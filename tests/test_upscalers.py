@@ -276,6 +276,16 @@ def test_analyze_prefers_the_game_exe_over_its_launcher(steam, monkeypatch):
     assert result["anti_cheat"] is False and result["foreign"] is False
 
 
+def test_analyze_picks_the_unity_player_over_anti_cheat_and_helper_exes(tmp_path):
+    for name in ("AntiCheatExpert/ACE-Service64.exe", "CefView/CefViewWing.exe", "PlatformProcess.exe", "QtWebEngineProcess.exe", "Endfield.exe"):
+        _write(tmp_path / name, "x")
+    (tmp_path / "Endfield_Data").mkdir()
+    result = games.analyze(tmp_path)
+    assert result["exe"] == "Endfield.exe"
+    assert result["target"] == str(tmp_path)
+    assert "AntiCheatExpert/ACE-Service64.exe" not in [c["exe"] for c in result["candidates"]]
+
+
 def test_agility_sdk_beside_the_exe_means_d3d12(steam, monkeypatch):
     # RE Engine games (RE4, Requiem, Onimusha) import only d3d11/dxgi and load D3D12 at runtime.
     from upscalers import solution_plan
@@ -465,7 +475,7 @@ def test_log_reader_takes_real_optiscaler_lines(tmp_path):
     assert facts["version"] == "0.9.4-final"
     assert facts["proxy"] == "dxgi.dll"
     assert facts["upscaler"] == "fsr31"
-    assert facts["input"] == "DLSS"
+    assert "input" not in facts
     assert facts["initial_resolution"] == {"render": [936, 624], "output": [1440, 960]}
     assert "resolution" not in facts
     assert facts["resolution_source"] == "initialization_only"
@@ -956,6 +966,90 @@ def test_lsfg_installs_the_layer_and_writes_per_game_profiles(steam, tmp_path):
     assert not (home / ".local" / lsfg.LAYER_FILES[0]).exists() and not (home / lsfg.CONFIG).exists()
 
 
+def _lsfg_tool(steam, tmp_path):
+    home, _ = steam
+    library = home / ".local/share/Steam"
+    _write(library / "steamapps/appmanifest_993090.acf", '"AppState"\n{\n "appid" "993090"\n}\n')
+    _write(library / "steamapps/common/Lossless Scaling/lsfg-vk.dll", b"dll")
+    tool = lsfg.Lsfg(str(home), tmp_path / "state")
+    tool.install(_lsfg_bundle(tmp_path / "bundle"), "lsfg-vk-2.0.0")
+    return home, tool
+
+
+def _flow_scale(home):
+    import tomllib
+    return tomllib.loads((home / lsfg.CONFIG).read_text())["profile"][0]["flow_scale"]
+
+
+def test_lsfg_flow_scale_keeps_the_previous_value_when_untouched(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    tool.set_game("1", "Game", {"multiplier": 2, "performance": True})
+    assert _flow_scale(home) == 0.75
+    tool.set_game("1", "Game", {"multiplier": 2, "flow": "fastest", "performance": True})
+    assert _flow_scale(home) == 0.25
+
+
+def test_lsfg_flow_scale_writes_the_chosen_value(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    result = tool.set_game("1", "Game", {"multiplier": 3, "flow_scale": 0.85, "performance": False})
+    assert _flow_scale(home) == 0.85
+    assert result["profile"]["flow_scale"] == 0.85
+    assert tool.status()["profiles"]["1"]["flow_scale"] == 0.85
+    tool.set_game("1", "Game", {"multiplier": 3, "flow_scale": 0.333, "performance": False})
+    assert _flow_scale(home) == 0.33
+
+
+def test_lsfg_flow_scale_tells_presets_from_manual_and_remembers_the_manual_value(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    manual = tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 0.6, "flow_manual": True})["profile"]
+    assert (manual["flow_manual"], manual["manual_scale"], _flow_scale(home)) == (True, 0.6, 0.6)
+    preset = tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 1.0, "flow_manual": False, "manual_scale": 0.6})["profile"]
+    assert (preset["flow_manual"], preset["manual_scale"], _flow_scale(home)) == (False, 0.6, 1.0)
+    assert tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 0.75})["profile"]["manual_scale"] is None
+    # An off-preset value is manual even when the caller did not say so.
+    assert tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 0.4, "flow_manual": False})["profile"]["flow_manual"] is True
+
+
+def test_lsfg_flow_scale_migrates_a_saved_value_to_a_preset_or_manual(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    tool.set_game("1", "Game", {"multiplier": 2})
+    tool.set_game("2", "Other", {"multiplier": 2})
+    data = tool._manifest()
+    data["profiles"]["1"].update(flow_scale=0.5)
+    data["profiles"]["2"].update(flow_scale=0.65)
+    for profile in data["profiles"].values():
+        profile.pop("flow_manual")
+    tool._save(data)
+    profiles = tool.status()["profiles"]
+    assert (profiles["1"]["flow_manual"], profiles["2"]["flow_manual"]) == (False, True)
+
+
+def test_lsfg_flow_scale_accepts_the_lsfg_vk_range_and_nothing_else(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    for edge in (0.25, 1.0):
+        tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": edge})
+        assert _flow_scale(home) == edge
+    for bad in (0.24, 1.01, 0, -1, float("nan"), float("inf"), "0.5", True, None):
+        with pytest.raises(lsfg.LsfgError, match="lsfg_invalid"):
+            tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": bad})
+    assert _flow_scale(home) == 1.0
+
+
+def test_lsfg_flow_scale_reads_a_profile_saved_with_a_preset(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    tool.set_game("1", "Game", {"multiplier": 2, "flow": "performance"})
+    data = tool._manifest()
+    data["profiles"]["1"] = {key: value for key, value in data["profiles"]["1"].items() if key != "flow_scale"}
+    data["profiles"]["1"]["flow"] = "quality"
+    tool._save(data)
+    assert tool.status()["profiles"]["1"]["flow_scale"] == 1.0
+    tool.set_game("2", "Other", {"multiplier": 2})
+    tool._write_config(tool._manifest())
+    import tomllib
+    scales = {p["name"]: p["flow_scale"] for p in tomllib.loads((home / lsfg.CONFIG).read_text())["profile"]}
+    assert scales == {"pdc-1": 1.0, "pdc-2": 0.75}
+
+
 def test_lsfg_never_writes_over_another_tools_setup(steam, tmp_path):
     home, _ = steam
     _write(home / lsfg.CONFIG, "version = 2\n[global]\nallow_fp16 = true\n")
@@ -1128,6 +1222,24 @@ def test_recipe_proxy_panel_cannot_install_is_left_out(steam, fake_catalog, proc
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll"))
     service = _service(steam, fake_catalog, proc)
     assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["dxgi=n,b"]
+
+
+def test_endfield_recipe_installs_the_d3d12_proxy(steam, fake_catalog, proc, monkeypatch):
+    # Under Proton, OptiScaler as dxgi.dll makes Endfield quit seconds after init; d3d12.dll keeps it running.
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll"))
+    monkeypatch.setattr(catalog, "D3D12_PROXY_APPIDS", frozenset({APPID}))
+    service = _service(steam, fake_catalog, proc)
+    result = service.install(APPID, {"build": "fsr-test"})
+    assert result["overrides"] == ["d3d12=n,b"]
+    _, game = steam
+    assert (game / "bin/x64_dx12/d3d12.dll").is_file() and not (game / "bin/x64_dx12/dxgi.dll").exists()
+
+
+def test_endfield_curated_recipe_launches_in_directx11():
+    # FSR 4 only runs through the D3D11 to D3D12 bridge; the Vulkan path falls back to FSR 2.2.
+    entry = recipes.recipe_catalog.bundled().match("4732690", "optiscaler", "linux", "x86_64")
+    assert entry is not None and entry.exe == "Endfield.exe" and entry.args == ("-force-d3d11",)
+    assert "4732690" not in recipes.RECIPES
 
 
 @pytest.fixture

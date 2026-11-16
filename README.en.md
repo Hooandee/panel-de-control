@@ -44,6 +44,8 @@ FPS you want without wasting battery.
 
 🌀 **Fans.** Live temperatures and RPM, and curves you draw with your finger. Over time it learns
 how hot each game runs and suggests a curve made for it.
+Fans that report only a percentage show that reading instead of RPM.
+Each profile keeps its custom curve when you switch modes and restores it when you return to Custom.
 
 🎨 **Display.** One-tap color modes (Native, Cinema, Vivid, Comfort) or fine tuning if you like to
 tinker, an OLED look for LCD screens, scheduled night mode and HDR where the panel supports it.
@@ -80,6 +82,9 @@ works with the controller, and updates show up on their own in the quick access 
 
 Put your photos, your videos or your games' art behind Home, and let a game's soundtrack play or
 its trailer show when you land on it.
+
+If you chose to keep a theme’s background, **Show mine anyway** lets Ambient take it back for
+Panel while keeping your images and settings.
 
 It's also a player for everything: your music, radio from around the world on a map, YouTube,
 Twitch or TV channels from M3U lists. Queue it up, pick repeat or shuffle and take it into your game

@@ -9,6 +9,7 @@ import { CONTROL_BUTTONS, CONTROL_IDLE_MS, GamepadButton, controlAction, keyToBu
 import { captureButtons } from "../../platform/buttonCapture";
 import { onQamLeftEdge, qamPanelWidth, subscribeQamSurface, type QamSurface } from "../../platform/qamSurface";
 import { subscribeVirtualKeyboard } from "../../platform/virtualKeyboard";
+import { floatingDiagnostics } from "../steam/floatingDiagnostics";
 import {
   cardWidth,
   fullscreenVideoBounds,
@@ -69,7 +70,11 @@ interface Drag {
  */
 const ENTRY_GUARD_MS = 400;
 
-export const FloatingPlayer: FC = () => {
+export interface FloatingPlayerProps {
+  recordEvent?: (action: string, fields: Record<string, unknown>) => void;
+}
+
+export const FloatingPlayer: FC<FloatingPlayerProps> = ({ recordEvent }) => {
   const { runtime, snapshot } = useAmbient();
   const { t } = useI18n();
   const dock = useLibraryDock();
@@ -132,6 +137,14 @@ export const FloatingPlayer: FC = () => {
   const pillWanted = !qamOpen && (mode === "always" || (mode === "peek" && peekUntil > Date.now()));
   const videoRunning = video && (playing || player?.status === "loading" || player?.status === "retrying");
   const visible = !!player?.track && !keyboardShown && (libraryOpen ? !!dockElement : videoRunning || pillWanted || controlling);
+  useEffect(() => {
+    if (!host || !view || !recordEvent) return;
+    const frame = view.requestAnimationFrame(() => {
+      recordEvent("floating_keyboard", { ...floatingDiagnostics(view.document, keyboardShown) });
+    });
+    return () => view.cancelAnimationFrame(frame);
+  }, [host, keyboardShown, view, recordEvent]);
+
   const rightInset = qamOpen && surface ? qamPanelWidth(surface.document) ?? 0 : 0;
   const normalWidth = viewport ? cardWidth(viewport, rightInset, video, music?.videoScale ?? 40) : 0;
   const width = fullscreen && viewport ? viewport.width : docked ? dockBounds?.width ?? 0 : normalWidth;
@@ -433,6 +446,7 @@ export const FloatingPlayer: FC = () => {
       {createPortal(
         <div
           ref={card}
+          data-pdc-ambient-card
           onPointerDown={docked ? undefined : onPointerDown}
           onPointerDownCapture={docked ? onPointerDown : undefined}
           onPointerMove={onPointerMove}

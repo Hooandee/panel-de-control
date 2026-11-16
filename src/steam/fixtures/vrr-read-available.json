@@ -1,0 +1,10 @@
+{
+  "read_display": {
+    "status": "available",
+    "control_id": "display"
+  },
+  "read_vrr": {
+    "status": "available",
+    "control_id": "vrr"
+  }
+}

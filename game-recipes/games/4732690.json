@@ -1,0 +1,29 @@
+{
+  "name": "Arknights: Endfield",
+  "revision": 1,
+  "conditions": {
+    "engine": [
+      "optiscaler"
+    ],
+    "platform": [
+      "linux"
+    ],
+    "arch": [
+      "x86_64"
+    ]
+  },
+  "exe": "Endfield.exe",
+  "args": [
+    "-force-d3d11"
+  ],
+  "ini": {},
+  "dependencies": [],
+  "source_urls": [
+    "https://github.com/optiscaler/OptiScaler/wiki/Arknights-Endfield"
+  ],
+  "tested_game_builds": [
+    "25728898"
+  ],
+  "tested_at": "2026-11-16",
+  "recommended_input": "dlss"
+}

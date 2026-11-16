@@ -479,3 +479,44 @@ def test_charge_types_only_selected_for_legion(tmp_path):
         key = "rog_ally"
 
     assert not isinstance(select_charge_limit(Ally(), root=str(tmp_path)), LenovoChargeTypes)
+
+
+def test_charge_types_active_is_cached_and_invalidated_on_write(tmp_path):
+    path = _mk_charge_types(str(tmp_path), "[Standard] Long_Life")
+    now = [0.0]
+    backend = LenovoChargeTypes(root=str(tmp_path), clock=lambda: now[0])
+    assert backend.active() == "Standard"
+    with open(path, "w") as f:
+        f.write("Standard [Long_Life]")
+    now[0] = 10.0
+    assert backend.active() == "Standard"  # served from the cache
+    now[0] = 31.0
+    assert backend.active() == "Long_Life"  # TTL expired
+    with open(path, "w") as f:
+        f.write("[Standard] Long_Life")
+    assert backend.disable() is True  # a write drops the cache
+    assert backend.active() == "Standard"
+
+
+def test_charge_types_read_straddling_a_write_is_not_cached(tmp_path, monkeypatch):
+    # A slow poll that started before the limit was written must not leave the old mode cached.
+    p = _mk_charge_types(str(tmp_path), value="[Standard] Long_Life")
+    cl = LenovoChargeTypes(root=str(tmp_path))
+    import battery.charge_limit as module
+    real_read = module.read_str
+
+    fired = []
+
+    def slow_read(path):
+        value = real_read(path)
+        if not fired:
+            fired.append(True)
+            cl.set(80)  # the write lands while this read is still in flight
+        return value
+
+    monkeypatch.setattr(module, "read_str", slow_read)
+    assert cl.active() == "Standard"
+    monkeypatch.setattr(module, "read_str", real_read)
+    assert open(p).read() == "Long_Life"
+    assert cl.active() == "Long_Life"
+

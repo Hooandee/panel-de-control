@@ -21,6 +21,7 @@ from .adapters.game_media import game_theme, game_trailer
 from .adapters.known_paths import known_folders
 from .adapters.library_scan import media_id as local_media_id, scan_folder
 from .adapters.media_server import MediaServer
+from .adapters.stream_relay import StreamRelay
 from .adapters.optimizer import OptimizeError, optimize, output_name
 from .adapters.remote_sources import download
 from .adapters.share_server import ShareServer
@@ -31,7 +32,7 @@ from .core import collections as coll
 from .core.image_header import ImageInfo, probe as probe_image
 from .core.m3u import is_channel_list, parse_m3u
 from .core.media_types import media_kind
-from .core.path_guard import resolve_servable
+from .core.path_guard import resolve_list, resolve_servable
 from .core.settings import default_settings, normalize_settings
 
 FolderScope = Literal["background", "music", "library"]
@@ -77,6 +78,7 @@ class AmbientService:
         self._index: dict[str, str] = self._retained_generated()
         self._theme_images = ThemeImageStore(os.path.join(state_dir, "theme-images.json"))
         self._roots: list[str] = []
+        self._list_media: dict[str, str] = {}
         self._events: deque[dict[str, Any]] = deque(maxlen=_MAX_EVENTS)
         self._discover_cache: OrderedDict[str, tuple[float, list[dict[str, Any]]]] = OrderedDict()
         self._playlist_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
@@ -84,7 +86,7 @@ class AmbientService:
         self._image_state_lock = threading.Lock()
         self._scale_failures: OrderedDict[tuple[tuple[str, int, int], int], float] = OrderedDict()
         self._image_probes: OrderedDict[tuple[str, int, int], Optional[ImageInfo]] = OrderedDict()
-        self._server = MediaServer(resolver=self._serve_path)
+        self._server = MediaServer(resolver=self._serve_path, relay=StreamRelay())
         self._server_started = False
         self._server_lock = threading.Lock()
         self._closed = False
@@ -309,37 +311,47 @@ class AmbientService:
         roots: list[str] = []
         truncated = False
 
-        def collect(folders: list[str], kinds: set[str], depth: int = 3) -> list[dict[str, Any]]:
+        lists: dict[str, dict[str, Any]] = {}
+
+        def collect(folders: list[str], kinds: set[str], depth: int = 3, with_lists: bool = False) -> list[dict[str, Any]]:
             nonlocal truncated
             items: dict[str, dict[str, Any]] = {}
             for folder in dict.fromkeys(folders):
-                result = scan_folder(folder, kinds=kinds, max_depth=depth)
+                result = scan_folder(folder, kinds=kinds | {"list"} if with_lists else kinds, max_depth=depth)
                 truncated = truncated or result.truncated
                 if result.missing:
                     continue
                 roots.append(folder)
                 for item in result.items:
                     index[item["id"]] = item["path"]
-                    items[item["id"]] = {k: item[k] for k in ("id", "name", "kind", "size", "mtime")}
+                    entry = {k: item[k] for k in ("id", "name", "kind", "size", "mtime")}
+                    (lists if item["kind"] == "list" else items)[item["id"]] = entry
             return list(items.values())
 
         kinds = _VISUAL | {"audio"}
         library = {
             "known.images": collect(known["images"] + known["videos"], kinds),
-            "known.music": collect(known["music"], kinds),
+            "known.music": collect(known["music"], kinds, with_lists=True),
         }
         shots = screenshot_folders(self._home)
         if shots:
             library["screenshots"] = collect(shots, {"image"}, depth=0)
         for folder in self._library_folders(settings):
-            library[coll.stable_id("folder", folder)] = collect([folder], kinds)
+            library[coll.stable_id("folder", folder)] = collect([folder], kinds, with_lists=True)
         collections = {key: [item for item in items if item["kind"] in _VISUAL] for key, items in library.items()}
         music = {item["id"]: item for items in [library["known.music"], *library.values()] for item in items if item["kind"] == "audio"}
         with self._lock:
             index.update(self._retained_generated())
+            index.update(self._list_media)
             self._index = index
             self._roots = roots + [self._cache_dir]
-        return {"collections": collections, "music": list(music.values()), "library": library, "truncated": truncated}
+        return {
+            "collections": collections,
+            "music": list(music.values()),
+            "library": library,
+            "lists": sorted(lists.values(), key=lambda item: item["name"].lower()),
+            "truncated": truncated,
+        }
 
 
     @staticmethod
@@ -579,6 +591,11 @@ class AmbientService:
         if self._resolve(media_id) is None or not self._ensure_server():
             return None
         return self._server.url_for(media_id)
+
+    def stream_url(self, url: str) -> Optional[str]:
+        if not self._ensure_server():
+            return None
+        return self._server.stream_url(url)
 
     def game_media(self, appid: str, name: str, now: Optional[float] = None, store: bool = True) -> dict[str, Any]:
         """Official trailer and a soundtrack preview for a game; found once, remembered for a week."""
@@ -840,6 +857,8 @@ class AmbientService:
         with self._lock:
             entry = next((p for p in self._settings["radio"].get("playlists", []) if p["id"] == playlist_id), None)
             hit = self._playlist_cache.get(playlist_id)
+        if playlist_id.startswith("local:"):
+            return self._local_playlist(playlist_id)
         if entry is None:
             return {"id": playlist_id, "channels": [], "error": "unknown_playlist"}
         if hit and time.time() - hit[0] < PLAYLIST_TTL_SEC:
@@ -859,6 +878,45 @@ class AmbientService:
         with self._lock:
             self._playlist_cache[playlist_id] = (time.time(), channels)
         return {"id": playlist_id, "channels": channels}
+
+    def _local_playlist(self, playlist_id: str) -> dict[str, Any]:
+        """Channels of an .m3u found in a folder the user chose. Entries are web streams or media files
+        inside that same folder; nothing else in the file is followed, and nothing in it is run."""
+        with self._lock:
+            path = self._index.get(playlist_id)
+            roots = [root for root in self._roots if root != self._cache_dir]
+        found = resolve_list(path, roots) if path else None
+        if found is None:
+            return {"id": playlist_id, "channels": [], "error": "unknown_playlist"}
+        real, root = found
+        try:
+            with open(real, "rb") as handle:
+                data = handle.read(remote_sources.MAX_PLAYLIST_BYTES + 1)
+            if len(data) > remote_sources.MAX_PLAYLIST_BYTES:
+                raise ValueError("playlist_too_large")
+        except (OSError, ValueError) as error:
+            self.record_event("playlist_error", "local:" + type(error).__name__)
+            return {"id": playlist_id, "channels": [], "error": "unreachable"}
+        folder = os.path.dirname(real)
+        channels = parse_m3u(data.decode("utf-8", errors="replace"), local=lambda entry: self._local_entry(entry, folder, root))
+        return {"id": playlist_id, "channels": channels}
+
+    def _local_entry(self, entry: str, folder: str, root: str) -> Optional[dict[str, Any]]:
+        if "\0" in entry:
+            return None
+        if entry.lower().startswith("file://"):
+            entry = urllib.parse.unquote(entry[7:])
+        elif "://" in entry:
+            return None
+        real = resolve_servable(entry if os.path.isabs(entry) else os.path.join(folder, entry), [root])
+        if real is None or media_kind(real) not in ("audio", "video"):
+            return None
+        media = local_media_id(real)
+        with self._lock:
+            self._list_media[media] = real
+            self._index[media] = real
+        url = self.media_url(media)
+        return {"url": url} if url else None
 
     def radio_catalog(self, force_refresh: bool = False) -> dict[str, Any]:
         """Cache complete catalogs for a day; keep the last complete result available offline."""
@@ -948,6 +1006,8 @@ def _settings_summary(settings: dict[str, Any]) -> dict[str, Any]:
     background, music, radio = settings["background"], settings["music"], settings["radio"]
     return {
         "gameArt": background.get("gameArt"),
+        "pinned": bool(background.get("pinned")),
+        "suggestedCollections": [key for key in background.get("collections", []) if key in {"suggested.library", "suggested.nasa", "suggested.bing"}],
         "transition": background.get("transition"),
         "optimizeVideos": background.get("optimizeVideos"),
         "videoQuality": background.get("videoQuality"),

@@ -1,0 +1,8 @@
+{
+  "device_key": "playstation_5",
+  "chip": "ps5_fan",
+  "values": {
+    "pwm1": "69",
+    "pwm1_enable": "2"
+  }
+}

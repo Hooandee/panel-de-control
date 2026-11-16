@@ -187,6 +187,7 @@ describe("per-game notices", () => {
   it("names the games whose update took away OptiScaler's input", () => {
     expect(gameNotice("3564740")).toBe("up.notice.dlssRemoved");
     expect(gameNotice(3564740)).toBe("up.notice.dlssRemoved");
+    expect(gameNotice("4732690")).toBe("up.notice.dx11Launch");
     expect(gameNotice("526870")).toBeNull();
     expect(gameNotice(null)).toBeNull();
   });

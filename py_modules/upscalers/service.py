@@ -197,7 +197,7 @@ class UpscalerService:
             try:
                 profile = self.lsfg.status().get("profiles", {}).get(str(appid))
                 event["applied_lsfg"] = {"enabled": profile is not None,
-                    **diagnostics.fields(profile, ("multiplier", "flow", "performance"))}
+                    **diagnostics.fields(profile, ("multiplier", "flow_scale", "performance"))}
             except Exception:
                 event["applied_lsfg"] = {"status": "unavailable"}
         if action == "mako_game":
@@ -232,6 +232,7 @@ class UpscalerService:
                     "proxy": install.get("proxy"),
                     "status": self._status(install, entry),
                     "options": install.get("options") or {},
+                    "fallback": self._last_fallback(install, entry),
                 }
         return {
             "gpu": self.gpu,
@@ -245,6 +246,15 @@ class UpscalerService:
             "job": self.job(),
             "helixsr": {"downloaded": self.helix.ready()},
         }
+
+    @staticmethod
+    def _last_fallback(install: dict, entry: dict) -> dict | None:
+        """What the last check of this build found: the log of an older game session says nothing about it."""
+        history = entry.get("history") or []
+        if not history or history[-1].get("build") != install.get("build"):
+            return None
+        fallen = (history[-1].get("facts") or {}).get("fallback")
+        return fallen if isinstance(fallen, dict) else None
 
     def _engine_summaries(self) -> dict:
         """What Mako and Lossless Scaling do per game, for the list: neither shows up as an install."""
@@ -799,13 +809,14 @@ class UpscalerService:
                 attempts: list[dict] = []
                 try:
                     try:
-                        receipt = prefix_dependencies.prepare(self.home, installed, auto_recipes.verbs(automatic), self.logger, self.proc, attempts)
+                        receipt = prefix_dependencies.prepare(self.home, installed, auto_recipes.verbs(automatic), self.logger, self.proc, attempts,
+                                                              cancelled=self._cancel.is_set)
                     finally:
                         entry["windows_components"] = {"at": time.time(), "attempts": attempts[-8:]}
                 except (prefix_dependencies.DependencyError, OSError) as error:
                     components_error = getattr(error, "code", type(error).__name__)
                     entry["windows_components"]["error"] = components_error
-                    if components_error == "running":
+                    if components_error in ("running", "cancelled"):
                         raise
                     # The game files still go in: the game page says what is missing and offers to try again.
                     receipt = None
@@ -1763,6 +1774,7 @@ class UpscalerService:
             generating = True
         return {"result": _verdict(install, facts), "resolution": facts.get("resolution"),
                 "resolution_source": facts.get("resolution_source", "unavailable"), "fg": generating, "fg_toggle": not blind,
+                "fallback": facts.get("fallback"),
                 **logread.provider_observation(facts if install.get("engine", "optiscaler") == "optiscaler" else {})}
 
     # ---- lsfg-vk -----------------------------------------------------------------------------
@@ -2018,7 +2030,7 @@ class UpscalerService:
         history = entry.get("history") or []
         if history and history[-1].get("build") == install.get("build") and result != "not_run":
             history[-1]["result"] = result
-            history[-1]["facts"] = {k: facts[k] for k in ("upscaler", "input", "fg", "resolution", "initial_resolution", "resolution_source", "version") if k in facts}
+            history[-1]["facts"] = {k: facts[k] for k in ("upscaler", "input", "fg", "resolution", "initial_resolution", "resolution_source", "version", "fallback") if k in facts}
             self._save()
         return {"result": result, "facts": facts}
 
@@ -2198,7 +2210,11 @@ def _with_leftovers(result: dict, left: dict | None) -> dict:
 
 
 def _recipe_proxy(recipe) -> str | None:
-    return recipe.proxy if recipe and recipe.proxy in catalog.PROXIES else None
+    if not recipe or recipe.proxy not in catalog.PROXIES:
+        return None
+    if recipe.proxy == "d3d12.dll" and recipe.appid not in catalog.D3D12_PROXY_APPIDS:
+        return None
+    return recipe.proxy
 
 
 def _recipe_info(recipe) -> dict | None:
@@ -2258,7 +2274,10 @@ def _facts(install: dict) -> dict:
         return {"present": False, "unverifiable": True}
     if _is_helix(install):
         return helixsr.read_install_log(install)
-    return logread.read(Path(install["target"]), since=diagnostics.verification_since(install))
+    facts = logread.read(Path(install["target"]), since=diagnostics.verification_since(install))
+    if fallen := logread.fallback(install, facts):
+        facts["fallback"] = fallen
+    return facts
 
 
 def _verdict(install: dict, facts: dict) -> str:

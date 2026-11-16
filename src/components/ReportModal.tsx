@@ -24,6 +24,7 @@ import { getQamDocument } from "../qamDocument";
 import { displayReport } from "../themes/themeHealth";
 import { readSteamDisplay } from "../themes/useThemeHealth";
 import { themeSurfaceReport } from "../themes/themeSurfaceReport";
+import { recordUiEvent } from "../system/uiEvents";
 
 type Phase = "form" | "sending" | "done" | "error";
 
@@ -151,6 +152,17 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
   const [result, setResult] = useState<ReportResult | null>(null);
   const [copied, setCopied] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    recordUiEvent("report", "phase", { phase });
+  }, [phase]);
+
+  useEffect(() => {
+    const form = rootRef.current?.closest("form");
+    const confirm = () => recordUiEvent("report", "confirm", {});
+    form?.addEventListener("submit", confirm);
+    return () => form?.removeEventListener("submit", confirm);
+  }, []);
 
   useEffect(() => {
     getDevice().then(setDevice).catch(() => {});
@@ -418,13 +430,19 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
   );
 };
 
-const ReportModal: FC<ReportModalProps> = ({ closeModal, initialCategories }) => (
-  <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <FocusRoot settingsModal="report">
-      <ReportBody closeModal={closeModal} initialCategories={initialCategories} />
-    </FocusRoot>
-  </ModalRoot>
-);
+const ReportModal: FC<ReportModalProps> = ({ closeModal, initialCategories }) => {
+  const close = () => {
+    recordUiEvent("report", "close", {});
+    closeModal?.();
+  };
+  return (
+    <ModalRoot closeModal={close} bAllowFullSize bOKDisabled>
+      <FocusRoot settingsModal="report">
+        <ReportBody closeModal={close} initialCategories={initialCategories} />
+      </FocusRoot>
+    </ModalRoot>
+  );
+};
 
 export function openReportModal(initialCategories?: ReportCategory[]): void {
   showModal(<ReportModal initialCategories={initialCategories} />, window);

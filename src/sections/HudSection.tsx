@@ -18,6 +18,7 @@ import { HudSliderRow } from "../components/HudSliderRow";
 import { QamAction } from "../components/QamAction";
 import { ColorPicker } from "../components/ColorPicker";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ProfileSelector } from "../components/ProfileSelector";
 import { ExperimentalBadge } from "../components/ExperimentalBadge";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { hasLocalEditor } from "../mangohud/editorUi";
@@ -225,6 +226,9 @@ export const HudSection: FC = () => {
   const { t } = useI18n();
   const {
     state,
+    scope,
+    game,
+    onScope,
     setModel,
     setEnabled,
     reload,
@@ -486,6 +490,16 @@ export const HudSection: FC = () => {
         }}
       >
         <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+          {game && (
+            <ProfileSelector
+              scope={scope}
+              gameName={game.name}
+              hasGameProfile={state.hasGameProfile}
+              globalLabel={t("tdp.scope.global")}
+              inheritHint={t("hud.inherit")}
+              onScope={onScope}
+            />
+          )}
           <div style={{ display: "flex", justifyContent: "flex-end", minWidth: 0 }}>
             <ExperimentalBadge>
               {t("hud.experimental.badge")}

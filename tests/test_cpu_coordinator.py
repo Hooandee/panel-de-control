@@ -921,3 +921,86 @@ def test_intel_failed_core_change_after_auto_release_recovers_each_baseline(
     assert coordinator.apply(intent, 4, enabled=False).ok is True
     assert _intel_windows(frequency) == [(400_000, value) for value in _INTEL_TURBO_MAXIMA]
     assert durable["state"] is None
+
+
+def _stuck_boost_kernel(tmp_path, monkeypatch, opens_on_retry):
+    """Boost on, cpuinfo at 3.5 GHz and scaling_max stuck at 2.8 GHz (Galileo after Eco)."""
+    import cpu.coordinator as coordinator_module
+
+    coordinator, frequency, boost, _durable, _persist = _amd_boost_kernel(
+        tmp_path, monkeypatch
+    )
+    policies = sorted((tmp_path / "sys/devices/system/cpu/cpufreq").glob("policy*"))
+    for policy in policies:
+        (policy / "scaling_max_freq").write_text("2801000")
+        (policy / "amd_pstate_max_freq").write_text("3501250")
+    kernel_write = frequency_module.write_str
+    state = {"stuck": True, "sleeps": []}
+
+    def write(path, value):
+        if state["stuck"] and Path(path).name == "scaling_max_freq":
+            return True
+        return kernel_write(path, value)
+
+    def sleep(seconds):
+        state["sleeps"].append(seconds)
+        if opens_on_retry and seconds == coordinator_module._RECOVERY_DELAY_S:
+            state["stuck"] = False
+
+    monkeypatch.setattr(frequency_module, "write_str", write)
+    monkeypatch.setattr(coordinator_module.time, "sleep", sleep)
+    return coordinator, frequency, boost, policies, state
+
+
+def _manual_intent():
+    return _intent(
+        smt=True, boost=True,
+        frequency={"manual": True, "min_khz": 800_000, "max_khz": 3_501_250},
+    )
+
+
+def test_scaling_max_stuck_with_boost_on_recovers_on_second_write_without_rollback(
+    tmp_path, monkeypatch
+):
+    coordinator, frequency, boost, policies, state = _stuck_boost_kernel(
+        tmp_path, monkeypatch, opens_on_retry=True
+    )
+
+    result = coordinator.apply(_manual_intent(), 1)
+
+    assert result.ok is True
+    assert result.rollback == {"attempted": False, "ok": None}
+    assert result.recovery["recovered"] is True
+    assert result.recovery["first_failure"]["reason"] == "readback_mismatch"
+    assert boost.enabled() is True
+    assert frequency.get_window() == (800_000, 3_501_250)
+    assert all(
+        (policy / "scaling_max_freq").read_text() == "3501250" for policy in policies
+    )
+    assert state["sleeps"].count(0.2) == 1
+
+
+def test_scaling_max_stuck_after_retry_rolls_back_and_records_full_failure(
+    tmp_path, monkeypatch
+):
+    coordinator, frequency, boost, _policies, state = _stuck_boost_kernel(
+        tmp_path, monkeypatch, opens_on_retry=False
+    )
+
+    result = coordinator.apply(_manual_intent(), 1)
+
+    assert result.ok is False
+    assert result.error_code == "frequency_readback_mismatch"
+    assert result.recovery["recovered"] is False
+    assert state["sleeps"].count(0.2) == 1
+    first = result.recovery["first_failure"]
+    assert first["boost"] == 1
+    assert len(first["policies"]) == 8
+    row = first["policies"][0]
+    assert row["hardware_bounds"] == [400_000, 3_501_250]
+    assert row["applied"] == [800_000, 2_801_000]
+    assert row["amd_pstate_max"] == 3_501_250
+    assert row["writes"][:2] == ["min=800000", "max=3501250"]
+    assert set(result.recovery["retry"]) == {f"policy{i}" for i in range(8)}
+    assert frequency.get_window() == (400_000, 2_801_000)
+

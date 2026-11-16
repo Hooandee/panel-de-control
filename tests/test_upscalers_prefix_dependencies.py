@@ -3,6 +3,8 @@ import pytest
 from upscalers import prefix_dependencies as pd
 from upscalers.games import Installed
 
+_REAL_TRANSACTION_GUARD = pd._guard_transaction
+
 @pytest.fixture
 def context(tmp_path, monkeypatch):
     library = tmp_path / 'Steam'
@@ -369,3 +371,82 @@ def test_a_system_without_flathub_gets_it_added_for_the_user(monkeypatch):
     assert pd._tool({'PATH': '/usr/bin'}, 1000, 1000) == '/usr/bin/flatpak'
     assert ['remote-add', '--user', '--if-not-exists', 'flathub', pd._FLATHUB] in calls
     assert ['install', '--user', '--noninteractive', '--assumeyes', 'flathub', pd._FLATPAK] in calls
+
+
+@pytest.mark.parametrize('outcome', ['exit', 'persistent', 'cancelled', 'prefix_changed', 'runtime_changed', 'unreadable'])
+def test_verified_prefix_waits_for_its_child_without_publishing_unsafe_state(context, monkeypatch, outcome):
+    import json
+    import shutil
+    from types import SimpleNamespace
+
+    home, game, compat = context
+    proc = home / 'proc'
+    child = proc / '901'
+    proc.mkdir()
+    transaction = compat.parent / '.pdc-dependencies-1462040'
+    recorded = json.loads((Path(__file__).parent / 'fixtures/upscalers/prefix_install_pending.json').read_text())
+    monkeypatch.setattr(pd, '_guard_transaction', _REAL_TRANSACTION_GUARD)
+    monkeypatch.setattr(pd.shutil, 'which', lambda *args, **kwargs: '/usr/bin/protontricks')
+
+    def missing(*args):
+        raise pd.DependencyError('prefix_tool_unavailable')
+
+    monkeypatch.setattr(pd, '_tool', missing)
+    clock = [0.0]
+    cancelled = [False]
+
+    def pause(seconds):
+        clock[0] += seconds
+        if outcome == 'persistent':
+            return
+        if outcome == 'cancelled':
+            cancelled[0] = True
+        elif outcome == 'prefix_changed':
+            (compat / 'pfx').rename(compat / 'old-pfx')
+            (compat / 'pfx').mkdir()
+            (compat / 'pfx/user.reg').write_text('replacement')
+        elif outcome == 'runtime_changed':
+            (transaction / 'compat/pfx/drive_c/windows/system32/msvcp140.dll').unlink()
+        shutil.rmtree(child)
+
+    monkeypatch.setattr(pd, 'time', SimpleNamespace(monotonic=lambda: clock[0], sleep=pause), raising=False)
+
+    def execute(command, env, *args):
+        installed(['-q', 'vcrun2022', 'msvcrt40'], env, *args)
+        child.mkdir()
+        (child / 'environ').write_bytes(b'STEAM_COMPAT_DATA_PATH=' + env['STEAM_COMPAT_DATA_PATH'].encode() + b'\0')
+        (child / 'cmdline').write_bytes(b'wineserver\0--private-argument\0')
+
+    monkeypatch.setattr(pd, '_execute', execute)
+    if outcome == 'unreadable':
+        read = Path.read_bytes
+
+        def denied(path):
+            if path == child / 'environ':
+                raise PermissionError()
+            return read(path)
+
+        monkeypatch.setattr(Path, 'read_bytes', denied)
+    trace = []
+    errors = {'persistent': recorded['error'], 'cancelled': 'cancelled',
+              'prefix_changed': 'prefix_transaction_failed', 'runtime_changed': 'prefix_readback_failed',
+              'unreadable': 'prefix_process_state_unavailable'}
+    if outcome == 'exit':
+        receipt = pd.prepare(str(home), game, ('vcrun2022', 'msvcrt40'), proc=str(proc), trace=trace,
+                             cancelled=lambda: cancelled[0])
+        assert receipt['verified'] is True and receipt['state'] == 'prepared'
+        assert clock[0] > 0
+    else:
+        with pytest.raises(pd.DependencyError, match=errors[outcome]):
+            pd.prepare(str(home), game, ('vcrun2022', 'msvcrt40'), proc=str(proc), trace=trace,
+                       cancelled=lambda: cancelled[0])
+        if outcome == 'persistent':
+            assert 0 < clock[0] <= 10
+        if outcome == 'unreadable':
+            assert clock[0] == 0
+    expected = 'replacement' if outcome == 'prefix_changed' else 'original'
+    assert (compat / 'pfx/user.reg').read_text() == expected
+    assert trace[:2] == recorded['attempts']
+    assert trace[-1]['via'] == 'prefix-settle'
+    assert str(home) not in json.dumps(trace)
+    assert 'private-argument' not in json.dumps(trace)

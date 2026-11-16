@@ -20,7 +20,7 @@ MANIFEST_DIR = ".pdc-upscaler"
 
 _SKIP_EXE = re.compile(
     r"crash|unins|redist|setup|prereq|dotnet|helper|easyanticheat|battleye|eac_|"
-    r"d3dconfig|compiler|7za|reporter|webhelper|cefprocess|vc_?redist|dxsetup|launcherpatcher",
+    r"ace-(?:service|setup|base)|d3dconfig|compiler|7za|reporter|webhelper|cefprocess|vc_?redist|dxsetup|launcherpatcher",
     re.I,
 )
 _SKIP_DIRS = {"__installer", "_commonredist", "redist", "redistributables", "directx", "support", "extras", "optiscaler"}
@@ -303,6 +303,8 @@ def _score(path: Path, root: Path, size: int) -> int:
         score -= 40
     if "launcher" in name:
         score -= 25
+    if (path.parent / f"{path.stem}_Data").is_dir():
+        score += 40
     score += min(size // (8 * 1024 * 1024), 20)
     return score
 

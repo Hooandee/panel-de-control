@@ -87,7 +87,7 @@ const FanCurveGraphImpl: FC<Props> = ({ points, liveTemp, editable, onChange, st
           return (
             <g key={`y${percent}`}>
               <line x1={0} y1={y} x2={geom.width} y2={y} stroke={theme.color.hairline} strokeWidth={1} />
-              <text x={-6} y={y + 3} textAnchor="end" fontSize={9} fill={muted}>{percent}</text>
+              <text x={-6} y={y + 3} textAnchor="end" fontSize={9} fill={muted}>{percent}%</text>
             </g>
           );
         })}
@@ -101,8 +101,7 @@ const FanCurveGraphImpl: FC<Props> = ({ points, liveTemp, editable, onChange, st
             </g>
           );
         })}
-        {/* axis unit hints */}
-        <text x={-6} y={-2} textAnchor="end" fontSize={8} fill={muted}>%</text>
+        {/* axis unit hint (the % rides on each Y label so it never collides with the top one) */}
         <text x={geom.width} y={geom.height + 14} textAnchor="end" fontSize={8} fill={muted}>°C</text>
 
         {/* plot border */}

@@ -35,11 +35,11 @@ export const ProfileSelector: FC<ProfileSelectorProps> = ({
   return (
     <div data-pdc-part="profile-selector">
       <Focusable style={segmentGroupStyle}>
-        <Focusable style={seg(scope === "global")} onActivate={() => onScope("global")} onClick={() => onScope("global")}>
+        <Focusable noFocusRing style={seg(scope === "global")} onActivate={() => onScope("global")} onClick={() => onScope("global")}>
           {globalLabel}
         </Focusable>
         {gameName && (
-          <Focusable title={gameName} style={seg(scope === "game")} onActivate={() => onScope("game")} onClick={() => onScope("game")}>
+          <Focusable noFocusRing title={gameName} style={seg(scope === "game")} onActivate={() => onScope("game")} onClick={() => onScope("game")}>
             <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, minWidth: 0, width: "100%" }}>
               <LuGamepad2 size={13} style={{ flexShrink: 0 }} />
               <span>{t("tdp.scope.game")}</span>

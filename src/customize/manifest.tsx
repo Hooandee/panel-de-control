@@ -147,6 +147,7 @@ export const PICKABLE_BLOCKS: Record<string, BlockDef[]> = {
   ...SECTION_BLOCKS,
   power: [
     { id: "tdp", labelKey: "customize.block.tdp", icon: <LuGauge size={ICON} />, handheldOnly: true, learningTags: ["tdp"] },
+    { id: "tdpWatts", labelKey: "customize.block.tdpWatts", icon: <LuGauge size={ICON} />, handheldOnly: true, learningTags: ["tdp"] },
     ...SECTION_BLOCKS.power,
   ],
   ambient: [
@@ -169,8 +170,8 @@ export function pickableBlocksForSection(
   presentIds: string[] | null,
 ): BlockDef[] {
   if (sectionId === "power" && !desktopMode) {
-    const tdp = PICKABLE_BLOCKS.power.find((block) => block.id === "tdp")!;
-    return [tdp, ...customizationBlocks(sectionId, false, presentIds)];
+    const tdpBlocks = PICKABLE_BLOCKS.power.filter((block) => block.id === "tdp" || block.id === "tdpWatts");
+    return [...tdpBlocks, ...customizationBlocks(sectionId, false, presentIds)];
   }
   return customizationBlocks(sectionId, desktopMode, presentIds);
 }

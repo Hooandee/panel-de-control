@@ -160,6 +160,15 @@ export class AmbientRuntime {
       const doc = spDocument();
       return doc && container ? neighborAppIdsIn(doc.querySelector(`.${container}`)) : [];
     },
+    (appid) => {
+      const themed = this.channel.themeSelection();
+      const background = this.settings()?.background;
+      void rpc.recordAmbientEvent("selection", JSON.stringify({
+        appid: Number(appid),
+        source: themed ? `theme:${themed.themeId}` : "carousel",
+        trailerRequested: !!(background?.enabled && background.gameTrailers),
+      })).catch(() => undefined);
+    },
   );
   private readonly themeAudio = new ThemeAudio(() => (typeof Audio === "function" ? new Audio() : null));
   private themePausedMusic = false;
@@ -230,6 +239,7 @@ export class AmbientRuntime {
       (detail) => void rpc.recordAmbientEvent(detail.startsWith("radio") ? "radio_error" : "playback_error", detail).catch(() => undefined),
       undefined,
       () => new VideoFrameEngine(() => rpc.getAmbientVideoPage(), () => spDocument()),
+      (url) => rpc.getAmbientStreamUrl(url),
     );
     this.snapshot = {
       ready: false,
@@ -877,27 +887,37 @@ export class AmbientRuntime {
     // Until the trailer is ready the selected game shows its own background, or Steam's art for it.
     const artMode = wantsTrailers && this.gameMedia.pending() ? "game" : settings.background.gameArt;
     const choice = chooseBackground(artMode, this.snapshot.current?.ref ?? null, selectedAppId, settings.background.perGame);
-    if (!owns || choice.mediaRef === null) {
+    const hostClaim = this.channel.activeClaim();
+    const hosted = hostClaim?.mode === "host" && surface !== "other" && hostClaim.surfaces.includes(surface);
+    // A host replaces Steam's Home, so its native game art must travel through the media channel.
+    const hostGameArtUrl = hosted && choice.mediaRef === null && choice.nativeArt === "show" && selectedAppId ? libraryHeroUrl(selectedAppId) : null;
+    const mediaRef = choice.mediaRef ?? (hostGameArtUrl ? `steam:${selectedAppId}` : null);
+    if (!owns || mediaRef === null) {
       this.layer.apply(null, { transition: settings.background.transition, nativeArt: "show", motion, visible: false });
       doc?.documentElement.removeAttribute("data-pdc-ambient-background");
       this.channel.publish({ owner: "theme", media: null, motion });
       if (doc) applyNeutralizer(doc, []);
-      this.patch({ coveredBy: [] });
+      const themeOwner = this.themeClaim?.id;
+      this.patch({ coveredBy: decision.background === "theme" && themeOwner && settings.claims[themeOwner] === "theme" ? [themeOwner] : [] });
       this.previousOwner = decision.background === "panel" && !owns ? null : decision.background;
       this.patch({ currentUrl: null });
       return;
     }
-    const url = await this.resolve(choice.mediaRef);
+    if (hostGameArtUrl && this.channel.getState().media?.url !== hostGameArtUrl) {
+      // A missing hero must not leave the previous game's art in the host's load-error fallback.
+      this.channel.publish({ owner: "panel", media: null, motion });
+      this.patch({ currentUrl: null });
+    }
+    const url = await this.resolve(mediaRef);
     if (this.stopped || generation !== this.renderGeneration || !url) return;
-    const kind = this.snapshot.items.find((i) => i.ref === choice.mediaRef)?.kind ?? (VIDEO_URL.test(url) ? "video" : "image");
+    const kind = this.snapshot.items.find((i) => i.ref === mediaRef)?.kind ?? (VIDEO_URL.test(url) ? "video" : "image");
     this.channel.publish({ owner: "panel", media: { url, kind }, motion });
-    const hostClaim = this.channel.activeClaim();
-    if (hostClaim?.mode === "host" && surface !== "other" && hostClaim.surfaces.includes(surface)) {
+    if (hosted) {
       this.layer.apply(null, { transition: settings.background.transition, nativeArt: "show", motion, visible: false });
       if (doc) applyNeutralizer(doc, []);
       doc?.documentElement.setAttribute("data-pdc-ambient-background", "panel");
       this.previousOwner = "panel";
-      this.patch({ currentUrl: url });
+      this.patch({ currentUrl: url, coveredBy: [] });
       return;
     }
     const chosen = Object.entries(settings.claims).filter(([id, owner]) => id.startsWith("css:") && owner === "panel").map(([id]) => id);
@@ -907,7 +927,7 @@ export class AmbientRuntime {
     const shown = this.layer.apply({ url, kind }, {
       transition: settings.background.transition,
       nativeArt: choice.nativeArt,
-      motion: motion === "play" && this.optimizingRef === choice.mediaRef ? "pause" : motion,
+      motion: motion === "play" && this.optimizingRef === mediaRef ? "pause" : motion,
       visible: surfaceAllowed,
     });
     if (shown) {
@@ -1618,9 +1638,10 @@ export class AmbientRuntime {
 
   private playlists = new Map<string, Promise<PlaylistContents>>();
 
-  /** Channels of a saved list; one request per list while Panel runs, failures are retried. */
+  /** Channels of a saved list; one request per list while Panel runs, failures are retried. A list file on disk is read each time: it changes, and its local entries are served from a port that can change. */
   playlist(id: string): Promise<PlaylistContents> {
-    const cached = this.playlists.get(id);
+    const local = id.startsWith("local:");
+    const cached = local ? undefined : this.playlists.get(id);
     if (cached) return cached;
     const pending = rpc.getAmbientPlaylist(id)
       .then((contents) => contents ?? { id, channels: [], error: "unreachable" })
@@ -1629,7 +1650,7 @@ export class AmbientRuntime {
         if (contents.error) this.playlists.delete(id);
         return contents;
       });
-    this.playlists.set(id, pending);
+    if (!local) this.playlists.set(id, pending);
     return pending;
   }
 

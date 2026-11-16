@@ -1,0 +1,22 @@
+{
+  "themeId": "hooandee-duo",
+  "backgroundEnabled": true,
+  "gameArt": "game",
+  "claims": {
+    "css:TabContentsScroll": "panel",
+    "css:RecentGamesInnerContainer::before": "panel",
+    "css:BackgroundGlass": "panel",
+    "hooandee-duo": "theme"
+  },
+  "recovered": {
+    "owner": {
+      "background": "panel",
+      "music": "panel",
+      "conflict": null
+    },
+    "coveredBy": [],
+    "selected": true,
+    "gameArt": "game",
+    "currentMedia": false
+  }
+}

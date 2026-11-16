@@ -1,0 +1,71 @@
+{
+  "sink": "alsa_output.pci-0000_04_00.5-platform-acp5x_mach.0.HiFi__Speaker__sink",
+  "events": [
+    {
+      "t": 0.0,
+      "m": "volume",
+      "before": [
+        "100%",
+        "100%"
+      ],
+      "requested": [
+        "0%"
+      ],
+      "after": [
+        "0%",
+        "0%"
+      ]
+    },
+    {
+      "t": 0.124,
+      "m": "mute",
+      "before": false,
+      "requested": true,
+      "after": true
+    },
+    {
+      "t": 1.49,
+      "m": "set_audio_enabled",
+      "a": "[false]"
+    },
+    {
+      "t": 7.866,
+      "m": "volume",
+      "before": [
+        "37%",
+        "37%"
+      ],
+      "requested": [
+        "0%"
+      ],
+      "after": [
+        "0%",
+        "0%"
+      ]
+    },
+    {
+      "t": 12.163,
+      "m": "volume",
+      "before": [
+        "71%",
+        "71%"
+      ],
+      "requested": [
+        "0%"
+      ],
+      "after": [
+        "0%",
+        "0%"
+      ]
+    },
+    {
+      "t": 8.003,
+      "m": "mute",
+      "before": false,
+      "requested": true,
+      "after": true,
+      "n": 2,
+      "last": 12.276
+    }
+  ]
+}

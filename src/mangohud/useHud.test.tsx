@@ -8,18 +8,34 @@ vi.mock("../api", () => ({
   resolveHudConflict: vi.fn(),
   resetHud: vi.fn(),
   setHudConfig: vi.fn(),
+  setHudFollowGlobal: vi.fn(),
 }));
 
-import { getHudState, reloadHud, resolveHudConflict, setHudConfig } from "../api";
+const running = vi.hoisted(() => ({
+  game: null as { appid: string; liveAppid: number; name: string } | null,
+}));
+vi.mock("../tdp/useRunningGame", () => ({ useRunningGame: () => running.game }));
+vi.mock("./hudGameSync", () => ({ noteHudScope: vi.fn(), syncSteamOverlayForGame: vi.fn(async () => undefined) }));
+
+import {
+  getHudState, reloadHud, resolveHudConflict, resetHud, setHudConfig, setHudFollowGlobal,
+} from "../api";
+import { syncSteamOverlayForGame } from "./hudGameSync";
 import { DEFAULT_MODEL, HudState } from "./model";
 import { useHud, useHudValues } from "./useHud";
 
-const state = (model = DEFAULT_MODEL): HudState => ({
+const state = (
+  model = DEFAULT_MODEL,
+  game: { appid: string | null; followsGlobal: boolean } = { appid: null, followsGlobal: true },
+): HudState => ({
   capability: "inactive",
   applyStatus: model.enabled ? "pending" : "disabled",
   conflict: null,
   model,
   values: {},
+  appid: game.appid,
+  followsGlobal: game.followsGlobal,
+  hasGameProfile: !game.followsGlobal,
 });
 
 async function settle() {
@@ -53,6 +69,7 @@ describe("useHud coordination", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    running.game = null;
   });
 
   it("coalesces edits and persists only the latest complete model", async () => {
@@ -68,7 +85,7 @@ describe("useHud coordination", () => {
     });
 
     expect(setHudConfig).toHaveBeenCalledTimes(1);
-    expect(setHudConfig).toHaveBeenCalledWith(latest);
+    expect(setHudConfig).toHaveBeenCalledWith(latest, "global", null, null);
     expect(result.current.state?.model).toEqual(latest);
   });
 
@@ -95,7 +112,7 @@ describe("useHud coordination", () => {
     await settle();
 
     expect(setHudConfig).toHaveBeenCalledTimes(2);
-    expect(setHudConfig).toHaveBeenLastCalledWith(latest);
+    expect(setHudConfig).toHaveBeenLastCalledWith(latest, "global", null, null);
   });
 
   it("reports a stalled save without overlapping the underlying RPC", async () => {
@@ -127,7 +144,7 @@ describe("useHud coordination", () => {
     await settle();
 
     expect(setHudConfig).toHaveBeenCalledTimes(2);
-    expect(setHudConfig).toHaveBeenLastCalledWith(latest);
+    expect(setHudConfig).toHaveBeenLastCalledWith(latest, "global", null, null);
   });
 
   it("does not overlap polls after the visible timeout", async () => {
@@ -186,7 +203,7 @@ describe("useHud coordination", () => {
     act(() => vi.advanceTimersByTime(300));
 
     expect(setHudConfig).toHaveBeenCalledTimes(1);
-    expect(setHudConfig).toHaveBeenCalledWith({ ...styled, enabled: true });
+    expect(setHudConfig).toHaveBeenCalledWith({ ...styled, enabled: true }, "global", null, null);
   });
 
   it("reports a reload failure instead of announcing success", async () => {
@@ -265,7 +282,7 @@ describe("useHud coordination", () => {
     await settle();
 
     expect(setHudConfig).toHaveBeenCalledTimes(2);
-    expect(setHudConfig).toHaveBeenLastCalledWith(latest);
+    expect(setHudConfig).toHaveBeenLastCalledWith(latest, "global", null, null);
     expect(reloadHud).not.toHaveBeenCalled();
 
     latestRequest.resolve(state(latest));
@@ -374,7 +391,7 @@ describe("useHud coordination", () => {
     act(() => result.current.setModel(latest));
     act(() => unmount());
 
-    expect(setHudConfig).toHaveBeenCalledWith(latest);
+    expect(setHudConfig).toHaveBeenCalledWith(latest, "global", null, null);
   });
 
   it("queues the latest unmounted model behind an in-flight request", async () => {
@@ -396,6 +413,83 @@ describe("useHud coordination", () => {
     await settle();
 
     expect(setHudConfig).toHaveBeenCalledTimes(2);
-    expect(setHudConfig).toHaveBeenLastCalledWith(latest);
+    expect(setHudConfig).toHaveBeenLastCalledWith(latest, "global", null, null);
+  });
+
+  describe("per-game scope", () => {
+    const game = { appid: "ns:cube a", liveAppid: 777, name: "Cube A" };
+
+    it("shows the global tab for a game that follows global and edits go to global", async () => {
+      running.game = game;
+      vi.mocked(getHudState).mockResolvedValue(state(DEFAULT_MODEL, { appid: game.appid, followsGlobal: true }));
+      const { result } = await renderHud();
+      expect(result.current.scope).toBe("global");
+
+      const edited = { ...DEFAULT_MODEL, fontSize: 31 };
+      act(() => result.current.setModel(edited));
+      await act(async () => {
+        vi.advanceTimersByTime(700);
+        await Promise.resolve();
+      });
+      expect(setHudConfig).toHaveBeenCalledWith(edited, "global", null, game.appid);
+    });
+
+    it("selects the game tab and saves edits to that game's own HUD", async () => {
+      running.game = game;
+      vi.mocked(getHudState).mockResolvedValue(state(DEFAULT_MODEL, { appid: game.appid, followsGlobal: false }));
+      const { result } = await renderHud();
+      expect(result.current.scope).toBe("game");
+
+      const edited = { ...DEFAULT_MODEL, enabled: true };
+      act(() => result.current.setEnabled(true));
+      await settle();
+      expect(setHudConfig).toHaveBeenCalledWith(edited, "game", game.appid, game.appid);
+    });
+
+    it("switching to the game tab asks the backend to stop following global", async () => {
+      running.game = game;
+      vi.mocked(getHudState).mockResolvedValue(state(DEFAULT_MODEL, { appid: game.appid, followsGlobal: true }));
+      vi.mocked(setHudFollowGlobal).mockResolvedValue(
+        state(DEFAULT_MODEL, { appid: game.appid, followsGlobal: false }),
+      );
+      const { result } = await renderHud();
+      await act(async () => {
+        result.current.onScope("game");
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(setHudFollowGlobal).toHaveBeenCalledWith(false, game.appid, game.appid);
+      expect(result.current.scope).toBe("game");
+    });
+
+    it("re-syncs Steam's overlay level after switching between Global and Game", async () => {
+      running.game = game;
+      vi.mocked(getHudState).mockResolvedValue(state(DEFAULT_MODEL, { appid: game.appid, followsGlobal: true }));
+      vi.mocked(setHudFollowGlobal).mockResolvedValue(
+        state(DEFAULT_MODEL, { appid: game.appid, followsGlobal: false }),
+      );
+      const { result } = await renderHud();
+      await act(async () => {
+        result.current.onScope("game");
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(syncSteamOverlayForGame).toHaveBeenCalled();
+    });
+
+    it("resets only the scope being edited", async () => {
+      running.game = game;
+      vi.mocked(getHudState).mockResolvedValue(state(DEFAULT_MODEL, { appid: game.appid, followsGlobal: false }));
+      vi.mocked(resetHud).mockResolvedValue(
+        state(DEFAULT_MODEL, { appid: game.appid, followsGlobal: false }),
+      );
+      const { result } = await renderHud();
+      await act(async () => {
+        result.current.reset();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(resetHud).toHaveBeenCalledWith("game", game.appid, game.appid);
+    });
   });
 });

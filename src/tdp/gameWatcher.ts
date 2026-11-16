@@ -1,6 +1,7 @@
 import { setCurrentGame, SteamPowerProfile } from "../api";
 import { GameReport, isSameGameReport } from "./gameReport";
 import { readRunningGame } from "./runningGame";
+import { syncSteamOverlayForGame } from "../mangohud/hudGameSync";
 import { readSteamPerformanceProfile, subscribeSteamPerformanceState } from "../steam/performanceRuntime";
 
 /**
@@ -81,6 +82,7 @@ export function startGameWatcher(): () => void {
           if (!alive) return;
           clearActiveRequest(request);
           committed = request.target;
+          void syncSteamOverlayForGame().catch(() => {});
           sendDesired();
         })
         .catch(() => {

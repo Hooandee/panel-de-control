@@ -1,0 +1,69 @@
+{
+  "available": true,
+  "status": "ready",
+  "coverage_complete": true,
+  "progress": {
+    "processed": 8,
+    "total": 8
+  },
+  "count": 8,
+  "selectable": 0,
+  "rows": [
+    {
+      "selectable": false,
+      "recommended": false,
+      "source": "steam",
+      "status": "protected",
+      "reason": "runtime"
+    },
+    {
+      "selectable": false,
+      "recommended": false,
+      "source": "steam",
+      "status": "protected",
+      "reason": "runtime"
+    },
+    {
+      "selectable": false,
+      "recommended": false,
+      "source": "steam",
+      "status": "managed_by_steam",
+      "reason": "managed_by_steam"
+    },
+    {
+      "selectable": false,
+      "recommended": false,
+      "source": "steam",
+      "status": "protected",
+      "reason": "runtime"
+    },
+    {
+      "selectable": false,
+      "recommended": false,
+      "source": "steam",
+      "status": "managed_by_steam",
+      "reason": "managed_by_steam"
+    },
+    {
+      "selectable": false,
+      "recommended": false,
+      "source": "steam",
+      "status": "managed_by_steam",
+      "reason": "managed_by_steam"
+    },
+    {
+      "selectable": false,
+      "recommended": false,
+      "source": "steam",
+      "status": "protected",
+      "reason": "runtime"
+    },
+    {
+      "selectable": false,
+      "recommended": false,
+      "source": "steam",
+      "status": "managed_by_steam",
+      "reason": "managed_by_steam"
+    }
+  ]
+}

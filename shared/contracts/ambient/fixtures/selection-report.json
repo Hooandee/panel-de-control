@@ -1,0 +1,12 @@
+{
+  "report": "loop presenta trailer equivocado de los juegos compi",
+  "nativeAppId": "413150",
+  "themeAppId": "391540",
+  "neighborAppId": "3354711170",
+  "background": {
+    "enabled": true,
+    "gameTrailers": true,
+    "gameThemes": true
+  },
+  "themeId": "hooandee-loop"
+}

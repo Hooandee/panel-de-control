@@ -1,0 +1,4 @@
+[14:34:58.634173] [I] NVSDK_NGX_D3D11_CreateFeature Creating new FSR 3.X w/Dx12 feature
+[14:34:59.336243] [E] `anonymous-namespace'::PrepareCachedResource Exposure D3D11 resource is missing
+[14:34:59.336258] [W] IFeature_Dx11wDx12::[serial] AutoExposure disabled but ExposureTexture does not exist, enabling auto exposure and changing backend
+[14:34:59.367908] [I] FeatureProvider_Dx11::ChangeFeature Creating new FSR 3.X/4 w/Dx12 upscaler

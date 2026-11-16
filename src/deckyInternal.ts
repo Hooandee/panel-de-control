@@ -868,6 +868,10 @@ export function quickAccessTabDiagnostics(
   const registryIds = tabs?.map((tab) => (
     tab && typeof tab === "object" ? (tab as { id?: unknown }).id : undefined
   )) ?? null;
+  const ownedIds = tabs?.filter((tab) => tab && typeof tab === "object"
+    && (tab as { __pdcOwner?: unknown }).__pdcOwner === PDC_QAM_TAB_OWNER)
+    .map((tab) => String((tab as { id?: unknown }).id)) ?? null;
+  const ownedKeys = ownedIds ? new Set(ownedIds.map((id) => `quickaccess_tab_${id}`)) : null;
   let adapter: QamRenderAdapterState | null = null;
   try {
     adapter = hook ? renderAdapterState(hook as DeckyTabsHook) : null;
@@ -875,13 +879,23 @@ export function quickAccessTabDiagnostics(
 
   let renderedIds: string[] | null = null;
   let roots: Element[] | null = null;
+  let deckyGeometry: Record<"x" | "y" | "width" | "height" | "viewport_width" | "viewport_height", number | null> | null = null;
+  const rounded = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value)
+    ? Math.round(value * 1000) / 1000 : null;
   try {
     if (qamDocument) {
-      renderedIds = Array.from(
-        qamDocument.querySelectorAll<HTMLElement>("[id^='quickaccess_tab_']"),
-        (node) => node.id,
-      );
+      const renderedTabs = Array.from(qamDocument.querySelectorAll<HTMLElement>("[id^='quickaccess_tab_']"));
+      renderedIds = renderedTabs.map((node) => node.id);
       roots = Array.from(qamDocument.querySelectorAll(".pdc-root"));
+      const deckyTabs = renderedTabs.filter((node) => node.id === `quickaccess_tab_${DECKY_PLUGIN_TAB_ID}`);
+      if (qamDocument.hidden === false && deckyTabs.length === 1) {
+        const box = deckyTabs[0].getBoundingClientRect?.();
+        if (box) deckyGeometry = {
+          x: rounded(box.x), y: rounded(box.y), width: rounded(box.width), height: rounded(box.height),
+          viewport_width: rounded(qamDocument.defaultView?.innerWidth),
+          viewport_height: rounded(qamDocument.defaultView?.innerHeight),
+        };
+      }
     }
   } catch {}
 
@@ -891,6 +905,7 @@ export function quickAccessTabDiagnostics(
     registry_unique_count: registryIds ? new Set(registryIds).size : null,
     registry_decky_count: registryIds?.filter((id) => id === DECKY_PLUGIN_TAB_ID).length ?? null,
     registry_pdc_count: registryIds?.filter((id) => id === PDC_QAM_TAB_ID).length ?? null,
+    registry_owned_count: ownedIds?.length ?? null,
     qam_document_available: qamDocument !== null,
     qam_document_hidden: qamDocument?.hidden ?? null,
     rendered_count: renderedIds?.length ?? null,
@@ -899,6 +914,8 @@ export function quickAccessTabDiagnostics(
       renderedIds?.filter((id) => id === `quickaccess_tab_${DECKY_PLUGIN_TAB_ID}`).length ?? null,
     rendered_pdc_count:
       renderedIds?.filter((id) => id === `quickaccess_tab_${PDC_QAM_TAB_ID}`).length ?? null,
+    rendered_owned_count: renderedIds && ownedKeys ? renderedIds.filter((id) => ownedKeys.has(id)).length : null,
+    rendered_decky_geometry: deckyGeometry,
     panel_root_count: roots?.length ?? null,
     visible_panel_root_count: roots?.filter((node) => {
       const rect = node.getBoundingClientRect();

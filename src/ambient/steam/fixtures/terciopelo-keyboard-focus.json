@@ -1,0 +1,73 @@
+{
+  "classes": {
+    "Focused": "_21EoN2ZlmHNY3fjho_HMae",
+    "Touched": "_3UFQq1GinEyksceos-TETi",
+    "KeyboardKey": "_2KhPXikozxMpbIRo_6jPxW",
+    "Keyboard": "_45rH7-kY4P2uVEb3TxZhm"
+  },
+  "states": {
+    "before": {
+      "focused": {
+        "area": true,
+        "face": true
+      },
+      "gpfocus": false,
+      "touched": false,
+      "sprite": "velvet-idle.png"
+    },
+    "after": {
+      "focused": {
+        "area": true,
+        "face": true
+      },
+      "gpfocus": false,
+      "touched": false,
+      "sprite": "velvet-focus.png"
+    },
+    "free": {
+      "focused": {
+        "area": true,
+        "face": true
+      },
+      "gpfocus": false,
+      "touched": false,
+      "sprite": "velvet-focus.png"
+    },
+    "runtimePress": {
+      "focused": {
+        "area": true,
+        "face": true
+      },
+      "gpfocus": false,
+      "touched": false,
+      "sprite": "velvet-focus-press-v3.png"
+    },
+    "nativeTouched": {
+      "focused": {
+        "area": true,
+        "face": true
+      },
+      "gpfocus": false,
+      "touched": true,
+      "sprite": "velvet-focus-press-v3.png"
+    },
+    "released": {
+      "focused": {
+        "area": true,
+        "face": true
+      },
+      "gpfocus": false,
+      "touched": false,
+      "sprite": "velvet-focus.png"
+    }
+  },
+  "other_key": {
+    "focused": {
+      "area": false,
+      "face": true
+    },
+    "gpfocus": true,
+    "touched": false,
+    "sprite": "velvet-focus.png"
+  }
+}

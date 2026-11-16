@@ -43,6 +43,22 @@ _HOME_PATH = re.compile(r"[\\/]home[\\/][^\\/\s:\"']+")
 _FIRMWARE_VERSION_KEYS = frozenset(
     {"bios_version", "bios_date", "bios_release", "ec_firmware_release"}
 )
+# Public controller enums resemble serials; preserve them only in typed fields.
+_CONTROLLER_ENUMS = frozenset(
+    prefix + name
+    for prefix in ("", "Gamepad:Button:")
+    for name in (
+        "LeftPaddle1", "LeftPaddle2", "LeftPaddle3",
+        "RightPaddle1", "RightPaddle2", "RightPaddle3", "QuickAccess2",
+    )
+)
+_CONTROLLER_ENUM_PATHS = frozenset({
+    ("controller", "gamepad_targets"),
+    ("controller", "buttons", "source"),
+    ("controller", "buttons", "target", "gamepad"),
+    ("controller_diagnostics", "dbus", "capabilities"),
+    ("controller_diagnostics", "mapped_buttons", "source"),
+})
 # Identifiers that can appear inside free text (log lines, dmesg/journal output).
 _MAC = re.compile(r"\b(?:[0-9a-fA-F]{2}[:_-]){5}[0-9a-fA-F]{2}\b")
 _UUID = re.compile(
@@ -86,7 +102,7 @@ def redact_text(
     return s
 
 
-def redact_obj(obj, *, home: str | None = None, hostname: str | None = None):
+def redact_obj(obj, *, home: str | None = None, hostname: str | None = None, _path=()):
     """Recursively redact a JSON-ish structure: scrub serial-like key values and
     run redact_text on every string. Idempotent."""
     if isinstance(obj, dict):
@@ -97,11 +113,13 @@ def redact_obj(obj, *, home: str | None = None, hostname: str | None = None):
             elif k in _FIRMWARE_VERSION_KEYS and isinstance(v, str):
                 out[k] = redact_text(v, home=home, hostname=hostname, keep_serial_runs=True)
             else:
-                out[k] = redact_obj(v, home=home, hostname=hostname)
+                out[k] = redact_obj(v, home=home, hostname=hostname, _path=(*_path, k))
         return out
     if isinstance(obj, (list, tuple)):
-        return [redact_obj(x, home=home, hostname=hostname) for x in obj]
-    return redact_text(obj, home=home, hostname=hostname)
+        return [redact_obj(x, home=home, hostname=hostname, _path=_path) for x in obj]
+    path = _path[1:] if _path[:1] == ("state",) else _path
+    keep_enum = isinstance(obj, str) and obj in _CONTROLLER_ENUMS and path in _CONTROLLER_ENUM_PATHS
+    return redact_text(obj, home=home, hostname=hostname, keep_serial_runs=keep_enum)
 
 
 def _tail_file(path: str, n: int) -> str:
@@ -668,6 +686,14 @@ _CONTROLLER_UNITS = {
     "inputplumber": ("inputplumber.service",),
 }
 
+_IP_LIFECYCLE_LINES = 120
+_IP_LIFECYCLE_BYTES = 16_000
+_IP_LIFECYCLE_GREP = (
+    "(?i)loading device profile|setting target devices|setting intercept mode to:"
+    "|device (added|removed):|starting inputplumber|stopp(ing|ed) inputplumber"
+    "|failed running device|found missing input device|disconnected|possible deadlock|channel (is )?closed"
+)
+
 
 def controller_daemon_cmds(manager: str | None) -> dict:
     """Extra kernel_logs command for the active controller daemon's journal, or an
@@ -679,7 +705,13 @@ def controller_daemon_cmds(manager: str | None) -> dict:
     for unit in units:
         cmd.extend(("-u", unit))
     cmd.extend(("-n", "300", "--no-pager"))
-    return {"controller": cmd}
+    commands = {"controller": cmd}
+    if manager == "inputplumber":
+        commands["controller_lifecycle"] = [
+            "/usr/bin/journalctl", "-b", "-u", "inputplumber.service",
+            "--grep", _IP_LIFECYCLE_GREP, "-n", str(_IP_LIFECYCLE_LINES), "--no-pager",
+        ]
+    return commands
 
 
 def capture_command(cmd, *, run=None, env=None) -> str | None:
@@ -719,7 +751,23 @@ def kernel_logs(
                 text = run(cmd[:at - 1] + cmd[at + 1:])
         except Exception:  # noqa: BLE001
             text = None
-        out[key] = redact_text(text[-cap:], home=home, hostname=hostname) if text else None
+        if key == "controller_lifecycle":
+            redacted = redact_text(text, home=home, hostname=hostname) if text else ""
+            encoded = redacted.encode("utf-8")
+            byte_limit = min(cap, _IP_LIFECYCLE_BYTES)
+            out[key] = encoded[-byte_limit:].decode("utf-8", errors="ignore") if encoded else None
+            out["controller_lifecycle_capture"] = {
+                "status": ("unavailable" if text is None else "command_exit"
+                           if text.startswith("[exit ") else "empty"
+                           if not text.strip() or text.strip() == "-- No entries --" else "captured"),
+                "window": "current_boot_tail",
+                "line_limit": _IP_LIFECYCLE_LINES,
+                "line_limit_reached": len((text or "").splitlines()) >= _IP_LIFECYCLE_LINES,
+                "byte_limit": byte_limit,
+                "byte_truncated": len(encoded) > byte_limit,
+            }
+        else:
+            out[key] = redact_text(text[-cap:], home=home, hostname=hostname) if text else None
     return out
 
 
@@ -731,6 +779,8 @@ _SNAP_MAX_CHIPS = 32
 _RAPL_SAMPLE_S = 0.5
 _sleep = time.sleep
 _SNAP_MAX_NAMES = 128
+_SNAP_MAX_FAN_CURVE_CHANNELS = 2
+_SNAP_MAX_FAN_CURVE_POINTS = 8
 _SNAP_MAX_MODULES = 512
 _SNAP_CAP = 60_000
 _HWMON_PATTERNS = (
@@ -786,12 +836,28 @@ def _hwmon_ppt_nodes(chip_dir: str) -> dict:
 
 def _hwmon_fan_nodes(chip_dir: str) -> dict:
     values = {}
-    for pat in ("pwm[0-9]", "pwm[0-9]_enable", "fan[0-9]_input"):
-        for path in sorted(_glob(chip_dir, pat)):
-            values[os.path.basename(path)] = {
-                "value": read_str(path),
-                "writable": _mode_writable(path),
-            }
+    # Existing single-digit control nodes stay bounded; curve readback is at most
+    # two channels of eight points, independent of requested or active fan mode.
+    paths = [path for pat in ("pwm[0-9]", "pwm[0-9]_enable", "fan[0-9]_input")
+             for path in sorted(_glob(chip_dir, pat))]
+    paths += [
+        path
+        for channel in range(1, _SNAP_MAX_FAN_CURVE_CHANNELS + 1)
+        for point in range(1, _SNAP_MAX_FAN_CURVE_POINTS + 1)
+        for field in ("temp", "pwm")
+        if os.path.exists(path := os.path.join(chip_dir, f"pwm{channel}_auto_point{point}_{field}"))
+    ]
+    for path in paths:
+        raw = read_str(path)
+        value = None
+        if raw is not None and re.fullmatch(r"[+-]?[0-9]{1,10}", raw):
+            numeric = int(raw)
+            if -(2 ** 31) <= numeric < 2 ** 31:
+                value = str(numeric)
+        values[os.path.basename(path)] = {
+            "value": value,
+            "writable": _mode_writable(path),
+        }
     return values
 
 
@@ -1223,7 +1289,7 @@ def _snap_desktop(root: str) -> dict:
     return out
 
 
-_DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name",
+_DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name", "board_version",
                "product_name", "product_version", "product_family", "chassis_type",
                "bios_version", "bios_date", "bios_release", "ec_firmware_release")
 _LED_NODES = ("max_brightness", "multi_index", "multi_intensity", "brightness")

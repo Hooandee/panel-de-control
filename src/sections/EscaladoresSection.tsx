@@ -13,7 +13,7 @@ import { BulkPanel } from "../upscalers/BulkPanel";
 import { GameView } from "../upscalers/GameView";
 import { IN_GAME_MODES, publishOverview, readCoverBadges, readInGameMode, setUpscalersSectionOpen, writeCoverBadges, writeInGameMode, type InGameMode } from "../upscalers/overlays";
 import { Fold, Label, SegmentRow } from "../upscalers/parts";
-import { badgeLabel } from "../upscalers/model";
+import { badgeLabel, fallbackLine } from "../upscalers/model";
 import { MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
 import { showGame, takeHeldPage, type PageDraft } from "../upscalers/pageMemory";
 import type { UpscalerChoice, UpscalersOverview } from "../upscalers/types";
@@ -143,7 +143,8 @@ export const EscaladoresSection: FC = () => {
             const engines = overview.engines?.[String(game.liveAppid)];
             const frameGen = engines?.mako?.fg ? `Mako${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
               : engines?.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
-            const scaler = install ? badgeLabel(build, install.options?.model, install.build).full : engines?.mako?.spatial ? "Mako" : null;
+            const fallback = install?.fallback ?? null;
+            const scaler = install ? (fallback ? (fallback.observed ?? t("up.fallback.coverNone", { from: fallback.requested })) : badgeLabel(build, install.options?.model, install.build).full) : engines?.mako?.spatial ? "Mako" : null;
             const active = scaler === "Mako" && frameGen?.startsWith("Mako") ? frameGen : [scaler, frameGen].filter(Boolean).join(" - ");
             return (
               <FocusableCard key={game.instanceKey} onActivate={() => setSelected(game)}>
@@ -155,9 +156,9 @@ export const EscaladoresSection: FC = () => {
                   <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, marginTop: 2, minHeight: 16 }}>
                     {install ? (
                       <>
-                        <span title={t(install.status === "active" ? "up.list.checked" : install.status === "broken" ? "up.list.review" : "up.list.unchecked")}
-                          style={{ display: "flex", flexShrink: 0, color: statusColor(install.status) }}>
-                          {install.status === "active" ? <LuCircleCheck size={14} /> : install.status === "broken" ? <LuTriangleAlert size={14} /> : <LuClock size={14} />}
+                        <span title={fallback ? fallbackLine(fallback, t) : t(install.status === "active" ? "up.list.checked" : install.status === "broken" ? "up.list.review" : "up.list.unchecked")}
+                          style={{ display: "flex", flexShrink: 0, color: statusColor(fallback ? "loaded" : install.status) }}>
+                          {fallback ? <LuTriangleAlert size={14} /> : install.status === "active" ? <LuCircleCheck size={14} /> : install.status === "broken" ? <LuTriangleAlert size={14} /> : <LuClock size={14} />}
                         </span>
                         <span style={{ color: theme.color.textPrimary }}>{active}</span>
                       </>

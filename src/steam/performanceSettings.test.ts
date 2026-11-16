@@ -3,6 +3,8 @@ import { steamRefreshRateForFps, readPerformanceSettings, writePerformanceSettin
 
 import { resetSteamPerformanceDiagnostics, steamPerformanceDiagnostics } from "./performanceDiagnostics";
 
+import reportedVrrRead from "./fixtures/vrr-read-available.json";
+
 beforeEach(resetSteamPerformanceDiagnostics);
 
 function fixture() {
@@ -35,6 +37,53 @@ function fixture() {
 const game = { scope: "game" as const, runningGameId: 42 };
 
 describe("Steam settings adapter", () => {
+  it("distinguishes the reported available read from unknown VRR eligibility", () => {
+    const { deps, store } = fixture();
+    deps.display = () => ({ external: false });
+    delete store.msgLimits!.is_vrr_supported;
+    store.msgSettingsPerApp!.is_vrr_enabled = "private unexpected value";
+    delete store.SetVRREnabled;
+    expect(readPerformanceSettings(deps).some((control) => control.id === "vrr")).toBe(false);
+    const current = steamPerformanceDiagnostics()!.current;
+    expect(current.read_display).toEqual(reportedVrrRead.read_display);
+    expect(current.read_vrr).toEqual(reportedVrrRead.read_vrr);
+    expect(current.vrr_capability).toEqual({
+      display_capable: null, limits_supported: null, setting_enabled: null, setter_present: false,
+    });
+    expect(JSON.stringify(current.vrr_capability)).not.toContain("private unexpected value");
+  });
+
+  it.each([
+    [true, true, false, true, true],
+    [false, true, false, true, false],
+    [true, false, false, true, false],
+    [true, true, null, true, false],
+    [true, true, true, false, false],
+  ] as const)("captures VRR eligibility without changing its guard (%s/%s/%s/%s)", (capable, supported, enabled, setterPresent, visible) => {
+    const { deps, store, display } = fixture();
+    const setter = store.SetVRREnabled;
+    display.isVrrCapable = capable;
+    store.msgLimits!.is_vrr_supported = supported;
+    store.msgSettingsPerApp!.is_vrr_enabled = enabled;
+    if (!setterPresent) delete store.SetVRREnabled;
+    expect(readPerformanceSettings(deps).some((control) => control.id === "vrr")).toBe(visible);
+    expect(steamPerformanceDiagnostics()!.current.vrr_capability).toEqual({
+      display_capable: capable, limits_supported: supported, setting_enabled: enabled, setter_present: setterPresent,
+    });
+    expect(setter).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates VRR diagnostics and records a changed Steam capability", () => {
+    const { deps, display, store } = fixture();
+    readPerformanceSettings(deps);
+    readPerformanceSettings(deps);
+    expect(steamPerformanceDiagnostics()!.events.filter((event) => event.area === "vrr_capability")).toHaveLength(1);
+    display.isVrrCapable = false;
+    expect(readPerformanceSettings(deps).some((control) => control.id === "vrr")).toBe(false);
+    expect(steamPerformanceDiagnostics()!.events.filter((event) => event.area === "vrr_capability")).toHaveLength(2);
+    expect(store.SetVRREnabled).not.toHaveBeenCalled();
+  });
+
   it("reads verified LCD controls without invoking setters or manufacturing legacy paths", () => {
     const { deps, store, set } = fixture();
     const controls = readPerformanceSettings(deps);

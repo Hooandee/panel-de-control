@@ -68,6 +68,18 @@ export function trackSource(track: Track): "music" | "radio" {
   return track.live || isYouTubeTrack(track) || parseEmbedStream(track.url) ? "radio" : "music";
 }
 
+const LOOPBACK_HTTP = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])[:/]/i;
+
+/** Steam's https document upgrades http media to https, so a station without TLS needs the loopback relay. */
+export function needsRelay(track: Track): boolean {
+  return track.live && /^http:\/\//i.test(track.url) && !LOOPBACK_HTTP.test(track.url) && !isHls(track.url) && !parseEmbedStream(track.url);
+}
+
+/** hls.js lives in a frame under Steam's https document, which blocks its http requests as mixed content. */
+function secureHls(url: string): string {
+  return isHls(url) && /^http:\/\//i.test(url) && !LOOPBACK_HTTP.test(url) ? `https://${url.slice(7)}` : url;
+}
+
 /** One player for music, radio and YouTube. What the UI shows comes from the element's own events. */
 export class AmbientPlayer {
   private audio: MediaLike | null = null;
@@ -93,6 +105,7 @@ export class AmbientPlayer {
     private readonly onError: (detail: string) => void = () => undefined,
     private readonly createYouTube: YouTubeFactory = () => new YouTubeEngine(),
     private readonly createVideo: VideoFactory | null = null,
+    private readonly relayStream: ((url: string) => Promise<string | null>) | null = null,
   ) {}
 
   subscribe(listener: Listener): () => void {
@@ -190,7 +203,16 @@ export class AmbientPlayer {
     this.clearRetry();
     this.wantPlaying = true;
     this.emit({ track, status: "loading", error: null, position: 0, duration: null, video: this.showsVideo(track), picture: true });
-    audio.src = track.url;
+    if (this.relayStream && needsRelay(track) && this.engineFor(track) === "audio") {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      void this.relayStream(track.url).catch(() => null).then((url) => {
+        if (generation !== this.loadGeneration || this.active !== audio) return;
+        audio.src = url ?? track.url;
+        if (this.wantPlaying) void audio.play().catch(() => undefined);
+      });
+    } else audio.src = secureHls(track.url);
     audio.volume = this.volume * this.scale;
     if (position > 0 && !track.live) {
       audio.addEventListener("loadedmetadata", () => {

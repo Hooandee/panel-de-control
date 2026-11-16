@@ -9,6 +9,7 @@ import type { AmbientRuntime, AmbientSnapshot } from "../steam/runtime";
 import { FloatingPlayer } from "./FloatingPlayer";
 import { registerLibraryDock, setLibraryDockFocus } from "./libraryDock";
 import { setAmbientRuntime } from "./useAmbient";
+import { recordUiEvent, setUiEventSink } from "../../system/uiEvents";
 
 const platform = vi.hoisted(() => ({
   composition: null as number | null,
@@ -137,6 +138,7 @@ describe("FloatingPlayer fullscreen", () => {
 
   afterEach(() => {
     cleanup();
+    setUiEventSink(null);
     setAmbientRuntime(null);
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -296,6 +298,56 @@ describe("FloatingPlayer fullscreen", () => {
     expect(store.runtime.setVideoVisible).toHaveBeenLastCalledWith(false);
     act(() => store.publish({ player: { ...store.snapshot().player, status: "playing" } }));
     expect(store.runtime.setVideoVisible).toHaveBeenLastCalledWith(true);
+  });
+
+  it("records its own visibility at keyboard transitions without recording media or chat content", () => {
+    const reported = { musicEnabled: false, setup: { overlay: "peek" as const } };
+    const store = runtimeStore(false);
+    const settings = structuredClone(store.snapshot().state!.settings);
+    settings.music.enabled = reported.musicEnabled;
+    settings.music.overlay = reported.setup.overlay;
+    store.publish({ state: { ...store.snapshot().state!, settings } });
+    const keyboard = { Value: false };
+    const keyboardWindow = { VirtualKeyboardManager: { IsShowingVirtualKeyboard: keyboard } };
+    vi.stubGlobal("SteamUIStore", {
+      ActiveWindowInstance: keyboardWindow,
+      WindowStore: { MainWindowInstance: keyboardWindow, SteamUIWindows: [keyboardWindow] },
+    });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 300, 100));
+    const events: Array<{ action: string; detail: string }> = [];
+    setUiEventSink((area, action, detail) => {
+      if (area === "ambient") events.push({ action, detail });
+    });
+    render(<FloatingPlayer recordEvent={(action, fields) => recordUiEvent("ambient", action, fields)} />);
+    act(() => vi.advanceTimersByTime(1100));
+    expect(events).toHaveLength(1);
+    expect(JSON.parse(events[0]!.detail)).toMatchObject({
+      widget: { mounted: true, visible: true },
+      keyboard: { observed: false, active: false, main: false },
+    });
+
+    keyboard.Value = true;
+    act(() => platform.keyboard!(true));
+    act(() => vi.advanceTimersByTime(1100));
+    expect(events[events.length - 1]?.action).toBe("floating_keyboard");
+    expect(JSON.parse(events[events.length - 1]!.detail)).toEqual({
+      widget: { mounted: true, visible: false },
+      keyboard: { observed: true, active: true, main: true, windows: 1, observed_windows: 1, showing_windows: 1 },
+    });
+    act(() => platform.keyboard!(true));
+    act(() => vi.advanceTimersByTime(1100));
+    expect(events).toHaveLength(2);
+    expect(events[1]!.detail.length).toBeLessThanOrEqual(400);
+    keyboard.Value = false;
+    act(() => platform.keyboard!(false));
+    act(() => vi.advanceTimersByTime(1100));
+    expect(events).toHaveLength(3);
+    expect(JSON.parse(events[2]!.detail)).toMatchObject({
+      widget: { mounted: true, visible: true },
+      keyboard: { observed: false, active: false, main: false },
+    });
+    expect(JSON.stringify(events)).not.toContain(store.snapshot().player.track!.title);
+    expect(JSON.stringify(events)).not.toContain(store.snapshot().player.track!.url);
   });
 
   it("steps aside while Steam's keyboard is up, even when set to always show, and comes back after", () => {

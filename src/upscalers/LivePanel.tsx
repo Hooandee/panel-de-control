@@ -4,6 +4,7 @@ import { getUpscalerLive, type UpscalerKey } from "../api";
 import { useI18n } from "../i18n";
 import { pressUpscalerKeyInGame } from "./gameHotkey";
 import { fpsCounterSnapshot, subscribeFpsCounter, toggleFpsCounter } from "./fpsCounter";
+import type { ScalerFallback } from "./types";
 import { Label, ListCard, ListRow, Note } from "./parts";
 
 const POLL_MS = 1500;
@@ -15,11 +16,12 @@ export interface UpscalerLive {
   generating: boolean | null;
   canPause: boolean;
   active: boolean;
+  fallback?: ScalerFallback | null;
 }
 
 /** What the running game reports through OptiScaler's log, polled while the page is open. */
 export function useUpscalerLive(appid: string, enabled: boolean, onActive?: () => void): [UpscalerLive, (generating: boolean | null) => void] {
-  const [live, setLive] = useState<UpscalerLive>({ fps: null, render: null, output: null, generating: null, canPause: true, active: false });
+  const [live, setLive] = useState<UpscalerLive>({ fps: null, render: null, output: null, generating: null, canPause: true, active: false, fallback: null });
   const reported = useRef(false);
   const activeRef = useRef(onActive);
   activeRef.current = onActive;
@@ -31,7 +33,7 @@ export function useUpscalerLive(appid: string, enabled: boolean, onActive?: () =
 
   useEffect(() => {
     reported.current = false;
-    setLive({ fps: null, render: null, output: null, generating: null, canPause: true, active: false });
+    setLive({ fps: null, render: null, output: null, generating: null, canPause: true, active: false, fallback: null });
     if (!enabled) return;
     let alive = true;
     const read = async () => {
@@ -48,6 +50,7 @@ export function useUpscalerLive(appid: string, enabled: boolean, onActive?: () =
         generating: next.fg ?? null,
         canPause: next.fg_toggle !== false,
         active: next.result === "active",
+        fallback: next.fallback ?? null,
       });
     };
     void read();

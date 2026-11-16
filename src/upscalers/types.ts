@@ -44,7 +44,7 @@ export interface UpscalersOverview {
   preferred: string;
   builds: BuildInfo[];
   cached: string[];
-  installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice> }>;
+  installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice>; fallback?: ScalerFallback | null }>;
   /** Mako and Lossless Scaling per game: they never show up as an install. */
   engines?: Record<string, {
     mako?: { spatial: boolean; fg: boolean; multiplier: number | null };
@@ -92,13 +92,20 @@ export interface UpscalerChoice {
   env?: string;
 }
 
+/** FSR 4 was installed but the game's log shows another scaler (or a failed texture hand-off). */
+export interface ScalerFallback {
+  requested: string;
+  observed: string | null;
+  reason: "vulkan_textures" | "backend_changed";
+}
+
 export interface HistoryEntry {
   build: string;
   proxy: string;
   at: number;
   result: UpscalerStatus;
   exe: string | null;
-  facts?: { fg?: string; upscaler?: string; fsr4?: string; version?: string; resolution?: { render: number[]; output: number[] }; initial_resolution?: { render: number[]; output: number[] } };
+  facts?: { fallback?: ScalerFallback; fg?: string; upscaler?: string; fsr4?: string; version?: string; resolution?: { render: number[]; output: number[] }; initial_resolution?: { render: number[]; output: number[] } };
 }
 
 export interface GameDetail {
