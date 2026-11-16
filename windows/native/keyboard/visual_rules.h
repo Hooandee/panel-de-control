@@ -20,7 +20,12 @@ inline constexpr KeyGlyph RoleFromSipGlyph(wchar_t glyph) {
     return RoleFromGlyph(glyph);
 }
 inline constexpr KeyGlyph RoleFromCaption(std::wstring_view caption) {
-    return caption == L"Tab" ? KeyGlyph{KeyRole::Tab, false} : KeyGlyph{KeyRole::Normal, false};
+    if (caption == L"Tab") return {KeyRole::Tab, false};
+    if (caption == L"Entrar") return {KeyRole::Enter, false};
+    if (caption == L"May\u00fas") return {KeyRole::Shift, false};
+    if (caption == L"Bloq May") return {KeyRole::CapsLock, false};
+    if (caption == L"Alt Gr") return {KeyRole::AltGr, false};
+    return {KeyRole::Normal, false};
 }
 inline constexpr bool SignKey(KeyRole role) {
     return role >= KeyRole::Enter && role <= KeyRole::Tab;

@@ -17,6 +17,10 @@ int main() {
     assert(RoleFromSipGlyph(L'\uE752').role == KeyRole::Shift);
     assert(RoleFromGlyph(L'\uE3D8').role == KeyRole::Normal);
     assert(RoleFromCaption(L"Tab").role == KeyRole::Tab);
+    assert(RoleFromCaption(L"Entrar").role == KeyRole::Enter);
+    assert(RoleFromCaption(L"May\u00fas").role == KeyRole::Shift);
+    assert(RoleFromCaption(L"Bloq May").role == KeyRole::CapsLock);
+    assert(RoleFromCaption(L"Alt Gr").role == KeyRole::AltGr);
     assert(RoleFromCaption(L"Home").role == KeyRole::Normal);
     assert(RoleFromCaption(L"TAB").role == KeyRole::Normal);
     assert(RoleFromCaption(L"").role == KeyRole::Normal);

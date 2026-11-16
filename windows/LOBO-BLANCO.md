@@ -143,8 +143,10 @@ iconos de Windows. Aplica las tintas originales, peso 700 a letras y el descenso
 de 2 px al pulsar, sin sustituir transformaciones nativas que ya estén activas.
 Las runas quedan arriba a la izquierda para reservar el indicador Xbox nativo.
 
-Intro, Retroceso, Mayús y Tab se identifican por glifos de las fuentes nativas
-de iconos; Tab también admite la etiqueta exacta observada en el modo numérico. En Emoji SIP Fluent Icons, el glifo de Mayús con
+Las especiales se identifican por glifos de las fuentes nativas de iconos y por
+las etiquetas exactas observadas: Tab, Entrar, Mayús, Bloq May y Alt Gr. Estas
+etiquetas cubren el modo tradicional en español; no declaran soporte para
+las traducciones de todas las interfaces de Windows. En Emoji SIP Fluent Icons, el glifo de Mayús con
 candado permite aplicar la cara granate; sus cambios se observan y se retira el
 callback al restaurar. La fuente del sistema se consulta, nunca se redistribuye.
 No se lee el texto de campos ni se envían pulsaciones a los diagnósticos.
@@ -154,8 +156,8 @@ Windows. No incorpora el sintetizador de Steam, la salida por filas ni controles
 de sonido/efectos. Los efectos responden al puntero y no imponen el mínimo de
 pulsación de 70/90 ms. El foco XAML se conserva; no acredita navegación con mando.
 
-No hay detección general de Mayús de un uso, AltGr, Bloq Mayús independiente o
-teclas muertas. La presencia de la cara granate o la runa Yrden en el paquete no
+No hay detección general del estado activo de Mayús de un uso, AltGr,
+Bloq Mayús independiente o teclas muertas. La presencia de la cara granate o la runa Yrden en el paquete no
 acredita esos estados. Los caracteres extendidos conservan su presentación nativa.
 Estas diferencias impiden declarar equivalencia visual completa con Steam.
 

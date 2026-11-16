@@ -101,7 +101,8 @@ Cada fuente se extrae a un archivo propio de nombre único en TemporaryFolder de
 proceso destino y se referencia mediante ms-appdata. No se instala globalmente.
 Se verifica una diferencia de métricas frente al fallback con una cadena fija,
 y se contrasta visualmente la tipografía. La clasificación de teclas especiales
-solo consulta glifos y la etiqueta Tab dentro de KeyboardKey, sin registrarlos.
+solo consulta glifos y las etiquetas especiales observadas dentro de KeyboardKey,
+sin registrarlos.
 Los indicadores de mando observados usan Xbox Fluent v2; se conserva esa fuente
 igual que las fuentes nativas de iconos. El diagnóstico incluye hasta dieciséis
 muestras de familia, ubicación fondo/contenido, tamaño, opacidad y visibilidad,
