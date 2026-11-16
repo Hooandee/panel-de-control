@@ -999,6 +999,31 @@ def test_lsfg_flow_scale_writes_the_chosen_value(steam, tmp_path):
     assert _flow_scale(home) == 0.33
 
 
+def test_lsfg_flow_scale_tells_presets_from_manual_and_remembers_the_manual_value(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    manual = tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 0.6, "flow_manual": True})["profile"]
+    assert (manual["flow_manual"], manual["manual_scale"], _flow_scale(home)) == (True, 0.6, 0.6)
+    preset = tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 1.0, "flow_manual": False, "manual_scale": 0.6})["profile"]
+    assert (preset["flow_manual"], preset["manual_scale"], _flow_scale(home)) == (False, 0.6, 1.0)
+    assert tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 0.75})["profile"]["manual_scale"] is None
+    # An off-preset value is manual even when the caller did not say so.
+    assert tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 0.4, "flow_manual": False})["profile"]["flow_manual"] is True
+
+
+def test_lsfg_flow_scale_migrates_a_saved_value_to_a_preset_or_manual(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    tool.set_game("1", "Game", {"multiplier": 2})
+    tool.set_game("2", "Other", {"multiplier": 2})
+    data = tool._manifest()
+    data["profiles"]["1"].update(flow_scale=0.5)
+    data["profiles"]["2"].update(flow_scale=0.65)
+    for profile in data["profiles"].values():
+        profile.pop("flow_manual")
+    tool._save(data)
+    profiles = tool.status()["profiles"]
+    assert (profiles["1"]["flow_manual"], profiles["2"]["flow_manual"]) == (False, True)
+
+
 def test_lsfg_flow_scale_accepts_the_lsfg_vk_range_and_nothing_else(steam, tmp_path):
     home, tool = _lsfg_tool(steam, tmp_path)
     for edge in (0.25, 1.0):

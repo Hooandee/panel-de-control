@@ -12,7 +12,7 @@ import { theme } from "../theme";
 import { readLosslessBranch, switchLosslessBranch, type LosslessBranchState } from "./losslessBranch";
 import { fgOffer } from "./model";
 import { ActionButton, Label, ListCard, ListRow, Note, Notice, PickerButton, Row } from "./parts";
-import { FlowScale } from "./FlowScale";
+import { FLOW_MODES, FLOW_PRESETS, FlowScale, flowMode, type FlowMode } from "./FlowScale";
 import type { FgRoute } from "./types";
 
 import { applyManagedLaunch } from "./managedLaunch";
@@ -194,7 +194,7 @@ export const FrameGenRow: FC<{
   const enableLossless = async (ready: LsfgStatus | null) => {
     if (!ready?.installed) setStatus(await installLsfg());
     await transitionFrameGen([
-      { apply: () => saveLsfg({ multiplier: 2, flow_scale: 0.75, performance: true }), restore: () => saveLsfg(profile) },
+      { apply: () => saveLsfg({ multiplier: 2, flow_scale: 0.75, flow_manual: false, performance: true }), restore: () => saveLsfg(profile) },
       ...retireOther("lsfg"),
     ]);
     onOptiscaler("off", null);
@@ -303,9 +303,20 @@ export const FrameGenRow: FC<{
                 options={MULTIPLIERS.map((m) => ({ value: String(m), label: `×${m}` }))}
                 onChange={(m) => void run(() => saveLsfg({ ...profile, multiplier: Number(m) as LsfgProfile["multiplier"] }))}
               />
-              <FlowScale appid={appid} value={profile.flow_scale} disabled={blocked}
-                onCommit={(flowScale) => void run(() => saveLsfg({ ...profile, flow_scale: flowScale }))} />
-              <Note>{t("up.lsfg.flowScaleHint")}</Note>
+              <PickerButton
+                duo={duo} controlId={`${appid}:flow`} showLabel label={t("up.lsfg.flow")}
+                value={flowMode(profile)}
+                disabled={blocked}
+                options={FLOW_MODES.map((mode) => ({ value: mode, label: t(`up.lsfg.flow.${mode}`) }))}
+                onChange={(mode) => void run(() => saveLsfg(mode === "manual"
+                  ? { ...profile, flow_manual: true, flow_scale: profile.manual_scale ?? profile.flow_scale }
+                  : { ...profile, flow_manual: false, flow_scale: FLOW_PRESETS[mode as Exclude<FlowMode, "manual">], manual_scale: flowMode(profile) === "manual" ? profile.flow_scale : profile.manual_scale }))}
+              />
+              {flowMode(profile) === "manual" && <>
+                <FlowScale appid={appid} value={profile.flow_scale} disabled={blocked}
+                  onCommit={(flowScale) => void run(() => saveLsfg({ ...profile, flow_manual: true, flow_scale: flowScale, manual_scale: flowScale }))} />
+                <Note>{t("up.lsfg.flowScaleHint")}</Note>
+              </>}
             <ListRow label={t("up.lsfg.light")} caption={t("up.lsfg.lightHint")} on={profile.performance} disabled={blocked}
               onPress={() => void run(() => saveLsfg({ ...profile, performance: !profile.performance }))} />
           </ListCard>

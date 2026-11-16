@@ -86,6 +86,8 @@ class Lsfg:
         for profile in data["profiles"].values():
             preset = profile.pop("flow", None)
             profile.setdefault("flow_scale", FLOW_PRESETS.get(preset, FLOW_SCALE_DEFAULT))
+            # A saved value that matches a preset shows as that preset; any other is the manual one.
+            profile.setdefault("flow_manual", profile["flow_scale"] not in FLOW_PRESETS.values())
         return data
 
     def _own(self, path: Path) -> None:
@@ -327,10 +329,13 @@ class Lsfg:
                 flow_scale = _flow_scale(config)
                 if multiplier not in MULTIPLIERS or flow_scale is None:
                     raise LsfgError("lsfg_invalid")
+                manual = bool(config.get("flow_manual")) or flow_scale not in FLOW_PRESETS.values()
                 data["profiles"][appid] = {
                     "name": str(name or appid)[:80],
                     "multiplier": multiplier,
                     "flow_scale": flow_scale,
+                    "flow_manual": manual,
+                    "manual_scale": flow_scale if manual else _flow_scale({"flow_scale": config.get("manual_scale")}),
                     "performance": bool(config.get("performance", True)),
                     "exe": Path(exe).name if exe else None,
                 }

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-vi.mock("../components/ContainedSlider", () => ({ ContainedSlider: ({ label, value, min, max, step, disabled, onChange }: any) => <input type="range" aria-label={label} value={value} min={min} max={max} step={step} disabled={disabled} onChange={e => onChange(Number(e.target.value))} /> }));
+vi.mock("../components/ContainedSlider", () => ({ ContainedSlider: ({ label, value, min, max, step, disabled, onChange, notchLabels }: any) => <div><span data-testid="notches">{notchLabels?.map((n: any) => n.label).join("|")}</span><input type="range" aria-label={label} value={value} min={min} max={max} step={step} disabled={disabled} onChange={e => onChange(Number(e.target.value))} /></div> }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 import { FlowScale, clampFlowScale } from "./FlowScale";
 
@@ -43,4 +43,9 @@ it("ignores the slider while the controls are blocked", () => {
   fireEvent.change(slider(), { target: { value: "90" } });
   act(() => { vi.advanceTimersByTime(400); });
   expect(commit).not.toHaveBeenCalled();
+});
+
+it("labels both ends so the number is not needed", () => {
+  render(<FlowScale appid="1" value={0.75} disabled={false} onCommit={vi.fn()} />);
+  expect(screen.getByTestId("notches").textContent).toBe("up.lsfg.flowScale.performance|up.lsfg.flowScale.quality");
 });

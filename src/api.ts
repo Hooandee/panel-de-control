@@ -1435,7 +1435,7 @@ export const restoreUpscalerImageSettings = callable<[appid: string], UpscalerIm
 export const getUpscalerIni = callable<[appid: string], { sections: IniSection[] }>("get_upscaler_ini");
 export const setUpscalerIni = callable<[appid: string, key: string, value: string], { key: string; value: string }>("set_upscaler_ini");
 export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] } | null; resolution_source?: "initialization_only" | "unavailable"; fg?: boolean | null; fg_toggle?: boolean; fps?: number | null; fallback?: import("./upscalers/types").ScalerFallback | null; provider_family?: "fsr" | "dlss" | "xess" | null; provider_name?: "FSR" | "DLSS" | "XeSS" | null; provider_version?: string | null; provider_source?: "optiscaler_log" | "unavailable"; provider_confidence?: "family_only" | "unknown" }>("get_upscaler_live");
-export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow_scale: number; performance: boolean }
+export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow_scale: number; flow_manual?: boolean; manual_scale?: number | null; performance: boolean }
 export interface EngineUpdate { state: "current" | "available" | "updated" | "deferred" | "failed" | "unmanaged"; version: string; available?: string }
 export const refreshFrameGenEngine = callable<[engine: "mako" | "lsfg", apply?: boolean], EngineUpdate>("refresh_framegen_engine");
 export interface LsfgStatus { version?: string | null; installed: boolean; foreign: boolean; foreign_backup?: boolean; cleared?: string[]; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
