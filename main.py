@@ -5566,6 +5566,7 @@ class Plugin(AmbientRpc):
             "pwm_max": hw_state.get("pwm_max", 255),
             "preset": effective["preset"],
             "points": effective["points"],
+            "custom_points": effective.get("custom_points"),
             "bias": effective.get("bias", 0),
             "global_preset": global_curve["preset"],
             "global_points": global_curve["points"],

@@ -44,6 +44,7 @@ FPS you want without wasting battery.
 
 🌀 **Fans.** Live temperatures and RPM, and curves you draw with your finger. Over time it learns
 how hot each game runs and suggests a curve made for it.
+Each profile keeps its custom curve when you switch modes and restores it when you return to Custom.
 
 🎨 **Display.** One-tap color modes (Native, Cinema, Vivid, Comfort) or fine tuning if you like to
 tinker, an OLED look for LCD screens, scheduled night mode and HDR where the panel supports it.

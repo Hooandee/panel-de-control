@@ -633,6 +633,7 @@ export interface FanCurveState {
   firmware_points: { temp: number; pct: number }[] | null;
   preset: FanPreset;
   points: [number, number][] | null;
+  custom_points?: [number, number][] | null;
   // Silence↔cool bias for the adaptive mode (-100..100, 0 otherwise).
   bias: number;
   global_preset: FanPreset;

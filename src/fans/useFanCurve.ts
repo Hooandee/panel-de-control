@@ -144,12 +144,9 @@ export function useFanCurve(): FanCurveControl {
     [resolveTarget, setStateSafe],
   );
 
-  // Enter custom editing: seed from the curve currently shown (the active preset
-  // or the existing custom curve) and persist it as a custom profile so the dots
-  // become editable from a familiar starting shape.
   const onCustomMode = useCallback(() => {
     if (state?.preset === "custom") return; // already editing
-    const seed = shownPoints(state);
+    const seed = state?.custom_points ?? shownPoints(state);
     if (!seed) return;
     const { appid: targetAppid, scope: targetScope } = resolveTarget();
     setState((cur) => (cur ? { ...cur, preset: "custom", points: seed } : cur));
