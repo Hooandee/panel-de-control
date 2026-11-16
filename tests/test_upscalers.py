@@ -276,6 +276,16 @@ def test_analyze_prefers_the_game_exe_over_its_launcher(steam, monkeypatch):
     assert result["anti_cheat"] is False and result["foreign"] is False
 
 
+def test_analyze_picks_the_unity_player_over_anti_cheat_and_helper_exes(tmp_path):
+    for name in ("AntiCheatExpert/ACE-Service64.exe", "CefView/CefViewWing.exe", "PlatformProcess.exe", "QtWebEngineProcess.exe", "Endfield.exe"):
+        _write(tmp_path / name, "x")
+    (tmp_path / "Endfield_Data").mkdir()
+    result = games.analyze(tmp_path)
+    assert result["exe"] == "Endfield.exe"
+    assert result["target"] == str(tmp_path)
+    assert "AntiCheatExpert/ACE-Service64.exe" not in [c["exe"] for c in result["candidates"]]
+
+
 def test_agility_sdk_beside_the_exe_means_d3d12(steam, monkeypatch):
     # RE Engine games (RE4, Requiem, Onimusha) import only d3d11/dxgi and load D3D12 at runtime.
     from upscalers import solution_plan
