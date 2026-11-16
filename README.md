@@ -108,6 +108,9 @@ funcionan en el Big Picture de Steam igual que en Linux, sin CSS Loader: se inst
 se ajustan desde el propio Panel. El resto de secciones enseña lo que lee tu equipo y se irá abriendo
 poco a poco. Si algo no funciona como esperabas, desde Ajustes puedes mandarme un reporte.
 
+La adaptación experimental del teclado táctil nativo permite seleccionar un tema,
+consultar su aplicación real y restaurar Windows. [Alcance y pruebas](windows/NATIVE-KEYBOARD.md).
+
 ## 🕹️ Equipos
 
 Lo pruebo todo en las máquinas que tengo en casa: **Steam Deck LCD y OLED, ROG Ally, ROG Ally X,

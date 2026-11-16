@@ -464,9 +464,9 @@
   <data name="ThemesRemoveDescription" xml:space="preserve"><value>Seine Dateien und Einstellungen werden gelöscht. Du kannst es später erneut installieren.</value></data>
   <data name="ThemesRemoveConfirm" xml:space="preserve"><value>Entfernen</value></data>
   <data name="ThemesRemoveCancel" xml:space="preserve"><value>Abbrechen</value></data>
-  <data name="NativeKeyboardTitle" xml:space="preserve"><value>Terciopelo — Windows-Tastatur</value></data>
+  <data name="NativeKeyboardTitle" xml:space="preserve"><value>Windows-Tastatur</value></data>
   <data name="NativeKeyboardExperimental" xml:space="preserve"><value>Experimentell. Bleibt aktiv, solange Panel de Control läuft. Nur für diese Sitzung.</value></data>
-  <data name="NativeKeyboardTry" xml:space="preserve"><value>Terciopelo aktivieren</value></data>
+  <data name="NativeKeyboardTry" xml:space="preserve"><value>Ausgewähltes Design aktivieren</value></data>
   <data name="NativeKeyboardDisable" xml:space="preserve"><value>Deaktivieren und wiederherstellen</value></data>
   <data name="NativeKeyboardDiagnostics" xml:space="preserve"><value>Diagnose kopieren</value></data>
   <data name="NativeKeyboardCopyFailed" xml:space="preserve"><value>Diagnose konnte nicht kopiert werden.</value></data>
@@ -476,10 +476,14 @@
   <data name="NativeKeyboardFailed" xml:space="preserve"><value>Verbindung zum Runtime fehlgeschlagen. Deaktiviere zur Prüfung der Wiederherstellung; siehe Diagnose.</value></data>
   <data name="NativeKeyboardUnavailable" xml:space="preserve"><value>Aktualisiere oder starte den Companion, um die Windows-Tastatur zu prüfen.</value></data>
   <data name="NativeKeyboardSummary" xml:space="preserve"><value>Windows {0}, {1}. Tasten: {2}/{3} gestaltet, {4} wiederhergestellt.</value></data>
-  <data name="NativeKeyboardApplying" xml:space="preserve"><value>Verbindung wird hergestellt und Terciopelo angewendet…</value></data>
-  <data name="NativeKeyboardApplied" xml:space="preserve"><value>Terciopelo wurde auf die vom Runtime bestätigten Tasten angewendet.</value></data>
-  <data name="NativeKeyboardWaiting" xml:space="preserve"><value>Warten auf die Bildschirmtastatur. Öffne sie, um Terciopelo anzuwenden.</value></data>
+  <data name="NativeKeyboardApplying" xml:space="preserve"><value>Verbindung wird hergestellt und Design angewendet…</value></data>
+  <data name="NativeKeyboardApplied" xml:space="preserve"><value>Design auf alle von der Runtime bestätigten Tasten angewendet.</value></data>
+  <data name="NativeKeyboardWaiting" xml:space="preserve"><value>Warten auf die Bildschirmtastatur. Öffne sie, um das Design anzuwenden.</value></data>
   <data name="NativeKeyboardRestoring" xml:space="preserve"><value>Ursprüngliches Aussehen wird wiederhergestellt…</value></data>
   <data name="NativeKeyboardRestoreUnconfirmed" xml:space="preserve"><value>Wiederherstellung nicht bestätigt. Schließe und öffne die Bildschirmtastatur; melde dich bei Bedarf von Windows ab. Siehe Diagnose.</value></data>
   <data name="NativeKeyboardTest" xml:space="preserve"><value>Tastatur hier ausprobieren</value></data>
+  <data name="NativeKeyboardTheme" xml:space="preserve"><value>Design</value></data>
+  <data name="NativeKeyboardThemeStatus" xml:space="preserve"><value>Angefordert: {0}. Bestätigt: {1}.</value></data>
+  <data name="NativeKeyboardNone" xml:space="preserve"><value>Keines</value></data>
+  <data name="NativeKeyboardRetry" xml:space="preserve"><value>Ausgewähltes Design erneut versuchen</value></data>
 </root>

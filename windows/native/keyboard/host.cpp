@@ -20,11 +20,20 @@ unsigned frameworkChecks = 0;
 std::atomic<bool> stopRequested{false};
 std::string lastStatus = "waiting_for_keyboard", lastError = "keyboard_not_running";
 const char* architecture = "unknown";
+keyboard::ThemeId requestedTheme = keyboard::ThemeId::None;
+bool restoreRequested = false;
 void Result(const char* status, const char* error, HRESULT hr = S_OK,
             const keyboard::Report* report = nullptr) {
     lastStatus = status; lastError = error;
+    if (restoreRequested && (lastError == "discovery_busy" || lastError == "xaml_attach_failed" ||
+                             lastError == "tap_receipt_timeout")) {
+        status = "restoring"; error = "styles_restoring";
+    }
     const bool connected = report && SUCCEEDED(report->subscribeResult);
-    std::cout << "{\"status\":\"" << status << "\",\"errorCode\":\"" << error
+    std::cout << "{\"protocolVersion\":" << keyboard::ProtocolVersion
+              << ",\"requestedTheme\":\"" << keyboard::ThemeName(requestedTheme)
+              << "\",\"appliedTheme\":\"" << keyboard::ThemeName(report && report->phase == keyboard::StylePhase::Applied ? report->appliedTheme : keyboard::ThemeId::None)
+              << "\",\"status\":\"" << status << "\",\"errorCode\":\"" << error
               << "\",\"windowsBuild\":" << build << ",\"architecture\":\"" << architecture << "\",\"processId\":"
               << targetPid << ",\"connected\":" << (connected ? "true" : "false")
               << ",\"hresult\":" << static_cast<long>(hr)
@@ -183,7 +192,7 @@ void StyleResult(const keyboard::Report& report) {
     }
 }
 }
-int Run(bool faceProbe, bool styling, bool effectProbe = false) {
+int Run(bool faceProbe, bool styling, bool effectProbe = false, bool restoring = false) {
     targetPid = 0;
     RTL_OSVERSIONINFOW version{}; version.dwOSVersionInfoSize = sizeof(version);
     using GetVersion = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
@@ -199,19 +208,30 @@ int Run(bool faceProbe, bool styling, bool effectProbe = false) {
         Result("unsupported", "unsupported_windows_or_architecture"); return 0;
     }
     build = version.dwBuildNumber;
-    if ((faceProbe || styling) && build != 26300) { Result("unsupported", "probe_build_unverified"); return 0; }
-    DWORD session = 0; ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    if ((faceProbe || styling || restoring) && build != 26300) { Result("unsupported", "probe_build_unverified"); return 0; }
+    DWORD session = 0;
+    if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)) { Result("connection_failed", "discovery_busy"); return 0; }
     Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
     PROCESSENTRY32W entry{}; entry.dwSize = sizeof(entry);
-    if (snapshot && Process32FirstW(snapshot.value, &entry)) do {
+    if (!snapshot || !Process32FirstW(snapshot.value, &entry)) {
+        Result("connection_failed", "discovery_busy"); return 0;
+    }
+    do {
         DWORD candidateSession = 0;
-        if (_wcsicmp(entry.szExeFile, L"TextInputHost.exe") == 0 &&
-            ProcessIdToSessionId(entry.th32ProcessID, &candidateSession) && candidateSession == session) {
+        if (_wcsicmp(entry.szExeFile, L"TextInputHost.exe") == 0) {
+            if (!ProcessIdToSessionId(entry.th32ProcessID, &candidateSession)) { Result("connection_failed", "discovery_busy"); return 0; }
+            if (candidateSession != session) continue;
             if (targetPid) { Result("connection_failed", "ambiguous_target"); return 0; }
             targetPid = entry.th32ProcessID;
         }
     } while (Process32NextW(snapshot.value, &entry));
-    if (!targetPid) { previousPid = 0; Result(styling ? "waiting_for_keyboard" : "connection_failed", "keyboard_not_running"); return 0; }
+    if (GetLastError() != ERROR_NO_MORE_FILES) { Result("connection_failed", "discovery_busy"); return 0; }
+    if (!targetPid) {
+        previousPid = 0;
+        Result(restoring ? "disabled" : styling ? "waiting_for_keyboard" : "connection_failed",
+               restoring ? "styles_restored" : "keyboard_not_running");
+        return 0;
+    }
 
     Handle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, targetPid));
     USHORT machine = 0, nativeMachine = 0;
@@ -278,17 +298,20 @@ int Run(bool faceProbe, bool styling, bool effectProbe = false) {
     const auto initialize = xaml ? reinterpret_cast<decltype(&InitializeXamlDiagnosticsEx)>(
         GetProcAddress(xaml, "InitializeXamlDiagnosticsEx")) : nullptr;
     if (!initialize) { CancelIoEx(pipe.value, nullptr); Result("unsupported", "xaml_diagnostics_missing"); return 0; }
+    const std::string themeName = keyboard::ThemeName(requestedTheme);
+    const auto initialization = std::to_wstring(keyboard::ProtocolVersion) + L"|" + sessionToken + L"|" +
+        std::wstring(themeName.begin(), themeName.end());
     HRESULT hr = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
     // Connection names are an implementation detail, not a documented keyboard contract.
     for (int i = 1; i <= 4 && hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND); ++i) {
         const auto name = L"VisualDiagConnection" + std::to_wstring(i);
-        hr = initialize(name.c_str(), targetPid, L"", tap.c_str(), effectProbe ? KeyboardEffectsProbeId : styling ? KeyboardStyleId : faceProbe ? KeyboardFaceProbeId : KeyboardTapId, sessionToken.c_str());
+        hr = initialize(name.c_str(), targetPid, L"", tap.c_str(), restoring ? KeyboardRestoreId : effectProbe ? KeyboardEffectsProbeId : styling ? KeyboardStyleId : faceProbe ? KeyboardFaceProbeId : KeyboardTapId, initialization.c_str());
     }
     DWORD transferred = 0;
     if (FAILED(hr)) {
         CancelIoEx(pipe.value, nullptr); Result("connection_failed", "xaml_attach_failed", hr); return 0;
     }
-    if (!immediate && connectError == ERROR_IO_PENDING && !FinishIo(pipe.value, operation, transferred, faceProbe ? 14000 : 8000)) {
+    if (!immediate && connectError == ERROR_IO_PENDING && !FinishIo(pipe.value, operation, transferred, restoring ? 1000 : faceProbe ? 14000 : 8000)) {
         Result("connection_failed", "tap_receipt_timeout"); return 0;
     }
     ULONG clientPid = 0;
@@ -309,12 +332,24 @@ int Run(bool faceProbe, bool styling, bool effectProbe = false) {
             if (WaitForSingleObject(process.value, 0) == WAIT_OBJECT_0) {
                 Result(stopping ? "disabled" : "waiting_for_keyboard", stopping ? "styles_restored" : "keyboard_not_running"); return 0;
             }
+            if (report.phase == keyboard::StylePhase::Applied && report.appliedTheme != requestedTheme) {
+                Result("connection_failed", "theme_mismatch"); return 0;
+            }
             StyleResult(report);
             if (stopping || report.phase == keyboard::StylePhase::Idle || FAILED(report.styleResult)) return 0;
             for (int i = 0; i < 10 && !stopRequested; ++i) Sleep(100);
         }
     }
     if (!ReadReport(pipe.value, event.value, report)) { Result("connection_failed", "receipt_invalid"); return 0; }
+    if (report.phase == keyboard::StylePhase::Applied && report.appliedTheme != requestedTheme) {
+        Result("connection_failed", "theme_mismatch"); return 0;
+    }
+    if (restoring) {
+        if (keyboard::RestorationConfirmed(report))
+            Result("disabled", "styles_restored", S_OK, &report);
+        else Result("connection_failed", "restore_unconfirmed", report.styleResult, &report);
+        return 0;
+    }
     if (FAILED(report.subscribeResult)) Result("connection_failed", "xaml_subscribe_failed", report.subscribeResult, &report);
     else if (FAILED(report.unsubscribeResult)) Result("connection_failed", "xaml_unsubscribe_failed", report.unsubscribeResult, &report);
     else if (faceProbe) Result("experimental_probe",
@@ -328,10 +363,40 @@ int Run(bool faceProbe, bool styling, bool effectProbe = false) {
 
 int wmain(int argc, wchar_t** argv) {
     const bool faceProbe = argc == 2 && wcscmp(argv[1], L"probe-key-face") == 0;
-    const bool effectProbe = argc == 2 && wcscmp(argv[1], L"probe-effects") == 0;
-    const bool styling = effectProbe || (argc == 2 && wcscmp(argv[1], L"serve") == 0);
-    if (argc != 2 || (!faceProbe && !styling && wcscmp(argv[1], L"discover") != 0)) {
+    const bool effectProbe = argc >= 2 && wcscmp(argv[1], L"probe-effects") == 0;
+    const bool restoring = argc >= 2 && wcscmp(argv[1], L"restore") == 0;
+    const bool styling = effectProbe || (argc >= 2 && wcscmp(argv[1], L"serve") == 0);
+    if ((!styling && !restoring && (argc != 2 || (!faceProbe && wcscmp(argv[1], L"discover") != 0))) ||
+        (styling && argc != 2 && argc != 3) || (restoring && argc != 3)) {
         Result("connection_failed", "invalid_command"); return 2;
+    }
+    if (styling || restoring) {
+        std::string theme = "terciopelo";
+        if (argc == 3) {
+            theme.clear();
+            for (const auto c : std::wstring_view(argv[2])) {
+                if (c > 127) { Result("connection_failed", "invalid_theme"); return 2; }
+                theme.push_back(static_cast<char>(c));
+            }
+        }
+        requestedTheme = keyboard::ParseTheme(theme);
+        if (!keyboard::KnownTheme(requestedTheme)) {
+            Result("connection_failed", "invalid_theme"); return 2;
+        }
+    }
+    if (restoring) {
+        restoreRequested = true;
+        const auto deadline = GetTickCount64() + 12000;
+        do {
+            Run(false, false, false, true);
+            if (lastError != "discovery_busy" && lastError != "xaml_attach_failed" &&
+                lastError != "tap_receipt_timeout") break;
+            if (GetTickCount64() >= deadline) break;
+            Sleep(500);
+        } while (GetTickCount64() < deadline);
+        if (lastError == "discovery_busy" || lastError == "xaml_attach_failed" || lastError == "tap_receipt_timeout")
+            Result("connection_failed", "restore_unconfirmed");
+        return 0;
     }
     if (!styling) return Run(faceProbe, false);
     std::thread([] {

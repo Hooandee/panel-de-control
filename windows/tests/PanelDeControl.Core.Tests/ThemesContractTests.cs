@@ -43,6 +43,43 @@ public sealed class ThemesContractTests
         Assert.ThrowsAny<Exception>(() => ThemesWireCodec.DeserializeRequest(payload));
     }
 
+    [Theory]
+    [InlineData("terciopelo")]
+    [InlineData("lobo-blanco")]
+    [InlineData(null)]
+    public void NativeKeyboardSelectionRoundTrips(string? themeId)
+    {
+        var request = ThemesRequest.SetNativeKeyboard(true, themeId);
+        var decoded = ThemesWireCodec.DeserializeRequest(ThemesWireCodec.SerializeRequest(request));
+        Assert.Equal(themeId, decoded.ThemeId);
+        Assert.True(decoded.Enabled);
+    }
+
+    [Theory]
+    [InlineData("{\"operation\":10,\"enabled\":true,\"theme_id\":\"unknown\"}")]
+    [InlineData("{\"operation\":10,\"enabled\":true,\"theme_id\":\"Lobo Blanco\"}")]
+    [InlineData("{\"operation\":0,\"theme_id\":\"terciopelo\"}")]
+    public void NativeKeyboardThemeCannotLeakIntoOtherOperations(string payload)
+    {
+        Assert.ThrowsAny<Exception>(() => ThemesWireCodec.DeserializeRequest(payload));
+    }
+
+    [Fact]
+    public void NativeKeyboardThemeConfirmationRoundTrips()
+    {
+        var response = new ThemesResponse
+        {
+            Status = ThemesResponseStatus.Ok,
+            NativeKeyboard = new PanelDeControl.Core.NativeKeyboard.NativeKeyboardStatus
+            {
+                Requested = true, Status = "applied", RequestedTheme = "lobo-blanco", AppliedTheme = "lobo-blanco",
+            },
+        };
+        var decoded = ThemesWireCodec.DeserializeResponse(ThemesWireCodec.SerializeResponse(response));
+        Assert.Equal("lobo-blanco", decoded.NativeKeyboard!.RequestedTheme);
+        Assert.Equal("lobo-blanco", decoded.NativeKeyboard.AppliedTheme);
+    }
+
     [Fact]
     public void ResponsesRoundTripWithLocalizedOptions()
     {

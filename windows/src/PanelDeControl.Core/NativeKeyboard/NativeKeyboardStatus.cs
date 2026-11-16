@@ -5,6 +5,10 @@ namespace PanelDeControl.Core.NativeKeyboard;
 [DataContract]
 public sealed class NativeKeyboardStatus
 {
+    [DataMember(Name = "requested_theme", Order = 15)]
+    public string RequestedTheme { get; set; } = "";
+    [DataMember(Name = "applied_theme", Order = 16)]
+    public string AppliedTheme { get; set; } = "";
     [DataMember(Name = "requested", Order = 1)]
     public bool Requested { get; set; }
     [DataMember(Name = "status", Order = 2)]

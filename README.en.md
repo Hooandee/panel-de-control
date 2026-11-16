@@ -108,6 +108,9 @@ work in Steam Big Picture just like on Linux, with no CSS Loader: install, enabl
 Panel itself. The other sections show what your device reports and will open up over time. If
 something doesn't work as you expected, you can send me a report from Settings.
 
+The experimental native touch keyboard integration lets you select a theme,
+check its confirmed state and restore Windows. [Scope and testing](windows/NATIVE-KEYBOARD.md).
+
 ## 🕹️ Devices
 
 I test everything on the machines I have at home: **Steam Deck LCD and OLED, ROG Ally, ROG Ally X,

@@ -1,0 +1,499 @@
+{
+  "schemaVersion": 1,
+  "id": "lobo-blanco",
+  "displayName": "Lobo Blanco",
+  "sourceVersion": "0.9.11",
+  "target": "TextInputHost.exe",
+  "experimental": true,
+  "scope": {
+    "source": "Steam virtual keyboard",
+    "target": "Windows 11 native touch keyboard",
+    "inventoryComplete": true,
+    "validatedWindowsBuilds": [],
+    "referenceEffectsAreImplemented": false
+  },
+  "licensing": {
+    "artwork": {
+      "catalogAuthor": "Hooandee",
+      "separateLicense": null,
+      "notice": "Original resources supplied by the theme author; no separate artwork license is included in the Steam source."
+    },
+    "fonts": {
+      "license": "OFL-1.1",
+      "notices": [
+        "fonts/OFL-cinzel.txt",
+        "fonts/OFL-marcellus.txt"
+      ],
+      "source": "fonts/SOURCE.txt"
+    }
+  },
+  "assets": [
+    {
+      "path": "assets/fx-igni.webp",
+      "bytes": 59302,
+      "sha256": "189e1f3807a320f223be8f4cc06c7135f053176b6bc0b02e91639c55a125b159",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/plate.webp",
+      "bytes": 111338,
+      "sha256": "acad81b9af3f2d74da0fe03c4f4903686b1b66e2014f9b3e1062b5a11bb05801",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/plush-hot-press.png",
+      "bytes": 23481,
+      "sha256": "92cb002cec223354e5bd34d58e13181f7f03e3688e6d4ec1f65c9b2a2730e54e",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/plush-hot.png",
+      "bytes": 25788,
+      "sha256": "4cacee1df7b2e07954ce1ee0e5298c64e03194e7bbff2b9232dd8af6c22f2675",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/plush-maroon.png",
+      "bytes": 13307,
+      "sha256": "4d025059d7ad82adda5e2413bd7c31abee246f39f766b3a5ccf68332cedf2484",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/plush-red-press.png",
+      "bytes": 17622,
+      "sha256": "68da545e0fb3945826e79da77a8b11dfa21d878c323cf9c338f155f0267f4260",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/plush-red.png",
+      "bytes": 19370,
+      "sha256": "f11483e0bb37ef8e8d957a0054c76397c207a43bc9d717bc86cc960e40daed88",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/plush-silver-press.png",
+      "bytes": 16219,
+      "sha256": "ff17f488dc67f3851bf8a134d5d1d3a6f5c309701e55853d40b8a7119872421f",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/plush-silver.png",
+      "bytes": 18737,
+      "sha256": "1d63cfc11f7573892ebf4c177eba653ca8dbbd4d05f4bc1d0cc0766802575715",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/sign-aard.png",
+      "bytes": 2597,
+      "sha256": "e53964f9ff413385fab1be4d13e99953ffaf3df06fdea9f4f04b5266c07fefa8",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/sign-axii.png",
+      "bytes": 2322,
+      "sha256": "07f11d804fcd8cd6da06d978dd2808ef8c221a89ed72b8471b66f3c125b7e4d3",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/sign-igni.png",
+      "bytes": 2810,
+      "sha256": "2ce1dc60546142c527cb7db816021dd3a710419a063c9344c2b36a2bcdd2c857",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/sign-quen.png",
+      "bytes": 2608,
+      "sha256": "55dfc630b89e65f44e1f853bc2c6b2a6d34de1ea20ce5a82aa4f1963ce75ad8a",
+      "origin": "steam-original"
+    },
+    {
+      "path": "assets/sign-yrden.png",
+      "bytes": 3652,
+      "sha256": "2496c4abd5ddda78bd8fbbd7d61cc26afed96a762000835b955934fa2a66f795",
+      "origin": "steam-original"
+    },
+    {
+      "path": "fonts/Cinzel.ttf",
+      "bytes": 33788,
+      "sha256": "30870094400b451a5d0151d8be381605c9179a9d1b25676391f51f2fd74b7f28",
+      "origin": "derived-font"
+    },
+    {
+      "path": "fonts/LoboBlancoLetras.ttf",
+      "bytes": 17900,
+      "sha256": "58cc067e980cb6ce3d036cb21bd014148aba51521d3f95d790602581b9e278d9",
+      "origin": "derived-font"
+    },
+    {
+      "path": "fonts/Marcellus.ttf",
+      "bytes": 30980,
+      "sha256": "c545e67ed2ae793268b90961bf52995b4a1163084173a64e9e5472f52004e552",
+      "origin": "derived-font"
+    },
+    {
+      "path": "fonts/originals/cinzel-latin.woff2",
+      "bytes": 15184,
+      "sha256": "8efa224fe70fef188a39c095e218b81fd31061809f2752537e33a9ec7b9c2263",
+      "origin": "steam-original"
+    },
+    {
+      "path": "fonts/originals/marcellus-latin.woff2",
+      "bytes": 14552,
+      "sha256": "8a539799d12e3a144273288055490f57e1eee84da7a9145f085bc522e80719c3",
+      "origin": "steam-original"
+    }
+  ],
+  "tokens": {
+    "background": "#0e0f11",
+    "foreground": "#3a0906",
+    "foregroundSoftRgba": [
+      58,
+      9,
+      6,
+      0.55
+    ],
+    "specialForeground": "#fbf1ea",
+    "focusedForeground": "#fff8f3",
+    "focusedSecondaryRgba": [
+      255,
+      244,
+      238,
+      0.7
+    ],
+    "emojiForeground": "#eef1f4",
+    "emojiFocusBackground": "#d63a2c",
+    "deadKeyForeground": "#b3231b",
+    "letterSizeCssPx": 20,
+    "numberSizeCssPx": 16,
+    "secondarySizeCssPx": [
+      10,
+      9
+    ],
+    "specialSizeCssPx": 9.5,
+    "metaSizeCssPx": 11,
+    "fontWeight": 700,
+    "keyMarginCssPx": [
+      3,
+      3,
+      4,
+      3
+    ],
+    "pressedTextOffsetCssPx": 2,
+    "popup": {
+      "gradient": [
+        "#2a2d32",
+        "#121316"
+      ],
+      "gapCssPx": 2,
+      "paddingCssPx": 4,
+      "cornerRadiusCssPx": 10,
+      "outlineRgba": [
+        214,
+        58,
+        44,
+        0.45
+      ],
+      "shadow": {
+        "offsetCssPx": [
+          0,
+          10
+        ],
+        "blurCssPx": 24,
+        "colorRgba": [
+          0,
+          0,
+          0,
+          0.7
+        ]
+      }
+    },
+    "labels": {
+      "primaryOffsetCssPx": -1,
+      "primaryWithSecondaryOffsetCssPx": 7,
+      "secondaryTopCssPx": 3,
+      "secondaryOpacity": 0.78,
+      "tertiaryRightCssPx": 6,
+      "tertiaryBottomCssPx": 5,
+      "tertiaryOpacity": 0.6
+    },
+    "rune": {
+      "topCssPx": 9,
+      "edgeInsetCssPx": 12,
+      "leftEdgeRoles": [
+        "CapsLock",
+        "ShiftLeft"
+      ],
+      "rightEdgeRoles": [
+        "Enter",
+        "Backspace",
+        "ShiftRight",
+        "Tab"
+      ],
+      "labelPaddingLeftCssPx": 22,
+      "labelPaddingRightCssPx": 24
+    }
+  },
+  "plate": {
+    "asset": "assets/plate.webp",
+    "sourcePixels": [
+      1708,
+      478
+    ],
+    "stretch": "fill",
+    "alignment": "center"
+  },
+  "fonts": {
+    "letters": {
+      "path": "fonts/LoboBlancoLetras.ttf",
+      "family": "Lobo Blanco Letras",
+      "style": "Regular",
+      "requestedWeight": 700,
+      "sourceActualWeight": 400,
+      "unicodeRanges": [
+        "0041-005A",
+        "0061-007A",
+        "00C0-00FF",
+        "0152-0153"
+      ],
+      "purpose": "CSS range selection through font fallback; no text inspection"
+    },
+    "symbols": {
+      "path": "fonts/Cinzel.ttf",
+      "family": "Cinzel",
+      "style": "Bold",
+      "weight": 700
+    },
+    "marcellusReference": {
+      "path": "fonts/Marcellus.ttf",
+      "family": "Marcellus",
+      "style": "Regular",
+      "weight": 400,
+      "runtime": false
+    }
+  },
+  "keyFaces": {
+    "sourcePixels": [
+      216,
+      168
+    ],
+    "sliceSourcePixels": 54,
+    "borderWidthCssPx": 18,
+    "outsetCssPx": 6,
+    "fillCenter": true,
+    "stretch": "stretch",
+    "states": {
+      "idle": "assets/plush-silver.png",
+      "special": "assets/plush-red.png",
+      "focus": "assets/plush-hot.png",
+      "pressed": "assets/plush-silver-press.png",
+      "specialPressed": "assets/plush-red-press.png",
+      "focusPressed": "assets/plush-hot-press.png",
+      "latched": "assets/plush-maroon.png"
+    },
+    "precedence": [
+      "idle",
+      "special",
+      "pressed or specialPressed",
+      "focusPressed",
+      "latched or oneShot",
+      "focus when latched or oneShot",
+      "deadKeyActive"
+    ],
+    "notes": [
+      "Source toggle rules follow press rules: latched and oneShot retain maroon, or hot when focused.",
+      "There is no maroon-press resource and no distinct hover resource.",
+      "The source dead-key rule follows focus and uses the red Sign face."
+    ]
+  },
+  "keyRoles": {
+    "Enter": "igni",
+    "Backspace": "aard",
+    "Shift": "quen",
+    "CapsLock": "yrden",
+    "Tab": "axii"
+  },
+  "signs": {
+    "igni": {
+      "asset": "assets/sign-igni.png",
+      "sourcePixels": [
+        60,
+        60
+      ],
+      "sizeCssPx": [
+        13,
+        13
+      ],
+      "glowRgba": [
+        255,
+        140,
+        60,
+        0.75
+      ]
+    },
+    "aard": {
+      "asset": "assets/sign-aard.png",
+      "sourcePixels": [
+        60,
+        60
+      ],
+      "sizeCssPx": [
+        13,
+        13
+      ],
+      "glowRgba": [
+        150,
+        210,
+        255,
+        0.7
+      ]
+    },
+    "quen": {
+      "asset": "assets/sign-quen.png",
+      "sourcePixels": [
+        60,
+        60
+      ],
+      "sizeCssPx": [
+        13,
+        13
+      ],
+      "glowRgba": [
+        255,
+        214,
+        110,
+        0.7
+      ]
+    },
+    "yrden": {
+      "asset": "assets/sign-yrden.png",
+      "sourcePixels": [
+        60,
+        60
+      ],
+      "sizeCssPx": [
+        13,
+        13
+      ],
+      "glowRgba": [
+        200,
+        160,
+        255,
+        0.7
+      ]
+    },
+    "axii": {
+      "asset": "assets/sign-axii.png",
+      "sourcePixels": [
+        60,
+        60
+      ],
+      "sizeCssPx": [
+        13,
+        13
+      ],
+      "glowRgba": [
+        160,
+        235,
+        130,
+        0.7
+      ]
+    }
+  },
+  "effects": {
+    "ember": {
+      "asset": "assets/fx-igni.webp",
+      "frames": 16,
+      "sourceFramePixels": [
+        160,
+        130
+      ],
+      "sizeCssPx": [
+        72,
+        58
+      ],
+      "bottomPercent": 42,
+      "durationMs": 380,
+      "fadeStartsFraction": 0.75,
+      "easing": "steps(15,end)",
+      "trigger": "press_except_igni"
+    },
+    "igni": {
+      "asset": "assets/fx-igni.webp",
+      "frames": 16,
+      "sourceFramePixels": [
+        160,
+        130
+      ],
+      "sizeCssPx": [
+        160,
+        130
+      ],
+      "bottomPercent": 30,
+      "durationMs": 620,
+      "fadeStartsFraction": 0.75,
+      "easing": "steps(15,end)",
+      "trigger": "enter_press"
+    },
+    "glow": {
+      "durationMs": 420,
+      "easing": "cubic-bezier(.2,.7,.2,1)",
+      "outsetCssPx": 6,
+      "cornerRadiusCssPx": 14,
+      "gradient": "radial closest-side to transparent",
+      "keyframes": [
+        {
+          "offset": 0,
+          "opacity": 0,
+          "scale": 0.9
+        },
+        {
+          "offset": 0.25,
+          "opacity": 1,
+          "scale": 1
+        },
+        {
+          "offset": 1,
+          "opacity": 0,
+          "scale": 1.08
+        }
+      ],
+      "trigger": "sign_press"
+    },
+    "exit": {
+      "durationMs": 300,
+      "rowStaggerMs": 28,
+      "rowOffsetCssPx": 26,
+      "rowOrder": "reversed",
+      "rowEasing": "cubic-bezier(.5,0,.75,0)",
+      "globalFadeStartsFraction": 0.35,
+      "globalEasing": "ease-in",
+      "trigger": "close"
+    },
+    "press": {
+      "minDurationMs": 70,
+      "physicalKeyboardDurationMs": 90,
+      "textOffsetCssPx": 2
+    }
+  },
+  "sound": {
+    "default": "soft",
+    "levels": {
+      "off": 0,
+      "soft": 0.35,
+      "normal": 0.7
+    },
+    "method": "synthesized",
+    "sampleAssets": [],
+    "frequencyDriftFraction": 0.08,
+    "envelopeAttackMs": 2,
+    "voice": "metallic click; Igni highpass sweep and three harmonics; Aard lowpass sweep and 80Hz sine; other Signs two triangle tones"
+  },
+  "settings": {
+    "effects": true,
+    "sound": "soft"
+  },
+  "limitations": [
+    "Resource inventory only; native input, rendering, effects and sound require independent validation.",
+    "No claim of parity with Steam until visual and interaction checks on Windows 11."
+  ]
+}

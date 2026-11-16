@@ -1,0 +1,77 @@
+Lobo Blanco font resources
+
+The two WOFF2 files in originals/ are the unchanged Latin font resources from
+the Hooandee Steam keyboard theme Lobo Blanco 0.9.11. They are not a new download
+or a replacement with a more recent upstream font. Their complete supplied
+coverage is preserved in the corresponding reference TTF files; "complete"
+here means the supplied Latin resource, not every glyph in an upstream family.
+
+cinzel-latin.woff2
+SHA-256: 8efa224fe70fef188a39c095e218b81fd31061809f2752537e33a9ec7b9c2263
+Embedded family/style: Cinzel / Bold
+Embedded unique name: 2.000;NONE;Cinzel-Bold
+Embedded copyright: Copyright 2020 The Cinzel Project Authors
+(https://github.com/NDISCOVER/Cinzel)
+Embedded license URL: https://scripts.sil.org/OFL
+Coverage: 228 glyphs, 220 Unicode code points.
+Output: Cinzel.ttf; family Cinzel, style Bold, PostScript Cinzel-Bold.
+
+marcellus-latin.woff2
+SHA-256: 8a539799d12e3a144273288055490f57e1eee84da7a9145f085bc522e80719c3
+Embedded family/style: Marcellus / Regular
+Embedded unique name: Astigmatic(AOETI): Marcellus: 2012
+Embedded copyright: Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic
+(AOETI) (astigma@astigmatic.com), with Reserved Font Name "Marcellus"
+Embedded license URL: http://scripts.sil.org/OFL
+Coverage: 218 glyphs, 214 Unicode code points.
+Reference output: Marcellus.ttf; family Marcellus, style Regular,
+PostScript Marcellus-Regular.
+
+Licenses
+
+Both embedded copyright statements and OFL URLs match the respective official
+Google Fonts license notices. Complete, family-specific notices are included:
+- OFL-cinzel.txt
+- OFL-marcellus.txt
+
+License source revision: google/fonts cc39c4c2c304bc368c9b7c311ea2bcc6013299fe
+https://github.com/google/fonts/blob/cc39c4c2c304bc368c9b7c311ea2bcc6013299fe/ofl/cinzel/OFL.txt
+https://github.com/google/fonts/blob/cc39c4c2c304bc368c9b7c311ea2bcc6013299fe/ofl/marcellus/OFL.txt
+
+The complete TTFs only unwrap WOFF2 compression: cmap, glyph order, outlines,
+metrics and name metadata are verified unchanged. They retain their names.
+OFL FAQ 2.2.1 describes the unmodified-data WOFF/WOFF2 exception:
+https://openfontlicense.org/ofl-faq/#faq-2-2-1
+
+LoboBlancoLetras.ttf is a Modified Version of Marcellus under OFL-1.1.
+Its family is Lobo Blanco Letras, style Regular, PostScript name
+LoboBlancoLetras-Regular. Family/full/unique/PostScript/typographic/WWS name
+records are renamed; original copyright, author and license metadata remain.
+No endorsement by the original font authors is implied.
+
+The derivative exposes only the code points present in the original within
+these CSS ranges: U+0041-005A, U+0061-007A, U+00C0-00FF, U+0152-0153.
+It preserves the selected outlines and advance/bearing metrics. The ranges
+are reproduced literally, including U+00D7 and U+00F7. Space, digits and other
+punctuation are absent from its cmap so native font fallback can select Cinzel
+without inspecting label text. Required composite glyph components may remain
+internally without an exposed Unicode mapping.
+
+Reproduction
+
+Python 3 with fonttools[woff]==4.63.0 and Brotli==1.2.1:
+
+    python -m pip install "fonttools[woff]==4.63.0" "Brotli==1.2.1"
+    python prepare_fonts.py
+
+Run from this directory, or pass the script's path from any directory. It reads
+only the checked-in originals, checks the SHA-256 inputs, converts both complete
+resources, builds the renamed derivative, and verifies coverage, outlines,
+metrics and metadata. No network access is needed after dependencies are
+installed. Timestamps are preserved for deterministic output. Output hashes are
+recorded in ../theme.json and must be reviewed if the tool version changes.
+
+FontTools API references:
+https://fonttools.readthedocs.io/en/latest/ttLib/ttFont.html
+https://fonttools.readthedocs.io/en/latest/subset/index.html
+https://github.com/fonttools/fonttools/blob/main/Snippets/rename-fonts.py

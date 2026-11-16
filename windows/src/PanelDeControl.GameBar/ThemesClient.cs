@@ -14,7 +14,7 @@ public sealed class ThemesClient
     private static readonly TimeSpan QuickResponseTimeout = TimeSpan.FromSeconds(12);
     private static readonly TimeSpan LongResponseTimeout = TimeSpan.FromSeconds(110);
 
-    public Task<ThemesResponse> SetNativeKeyboardAsync(bool enabled) => SendAsync(ThemesRequest.SetNativeKeyboard(enabled));
+    public Task<ThemesResponse> SetNativeKeyboardAsync(bool enabled, string? themeId = null) => SendAsync(ThemesRequest.SetNativeKeyboard(enabled, themeId));
 
     public Task<ThemesResponse> GetAsync() => SendAsync(ThemesRequest.Get());
 
