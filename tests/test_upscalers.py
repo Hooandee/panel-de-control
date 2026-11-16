@@ -1239,11 +1239,13 @@ def test_endfield_recipe_launches_in_directx11(steam, fake_catalog, proc, monkey
     # FSR 4 only runs through the D3D11 to D3D12 bridge; the Vulkan path falls back to FSR 2.2.
     recipe = recipes.recipe_for("4732690")
     assert recipe.args == ("-force-d3d11",)
+    assert recipes.recipe_catalog.bundled().match("4732690", "optiscaler", None, None) is None
+    # The fixture game has a curated recipe whose arguments would replace these; Endfield has none.
+    monkeypatch.setattr(type(recipes.recipe_catalog.bundled()), "match", lambda self, *a, **k: None)
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, args=recipe.args, proxy="d3d12.dll"))
     monkeypatch.setattr(catalog, "D3D12_PROXY_APPIDS", frozenset({APPID}))
     result = _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test"})
-    # The fixture game also has wiki arguments; the recipe only has to add its own.
-    assert result["overrides"] == ["d3d12=n,b"] and "-force-d3d11" in result["args"]
+    assert result["overrides"] == ["d3d12=n,b"] and result["args"] == ["-force-d3d11"]
 
 
 @pytest.fixture
