@@ -889,7 +889,8 @@ export class AmbientRuntime {
     const hostClaim = this.channel.activeClaim();
     const hosted = hostClaim?.mode === "host" && surface !== "other" && hostClaim.surfaces.includes(surface);
     // A host replaces Steam's Home, so its native game art must travel through the media channel.
-    const mediaRef = choice.mediaRef ?? (hosted && choice.nativeArt === "show" && selectedAppId ? `steam:${selectedAppId}` : null);
+    const hostGameArtUrl = hosted && choice.mediaRef === null && choice.nativeArt === "show" && selectedAppId ? libraryHeroUrl(selectedAppId) : null;
+    const mediaRef = choice.mediaRef ?? (hostGameArtUrl ? `steam:${selectedAppId}` : null);
     if (!owns || mediaRef === null) {
       this.layer.apply(null, { transition: settings.background.transition, nativeArt: "show", motion, visible: false });
       doc?.documentElement.removeAttribute("data-pdc-ambient-background");
@@ -900,6 +901,11 @@ export class AmbientRuntime {
       this.previousOwner = decision.background === "panel" && !owns ? null : decision.background;
       this.patch({ currentUrl: null });
       return;
+    }
+    if (hostGameArtUrl && this.channel.getState().media?.url !== hostGameArtUrl) {
+      // A missing hero must not leave the previous game's art in the host's load-error fallback.
+      this.channel.publish({ owner: "panel", media: null, motion });
+      this.patch({ currentUrl: null });
     }
     const url = await this.resolve(mediaRef);
     if (this.stopped || generation !== this.renderGeneration || !url) return;

@@ -879,6 +879,48 @@ describe("AmbientRuntime", () => {
     } finally { runtime.stop(); }
   });
 
+  it.each([true, false])("clears the previous host game before resolving the next one (source available: %s)", async (available) => {
+    const { channel, runtime } = hostGameArtFixture();
+    try {
+      await runtime.start();
+      await runtime.showMineOver([hostGameArt.themeId]);
+      await vi.waitFor(() => expect(channel.getState().media?.url).toBe("https://steamloopback.host/assets/730/library_hero.jpg"));
+      const resolver = runtime as unknown as { resolve(ref: string): Promise<string | null> };
+      const original = resolver.resolve.bind(runtime);
+      let finish!: (url: string | null) => void;
+      vi.spyOn(resolver, "resolve").mockImplementation(ref => ref === "steam:570" ? new Promise(resolve => { finish = resolve; }) : original(ref));
+      const seen: (string | null)[] = [];
+      channel.subscribe(state => seen.push(state.media?.url ?? null));
+      channel.select(hostGameArt.themeId, "570");
+      expect(channel.getState()).toMatchObject({ owner: "panel", media: null });
+      expect(runtime.getSnapshot().currentUrl).toBeNull();
+      const next = available ? "https://steamloopback.host/assets/570/library_hero.jpg" : null;
+      finish(next);
+      await vi.waitFor(() => expect(channel.getState().media?.url ?? null).toBe(next));
+      expect(seen).toEqual(available ? [null, next] : [null]);
+      if (available) {
+        await runtime.updateSettings(s => s);
+        expect(seen).toEqual([null, next]);
+        expect(channel.getState().media?.url).toBe(next);
+      }
+    } finally { runtime.stop(); }
+  });
+
+  it("keeps the host's existing crossfade policy for an explicit per-game picture", async () => {
+    const { channel, runtime } = hostGameArtFixture();
+    try {
+      await runtime.start();
+      await runtime.showMineOver([hostGameArt.themeId]);
+      await vi.waitFor(() => expect(channel.getState().media?.url).toBe("https://steamloopback.host/assets/730/library_hero.jpg"));
+      await runtime.updateSettings(s => ({ ...s, background: { ...s.background, perGame: { "570": "local:b" } } }));
+      const seen: (string | null)[] = [];
+      channel.subscribe(state => seen.push(state.media?.url ?? null));
+      channel.select(hostGameArt.themeId, "570");
+      await vi.waitFor(() => expect(channel.getState().media?.url).toBe("http://127.0.0.1:1/m/t/local:b"));
+      expect(seen).toEqual(["http://127.0.0.1:1/m/t/local:b"]);
+    } finally { runtime.stop(); }
+  });
+
   it("tells theme runtimes when Ambiente's music really plays, and when the in-game pause silences it", async () => {
     const configured = settings();
     configured.music.enabled = true;
