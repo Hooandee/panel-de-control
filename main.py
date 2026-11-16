@@ -3474,6 +3474,8 @@ class Plugin(AmbientRpc):
                 continue
             sanitized = {}
             for key, value in values.items():
+                if source == "theme_surface" and key == "navigation":
+                    continue
                 if not isinstance(key, str) or len(key) > 32:
                     continue
                 if isinstance(value, bool) or value is None:
@@ -3482,6 +3484,29 @@ class Plugin(AmbientRpc):
                     sanitized[key] = round(float(value), 3)
                 if len(sanitized) >= limit:
                     break
+            if source == "theme_surface" and isinstance(values.get("navigation"), dict):
+                navigation = values["navigation"]
+                allowed = {
+                    "route": {"home", "steamweb", "externalweb", "store", "other"},
+                    "expected": {"blank", "store", "community", "http", "other"},
+                    "requested": {"blank", "store", "community", "http", "other"},
+                    "loaded": {"blank", "store", "community", "http", "other"},
+                    "browser": {"missing", "unready", "ready", "unknown"},
+                }
+                snapshot = {
+                    key: value if isinstance(value := navigation.get(key), str) and value in choices else None
+                    for key, choices in allowed.items()
+                }
+                snapshot["loading"] = navigation.get("loading") if isinstance(navigation.get("loading"), bool) else None
+                history = navigation.get("history")
+                history = history if isinstance(history, dict) else {}
+                snapshot["history"] = {
+                    key: value if type(value := history.get(key)) is int and 0 <= value <= 2147483647 else None
+                    for key in ("index", "entries", "initial", "final")
+                }
+                error = navigation.get("error")
+                snapshot["error"] = error if type(error) is int and -2147483648 <= error <= 2147483647 else None
+                sanitized["navigation"] = snapshot
             result[target] = sanitized
         return result
 
