@@ -686,6 +686,14 @@ _CONTROLLER_UNITS = {
     "inputplumber": ("inputplumber.service",),
 }
 
+_IP_LIFECYCLE_LINES = 120
+_IP_LIFECYCLE_BYTES = 16_000
+_IP_LIFECYCLE_GREP = (
+    "(?i)loading device profile|setting target devices|setting intercept mode to:"
+    "|device (added|removed):|starting inputplumber|stopp(ing|ed) inputplumber"
+    "|failed running device|found missing input device|disconnected|possible deadlock|channel (is )?closed"
+)
+
 
 def controller_daemon_cmds(manager: str | None) -> dict:
     """Extra kernel_logs command for the active controller daemon's journal, or an
@@ -697,7 +705,13 @@ def controller_daemon_cmds(manager: str | None) -> dict:
     for unit in units:
         cmd.extend(("-u", unit))
     cmd.extend(("-n", "300", "--no-pager"))
-    return {"controller": cmd}
+    commands = {"controller": cmd}
+    if manager == "inputplumber":
+        commands["controller_lifecycle"] = [
+            "/usr/bin/journalctl", "-b", "-u", "inputplumber.service",
+            "--grep", _IP_LIFECYCLE_GREP, "-n", str(_IP_LIFECYCLE_LINES), "--no-pager",
+        ]
+    return commands
 
 
 def capture_command(cmd, *, run=None, env=None) -> str | None:
@@ -737,7 +751,23 @@ def kernel_logs(
                 text = run(cmd[:at - 1] + cmd[at + 1:])
         except Exception:  # noqa: BLE001
             text = None
-        out[key] = redact_text(text[-cap:], home=home, hostname=hostname) if text else None
+        if key == "controller_lifecycle":
+            redacted = redact_text(text, home=home, hostname=hostname) if text else ""
+            encoded = redacted.encode("utf-8")
+            byte_limit = min(cap, _IP_LIFECYCLE_BYTES)
+            out[key] = encoded[-byte_limit:].decode("utf-8", errors="ignore") if encoded else None
+            out["controller_lifecycle_capture"] = {
+                "status": ("unavailable" if text is None else "command_exit"
+                           if text.startswith("[exit ") else "empty"
+                           if not text.strip() or text.strip() == "-- No entries --" else "captured"),
+                "window": "current_boot_tail",
+                "line_limit": _IP_LIFECYCLE_LINES,
+                "line_limit_reached": len((text or "").splitlines()) >= _IP_LIFECYCLE_LINES,
+                "byte_limit": byte_limit,
+                "byte_truncated": len(encoded) > byte_limit,
+            }
+        else:
+            out[key] = redact_text(text[-cap:], home=home, hostname=hostname) if text else None
     return out
 
 
