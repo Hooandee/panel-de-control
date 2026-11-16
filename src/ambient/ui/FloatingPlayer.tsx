@@ -9,6 +9,8 @@ import { CONTROL_BUTTONS, CONTROL_IDLE_MS, GamepadButton, controlAction, keyToBu
 import { captureButtons } from "../../platform/buttonCapture";
 import { onQamLeftEdge, qamPanelWidth, subscribeQamSurface, type QamSurface } from "../../platform/qamSurface";
 import { subscribeVirtualKeyboard } from "../../platform/virtualKeyboard";
+import { recordUiEvent } from "../../system/uiEvents";
+import { floatingDiagnostics } from "../steam/floatingDiagnostics";
 import {
   cardWidth,
   fullscreenVideoBounds,
@@ -132,6 +134,14 @@ export const FloatingPlayer: FC = () => {
   const pillWanted = !qamOpen && (mode === "always" || (mode === "peek" && peekUntil > Date.now()));
   const videoRunning = video && (playing || player?.status === "loading" || player?.status === "retrying");
   const visible = !!player?.track && !keyboardShown && (libraryOpen ? !!dockElement : videoRunning || pillWanted || controlling);
+  useEffect(() => {
+    if (!host || !view) return;
+    const frame = view.requestAnimationFrame(() => {
+      recordUiEvent("ambient", "floating_keyboard", { ...floatingDiagnostics(view.document, keyboardShown) });
+    });
+    return () => view.cancelAnimationFrame(frame);
+  }, [host, keyboardShown, view]);
+
   const rightInset = qamOpen && surface ? qamPanelWidth(surface.document) ?? 0 : 0;
   const normalWidth = viewport ? cardWidth(viewport, rightInset, video, music?.videoScale ?? 40) : 0;
   const width = fullscreen && viewport ? viewport.width : docked ? dockBounds?.width ?? 0 : normalWidth;
@@ -433,6 +443,7 @@ export const FloatingPlayer: FC = () => {
       {createPortal(
         <div
           ref={card}
+          data-pdc-ambient-card
           onPointerDown={docked ? undefined : onPointerDown}
           onPointerDownCapture={docked ? onPointerDown : undefined}
           onPointerMove={onPointerMove}
