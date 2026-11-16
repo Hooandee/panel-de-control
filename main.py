@@ -4722,6 +4722,16 @@ class Plugin(AmbientRpc):
             await self._ensure_recognised_desktop_migration()
             if getattr(self, "_desktop_recognition_migration_pending", False):
                 return False
+            if callable(getattr(self._tdp_backend, "resume_ownership", None)):
+                resume_cancelled = threading.Event()
+                try:
+                    await self._offload_call(
+                        lambda: self._recover_tdp_runtime_transaction(
+                            resume_control=True, resume_cancelled=resume_cancelled,
+                        )
+                    )
+                finally:
+                    resume_cancelled.set()
             if not await self._probe_tdp_backend(force=True):
                 return False
             if self._low_battery_hold_recovery_pending:
@@ -14139,13 +14149,49 @@ class Plugin(AmbientRpc):
             self._start_tdp_guard_loop()
         return recovered
 
-    def _recover_tdp_runtime_transaction(self) -> bool:
+    def _recover_tdp_runtime_transaction(
+        self, resume_control=False, resume_cancelled=None,
+    ) -> bool:
         if not getattr(self._tdp_backend, "safety_locked", False):
             return True
         recover = getattr(self._tdp_backend, "recover_runtime_transaction", None)
         if not callable(recover):
             return True
         try:
+            backend = self._tdp_backend
+            generation = getattr(self, "_tdp_generation", None)
+            resume = getattr(backend, "resume_ownership", None)
+            resume_ready = getattr(backend, "ownership_resume_ready", None)
+
+            def authorized():
+                return (
+                    self._tdp_backend is backend
+                    and getattr(self, "_tdp_generation", None) == generation
+                    and not getattr(self, "_shutting_down", False)
+                    and (resume_cancelled is None or not resume_cancelled.is_set())
+                    and (self._tdp_control_on() or resume_control)
+                    and self._tdp_write_authorized()
+                    and self._tdp_external_owner is False
+                    and self._firmware_mode() == _CUSTOM_MODE
+                )
+
+            if (
+                callable(resume) and callable(resume_ready) and resume_ready()
+                and authorized()
+                and self._powerstation_detector.tdp_active() is False
+                and (
+                    self._controller_backend.manager != controller_detect.HHD
+                    or self._hhd_tdp_client.current_tdp_enable() is False
+                )
+                and authorized()
+            ):
+                resumed = trace_tdp_operation(
+                    self._tdp_backend, "resume_ownership",
+                    lambda: resume(write_authorized=True),
+                )
+                if isinstance(resumed, dict) and resumed.get("ok"):
+                    decky.logger.info("TDP ownership: %s", resumed.get("detail"))
+                    return True
             result = trace_tdp_operation(
                 self._tdp_backend, "recover", recover,
             )
