@@ -1344,6 +1344,7 @@ export const de: Record<string, string> = {
   "system.off": "deaktiviert",
   "system.eco.title": "Downloadmodus",
   "system.eco.autoExit": "Downloadmodus deaktiviert, da du dein Gerät wieder benutzt.",
+  "system.eco.downloadDone": "Downloadmodus deaktiviert, da der Download abgeschlossen ist.",
   "system.eco.desc": "Senkt den Verbrauch beim Herunterladen von Spielen.",
   "system.eco.countdown": "Bildschirm geht aus in",
   "system.eco.row.tdp": "TDP",

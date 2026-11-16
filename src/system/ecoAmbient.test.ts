@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   cancel: vi.fn(),
   started: 0,
   steam: (_active: boolean) => {},
+  download: (_active: boolean) => {},
   raw: () => {},
   brightness: (_f: number) => {},
 }));
@@ -36,6 +37,7 @@ vi.mock("./ecoCountdown", () => ({
   },
 }));
 vi.mock("./activity", () => ({ subscribeActive: (cb: (a: boolean) => void) => ((h.steam = cb), () => {}) }));
+vi.mock("./downloads", () => ({ subscribeDownloadActive: (cb: (a: boolean) => void) => ((h.download = cb), () => {}) }));
 vi.mock("./display", () => ({
   displayBrightness: { set: h.setBrightness, subscribe: (cb: (f: number) => void) => ((h.brightness = cb), () => {}) },
 }));
@@ -79,6 +81,43 @@ describe("download mode screen", () => {
     vi.useRealTimers();
   });
 
+
+  it("leaves download mode thirty seconds after the download that ran under it ends", async () => {
+    enable();
+    h.download(true);
+    await tick(60000);
+    expect(h.setEco).not.toHaveBeenCalled();
+    h.download(false);
+    await tick(29999);
+    expect(h.setEco).not.toHaveBeenCalled();
+    await tick(1);
+    expect(h.setEco).toHaveBeenCalledExactlyOnceWith(false, 40);
+    expect(h.toast).toHaveBeenCalledTimes(1);
+    expect(h.recordUiEvent).toHaveBeenCalledWith("system", "eco_auto_exit", { reason: "download_finished", source: "steam_downloads" }, true);
+    await tick(60000);
+    expect(h.setEco).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps download mode when no download was seen or the next one starts in time", async () => {
+    enable();
+    h.download(false);
+    await tick(60000);
+    expect(h.setEco).not.toHaveBeenCalled();
+    h.download(true);
+    h.download(false);
+    await tick(20000);
+    h.download(true);
+    await tick(60000);
+    expect(h.setEco).not.toHaveBeenCalled();
+  });
+
+  it("forgets downloads seen before download mode was turned on", async () => {
+    h.download(true);
+    enable();
+    h.download(false);
+    await tick(60000);
+    expect(h.setEco).not.toHaveBeenCalled();
+  });
 
   it("does not exit on enable, a Steam active state, or one wake tap", async () => {
     enable();
