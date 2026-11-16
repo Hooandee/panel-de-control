@@ -55,7 +55,7 @@ const game: GameEntry = {
 afterEach(() => { cleanup(); setUiEventSink(null); vi.clearAllMocks(); });
 
 describe("custom launch variables", () => {
-  it("shows the reported DXVK_HUD=0 variable in the manager and in Advanced without writing the game", async () => {
+  it("shows the reported DXVK_HUD=0 variable in the manager and in the editor without unfolding Advanced and without writing the game", async () => {
     const events: Array<{ area: string; action: string; fields: unknown; ok: boolean }> = [];
     const sink: UiEventSink = (area, action, detail, ok) => { events.push({ area, action, fields: JSON.parse(detail), ok }); };
     setUiEventSink(sink);
@@ -68,13 +68,14 @@ describe("custom launch variables", () => {
     openLaunchEditorModal(game, () => {});
     render(mocks.modal);
     const advanced = await screen.findByText("params.advanced");
-    expect(screen.queryByRole("switch", { name: "Hide Shader Compilation" })).toBeNull();
+    expect(screen.getByRole("switch", { name: "Hide Shader Compilation" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText("params.sub.custom")).toBeTruthy();
     await waitFor(() => {
       setUiEventSink(sink);
       expect(events).toContainEqual({ area: "launch", action: "editor_state", fields: { state: "ready", custom_state: "ready", custom_count: 1, advanced_open: false }, ok: true });
     });
     fireEvent.click(advanced);
-    expect(screen.getByRole("switch", { name: "Hide Shader Compilation" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getAllByRole("switch", { name: "Hide Shader Compilation" })).toHaveLength(1);
     expect(screen.getByText("DXVK_HUD=0")).toBeTruthy();
     setUiEventSink(null);
     expect(events[events.length - 1]).toEqual({ area: "launch", action: "editor_state", fields: { state: "ready", custom_state: "ready", custom_count: 1, advanced_open: true }, ok: true });

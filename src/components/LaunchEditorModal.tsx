@@ -42,6 +42,9 @@ const SUBGROUP_ICONS: Record<string, ReactNode> = {
   "params.sub.custom": <LuSlidersHorizontal size={13} />,
 };
 
+// The user's own variables stay outside the folded Advanced section so they are visible on open.
+const CUSTOM_SUBGROUP = "params.sub.custom";
+
 type Editor = ReturnType<typeof useLaunchEditor>;
 
 const TOOLS_FALLBACK: LaunchTools = {
@@ -157,7 +160,7 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   const supportedEnvs = capabilities.envs;
   const fsrReason = fsrUnavailableReason(gpu, capabilities);
   const advancedCount = catalog.filter((p) =>
-    p.section === "advanced" && !!selectionForPill(p, ed.selections, gpu, supportedEnvs, catalog) && pillVisible(p, supportedEnvs, gpu)).length;
+    p.section === "advanced" && p.subgroup !== CUSTOM_SUBGROUP && !!selectionForPill(p, ed.selections, gpu, supportedEnvs, catalog) && pillVisible(p, supportedEnvs, gpu)).length;
   const owned = ownedTokens(ed.selections, catalog);
   const frequents: Pill[] = tools ? frequentPills(ed.usage, tools).filter((p) => pillVisible(p, supportedEnvs, gpu)) : [];
   // No usage yet → offer a "Start here" set of safe recommended picks instead.
@@ -243,8 +246,10 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
             <Subgroup key={sg} section="common" subgroup={sg} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} catalog={catalog} />
           ))}
 
+          <Subgroup section="advanced" subgroup={CUSTOM_SUBGROUP} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} catalog={catalog} />
+
           <Fold title={t("params.advanced")} summary={advancedCount > 0 ? `${advancedCount}` : ""} onOpenChange={setAdvancedOpen}>
-            {SUBGROUP_ORDER.advanced.map((sg) => (
+            {SUBGROUP_ORDER.advanced.filter((sg) => sg !== CUSTOM_SUBGROUP).map((sg) => (
               <Subgroup key={sg} section="advanced" subgroup={sg} fsrReason={fsrReason} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} catalog={catalog} />
             ))}
           </Fold>
