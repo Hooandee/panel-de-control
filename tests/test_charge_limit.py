@@ -496,3 +496,27 @@ def test_charge_types_active_is_cached_and_invalidated_on_write(tmp_path):
         f.write("[Standard] Long_Life")
     assert backend.disable() is True  # a write drops the cache
     assert backend.active() == "Standard"
+
+
+def test_charge_types_read_straddling_a_write_is_not_cached(tmp_path, monkeypatch):
+    # A slow poll that started before the limit was written must not leave the old mode cached.
+    p = _mk_charge_types(str(tmp_path), value="[Standard] Long_Life")
+    cl = LenovoChargeTypes(root=str(tmp_path))
+    import battery.charge_limit as module
+    real_read = module.read_str
+
+    fired = []
+
+    def slow_read(path):
+        value = real_read(path)
+        if not fired:
+            fired.append(True)
+            cl.set(80)  # the write lands while this read is still in flight
+        return value
+
+    monkeypatch.setattr(module, "read_str", slow_read)
+    assert cl.active() == "Standard"
+    monkeypatch.setattr(module, "read_str", real_read)
+    assert open(p).read() == "Long_Life"
+    assert cl.active() == "Long_Life"
+
