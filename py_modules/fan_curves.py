@@ -16,6 +16,15 @@ def _clamp_bias(v):
         return 0
 
 
+def _clean_points(raw):
+    if not isinstance(raw, list) or not raw:
+        return None
+    try:
+        return [[int(t), int(p)] for t, p in raw]
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 class FanCurveStore(ScopedProfileStore):
     """Global fan-curve profile + per-appid overrides. See ScopedProfileStore for the
     scope contract.
@@ -23,6 +32,7 @@ class FanCurveStore(ScopedProfileStore):
     Profile = {"preset": str, "points": list|None}. preset in {"auto","adaptive"}
     => points None. `adaptive` additionally carries a `bias` (silence↔cool
     preference, -100..100). Otherwise points is an 8-element [[temp,pwm],...] list.
+    Outside custom, optional `custom_points` remembers the last manual curve.
     Default = auto.
     """
 
@@ -42,17 +52,17 @@ class FanCurveStore(ScopedProfileStore):
         if raw.get("learned") and preset == "custom":
             return self._adaptive()
         if preset == "adaptive":
-            return self._adaptive(raw.get("bias", 0))
-        if preset not in _VALID or preset == "auto":
-            return self._auto()
-        pts = raw.get("points")
-        if not isinstance(pts, list) or not pts:
-            return self._auto()
-        try:
-            points = [[int(t), int(p)] for t, p in pts]
-        except (TypeError, ValueError):
-            return self._auto()
-        return {"preset": preset, "points": points}
+            profile = self._adaptive(raw.get("bias", 0))
+        elif preset not in _VALID or preset == "auto":
+            profile = self._auto()
+        else:
+            points = _clean_points(raw.get("points"))
+            profile = {"preset": preset, "points": points} if points else self._auto()
+        if preset != "custom":
+            custom_points = _clean_points(raw.get("custom_points"))
+            if custom_points:
+                profile["custom_points"] = custom_points
+        return profile
 
     def effective(self, appid):
         return dict(self._effective_prof(appid))
@@ -68,19 +78,27 @@ class FanCurveStore(ScopedProfileStore):
         """The silence↔cool bias (-100..100) of the effective adaptive profile (0 otherwise)."""
         return _clamp_bias(self._effective_prof(appid).get("bias", 0))
 
+    def _set_mode(self, scope, profile, appid=None):
+        previous = self._target(scope, appid)
+        remembered = previous.get("points") if previous.get("preset") == "custom" else previous.get("custom_points")
+        custom_points = _clean_points(remembered)
+        if profile["preset"] != "custom" and custom_points:
+            profile["custom_points"] = custom_points
+        self._set_profile(scope, appid, profile)
+
     def set_preset(self, scope, preset_id, points, appid=None):
-        self._set_profile(scope, appid, {"preset": preset_id, "points": [list(p) for p in points]})
+        self._set_mode(scope, {"preset": preset_id, "points": [list(p) for p in points]}, appid)
 
     def set_custom(self, scope, points, appid=None):
         self._set_profile(scope, appid, {"preset": "custom", "points": [list(p) for p in points]})
 
     def set_adaptive(self, scope, appid=None):
         """Select the adaptive (learned) mode for a scope (bias reset to neutral)."""
-        self._set_profile(scope, appid, self._adaptive())
+        self._set_mode(scope, self._adaptive(), appid)
 
     def set_adaptive_bias(self, scope, bias, appid=None):
         """Select adaptive and set its silence↔cool bias (-100..100)."""
-        self._set_profile(scope, appid, self._adaptive(bias))
+        self._set_mode(scope, self._adaptive(bias), appid)
 
     def set_auto(self, scope, appid=None):
-        self._set_profile(scope, appid, self._auto())
+        self._set_mode(scope, self._auto(), appid)
