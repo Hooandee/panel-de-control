@@ -1,5 +1,5 @@
 export const de: Record<string, string> = {
-  "app.title": "Kontrollzentrum",
+  "app.title": "Panel de Control",
   "load.error": "Der Plugin-Status konnte nicht geladen werden. Versuche es gleich noch einmal.",
   "load.retry": "Erneut versuchen",
   "device.detected": "{name}",

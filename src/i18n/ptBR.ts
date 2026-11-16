@@ -1,5 +1,5 @@
 export const ptBR: Record<string, string> = {
-  "app.title": "Painel de Controle",
+  "app.title": "Panel de Control",
   "load.error": "Não foi possível carregar o estado do plugin. Por favor, tente novamente em um momento.",
   "load.retry": "Tentar novamente",
   "device.detected": "{name}",

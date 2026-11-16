@@ -1937,7 +1937,7 @@ const es: Record<string, string> = {
 };
 
 const en: Record<string, string> = {
-  "app.title": "Control Panel",
+  "app.title": "Panel de Control",
   "load.error": "Couldn't load the plugin state. Please try again in a moment.",
   "load.retry": "Retry",
   "device.detected": "{name}",

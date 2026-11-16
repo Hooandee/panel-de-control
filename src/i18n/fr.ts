@@ -1,5 +1,5 @@
 export const fr: Record<string, string> = {
-  "app.title": "Centre de contrôle",
+  "app.title": "Panel de Control",
   "load.error": "Impossible de charger l'état du plugin. Réessayez dans un instant.",
   "load.retry": "Réessayer",
   "device.detected": "{name}",

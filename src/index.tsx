@@ -99,8 +99,6 @@ import { themeActionsChannel } from "./themes/runtime/themeActions";
 import { startPluginQamRuntime } from "./qam/pluginRuntime";
 import { getQamDocument, onQamDocument } from "./qamDocument";
 
-// Localized header title only; the internal plugin name / install folder stays
-// "Panel de Control" (renaming it would break existing installs and the updater).
 // Steam's public beta stopped exposing the module @decky/ui reads these classes from.
 const PluginTitle: FC = () => (
   <div className={staticClasses?.Title}>{translate("app.title")}</div>
