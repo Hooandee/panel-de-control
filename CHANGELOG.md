@@ -1,5 +1,182 @@
 # Changelog
 
+## [0.90.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.3...panel-de-control-v0.90.0) (2026-11-16)
+
+
+### Español
+
+* **Los dos ventiladores de la ROG Ally, por separado:** En la familia ROG Ally, el editor de curva tiene ahora «Juntos» y «Por separado». Por separado, cada ventilador sigue su propia curva, con los preajustes aplicados a los dos. Si vuelves a «Juntos», recuperas tu curva de siempre. En las consolas con un solo ventilador no cambia nada.
+* **HUD distinto para cada juego:** El HUD tiene las mismas pestañas Global y Juego que la potencia o los ventiladores. Puedes dejarlo apagado para todos y encendido solo en un juego, o al revés, y se aplica solo al abrirlo. En Parámetros verás qué juegos tienen su propio HUD.
+* **El aviso de control del TDP se puede ocultar:** La tarjeta que avisa de que Steam también puede gestionar la potencia tiene «No volver a mostrar», y devolver el control a Steam sigue a mano dentro de la sección. Si Steam es quien controla el TDP, la sección lo dice claramente y te deja recuperarlo con un toque.
+* **El TDP, también en tus menús personalizados:** Hay un bloque nuevo que solo trae el control de vatios, para ponerlo en cualquier menú personalizado.
+* **Generación de frames de Lossless Scaling más fácil de ajustar:** La calidad de generación mantiene sus opciones de siempre y añade Manual, con un deslizador que va de más rendimiento a más calidad.
+* **FSR 4 funciona en Arknights: Endfield:** Antes OptiScaler se instalaba en la carpeta equivocada y el juego no lo cargaba. Ahora Panel de Control lo coloca junto al juego y lo abre en DirectX 11, que es como FSR 4 funciona en Linux. Solo tienes que elegir DLSS en los ajustes gráficos del juego; la tarjeta te lo recuerda.
+* **Panel de Control avisa si FSR 4 no llega a usarse:** Cuando un juego no puede usar FSR 4 y cambia a FSR 2, la tarjeta y la etiqueta del juego lo dicen, en lugar de seguir mostrando FSR 4.
+* **Escaladores más fiables:** Panel de Control ya no confunde el programa antitrampas con el juego al elegir dónde instalar, sigue las indicaciones de DirectX 12 de cada juego y la etiqueta del juego se actualiza en cuanto termina una instalación.
+* **El Modo Descarga se apaga solo al terminar:** Cuando acaba la descarga de Steam que empezó con el modo activo, la consola vuelve a tu potencia normal sin que tengas que tocarla.
+* **El TDP de las Legion no desaparece con poca batería:** En la Legion Go 2 con la batería baja, el firmware bloquea la potencia y Panel de Control mostraba el TDP como no disponible. Ahora sigue disponible y lo aplica en cuanto el firmware lo permite.
+* **La Legion Go S ya no se queda congelada:** Leer el límite de carga podía tardar unos segundos en la Go S y dejaba Panel de Control sin responder. Ahora esa lectura va aparte y no afecta a nada más.
+* **El límite de carga ya no se deshace solo:** Un cambio confirmado del límite de carga ya no vuelve al valor anterior por una lectura atrasada.
+* **La MSI Claw A8 recupera el TDP tras reiniciar Decky:** Panel de Control vuelve a controlar la potencia sin perder los valores originales de la consola.
+* **La CPU vuelve a su velocidad máxima al salir del Modo Eco:** Si al salir la CPU se quedaba limitada, Panel de Control lo detecta y lo corrige sin reiniciar. Al volver de la suspensión, los núcleos y el SMT se respetan como los dejaste.
+* **Más radios funcionan en Ambiente:** Las emisoras que solo emiten por http ya suenan, también al cambiar de una emisora a otra mientras suena música.
+* **Tus listas de música, también:** Ambiente lee las listas .m3u y .m3u8 de las carpetas que elijas.
+* **El reproductor lateral ya no tapa el teclado:** Se oculta mientras escribes con el teclado de Steam y vuelve después.
+* **Puedes volver a tu fondo:** Si eliges el fondo de un tema, ahora puedes recuperar el tuyo cuando quieras. Los temas compatibles reciben también la imagen del juego seleccionado.
+* **Tus variables de lanzamiento, a la vista:** Las variables personalizadas aparecen en el editor de cada juego sin tener que desplegar Avanzado.
+* **El limpiador deja elegir tus Proton personalizados:** Aunque falle la lectura de algún juego que no tiene nada que ver, los Proton que no usa ningún juego se pueden seleccionar.
+* **Los temas avisan si falta reiniciar Decky:** Si tras actualizar Panel de Control los temas no aparecen porque Decky sigue con la versión anterior cargada, verás un aviso para reiniciarlo con un toque.
+* **El HUD horizontal ya no se mueve:** Los valores de Panel de Control ocupan siempre el mismo espacio, así que la fila no baila cuando un número gana una cifra.
+* **Editar la curva del ventilador gasta menos:** El editor ya no hace trabajar a la gráfica sin parar mientras está abierto, y las curvas manuales se conservan al cambiar de modo.
+* **El ecualizador ya no te cambia el volumen:** Al desactivarlo, el volumen del sistema deja de volver al valor anterior, y el balance ya no pega un salto.
+* **Tu reporte no se pierde al pulsar Intro:** Al escribir un reporte con el teclado virtual, Intro ya no lo cancela.
+* **El ventilador de la PS5 muestra su porcentaje:** Se ve el porcentaje real en lugar de unas revoluciones inventadas.
+
+### English
+
+* **The ROG Ally's two fans, separately:** On the ROG Ally family, the curve editor now offers Joined and Split. Split gives each fan its own curve, with presets applied to both. Going back to Joined restores your usual curve. Nothing changes on single-fan devices.
+* **A different HUD for each game:** The HUD has the same Global and Game tabs as power or fans. You can keep it off everywhere and on in one game, or the other way round, and it applies on its own when the game opens. Launch options show which games have their own HUD.
+* **The TDP control notice can be hidden:** The card warning that Steam can also manage power has «Don't show again», and giving control back to Steam is still at hand inside the section. When Steam is the one controlling TDP, the section says so clearly and lets you take it back with one tap.
+* **TDP in your custom menus too:** A new block holds just the watts control, so you can place it in any custom menu.
+* **Lossless Scaling frame generation is easier to tune:** Generation quality keeps its usual options and adds Manual, with a slider that goes from more performance to more quality.
+* **FSR 4 works in Arknights: Endfield:** OptiScaler used to be installed in the wrong folder and the game never loaded it. Panel de Control now places it next to the game and launches it in DirectX 11, which is how FSR 4 works on Linux. Just pick DLSS in the game's graphics settings; the card reminds you.
+* **Panel de Control tells you when FSR 4 is not used:** When a game cannot use FSR 4 and switches to FSR 2, the card and the game label say so instead of still showing FSR 4.
+* **More reliable upscalers:** Panel de Control no longer mistakes the anti-cheat program for the game when choosing where to install, follows each game's DirectX 12 notes, and the game label updates as soon as an install finishes.
+* **Download mode turns itself off when done:** When the Steam download that started with the mode on finishes, the console goes back to your normal power without you touching it.
+* **Legion TDP no longer disappears on low battery:** On the Legion Go 2 with a low battery, the firmware locks power and Panel de Control showed TDP as unavailable. It now stays available and applies as soon as the firmware allows it.
+* **The Legion Go S no longer freezes:** Reading the charge limit could take a few seconds on the Go S and left Panel de Control unresponsive. That read now runs on its own and does not hold anything else up.
+* **The charge limit no longer undoes itself:** A confirmed charge limit change no longer goes back to the previous value because of a late reading.
+* **MSI Claw A8 gets TDP back after restarting Decky:** Panel de Control takes power control again without losing the console's original values.
+* **The CPU gets back to full speed after Eco mode:** If the CPU stayed capped after leaving, Panel de Control spots it and fixes it without a reboot. After waking from sleep, cores and SMT stay as you left them.
+* **More radios work in Ambient:** Stations that only stream over http now play, also when switching from one station to another while music is playing.
+* **Your playlists too:** Ambient reads .m3u and .m3u8 lists from the folders you choose.
+* **The side player no longer covers the keyboard:** It hides while you type with Steam's keyboard and comes back afterwards.
+* **You can go back to your background:** If you pick a theme's background, you can now get yours back whenever you want. Compatible themes also receive the selected game's artwork.
+* **Your launch variables, in sight:** Custom variables show up in each game's editor without unfolding Advanced.
+* **The cleaner lets you select your custom Protons:** Even if reading some unrelated game fails, Protons that no game uses can be selected.
+* **Themes tell you when Decky needs a restart:** If themes do not show up after updating Panel de Control because Decky still has the old version loaded, you get a notice to restart it with one tap.
+* **The horizontal HUD stops shifting:** Panel de Control values always take the same space, so the row no longer jumps when a number gains a digit.
+* **Editing the fan curve uses less power:** The editor no longer keeps the GPU busy while it is open, and manual curves are kept when switching modes.
+* **The equalizer no longer changes your volume:** Turning it off stops the system volume from jumping back, and balance no longer spikes.
+* **Your report is not lost when you press Enter:** When writing a report with the virtual keyboard, Enter no longer cancels it.
+* **The PS5 fan shows its percentage:** You see the real percentage instead of made-up RPM.
+
+### Italiano
+
+* **Le due ventole della ROG Ally, separate:** Sulla famiglia ROG Ally, l'editor della curva offre ora «Insieme» e «Separate». Separate dà a ogni ventola la sua curva, con i preset applicati a entrambe. Tornando a Insieme ritrovi la curva di sempre. Nulla cambia sulle console con una sola ventola.
+* **Un HUD diverso per ogni gioco:** L'HUD ha le stesse schede Globale e Gioco della potenza o delle ventole. Puoi tenerlo spento ovunque e acceso in un solo gioco, o il contrario, e si applica da solo quando il gioco si apre. Nei parametri vedi quali giochi hanno un HUD proprio.
+* **L'avviso sul controllo del TDP si può nascondere:** La scheda che avvisa che anche Steam può gestire la potenza ha «Non mostrare più», e restituire il controllo a Steam resta a portata di mano nella sezione. Quando è Steam a controllare il TDP, la sezione lo dice chiaramente e ti permette di riprenderlo con un tocco.
+* **Il TDP anche nei menu personalizzati:** Un nuovo blocco contiene solo il controllo dei watt, da mettere in qualsiasi menu personalizzato.
+* **La generazione di frame di Lossless Scaling si regola più facilmente:** La qualità di generazione mantiene le opzioni di sempre e aggiunge Manuale, con un cursore che va da più prestazioni a più qualità.
+* **FSR 4 funziona in Arknights: Endfield:** Prima OptiScaler veniva installato nella cartella sbagliata e il gioco non lo caricava. Ora Panel de Control lo mette accanto al gioco e lo avvia in DirectX 11, che è il modo in cui FSR 4 funziona su Linux. Basta scegliere DLSS nelle impostazioni grafiche del gioco; la scheda te lo ricorda.
+* **Panel de Control avvisa se FSR 4 non viene usato:** Quando un gioco non può usare FSR 4 e passa a FSR 2, la scheda e l'etichetta del gioco lo indicano invece di mostrare ancora FSR 4.
+* **Upscaler più affidabili:** Panel de Control non scambia più il programma anti-cheat per il gioco quando sceglie dove installare, segue le indicazioni DirectX 12 di ogni gioco e l'etichetta del gioco si aggiorna appena finisce un'installazione.
+* **La modalità Download si spegne da sola alla fine:** Quando termina il download di Steam iniziato con la modalità attiva, la console torna alla potenza normale senza che tu debba toccarla.
+* **Il TDP delle Legion non sparisce con la batteria scarica:** Sulla Legion Go 2 con batteria bassa il firmware blocca la potenza e Panel de Control mostrava il TDP come non disponibile. Ora resta disponibile e si applica appena il firmware lo permette.
+* **La Legion Go S non si blocca più:** Leggere il limite di carica poteva richiedere qualche secondo sulla Go S e lasciava Panel de Control senza risposta. Ora quella lettura va per conto suo e non blocca nient'altro.
+* **Il limite di carica non si annulla più da solo:** Una modifica confermata del limite di carica non torna più al valore precedente per una lettura in ritardo.
+* **La MSI Claw A8 recupera il TDP dopo il riavvio di Decky:** Panel de Control riprende il controllo della potenza senza perdere i valori originali della console.
+* **La CPU torna alla velocità massima dopo la modalità Eco:** Se all'uscita la CPU restava limitata, Panel de Control se ne accorge e la sistema senza riavviare. Dopo la sospensione, core e SMT restano come li avevi lasciati.
+* **Più radio funzionano in Ambiente:** Le emittenti che trasmettono solo via http ora suonano, anche passando da un'emittente all'altra mentre c'è musica.
+* **Anche le tue playlist:** Ambiente legge le liste .m3u e .m3u8 dalle cartelle che scegli.
+* **Il lettore laterale non copre più la tastiera:** Si nasconde mentre scrivi con la tastiera di Steam e poi ricompare.
+* **Puoi tornare al tuo sfondo:** Se scegli lo sfondo di un tema, ora puoi riavere il tuo quando vuoi. I temi compatibili ricevono anche l'immagine del gioco selezionato.
+* **Le tue variabili di avvio, in vista:** Le variabili personalizzate compaiono nell'editor di ogni gioco senza dover aprire Avanzate.
+* **Il pulitore lascia selezionare i tuoi Proton personalizzati:** Anche se la lettura di un gioco che non c'entra non riesce, i Proton che nessun gioco usa si possono selezionare.
+* **I temi avvisano se serve riavviare Decky:** Se dopo l'aggiornamento di Panel de Control i temi non compaiono perché Decky ha ancora caricata la versione precedente, vedrai un avviso per riavviarlo con un tocco.
+* **L'HUD orizzontale non si sposta più:** I valori di Panel de Control occupano sempre lo stesso spazio, così la riga non balla quando un numero guadagna una cifra.
+* **Modificare la curva della ventola consuma meno:** L'editor non tiene più occupata la GPU mentre è aperto, e le curve manuali restano quando cambi modalità.
+* **L'equalizzatore non ti cambia più il volume:** Disattivandolo, il volume di sistema non torna più al valore precedente e il bilanciamento non ha più sbalzi.
+* **Il tuo report non si perde premendo Invio:** Scrivendo un report con la tastiera virtuale, Invio non lo annulla più.
+* **La ventola della PS5 mostra la sua percentuale:** Vedi la percentuale reale invece di giri inventati.
+
+### Deutsch
+
+* **Die zwei Lüfter der ROG Ally, getrennt:** In der ROG-Ally-Familie bietet der Kurveneditor jetzt «Gemeinsam» und «Getrennt». Getrennt bekommt jeder Lüfter seine eigene Kurve, Voreinstellungen gelten für beide. Zurück auf Gemeinsam bekommst du deine gewohnte Kurve wieder. Auf Geräten mit nur einem Lüfter ändert sich nichts.
+* **Ein eigenes HUD für jedes Spiel:** Das HUD hat dieselben Tabs Global und Spiel wie Leistung oder Lüfter. Du kannst es überall aus und nur in einem Spiel an lassen oder umgekehrt, und es greift von selbst, sobald das Spiel startet. In den Startoptionen siehst du, welche Spiele ein eigenes HUD haben.
+* **Der Hinweis zur TDP-Steuerung lässt sich ausblenden:** Die Karte, die darauf hinweist, dass auch Steam die Leistung verwalten kann, hat «Nicht mehr anzeigen», und die Steuerung an Steam zurückzugeben bleibt im Abschnitt griffbereit. Wenn Steam die TDP steuert, sagt der Abschnitt das klar und du holst sie dir mit einem Tippen zurück.
+* **TDP auch in deinen eigenen Menüs:** Ein neuer Baustein enthält nur die Watt-Steuerung, damit du ihn in jedes eigene Menü setzen kannst.
+* **Die Bildgenerierung von Lossless Scaling lässt sich leichter einstellen:** Die Generierungsqualität behält ihre gewohnten Optionen und bekommt Manuell dazu, mit einem Regler von mehr Leistung bis mehr Qualität.
+* **FSR 4 funktioniert in Arknights: Endfield:** Bisher wurde OptiScaler in den falschen Ordner installiert und das Spiel hat es nie geladen. Panel de Control legt es jetzt neben das Spiel und startet es in DirectX 11, so funktioniert FSR 4 unter Linux. Wähle einfach DLSS in den Grafikeinstellungen des Spiels; die Karte erinnert dich daran.
+* **Panel de Control sagt dir, wenn FSR 4 nicht genutzt wird:** Wenn ein Spiel FSR 4 nicht nutzen kann und zu FSR 2 wechselt, zeigen Karte und Spielbeschriftung das an, statt weiter FSR 4 anzuzeigen.
+* **Zuverlässigere Upscaler:** Panel de Control verwechselt das Anti-Cheat-Programm nicht mehr mit dem Spiel, wenn es den Installationsort wählt, folgt den DirectX-12-Hinweisen jedes Spiels, und die Spielbeschriftung aktualisiert sich, sobald eine Installation fertig ist.
+* **Der Download-Modus schaltet sich nach dem Download selbst ab:** Wenn der Steam-Download, der mit aktivem Modus begonnen hat, fertig ist, kehrt die Konsole zu deiner normalen Leistung zurück, ohne dass du etwas tun musst.
+* **Die TDP der Legion verschwindet bei wenig Akku nicht mehr:** Auf der Legion Go 2 sperrt die Firmware bei niedrigem Akkustand die Leistung, und Panel de Control zeigte die TDP als nicht verfügbar. Jetzt bleibt sie verfügbar und wird angewendet, sobald die Firmware es zulässt.
+* **Die Legion Go S friert nicht mehr ein:** Das Auslesen des Ladelimits konnte auf der Go S einige Sekunden dauern und ließ Panel de Control hängen. Jetzt läuft das getrennt und hält nichts anderes auf.
+* **Das Ladelimit macht sich nicht mehr selbst rückgängig:** Eine bestätigte Änderung des Ladelimits springt nicht mehr wegen einer verspäteten Messung auf den alten Wert zurück.
+* **Die MSI Claw A8 bekommt die TDP nach einem Decky-Neustart zurück:** Panel de Control übernimmt die Leistungssteuerung wieder, ohne die ursprünglichen Werte der Konsole zu verlieren.
+* **Die CPU kommt nach dem Eco-Modus wieder auf volle Geschwindigkeit:** Blieb die CPU nach dem Verlassen begrenzt, erkennt Panel de Control das und behebt es ohne Neustart. Nach dem Aufwachen aus dem Ruhezustand bleiben Kerne und SMT so, wie du sie eingestellt hast.
+* **Mehr Radiosender funktionieren in Ambient:** Sender, die nur über http streamen, spielen jetzt, auch wenn du bei laufender Musik von einem Sender zum anderen wechselst.
+* **Auch deine Playlists:** Ambient liest .m3u- und .m3u8-Listen aus den Ordnern, die du auswählst.
+* **Der seitliche Player verdeckt die Tastatur nicht mehr:** Er blendet sich aus, während du mit der Steam-Tastatur schreibst, und kommt danach zurück.
+* **Du kannst zu deinem Hintergrund zurück:** Wenn du den Hintergrund eines Themes wählst, bekommst du deinen jetzt jederzeit zurück. Kompatible Themes erhalten außerdem das Bild des ausgewählten Spiels.
+* **Deine Startvariablen im Blick:** Eigene Variablen erscheinen im Editor jedes Spiels, ohne Erweitert aufklappen zu müssen.
+* **Der Aufräumer lässt deine eigenen Protons auswählen:** Auch wenn das Auslesen eines unbeteiligten Spiels fehlschlägt, lassen sich Protons, die kein Spiel nutzt, auswählen.
+* **Themes melden, wenn Decky neu gestartet werden muss:** Erscheinen nach einem Update von Panel de Control keine Themes, weil Decky noch die alte Version geladen hat, siehst du einen Hinweis, um es mit einem Tippen neu zu starten.
+* **Das horizontale HUD verrutscht nicht mehr:** Werte von Panel de Control nehmen immer gleich viel Platz ein, damit die Zeile nicht springt, wenn eine Zahl eine Stelle dazubekommt.
+* **Die Lüfterkurve zu bearbeiten kostet weniger:** Der Editor beschäftigt die GPU nicht mehr dauernd, solange er offen ist, und manuelle Kurven bleiben beim Moduswechsel erhalten.
+* **Der Equalizer verändert deine Lautstärke nicht mehr:** Beim Ausschalten springt die Systemlautstärke nicht mehr zurück, und die Balance macht keinen Sprung mehr.
+* **Dein Bericht geht beim Drücken von Enter nicht verloren:** Wenn du einen Bericht mit der Bildschirmtastatur schreibst, bricht Enter ihn nicht mehr ab.
+* **Der PS5-Lüfter zeigt seinen Prozentwert:** Du siehst den echten Prozentwert statt erfundener Drehzahlen.
+
+### Português (Brasil)
+
+* **As duas ventoinhas do ROG Ally, separadas:** Na família ROG Ally, o editor de curva agora oferece «Juntas» e «Separadas». Separadas, cada ventoinha segue a sua própria curva, com as predefinições aplicadas às duas. Voltando para Juntas, você recupera a curva de sempre. Nada muda nos aparelhos com uma só ventoinha.
+* **Um HUD diferente para cada jogo:** O HUD tem as mesmas abas Global e Jogo da potência ou das ventoinhas. Você pode deixá-lo desligado em tudo e ligado em um jogo só, ou o contrário, e ele é aplicado sozinho quando o jogo abre. Nos parâmetros você vê quais jogos têm HUD próprio.
+* **O aviso de controle do TDP pode ser ocultado:** O cartão que avisa que o Steam também pode gerenciar a potência tem «Não mostrar de novo», e devolver o controle ao Steam continua à mão dentro da seção. Quando é o Steam que controla o TDP, a seção diz isso claramente e deixa você recuperá-lo com um toque.
+* **O TDP também nos seus menus personalizados:** Um bloco novo traz só o controle de watts, para colocar em qualquer menu personalizado.
+* **A geração de quadros do Lossless Scaling ficou mais fácil de ajustar:** A qualidade de geração mantém as opções de sempre e ganha Manual, com um controle deslizante que vai de mais desempenho a mais qualidade.
+* **O FSR 4 funciona em Arknights: Endfield:** Antes o OptiScaler era instalado na pasta errada e o jogo nunca o carregava. Agora o Panel de Control coloca ele junto do jogo e o abre em DirectX 11, que é como o FSR 4 funciona no Linux. É só escolher DLSS nas configurações gráficas do jogo; o cartão lembra você disso.
+* **O Panel de Control avisa quando o FSR 4 não é usado:** Quando um jogo não consegue usar o FSR 4 e muda para o FSR 2, o cartão e a etiqueta do jogo mostram isso em vez de continuar exibindo FSR 4.
+* **Escaladores mais confiáveis:** O Panel de Control não confunde mais o programa antitrapaça com o jogo ao escolher onde instalar, segue as indicações de DirectX 12 de cada jogo, e a etiqueta do jogo é atualizada assim que uma instalação termina.
+* **O Modo Download desliga sozinho no final:** Quando o download do Steam que começou com o modo ativo termina, o console volta para a sua potência normal sem você precisar mexer.
+* **O TDP dos Legion não some com pouca bateria:** No Legion Go 2 com a bateria baixa, o firmware trava a potência e o Panel de Control mostrava o TDP como indisponível. Agora ele continua disponível e é aplicado assim que o firmware deixa.
+* **O Legion Go S não trava mais:** Ler o limite de carga podia levar alguns segundos no Go S e deixava o Panel de Control sem responder. Agora essa leitura roda à parte e não segura mais nada.
+* **O limite de carga não se desfaz sozinho:** Uma mudança confirmada no limite de carga não volta mais ao valor anterior por causa de uma leitura atrasada.
+* **O MSI Claw A8 recupera o TDP depois de reiniciar o Decky:** O Panel de Control volta a controlar a potência sem perder os valores originais do console.
+* **A CPU volta à velocidade máxima ao sair do Modo Eco:** Se a CPU ficava limitada ao sair, o Panel de Control percebe e corrige sem reiniciar. Ao voltar da suspensão, os núcleos e o SMT ficam como você deixou.
+* **Mais rádios funcionam no Ambiente:** As emissoras que só transmitem por http agora tocam, também ao trocar de uma emissora para outra com música tocando.
+* **Suas playlists também:** O Ambiente lê as listas .m3u e .m3u8 das pastas que você escolher.
+* **O player lateral não cobre mais o teclado:** Ele se esconde enquanto você digita com o teclado do Steam e volta depois.
+* **Você pode voltar para o seu fundo:** Se escolher o fundo de um tema, agora pode recuperar o seu quando quiser. Os temas compatíveis também recebem a imagem do jogo selecionado.
+* **Suas variáveis de inicialização, à vista:** As variáveis personalizadas aparecem no editor de cada jogo sem precisar abrir Avançado.
+* **O limpador deixa escolher seus Proton personalizados:** Mesmo que a leitura de algum jogo que não tem nada a ver falhe, os Proton que nenhum jogo usa podem ser selecionados.
+* **Os temas avisam quando falta reiniciar o Decky:** Se depois de atualizar o Panel de Control os temas não aparecem porque o Decky ainda está com a versão antiga carregada, você vê um aviso para reiniciá-lo com um toque.
+* **O HUD horizontal não se mexe mais:** Os valores do Panel de Control ocupam sempre o mesmo espaço, então a linha não pula quando um número ganha um dígito.
+* **Editar a curva da ventoinha gasta menos:** O editor não deixa mais a GPU trabalhando sem parar enquanto está aberto, e as curvas manuais são mantidas ao trocar de modo.
+* **O equalizador não muda mais o seu volume:** Ao desligá-lo, o volume do sistema não volta mais ao valor anterior, e o balanço não dá mais salto.
+* **Seu relatório não se perde ao apertar Enter:** Ao escrever um relatório com o teclado virtual, o Enter não o cancela mais.
+* **A ventoinha do PS5 mostra a sua porcentagem:** Você vê a porcentagem real em vez de rotações inventadas.
+
+### Français
+
+* **Les deux ventilateurs de la ROG Ally, séparément :** Sur la famille ROG Ally, l'éditeur de courbe propose maintenant « Ensemble » et « Séparément ». Séparément, chaque ventilateur suit sa propre courbe, avec les préréglages appliqués aux deux. En revenant à Ensemble, vous retrouvez votre courbe habituelle. Rien ne change sur les appareils à un seul ventilateur.
+* **Un HUD différent pour chaque jeu :** Le HUD a les mêmes onglets Global et Jeu que la puissance ou les ventilateurs. Vous pouvez le laisser éteint partout et allumé dans un seul jeu, ou l'inverse, et il s'applique tout seul à l'ouverture du jeu. Dans les paramètres, vous voyez quels jeux ont leur propre HUD.
+* **L'avis sur le contrôle du TDP peut être masqué :** La carte qui prévient que Steam peut aussi gérer la puissance a « Ne plus afficher », et rendre le contrôle à Steam reste sous la main dans la section. Quand c'est Steam qui contrôle le TDP, la section le dit clairement et vous permet de le reprendre d'un geste.
+* **Le TDP aussi dans vos menus personnalisés :** Un nouveau bloc ne contient que le réglage des watts, à placer dans n'importe quel menu personnalisé.
+* **La génération d'images de Lossless Scaling se règle plus facilement :** La qualité de génération garde ses options habituelles et ajoute Manuel, avec un curseur qui va de plus de performances à plus de qualité.
+* **FSR 4 fonctionne dans Arknights: Endfield :** Avant, OptiScaler était installé dans le mauvais dossier et le jeu ne le chargeait jamais. Panel de Control le place maintenant à côté du jeu et le lance en DirectX 11, c'est ainsi que FSR 4 fonctionne sous Linux. Il suffit de choisir DLSS dans les réglages graphiques du jeu ; la carte vous le rappelle.
+* **Panel de Control vous prévient si FSR 4 n'est pas utilisé :** Quand un jeu ne peut pas utiliser FSR 4 et passe à FSR 2, la carte et l'étiquette du jeu l'indiquent au lieu d'afficher encore FSR 4.
+* **Des upscalers plus fiables :** Panel de Control ne confond plus le programme anti-triche avec le jeu au moment de choisir où installer, suit les indications DirectX 12 de chaque jeu, et l'étiquette du jeu se met à jour dès qu'une installation se termine.
+* **Le mode Téléchargement s'arrête tout seul à la fin :** Quand le téléchargement Steam lancé avec le mode actif se termine, la console revient à votre puissance normale sans que vous ayez à la toucher.
+* **Le TDP des Legion ne disparaît plus avec peu de batterie :** Sur la Legion Go 2 avec une batterie faible, le firmware bloque la puissance et Panel de Control affichait le TDP comme indisponible. Il reste maintenant disponible et s'applique dès que le firmware le permet.
+* **La Legion Go S ne se fige plus :** Lire la limite de charge pouvait prendre quelques secondes sur la Go S et laissait Panel de Control sans réponse. Cette lecture se fait maintenant à part et ne bloque plus rien d'autre.
+* **La limite de charge ne s'annule plus toute seule :** Un changement confirmé de la limite de charge ne revient plus à la valeur précédente à cause d'une lecture en retard.
+* **La MSI Claw A8 retrouve le TDP après un redémarrage de Decky :** Panel de Control reprend le contrôle de la puissance sans perdre les valeurs d'origine de la console.
+* **Le processeur retrouve sa vitesse maximale après le mode Éco :** Si le processeur restait bridé à la sortie, Panel de Control le détecte et le corrige sans redémarrer. Au réveil de la mise en veille, les cœurs et le SMT restent comme vous les avez laissés.
+* **Plus de radios fonctionnent dans Ambiance :** Les stations qui ne diffusent qu'en http jouent maintenant, aussi quand vous passez d'une station à l'autre pendant que la musique joue.
+* **Vos listes de lecture aussi :** Ambiance lit les listes .m3u et .m3u8 des dossiers que vous choisissez.
+* **Le lecteur latéral ne cache plus le clavier :** Il se masque pendant que vous tapez avec le clavier de Steam et revient ensuite.
+* **Vous pouvez retrouver votre fond :** Si vous choisissez le fond d'un thème, vous pouvez maintenant récupérer le vôtre quand vous voulez. Les thèmes compatibles reçoivent aussi l'image du jeu sélectionné.
+* **Vos variables de lancement, bien visibles :** Les variables personnalisées apparaissent dans l'éditeur de chaque jeu sans devoir ouvrir Avancé.
+* **Le nettoyeur permet de choisir vos Proton personnalisés :** Même si la lecture d'un jeu sans rapport échoue, les Proton qu'aucun jeu n'utilise peuvent être sélectionnés.
+* **Les thèmes préviennent quand Decky doit redémarrer :** Si après une mise à jour de Panel de Control les thèmes n'apparaissent pas parce que Decky a encore l'ancienne version chargée, un avis vous propose de le redémarrer d'un geste.
+* **Le HUD horizontal ne bouge plus :** Les valeurs de Panel de Control prennent toujours la même place, la ligne ne saute plus quand un nombre gagne un chiffre.
+* **Modifier la courbe du ventilateur consomme moins :** L'éditeur n'occupe plus le GPU en continu tant qu'il est ouvert, et les courbes manuelles sont conservées quand vous changez de mode.
+* **L'égaliseur ne change plus votre volume :** En le désactivant, le volume du système ne revient plus à sa valeur précédente et la balance ne fait plus de saut.
+* **Votre rapport n'est plus perdu quand vous appuyez sur Entrée :** En écrivant un rapport avec le clavier virtuel, Entrée ne l'annule plus.
+* **Le ventilateur de la PS5 affiche son pourcentage :** Vous voyez le pourcentage réel au lieu de tours inventés.
+
 ## [0.89.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.2...panel-de-control-v0.89.3) (2026-11-14)
 
 
