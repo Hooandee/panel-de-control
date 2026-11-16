@@ -142,6 +142,7 @@ from ps5.firmware_io import FirmwareIo
 from ps5.led import is_animated as ps5_led_animated
 from ps5.thermal import THRESHOLD_DEFAULT_C as PS5_GUARD_DEFAULT_C, clamp_threshold
 from battery.reader import BatteryReader
+from battery.diagnostics import capture_charge_limit_before
 from battery.charge_limit import (
     NullChargeLimit,
     SteamDeckChargeLimit,
@@ -9554,7 +9555,7 @@ class Plugin(AmbientRpc):
             self._desktop_power.apply(mode)
 
     # ---- Battery + charge limit --------------------------------------------
-    def _record_charge_limit_apply(self, action, requested, ok, attempts) -> None:
+    def _record_charge_limit_apply(self, action, requested, ok, attempts, before) -> None:
         try:
             readback = self._charge_limit.get()
         except Exception:  # noqa: BLE001
@@ -9566,8 +9567,10 @@ class Plugin(AmbientRpc):
             "readback": readback,
             "attempts": attempts,
         }
-        previous = getattr(self, "_charge_limit_last_apply", None)
         self._charge_limit_last_apply = event
+        event = {**event, "before": before}
+        previous = getattr(self, "_charge_limit_last_transition", None)
+        self._charge_limit_last_transition = event
         if action == "full_once":
             self._charge_limit_full_once_status = (
                 "active" if ok else "failed"
@@ -9608,6 +9611,11 @@ class Plugin(AmbientRpc):
     ) -> None:
         if not self._charge_limit_apply_current(generation):
             return
+        before = capture_charge_limit_before(
+            self._charge_limit, self._battery, read_on_ac,
+        )
+        if not self._charge_limit_apply_current(generation):
+            return
         attempts = 1
         result = operation()
         if not self._charge_limit_apply_current(generation):
@@ -9622,6 +9630,7 @@ class Plugin(AmbientRpc):
             requested,
             bool(result),
             attempts,
+            before,
         )
 
     def _apply_charge_limit(self, generation=None) -> None:
