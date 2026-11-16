@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import defaults from "../../../shared/contracts/ambient/fixtures/defaults.json";
+import selectionReport from "../../../shared/contracts/ambient/fixtures/selection-report.json";
 import savedThemeBackground from "../../../shared/contracts/ambient/fixtures/saved-theme-background.json";
 import type { AmbientSettings } from "../core/types";
 import type { GameMedia } from "./gameMedia";
@@ -14,7 +15,7 @@ const rpcMock = vi.hoisted(() => ({
   cacheAmbientRemote: vi.fn(),
   reconcileAmbientCache: vi.fn(async () => false),
   getAmbientRemoteFeed: vi.fn(async () => []),
-  recordAmbientEvent: vi.fn(async () => true),
+  recordAmbientEvent: vi.fn(async (_kind: string, _detail: string) => true),
   checkAmbientAudio: vi.fn(async (_detail: string) => true),
   cancelAmbientJobs: vi.fn(async () => true),
   resolveAmbientRadio: vi.fn(async () => null),
@@ -889,6 +890,38 @@ describe("AmbientRuntime", () => {
     await runtime.setPinned(false);
     expect(runtime.getSnapshot().state?.settings.background.pinned).toBe("");
     runtime.stop();
+  });
+
+  it.each(["carousel", "theme"])("records the real %s source only for the settled media request", async (source) => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `<div class="h-BasicHome"><section></section><div class="h-RecentGamesContainer">
+      <div role="listitem"><div class="gpfocus"><img src="/assets/${selectionReport.nativeAppId}/library_hero.jpg"></div></div>
+      <div role="listitem"><img src="/assets/${selectionReport.neighborAppId}/library_hero.jpg"></div>
+    </div></div>`;
+    const configured = settings();
+    Object.assign(configured.background, selectionReport.background);
+    configured.claims[selectionReport.themeId] = "theme";
+    document.documentElement.style.setProperty("--pdc-ambient-claim", `"${selectionReport.themeId}"`);
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    rpcMock.getAmbientGameMedia.mockResolvedValue({ trailer: null, theme: null });
+    const channel = new AmbientThemeChannel();
+    if (source === "theme") channel.select(selectionReport.themeId, selectionReport.themeAppId);
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts, channel);
+    const requests = () => rpcMock.recordAmbientEvent.mock.calls
+      .filter(([kind, detail]) => kind === "selection" && detail.startsWith("{"))
+      .map(([, detail]) => JSON.parse(detail));
+    try {
+      await runtime.start();
+      await vi.advanceTimersByTimeAsync(1499);
+      expect(requests()).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(requests()).toEqual([{
+        appid: Number(source === "theme" ? selectionReport.themeAppId : selectionReport.nativeAppId),
+        source: source === "theme" ? `theme:${selectionReport.themeId}` : "carousel",
+        trailerRequested: true,
+      }]);
+      expect(rpcMock.getAmbientGameMedia).toHaveBeenCalledWith(selectionReport.neighborAppId, expect.any(String), false);
+    } finally { runtime.stop(); }
   });
 
   it("a game resting selected on Home plays its trailer as the background, capped to a light rendition", async () => {

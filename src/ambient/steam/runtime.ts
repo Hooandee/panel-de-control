@@ -160,6 +160,15 @@ export class AmbientRuntime {
       const doc = spDocument();
       return doc && container ? neighborAppIdsIn(doc.querySelector(`.${container}`)) : [];
     },
+    (appid) => {
+      const themed = this.channel.themeSelection();
+      const background = this.settings()?.background;
+      void rpc.recordAmbientEvent("selection", JSON.stringify({
+        appid: Number(appid),
+        source: themed ? `theme:${themed.themeId}` : "carousel",
+        trailerRequested: !!(background?.enabled && background.gameTrailers),
+      })).catch(() => undefined);
+    },
   );
   private readonly themeAudio = new ThemeAudio(() => (typeof Audio === "function" ? new Audio() : null));
   private themePausedMusic = false;
