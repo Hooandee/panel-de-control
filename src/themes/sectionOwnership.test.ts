@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { CssLoaderPatch, CssLoaderTheme } from "./cssLoaderTypes";
+import reportedSections from "./fixtures/theme-section-overlap.json";
 import {
   planSectionHandoff,
   planSectionRestore,
@@ -82,5 +83,42 @@ describe("planSectionRestore", () => {
     };
 
     expect(planSectionRestore([gallery], handoffs, "Hooandee Luminous Atlas")).toEqual([]);
+  });
+});
+
+
+describe("compound menu sections", () => {
+  const fromReport = (): CssLoaderTheme[] => reportedSections.installed.map((item) => ({
+    id: item.name, name: item.name, displayName: item.name, version: item.version, author: "Hooandee",
+    enabled: item.active,
+    patches: Object.entries(item.sections).map(([name, value]) => patch(name, value as "Yes" | "No")),
+  }));
+  const galleryName = "Hooandee Gallery";
+  const atlasName = "Hooandee Luminous Atlas";
+
+  it("leaves the inactive theme alone in the reported state", () => {
+    expect(planSectionHandoff(fromReport(), atlasName, HOOANDEE)).toEqual([]);
+  });
+
+  it("hands QAM and Panel back when the compound menu theme is activated", () => {
+    const themes = fromReport();
+    themes.find((item) => item.name === galleryName)!.enabled = true;
+    themes.push(theme("Companion", true, [patch("Estilizar QAM y Decky", "Yes"), patch("Estilizar Panel de Control", "Yes")]));
+    const plan = planSectionHandoff(themes, galleryName, HOOANDEE);
+    expect(plan).toEqual(expect.arrayContaining([
+      { themeName: atlasName, patchName: "Estilizar menú de Steam" },
+      { themeName: atlasName, patchName: "Estilizar QAM y Decky" },
+      { themeName: atlasName, patchName: "Estilizar Panel de Control" },
+    ]));
+    expect(plan).not.toContainEqual({ themeName: atlasName, patchName: "Estilizar configurador de mando" });
+    expect(plan.some((ref) => ref.themeName === "Companion")).toBe(false);
+  });
+
+  it.each(["Estilizar QAM y Decky", "Estilizar Panel de Control"])("hands the compound menu section off when only %s is enabled", (patchName) => {
+    const themes = fromReport();
+    themes.find((item) => item.name === galleryName)!.enabled = true;
+    expect(planSectionHandoff(themes, atlasName, HOOANDEE, patchName)).toEqual([
+      { themeName: galleryName, patchName: "Estilizar menús y barras" },
+    ]);
   });
 });

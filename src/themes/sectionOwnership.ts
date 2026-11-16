@@ -25,11 +25,18 @@ const SECTION_KEYS: readonly (readonly [RegExp, string])[] = [
 export const SECTION_ON = "Yes";
 export const SECTION_OFF = "No";
 
-export function sectionKeyOf(patchName: string): string | null {
+function sectionKeysOf(patchName: string): readonly string[] {
   const normalized = patchName.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-  if (!normalized.startsWith(SECTION_PREFIX)) return null;
+  if (!normalized.startsWith(SECTION_PREFIX)) return [];
   const rest = normalized.slice(SECTION_PREFIX.length);
-  return SECTION_KEYS.find(([pattern]) => pattern.test(rest))?.[1] ?? null;
+  // Gallery's single menu switch also gates QuickAccess and Panel's shared chrome.
+  if (rest === "menus y barras") return ["menu", "qam", "panel"];
+  const key = SECTION_KEYS.find(([pattern]) => pattern.test(rest))?.[1];
+  return key ? [key] : [];
+}
+
+export function sectionKeyOf(patchName: string): string | null {
+  return sectionKeysOf(patchName)[0] ?? null;
 }
 
 export function sectionHandoffKey({ themeName, patchName }: SectionPatchRef): string {
@@ -70,15 +77,14 @@ export function planSectionHandoff(
   if (!owner?.enabled || !hooandeeThemes.has(ownerName)) return [];
   const owned = new Set(owner.patches
     .filter((patch) => patch.value === SECTION_ON && (onlyPatchName === undefined || patch.name === onlyPatchName))
-    .map((patch) => sectionKeyOf(patch.name))
-    .filter((key): key is string => key !== null));
+    .flatMap((patch) => sectionKeysOf(patch.name)));
   if (owned.size === 0) return [];
   return themes
     .filter((theme) => theme.enabled && theme.name !== ownerName && hooandeeThemes.has(theme.name))
     .flatMap((theme) => theme.patches
       .filter((patch) => {
-        const key = sectionKeyOf(patch.name);
-        return key !== null && owned.has(key) && patch.value === SECTION_ON && patch.options.includes(SECTION_OFF);
+        return sectionKeysOf(patch.name).some((key) => owned.has(key))
+          && patch.value === SECTION_ON && patch.options.includes(SECTION_OFF);
       })
       .map((patch) => ({ themeName: theme.name, patchName: patch.name })));
 }
