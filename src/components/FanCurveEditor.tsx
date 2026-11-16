@@ -99,6 +99,7 @@ export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion, expan
           return (
             <Focusable
               key={mode}
+              noFocusRing
               style={{ ...segmentItemStyle(active), flex: expanded ? "1 1 90px" : 1, padding: "6px 8px" }}
               aria-label={label}
               title={label}
