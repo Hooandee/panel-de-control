@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import defaults from "../../../shared/contracts/ambient/fixtures/defaults.json";
 import selectionReport from "../../../shared/contracts/ambient/fixtures/selection-report.json";
 import savedThemeBackground from "../../../shared/contracts/ambient/fixtures/saved-theme-background.json";
+import hostGameArt from "../../../shared/contracts/ambient/fixtures/host-game-art.json";
 import type { AmbientSettings } from "../core/types";
 import type { GameMedia } from "./gameMedia";
 
@@ -815,6 +816,67 @@ describe("AmbientRuntime", () => {
     expect(runtime.getSnapshot().decision.conflict).toBeNull();
     runtime.stop();
     expect(channel.getState().owner).toBe("theme");
+  });
+
+  function hostGameArtFixture(mode: "host" | "yield" | null = "host", surfaces: readonly ("home" | "library")[] = ["home"]) {
+    const configured = settings({ claims: structuredClone(hostGameArt.claims) as AmbientSettings["claims"] });
+    configured.background.enabled = hostGameArt.backgroundEnabled;
+    configured.background.gameArt = hostGameArt.gameArt as AmbientSettings["background"]["gameArt"];
+    const channel = new AmbientThemeChannel();
+    if (mode) channel.claim(hostGameArt.themeId, { name: "Duo", surfaces, mode });
+    channel.select(hostGameArt.themeId, "730");
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    return { channel, runtime: new AmbientRuntime(ports() as unknown as AmbientPorts, channel) };
+  }
+
+  it("keeps the saved theme owner, then gives a host the selected game's art when Panel is recovered", async () => {
+    const { channel, runtime } = hostGameArtFixture();
+    try {
+      await runtime.start();
+      expect(channel.getState()).toMatchObject({ owner: "theme", media: null });
+      expect(runtime.getSnapshot().decision.background).toBe("theme");
+      await runtime.showMineOver([hostGameArt.themeId]);
+      await vi.waitFor(() => expect(channel.getState()).toMatchObject({
+        owner: hostGameArt.recovered.owner.background,
+        media: { url: "https://steamloopback.host/assets/730/library_hero.jpg", kind: "image" },
+      }));
+      expect(runtime.getSnapshot().coveredBy).toEqual(hostGameArt.recovered.coveredBy);
+      expect(runtime.getSnapshot().state?.settings.claims).toEqual({ ...hostGameArt.claims, [hostGameArt.themeId]: "panel" });
+      expect(document.getElementById("pdc-ambient-layer")).toBeNull();
+    } finally { runtime.stop(); }
+  });
+
+  it.each([null, "yield", "unclaimed"] as const)("keeps native game art for a %s surface", async (mode) => {
+    const { channel, runtime } = hostGameArtFixture(mode === "unclaimed" ? "host" : mode, mode === "unclaimed" ? ["library"] : ["home"]);
+    try {
+      await runtime.start();
+      await runtime.showMineOver([hostGameArt.themeId]);
+      expect(runtime.getSnapshot().decision.background).toBe("panel");
+      expect(channel.getState().media).toBeNull();
+      expect(document.getElementById("pdc-ambient-layer")).toBeNull();
+    } finally { runtime.stop(); }
+  });
+
+  it("does not publish an older host selection after it changes, disappears or the runtime stops", async () => {
+    const { channel, runtime } = hostGameArtFixture();
+    try {
+      await runtime.start();
+      await runtime.showMineOver([hostGameArt.themeId]);
+      const seen: string[] = [];
+      channel.subscribe(state => { if (state.media) seen.push(state.media.url); });
+      channel.select(hostGameArt.themeId, "570");
+      channel.select(hostGameArt.themeId, "440");
+      await vi.waitFor(() => expect(channel.getState().media?.url).toBe("https://steamloopback.host/assets/440/library_hero.jpg"));
+      expect(seen).not.toContain("https://steamloopback.host/assets/570/library_hero.jpg");
+      channel.select(hostGameArt.themeId, null);
+      expect(channel.getState().media).toBeNull();
+      expect(runtime.getSnapshot().currentUrl).toBeNull();
+      channel.select(hostGameArt.themeId, "570");
+      runtime.stop();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(channel.getState()).toMatchObject({ owner: "theme", media: null });
+    } finally { runtime.stop(); }
   });
 
   it("tells theme runtimes when Ambiente's music really plays, and when the in-game pause silences it", async () => {

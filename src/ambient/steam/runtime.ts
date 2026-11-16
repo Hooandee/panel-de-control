@@ -886,7 +886,11 @@ export class AmbientRuntime {
     // Until the trailer is ready the selected game shows its own background, or Steam's art for it.
     const artMode = wantsTrailers && this.gameMedia.pending() ? "game" : settings.background.gameArt;
     const choice = chooseBackground(artMode, this.snapshot.current?.ref ?? null, selectedAppId, settings.background.perGame);
-    if (!owns || choice.mediaRef === null) {
+    const hostClaim = this.channel.activeClaim();
+    const hosted = hostClaim?.mode === "host" && surface !== "other" && hostClaim.surfaces.includes(surface);
+    // A host replaces Steam's Home, so its native game art must travel through the media channel.
+    const mediaRef = choice.mediaRef ?? (hosted && choice.nativeArt === "show" && selectedAppId ? `steam:${selectedAppId}` : null);
+    if (!owns || mediaRef === null) {
       this.layer.apply(null, { transition: settings.background.transition, nativeArt: "show", motion, visible: false });
       doc?.documentElement.removeAttribute("data-pdc-ambient-background");
       this.channel.publish({ owner: "theme", media: null, motion });
@@ -897,12 +901,11 @@ export class AmbientRuntime {
       this.patch({ currentUrl: null });
       return;
     }
-    const url = await this.resolve(choice.mediaRef);
+    const url = await this.resolve(mediaRef);
     if (this.stopped || generation !== this.renderGeneration || !url) return;
-    const kind = this.snapshot.items.find((i) => i.ref === choice.mediaRef)?.kind ?? (VIDEO_URL.test(url) ? "video" : "image");
+    const kind = this.snapshot.items.find((i) => i.ref === mediaRef)?.kind ?? (VIDEO_URL.test(url) ? "video" : "image");
     this.channel.publish({ owner: "panel", media: { url, kind }, motion });
-    const hostClaim = this.channel.activeClaim();
-    if (hostClaim?.mode === "host" && surface !== "other" && hostClaim.surfaces.includes(surface)) {
+    if (hosted) {
       this.layer.apply(null, { transition: settings.background.transition, nativeArt: "show", motion, visible: false });
       if (doc) applyNeutralizer(doc, []);
       doc?.documentElement.setAttribute("data-pdc-ambient-background", "panel");
@@ -917,7 +920,7 @@ export class AmbientRuntime {
     const shown = this.layer.apply({ url, kind }, {
       transition: settings.background.transition,
       nativeArt: choice.nativeArt,
-      motion: motion === "play" && this.optimizingRef === choice.mediaRef ? "pause" : motion,
+      motion: motion === "play" && this.optimizingRef === mediaRef ? "pause" : motion,
       visible: surfaceAllowed,
     });
     if (shown) {
