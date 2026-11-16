@@ -1645,7 +1645,7 @@ class Plugin(AmbientRpc):
 
     async def _support_upscalers_state(self) -> dict:
         service = getattr(self, "_upscaler_service", None)
-        return service.support_state() if service is not None else {"loaded": False}
+        return await asyncio.to_thread(service.support_state) if service is not None else {"loaded": False}
 
     def _close_upscalers_sync(self) -> None:
         self._upscalers_closed = True
