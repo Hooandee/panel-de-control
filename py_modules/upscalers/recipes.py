@@ -65,7 +65,6 @@ RECIPES: dict[str, Recipe] = {
         Recipe("292030", exe="bin/x64_dx12/witcher3.exe", args=("--launcher-skip", "-dx12"), fg_note="reflexOff"),
         # ControlLauncher also loads the proxy before OptiScaler can apply its Control_DX12 spoofing exception.
         # FSR 4 only runs through OptiScaler's D3D11 to D3D12 bridge: the Vulkan path cannot share its textures.
-        Recipe("4732690", args=("-force-d3d11",)),
         Recipe("870780", ini={"Spoofing.Dxgi": "false"}),
         # RE Engine exposes its upscaler to OptiScaler only through REFramework.
         Recipe("2054970", files={"dinput8.dll": "reframework-nightly"}, native_dlls=("dinput8",)),
