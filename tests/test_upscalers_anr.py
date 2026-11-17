@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from upscalers import catalog, ini, recipe_catalog
+from upscalers import catalog, diagnostics, ini, recipe_catalog
 from upscalers.catalog import Asset, Build
 from upscalers.service import UpscalerError, UpscalerService
 
@@ -107,6 +107,10 @@ def test_installing_anr_puts_its_provider_in_optiscalers_custom_folder_and_takes
     assert ini.read(text, "FrameGen.DisableHudless") == "false"
     install = service.state["games"][APPID]["install"]
     assert install["anr"] and install["options"]["fg_route"] == "anr"
+    _write(game / PROVIDER / "nr_fg-1.log", "path=portable\nfeature created\n")
+    report = diagnostics.game_report(service.home, APPID, service.state["games"][APPID])
+    assert report["anr_log"]["provider"] and report["anr_log"]["tail"] == ["path=portable", "feature created"]
+    assert report["ini"]["FrameGen.FGNvngxReplacement"] == catalog.ANR_PROVIDER
 
     service.configure(APPID, {"fg": "on", "fg_route": "game"})
     text = (game / "OptiScaler.ini").read_text()

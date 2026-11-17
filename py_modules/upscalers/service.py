@@ -1735,6 +1735,11 @@ class UpscalerService:
         for generated in _GENERATED if manifest.get("engine") != "dll" else ():
             if (target / generated).is_file() and generated not in manifest.get("backups", []):
                 (target / generated).unlink()
+        for directory in manifest.get("dirs", []):
+            # ANR FG writes a log per launch beside its provider.
+            if directory.endswith(f"custom/{catalog.ANR_PROVIDER}/dlssg"):
+                for log in (target / directory).glob("nr_fg-*.log"):
+                    log.unlink(missing_ok=True)
         for relative in manifest.get("backups", []):
             saved = meta / "backup" / relative
             if saved.exists() and not (target / relative).exists():
