@@ -43,6 +43,8 @@ public sealed class GameBarFocusReturner
     private long quietUntilTicks;
     private volatile bool stopped;
     private IntPtr pendingRestore;
+    // The window Big Picture came over: a game started by another launcher does not descend from steam.exe.
+    private IntPtr coveredGame;
     private int nullReadings;
     private const int NullReadingsAsShell = 3;
     private ICdpSession? sharedContext;
@@ -85,6 +87,11 @@ public sealed class GameBarFocusReturner
             // Above whatever was in front before: other small topmost windows (overlays) do not matter.
             var raised = WindowOrder.Raise(bigPicture, stayTopmost)
                 && (above == IntPtr.Zero || above == bigPicture || WindowOrder.IsAbove(bigPicture, above));
+            if (raised && above != IntPtr.Zero && above != bigPicture)
+            {
+                coveredGame = above;
+            }
+
             if (raised && stayTopmost && !stopped)
             {
                 Volatile.Write(ref bigPictureHeldTopmost, bigPicture);
@@ -127,26 +134,26 @@ public sealed class GameBarFocusReturner
                 return null;
             }
 
-            var game = findGame();
-            if (game == IntPtr.Zero)
+            var covered = coveredGame;
+            coveredGame = IntPtr.Zero;
+            var game = covered != IntPtr.Zero && IsWindow(covered) ? covered : findGame();
+            if (game != IntPtr.Zero)
             {
-                return "no_window";
-            }
-
-            WindowOrder.Raise(game, stayTopmost: WindowOrder.IsTopmost(game));
-            for (var attempt = 1; attempt <= RestoreAttempts; attempt++)
-            {
-                AskForeground(game);
-                await Task.Delay(200, cancellationToken).ConfigureAwait(false);
-                if (GetForegroundWindow() == game)
+                WindowOrder.Raise(game, stayTopmost: WindowOrder.IsTopmost(game));
+                for (var attempt = 1; attempt <= RestoreAttempts; attempt++)
                 {
-                    return $"foreground attempt={attempt}";
+                    AskForeground(game);
+                    await Task.Delay(200, cancellationToken).ConfigureAwait(false);
+                    if (GetForegroundWindow() == game)
+                    {
+                        return $"foreground attempt={attempt}";
+                    }
                 }
             }
 
             var steam = WindowOrder.FindTopWindow(handle => Classify(handle) == ForegroundKind.Steam, background: true);
             var lowered = steam != IntPtr.Zero && WindowOrder.SendToBottom(steam);
-            return lowered ? "big_picture_to_bottom" : "refused";
+            return (game == IntPtr.Zero ? "no_window " : string.Empty) + (lowered ? "big_picture_to_bottom" : "refused");
         }
         finally
         {
@@ -174,6 +181,7 @@ public sealed class GameBarFocusReturner
         {
             Foreground.GameEnded();
             ReleaseBigPicture();
+            coveredGame = IntPtr.Zero;
         }
         finally
         {
