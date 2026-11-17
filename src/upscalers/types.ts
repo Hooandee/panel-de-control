@@ -193,6 +193,7 @@ export interface UserFileCandidate {
 export interface RecipeInfo {
   user_files?: UserFile[];
   game_settings?: { setting: string; value: string }[];
+  anr_settings?: { setting: string; value: string }[];
   fps_counter?: boolean;
   quality_on_exit?: boolean;
   recommended_input?: "dlss" | "fsr31" | "fsr2" | "xess" | null;

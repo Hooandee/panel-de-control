@@ -782,6 +782,7 @@ export const GameView: FC<{
           optiscaler={{ fg: choice.fg ?? "off", route }}
           installedRoute={install?.options.fg === "on" ? install.options.fg_route ?? detail.fg_plan?.route ?? detail.fg_plan?.source ?? "game" : null}
           gpu={overview.gpu}
+          anrSettings={detail.recipe_info?.anr_settings}
           onOptiscaler={(fg, fg_route) => changeChoice({ ...choice, fg, fg_route: fg_route ?? choice.fg_route ?? null })}
           renderAdvanced={(restore) => detail.native ? restore && (
             <>

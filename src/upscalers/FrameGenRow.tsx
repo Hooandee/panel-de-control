@@ -47,7 +47,8 @@ export const FrameGenRow: FC<{
   onApplyOptiscaler?: (fg: "on" | "off", route: FgRoute | null) => Promise<void>;
   disabled?: boolean;
   optiscalerDisabled?: boolean;
-}> = ({ appid, liveAppid, isNonSteam, gameRunning, routes, recommendedRoutes, inputs, optiscaler, installedRoute, gpu, onOptiscaler, onApplyOptiscaler, disabled = false, optiscalerDisabled = false, renderAdvanced, duo = false }) => {
+  anrSettings?: { setting: string; value: string }[];
+}> = ({ anrSettings = [], appid, liveAppid, isNonSteam, gameRunning, routes, recommendedRoutes, inputs, optiscaler, installedRoute, gpu, onOptiscaler, onApplyOptiscaler, disabled = false, optiscalerDisabled = false, renderAdvanced, duo = false }) => {
   const { t } = useI18n();
   const [status, setStatus] = useState<LsfgStatus | null>(null);
   const [mako, setMako] = useState<MakoStatus | null>(null);
@@ -327,7 +328,8 @@ export const FrameGenRow: FC<{
         {(current === "game" || current === "optiscaler") && recommendedRoutes && !recommendedRoutes[current] && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.fg.notRecommended")}</Notice>}
         {current === "game" && dlssBridge && <Notice icon={<LuLayers size={16} />}>{t("up.fg.hint.dlss")}</Notice>}
         {current === "optiscaler" && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.fg.hint.opti")}</Notice>}
-        {current === "anr" && <Notice icon={<LuSparkles size={16} />}>{t(installedRoute === "anr" ? "up.fg.hint.dlss" : "up.fg.hint.anr")}</Notice>}
+        {current === "anr" && <Notice icon={<LuSparkles size={16} />}>{t(installedRoute === "anr" ? "up.fg.hint.anrGame" : "up.fg.hint.anr")}</Notice>}
+        {current === "anr" && anrSettings.map((entry) => <Notice key={entry.setting} icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.gameSetting", entry)}</Notice>)}
         {current === "mako" && !makoProfile && makoLeftover.leftover && (
           <>
             <Notice icon={<LuArrowLeftRight size={16} />}>{t("up.mako.leftover")}</Notice>

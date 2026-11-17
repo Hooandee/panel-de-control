@@ -171,3 +171,11 @@ def test_a_newer_anr_release_in_another_layout_falls_back_before_the_game_is_tou
     service.begin("install", APPID)
     service.install(APPID, {"build": "new", "fg": "on", "fg_route": "anr"})
     assert (game / PROVIDER / "nvngx_dlssg.dll").read_bytes() == b"anr"
+
+
+def test_hogwarts_tells_what_its_menu_needs_for_anr_and_keeps_its_wiki_facts():
+    from upscalers import recipes
+    recipe = recipes.recipe_for("990080")
+    assert dict(recipe.anr_settings)["Upscale Type"] == "NVIDIA DLSS"
+    assert recipe.optipatcher and recipe.status == "works"
+    assert not recipe.exe and not recipe.ini and not recipe.args

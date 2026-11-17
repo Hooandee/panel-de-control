@@ -55,6 +55,8 @@ class Recipe:
     reframework_upscaler: bool = False
     optiscaler_fg: bool = True
     game_settings: tuple[tuple[str, str], ...] = ()
+    # What the game's own menu needs so its DLSS Frame Generation reaches ANR.
+    anr_settings: tuple[tuple[str, str], ...] = ()
 
 
 RECIPES: dict[str, Recipe] = {
@@ -71,6 +73,9 @@ RECIPES: dict[str, Recipe] = {
         # Monster Hunter Wilds wiki entry: on AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing
         # on top crashes it. REFramework comes from the RE Engine rule.
         Recipe("2246340", ini={"Spoofing.Dxgi": "false"}, needs=("reframework",)),
+        # Hogwarts Legacy lists DLSS Frame Generation only while its upscaler is DLSS; both apply on restart.
+        Recipe("990080", anr_settings=(("Upscale Type", "NVIDIA DLSS"),
+                                       ("Frame Generation", "NVIDIA DLSS Frame Generation x2"))),
     )
 }
 
