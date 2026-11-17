@@ -489,12 +489,12 @@ def fg_route_plan(plan: dict | None, route: str | None) -> dict | None:
     return {**plan["routes"][route], "route": route, "routes": plan["routes"]}
 
 
-def fg_overrides(plan: dict | None, enabled: bool, generation: int = 9) -> dict[str, str]:
+def fg_overrides(plan: dict | None, enabled: bool, anr_files: bool = False) -> dict[str, str]:
     provider = plan.get("provider") if enabled and plan else None
-    # OptiScaler 10 keeps the replacement across launches: leaving ANR must hand DLSSG back to OptiScaler's default.
-    # ANR draws the HUD over the HUD-less colour itself, so OptiScaler must not strip it.
+    # Only where ANR is or was: leaving it hands DLSSG back to OptiScaler's default. ANR draws the HUD over the
+    # HUD-less colour itself, so OptiScaler must not strip it.
     replacement = ({"FrameGen.FGNvngxReplacement": provider or "auto",
-                    "FrameGen.DisableHudless": "false" if provider else "auto"} if generation >= 10 else {})
+                    "FrameGen.DisableHudless": "false" if provider else "auto"} if provider or anr_files else {})
     if not enabled or not plan:
         return {"FrameGen.Enabled": "false", "FrameGen.FGInput": "nofg", "FrameGen.FGOutput": "nofg", **replacement}
     enabled = "auto" if plan.get("follows_game") else "true"

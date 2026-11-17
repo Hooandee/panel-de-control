@@ -736,10 +736,18 @@ class UpscalerService:
         self._recover_orphan(target)
         pinned_only: set[str] = set()
         paths, chosen = self._fetch_assets(needed(effective_build, recipe))
+        if wants_anr:
+            try:
+                _anr_sources(paths[catalog.ANR_FG], "")
+            except UpscalerError:
+                # A newer add-on laid out differently: the catalog's own release, before the game is touched.
+                pinned_only.add(catalog.ANR_FG)
+                paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
+                _anr_sources(paths[catalog.ANR_FG], "")
         try:
             auto_recipes.sources(automatic, paths, self.user_files)
         except auto_recipes.RecipeError:
-            pinned_only = {asset.id for asset in auto_recipes.assets(automatic)}
+            pinned_only |= {asset.id for asset in auto_recipes.assets(automatic)}
             paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
         left = self._replace(entry, installed)
         # Files the game replaced since (an update) stayed behind with stale backups: those copies go, the game's stay.
@@ -790,7 +798,7 @@ class UpscalerService:
             **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
             **({"Plugins.LoadAsiPlugins": "true"} if recipe and recipe.optipatcher else {}),
             **catalog.model_overrides(build, choice.get("model")),
-            **catalog.fg_overrides(fg_plan, choice.get("fg") == "on", archive_asset.generation),
+            **catalog.fg_overrides(fg_plan, choice.get("fg") == "on", bool(previous.get("anr"))),
         }
         managed = sorted(panel)
         # The wiki's settings are a starting point the user may change in the editor; Panel's own keys win over them
@@ -1307,7 +1315,7 @@ class UpscalerService:
             path = Path(install["target"]) / "OptiScaler.ini"
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
-                path.write_text(ini.apply(text, catalog.fg_overrides(None, False, _generation(install))), encoding="utf-8")
+                path.write_text(ini.apply(text, catalog.fg_overrides(None, False, bool(install.get("anr")))), encoding="utf-8")
             except OSError:
                 raise UpscalerError("broken") from None
             _wrote_ini(install)
@@ -1348,7 +1356,7 @@ class UpscalerService:
         install["fg_plan"] = catalog.fg_route_plan(plan, choice.get("fg_route"))
         if solution:
             install["solution"] = solution
-        fg = catalog.fg_overrides(install.get("fg_plan"), choice.get("fg") == "on", _generation(install))
+        fg = catalog.fg_overrides(install.get("fg_plan"), choice.get("fg") == "on", bool(install.get("anr")))
         build = catalog.BUILDS.get(install.get("build", ""))
         model = catalog.model_overrides(build, choice.get("model"))
         model_changed = model != catalog.model_overrides(build, install.get("options", {}).get("model"))
@@ -1789,7 +1797,8 @@ class UpscalerService:
             generating = facts["fg_state"] == "true" and bool(facts.get("fg"))
         elif not blind and facts.get("fg"):
             generating = True
-        if install.get("anr") and (install.get("options") or {}).get("fg_route") == "anr":
+        options = install.get("options") or {}
+        if install.get("anr") and options.get("fg") == "on" and options.get("fg_route") == "anr":
             folder = Path(install["target"]) / "OptiScaler" / "custom" / catalog.ANR_PROVIDER / "dlssg"
             generating = logread.anr_generating(folder, time.time())
         return {"result": _verdict(install, facts), "resolution": facts.get("resolution"),

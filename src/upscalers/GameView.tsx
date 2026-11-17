@@ -337,7 +337,7 @@ export const GameView: FC<{
     if (gameRunning && install && !spatialInstalled && (!sameBuild || modelChanged || (qualityChanged && !!detail?.recipe_info?.quality_on_exit))) {
       // The running game holds OptiScaler's files (and REFramework rewrites its quality on exit): it goes in as soon as it closes.
       queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
-        ...scalerChoice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
+        ...scalerChoice, ...(replacesFsr || dropsAnr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
         ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
       });
       setMessage(null);
@@ -398,11 +398,16 @@ export const GameView: FC<{
     keepDraft.current = true;
     changeChoice(next);
     if (keep && install?.options.fg_route === "anr") {
-      const result = await configureUpscaler(appid, next);
-      if (gameRunning) setApplied(result.live ? "now" : "restart");
-      await load();
-      onChanged();
-      return;
+      try {
+        const result = await configureUpscaler(appid, next);
+        if (gameRunning) setApplied(result.live ? "now" : "restart");
+        await load();
+        onChanged();
+        return;
+      } catch (error) {
+        // A reinstall with frame generation off took ANR's files out: they go back in with a new install.
+        if (upscalerErrorCode(error) !== "anr_reinstall") throw error;
+      }
     }
     const started = await startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
     setJob(started);

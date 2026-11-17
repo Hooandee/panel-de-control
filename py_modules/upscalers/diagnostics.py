@@ -552,12 +552,12 @@ def _anr_log(target: Path) -> dict:
     """ANR FG writes its own log per launch beside its provider; the newest is the one support asks for."""
     folder = target / "OptiScaler" / "custom" / catalog.ANR_PROVIDER / "dlssg"
     try:
-        logs = sorted(folder.glob("nr_fg-*.log"), key=lambda path: path.stat().st_mtime)
+        logs = sorted(((path.stat().st_mtime, path) for path in folder.glob("nr_fg-*.log")), key=lambda item: item[0])
     except OSError:
         logs = []
     provider = folder / "nvngx_dlssg.dll"
     return {"provider": provider.is_file() and not provider.is_symlink(), "logs": len(logs),
-            "newest_at": logs[-1].stat().st_mtime if logs else None, "tail": _tail(logs[-1]) if logs else []}
+            "newest_at": logs[-1][0] if logs else None, "tail": _tail(logs[-1][1]) if logs else []}
 
 
 # Files that load code into a game besides the game itself: whose they are is the first support question.

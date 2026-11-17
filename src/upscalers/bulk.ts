@@ -35,6 +35,8 @@ export function bulkSteps(action: BulkAction, games: GameEntry[], overview: Upsc
     }
     if (!install || !optiscaler(overview, install.build)) return [];
     if (action === "repair") return install.status === "broken" ? [{ game, choice: keep(install.options, install.build) }] : [];
+    // ANR keeps the game on the OptiScaler 10 build it went in with.
+    if (install.options?.fg === "on" && install.options.fg_route === "anr") return [];
     return preferred && install.build !== preferred.id && optiscaler(overview, preferred.id)
       ? [{ game, choice: keep(install.options, preferred.id) }] : [];
   });

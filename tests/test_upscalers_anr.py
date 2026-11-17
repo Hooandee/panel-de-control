@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from upscalers import catalog, diagnostics, ini, logread, recipe_catalog
+from upscalers import catalog, diagnostics, ini, logread, recipe_catalog, solution_plan
 from upscalers.catalog import Asset, Build
 from upscalers.service import UpscalerError, UpscalerService
 
@@ -26,17 +26,22 @@ def test_anr_is_a_route_only_for_dx12_dlss_fg_games_on_amd_handheld_gpus():
     assert "anr" not in catalog.fg_routes("rdna3", {"fsrfg": ["x"]}, ["d3d12"])
     assert "anr" not in catalog.fg_routes("rdna3", DLSSG, ["vulkan"], streamline=2)
     assert "anr" not in catalog.fg_routes("intel", DLSSG, ["d3d12"], streamline=2)
+    # The offer forces D3D12; a game seen only on Vulkan must not get ANR anyway.
+    vulkan = solution_plan.resolve("rdna3", {"inputs": DLSSG, "apis": ["vulkan"], "streamline": 2}, generation=10)
+    assert "anr" not in ((vulkan["offered_fg_plan"] or {}).get("routes") or {})
+    both = solution_plan.resolve("rdna3", {"inputs": DLSSG, "apis": ["d3d11", "d3d12"], "streamline": 2}, generation=10)
+    assert "anr" in both["offered_fg_plan"]["routes"]
 
 
 def test_overrides_hand_dlssg_back_whenever_anr_is_not_the_route():
     plan = catalog.fg_plan("rdna2", DLSSG, generation=10, apis=["d3d12"], streamline=2, route="anr")
-    on = catalog.fg_overrides(plan, True, 10)
+    on = catalog.fg_overrides(plan, True)
     assert on == {"FrameGen.Enabled": "auto", "FrameGen.FGInput": "nvngxfg", "FrameGen.FGOutput": "auto",
                   "FrameGen.FGNvngxReplacement": catalog.ANR_PROVIDER, "FrameGen.DisableHudless": "false"}
     game = catalog.fg_route_plan(plan, "game")
-    assert catalog.fg_overrides(game, True, 10)["FrameGen.FGNvngxReplacement"] == "auto"
-    assert catalog.fg_overrides(plan, False, 10)["FrameGen.DisableHudless"] == "auto"
-    # OptiScaler 0.9 has neither key: its INI stays as before.
+    assert catalog.fg_overrides(game, True, anr_files=True)["FrameGen.FGNvngxReplacement"] == "auto"
+    assert catalog.fg_overrides(plan, False, anr_files=True)["FrameGen.DisableHudless"] == "auto"
+    # Games that never had ANR keep their INI exactly as before.
     assert "FrameGen.FGNvngxReplacement" not in catalog.fg_overrides(game, True)
 
 
@@ -148,3 +153,21 @@ def test_anr_counts_as_generating_only_while_its_pacing_summaries_keep_coming(tm
     assert logread.anr_generating(folder, modified + 5) is True
     # End stops the evaluations: no newer summary arrives.
     assert logread.anr_generating(folder, modified + logread.ANR_FRESH_S + 1) is False
+    with open(log, "a") as handle:
+        handle.write("[16:41:40.000] [info] pacing spike: real frame interval 353.63 ms\n")
+    assert logread.anr_generating(folder, log.stat().st_mtime) is False
+
+
+def test_a_newer_anr_release_in_another_layout_falls_back_before_the_game_is_touched(anr_setup, monkeypatch):
+    service, game = anr_setup
+    pinned = catalog.ASSETS[catalog.ANR_FG]
+    content = b"anr-next"
+    newer = Asset(pinned.id, "next.zip", hashlib.sha256(content).hexdigest(), len(content), ("http://invalid",), True, generation=10)
+    unpacked = service.cache.root / newer.sha256 / "unpacked"
+    _write(unpacked / "Renamed/dlssg/nvngx_dlssg.dll", b"anr")
+    _write(unpacked / ".complete", newer.sha256)
+    monkeypatch.setattr(service.latest, "tracked", lambda asset: asset.id == catalog.ANR_FG)
+    monkeypatch.setattr(service.latest, "resolve", lambda asset: newer if asset.id == catalog.ANR_FG else asset)
+    service.begin("install", APPID)
+    service.install(APPID, {"build": "new", "fg": "on", "fg_route": "anr"})
+    assert (game / PROVIDER / "nvngx_dlssg.dll").read_bytes() == b"anr"

@@ -19,6 +19,9 @@ def resolve(gpu, analysis, recipe=None, generation=9, engine="optiscaler", route
     offered = (catalog.fg_plan(gpu, analysis.get("inputs", {}), getattr(recipe, "fg", None),
                                generation, ["d3d12"], analysis.get("streamline"), route)
                if engine == "optiscaler" else None)
+    if offered and "anr" in offered["routes"] and (forced or detected) and "d3d12" not in (forced or detected):
+        routes = {key: value for key, value in offered["routes"].items() if key != "anr"}
+        offered = catalog.fg_route_plan({**offered, "routes": routes}, offered["route"]) if routes else None
     fg = None
     if engine == "optiscaler" and not conflict:
         fg = catalog.fg_plan(gpu, analysis.get("inputs", {}), getattr(recipe, "fg", None),

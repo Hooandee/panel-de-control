@@ -149,8 +149,13 @@ def fallback(install: dict, facts: dict) -> dict | None:
 
 
 # ANR FG logs a pacing summary every 10 s while it evaluates; End stops the evaluations and the summaries.
-_ANR_PACING = re.compile(r"\] \[info\] pacing: \d+ real frames .*?evaluates ours (\d+)")
+_ANR_PACING = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\.\d+\] \[info\] pacing: \d+ real frames .*?evaluates ours (\d+)", re.M)
+_ANR_LINE = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\.\d+\]", re.M)
 ANR_FRESH_S = 25
+
+
+def _clock_s(hours: str, minutes: str, seconds: str) -> int:
+    return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
 
 
 def anr_generating(folder: Path, now: float) -> bool | None:
@@ -164,7 +169,10 @@ def anr_generating(folder: Path, now: float) -> bool | None:
             tail = handle.read().decode("utf-8", "replace")
     except (OSError, ValueError):
         return None
-    counts = _ANR_PACING.findall(tail)
-    if not counts:
+    summaries = _ANR_PACING.findall(tail)
+    if not summaries:
         return None
-    return int(counts[-1]) > 0 and now - modified <= ANR_FRESH_S
+    *clock, ours = summaries[-1]
+    # Other lines may keep the file fresh after End: the summary itself must be among the newest.
+    since_summary = (_clock_s(*_ANR_LINE.findall(tail)[-1]) - _clock_s(*clock)) % 86400
+    return int(ours) > 0 and now - modified <= ANR_FRESH_S and since_summary <= ANR_FRESH_S
