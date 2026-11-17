@@ -13,6 +13,8 @@ const REACTIVATE_DELAYS_MS = [0, 120, 400];
 /** A game asking for its overlay (store page, purchase) is followed within this window by the activation. */
 const GAME_REQUEST_WINDOW_MS = 1_500;
 const OVERLAY_POLL_MS = 1_000;
+/** The companion's DevTools binding that raises the game's window as well. */
+export const RAISE_GAME_BINDING = "pdcHostRaiseGame";
 /** Steam's own UI in its focus events and composition queue. */
 const STEAM_UI_APPID = 769;
 
@@ -173,6 +175,8 @@ export function installSteamButtonHome(
       try {
         steam.SteamClient?.Overlay?.SetOverlayState?.(gameId, COMPOSITION_HIDDEN);
         void Promise.resolve(steam.SteamClient?.Apps?.RaiseWindowForGame?.(gameId)).catch(() => log("raise_game_failed"));
+        // Windows can refuse Steam the game's window after Game Bar; the companion raises it too (GameWindowRaiser).
+        (scope as unknown as Record<string, ((payload: string) => void) | undefined>)[RAISE_GAME_BINDING]?.(gameId);
       } catch {
         log("raise_game_failed");
       }

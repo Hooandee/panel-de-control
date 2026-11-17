@@ -115,6 +115,7 @@ public static class Program
                 SuperviseAsync("themes.engine", () => themeEngine.RunAsync(token), token),
                 SuperviseAsync("themes.pipe", () => themesServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("themes.focus", () => focusReturner.RunAsync(token), token),
+                SuperviseAsync("themes.game_raise", () => new GameWindowRaiser(steamDevTools, gameProcesses).RunAsync(token), token),
                 SuperviseAsync("themes.game_audio", () => new GameAudioSilencer(
                     steamDevTools,
                     gameMixer,

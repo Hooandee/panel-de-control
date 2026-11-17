@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { installSteamButtonHome, PRESS_HOME_WAIT_MS } from "./steamButton";
+import { installSteamButtonHome, PRESS_HOME_WAIT_MS, RAISE_GAME_BINDING } from "./steamButton";
 
 type Activated = (pid: number, appId: number, active: boolean, user: boolean) => void;
 
@@ -93,14 +93,15 @@ describe("Steam button on Windows", () => {
     stop();
   });
 
-  it("raises the game when Big Picture resumes it", () => {
+  it("raises the game when Big Picture resumes it, and asks the companion to raise its window too", () => {
     const { scope, calls, navigate } = steam();
+    Object.assign(scope, { [RAISE_GAME_BINDING]: (gameId: string) => calls.push(`companion raise ${gameId}`) });
     const stop = installSteamButtonHome(scope, () => true, log);
 
     navigate("/library/home");
     navigate("/apprunning");
 
-    expect(calls).toEqual(["overlay 10798923412957822976 0", "raise 10798923412957822976"]);
+    expect(calls).toEqual(["overlay 10798923412957822976 0", "raise 10798923412957822976", "companion raise 10798923412957822976"]);
     stop();
     expect(errors).toEqual([]);
   });
