@@ -40,6 +40,8 @@ export interface WindowsThemeHostStatus {
   gameSilenced: boolean;
   /** The game a theme holds frozen while its lease lasts (gamePause.ts), or null. */
   gamePaused: string | null;
+  /** Steam runs a game behind its UI. */
+  gameRunning: boolean;
   storage: WindowsStorageStatus;
   picturesDirectory: string | null;
 }
@@ -51,8 +53,10 @@ export interface WindowsThemeHost {
   /** Writes theme runtimes made since the last settlement, oldest first; the companion persists them. */
   storageTake(): WindowsStorageWrite[];
   storageSettle(settlement: WindowsStorageSettlement): WindowsStorageStatus;
-  /** The Xbox button Game Bar kept from Steam (the companion calls it); see steamButton.ts. */
+  /** The Xbox button Game Bar kept from Steam (the companion calls these); see steamButton.ts. */
   pressHome(): string;
+  gameBarShown(foregroundWasSteam: boolean): string;
+  gameHome(): string;
   dispose(): void;
 }
 
@@ -228,6 +232,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     errors: [...errors],
     gameSilenced: gameAudio.silenced(),
     gamePaused: gamePause.paused(),
+    gameRunning: stopSteamButton.gameRunning(),
     storage: storage.status(),
     picturesDirectory: state.picturesDirectory ?? null,
   });
@@ -249,6 +254,8 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     storageTake: storage.take,
     storageSettle: storage.settle,
     pressHome: () => stopSteamButton.pressHome(),
+    gameBarShown: (foregroundWasSteam: boolean) => stopSteamButton.gameBarShown(foregroundWasSteam === true),
+    gameHome: () => stopSteamButton.gameHome(),
     dispose() {
       stopRuntime();
       storage.dispose();

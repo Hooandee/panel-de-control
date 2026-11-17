@@ -17,11 +17,14 @@ public sealed class ThemesController : IThemesController
 
     private readonly ThemeService service;
     private readonly SteamThemeEngine engine;
+    private readonly Func<ForegroundKind> foregroundBeforeGameBar;
+    private readonly GameBarButtonPolicy gameBarButton = new();
 
-    public ThemesController(ThemeService service, SteamThemeEngine engine)
+    public ThemesController(ThemeService service, SteamThemeEngine engine, Func<ForegroundKind> foregroundBeforeGameBar)
     {
         this.service = service;
         this.engine = engine;
+        this.foregroundBeforeGameBar = foregroundBeforeGameBar;
     }
 
     public async Task<ThemesResponse> HandleAsync(ThemesRequest request, CancellationToken cancellationToken)
@@ -63,8 +66,25 @@ public sealed class ThemesController : IThemesController
                     service.EnableSteamDebugging();
                     return await ReadbackAsync(cancellationToken).ConfigureAwait(false);
                 case ThemesOperation.SteamHome:
-                    CompanionLog.Write("themes.steam_home", await engine.PressSteamHomeAsync(cancellationToken).ConfigureAwait(false));
+                    CompanionLog.Write("themes.steam_home", await engine.GameHomeAsync(cancellationToken).ConfigureAwait(false));
                     return Response(engine.Status);
+                case ThemesOperation.GameBarShown:
+                {
+                    var before = foregroundBeforeGameBar();
+                    var answer = await engine.GameBarShownAsync(before == ForegroundKind.Steam, cancellationToken).ConfigureAwait(false);
+                    gameBarButton.Shown(answer);
+                    CompanionLog.Write("themes.game_bar_shown", $"{answer} over={before}");
+                    return Response(engine.Status);
+                }
+                case ThemesOperation.GameBarHidden:
+                {
+                    var shownFor = request.ShownMilliseconds!.Value;
+                    var home = gameBarButton.Hidden(TimeSpan.FromMilliseconds(shownFor));
+                    CompanionLog.Write(
+                        "themes.game_bar_hidden",
+                        home ? $"{shownFor}ms {await engine.GameHomeAsync(cancellationToken).ConfigureAwait(false)}" : $"{shownFor}ms");
+                    return Response(engine.Status);
+                }
                 case ThemesOperation.RestartSteam:
                     using (var timeout = Timeout(cancellationToken, LongOperationTimeout))
                     {

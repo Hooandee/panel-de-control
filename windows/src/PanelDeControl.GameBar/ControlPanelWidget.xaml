@@ -81,15 +81,28 @@
                 </Button>
             </Grid>
 
-            <TextBlock
-                x:Name="ConnectionStatus"
-                x:Uid="ConnectionStatus"
-                Grid.Row="1"
-                Margin="0,10,0,0"
-                Visibility="Collapsed"
-                Foreground="{StaticResource PdcWarnBrush}"
-                AutomationProperties.LiveSetting="Polite"
-                Style="{StaticResource PdcMutedStyle}" />
+            <StackPanel Grid.Row="1">
+                <TextBlock
+                    x:Name="ConnectionStatus"
+                    x:Uid="ConnectionStatus"
+                    Margin="0,10,0,0"
+                    Visibility="Collapsed"
+                    Foreground="{StaticResource PdcWarnBrush}"
+                    AutomationProperties.LiveSetting="Polite"
+                    Style="{StaticResource PdcMutedStyle}" />
+                <Button
+                    x:Name="SteamHomeButton"
+                    x:Uid="SteamHomeButton"
+                    Margin="0,12,0,0"
+                    Visibility="Collapsed"
+                    Click="SteamHomeButton_Click"
+                    Style="{StaticResource PdcChipButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontFamily="{StaticResource PdcIconFontFamily}" FontSize="15" Glyph="&#xE80F;" />
+                        <TextBlock x:Uid="SteamHomeButtonText" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
 
             <Border x:Name="SectionTabsBar" Grid.Row="2" Margin="0,16,0,0" Padding="6" CornerRadius="18" Background="{StaticResource PdcLayerBrush}">
                 <ScrollViewer

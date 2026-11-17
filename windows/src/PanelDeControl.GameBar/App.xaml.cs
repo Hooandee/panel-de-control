@@ -80,19 +80,44 @@ sealed partial class App : Application
     }
 
     // On some handhelds (ROG Xbox Ally X with Gaming Services 39.118) Windows keeps the Xbox button for Game Bar and
-    // Steam never sees it, so a Steam theme could not leave a game. Game Bar coming to the foreground is that press:
-    // the companion asks the theme host to answer it as Steam's Home (steamButton.ts pressHome), and stands down
-    // where Steam got the button too.
+    // Steam never sees it. The companion hears every time Game Bar opens and closes: over Big Picture or the desktop
+    // opening is Steam's button for the theme; over a game Game Bar stays usable, and opening and closing it at once
+    // (the button pressed twice) is Steam's button. How long it was shown is measured here, where the events arrive,
+    // and the reports go out one after another so a slow pipe cannot reorder them.
+    private static readonly System.Diagnostics.Stopwatch GameBarShownFor = new();
+    private static readonly object GameBarReportGate = new();
+    private static System.Threading.Tasks.Task gameBarReports = System.Threading.Tasks.Task.CompletedTask;
+
     private static void OnGameBarDisplayModeChanged(XboxGameBarWidget sender, object args)
     {
-        if (sender.GameBarDisplayMode != XboxGameBarDisplayMode.Foreground)
+        var shown = sender.GameBarDisplayMode == XboxGameBarDisplayMode.Foreground;
+        Func<ThemesClient, System.Threading.Tasks.Task> report;
+        lock (GameBarReportGate)
         {
-            return;
-        }
+            if (shown == GameBarShownFor.IsRunning)
+            {
+                return;
+            }
 
-        _ = new ThemesClient().SteamHomeAsync().ContinueWith(
-            task => CrashLog.Write("steam-home", task.Exception),
-            System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+            if (shown)
+            {
+                GameBarShownFor.Restart();
+                report = client => client.GameBarShownAsync();
+            }
+            else
+            {
+                GameBarShownFor.Stop();
+                var milliseconds = GameBarShownFor.ElapsedMilliseconds;
+                report = client => client.GameBarHiddenAsync(milliseconds);
+            }
+
+            gameBarReports = gameBarReports
+                .ContinueWith(_ => report(new ThemesClient()), System.Threading.Tasks.TaskScheduler.Default)
+                .Unwrap()
+                .ContinueWith(
+                    task => CrashLog.Write("game-bar-report", task.Exception),
+                    System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+        }
     }
 
     // Game Bar loads the widget at sign-in even while hidden. The companion keeps Steam themed, so it

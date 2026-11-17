@@ -65,9 +65,16 @@ interface SteamButtonScope {
 /** How long Steam's own answer to its button gets before the companion's press acts in its place. */
 export const PRESS_HOME_WAIT_MS = 350;
 
-/** Stops the Steam button handling; `pressHome` is the Xbox button seen by Game Bar instead of Steam (the companion
- * calls it): the theme's own Steam button, or Big Picture's Home over a game. */
-export type SteamButtonHome = (() => void) & { pressHome(): string };
+/** Stops the Steam button handling. The companion calls the rest for the Xbox button, which Windows keeps for Game
+ * Bar on some handhelds: `pressHome` is Steam's button (the theme's own, or Big Picture's Home over a game),
+ * `gameBarShown` is Game Bar opening, and `gameHome` is Big Picture's Home over the running game (Game Bar opened
+ * and closed at once, or the widget's button). */
+export type SteamButtonHome = (() => void) & {
+  pressHome(): string;
+  gameBarShown(foregroundWasSteam: boolean): string;
+  gameHome(): string;
+  gameRunning(): boolean;
+};
 
 /** Records a failure code; it reaches the companion as one of the host's errors. */
 export type SteamButtonLog = (code: string) => void;
@@ -256,6 +263,22 @@ export function installSteamButtonHome(
     return "scheduled";
   };
 
+  // Over a game Game Bar opens for itself (TDP, Panel's widget): only Steam's own window in front makes it Steam's
+  // button. A game behind Big Picture is not in front: the theme's button answers as before.
+  const gameBarShown = (foregroundWasSteam: boolean): string => {
+    if (!isActive()) return "inactive";
+    if (!foregroundWasSteam && runningAppId()) return "game";
+    return pressHome();
+  };
+
+  const gameHome = (): string => {
+    if (!isActive()) return "inactive";
+    const running = runningAppId();
+    if (!running) return pressHome();
+    showBigPictureHome(running);
+    return "game_home";
+  };
+
   const stop = () => {
     timers.clearInterval(overlayPoll);
     timers.clearInterval(windowPoll);
@@ -274,5 +297,5 @@ export function installSteamButtonHome(
     }
     patched.clear();
   };
-  return Object.assign(stop, { pressHome });
+  return Object.assign(stop, { pressHome, gameBarShown, gameHome, gameRunning: () => Boolean(runningAppId()) });
 }

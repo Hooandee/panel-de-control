@@ -504,4 +504,10 @@
   <data name="ThemesRemoveDescription" xml:space="preserve"><value>Se borrarán sus archivos y sus ajustes. Se podrá volver a instalar más tarde.</value></data>
   <data name="ThemesRemoveConfirm" xml:space="preserve"><value>Eliminar</value></data>
   <data name="ThemesRemoveCancel" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="SteamHomeButtonText.Text" xml:space="preserve">
+    <value>Ir al Inicio de Steam</value>
+  </data>
+  <data name="SteamHomeButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Ir al Inicio de Steam</value>
+  </data>
 </root>

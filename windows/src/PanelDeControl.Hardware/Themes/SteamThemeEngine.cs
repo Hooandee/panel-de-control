@@ -16,7 +16,7 @@ public enum SteamThemeConnection
 
 public sealed record ThemePageStatus(string Title, int Expected, int Applied);
 
-public sealed record ThemeHostStatus(bool Present, bool SteamDocument, IReadOnlyList<string> Mounted, IReadOnlyList<string> Errors);
+public sealed record ThemeHostStatus(bool Present, bool SteamDocument, IReadOnlyList<string> Mounted, IReadOnlyList<string> Errors, bool GameRunning = false);
 
 public sealed record ThemeEngineStatus(
     long Cycle,
@@ -154,7 +154,16 @@ public sealed class SteamThemeEngine
     /// The Xbox button that Windows gave to Game Bar instead of Steam: the theme host presses Steam's Home in its place
     /// (steamButton.ts pressHome). Returns what the host did, for the log.
     /// </summary>
-    public async Task<string> PressSteamHomeAsync(CancellationToken cancellationToken)
+    public Task<string> PressSteamHomeAsync(CancellationToken cancellationToken) => CallHostAsync("pressHome?.()", cancellationToken);
+
+    /// <summary>Game Bar came to the foreground: Steam's button unless it opened over a running game ("game").</summary>
+    public Task<string> GameBarShownAsync(bool foregroundWasSteam, CancellationToken cancellationToken) =>
+        CallHostAsync(foregroundWasSteam ? "gameBarShown?.(true)" : "gameBarShown?.(false)", cancellationToken);
+
+    /// <summary>Big Picture's Home over the running game, at once.</summary>
+    public Task<string> GameHomeAsync(CancellationToken cancellationToken) => CallHostAsync("gameHome?.()", cancellationToken);
+
+    private async Task<string> CallHostAsync(string call, CancellationToken cancellationToken)
     {
         try
         {
@@ -165,7 +174,7 @@ public sealed class SteamThemeEngine
             }
 
             var result = await session.EvaluateAsync(
-                $"(() => {{ try {{ return String(window.{HostGlobal}?.pressHome?.() ?? 'no_host'); }} catch {{ return 'error'; }} }})()",
+                $"(() => {{ try {{ return String(window.{HostGlobal}?.{call} ?? 'no_host'); }} catch {{ return 'error'; }} }})()",
                 cancellationToken).ConfigureAwait(false);
             return result.ValueKind == JsonValueKind.String ? result.GetString() ?? "unknown" : "unknown";
         }
@@ -611,7 +620,8 @@ public sealed class SteamThemeEngine
             true,
             status.TryGetProperty("steamDocument", out var document) && document.ValueKind == JsonValueKind.True,
             Strings(status, "mounted"),
-            Strings(status, "errors"));
+            Strings(status, "errors"),
+            status.TryGetProperty("gameRunning", out var gameRunning) && gameRunning.ValueKind == JsonValueKind.True);
     }
 
     private async Task RefreshTranslatorAsync(string sessionId, ICdpSession session, CancellationToken cancellationToken)

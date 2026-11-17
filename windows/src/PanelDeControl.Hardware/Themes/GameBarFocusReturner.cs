@@ -37,6 +37,7 @@ public sealed class GameBarFocusReturner
     private readonly GameBarFocusTracker tracker = new();
     private IntPtr lastHandle;
     private ForegroundKind lastKind = ForegroundKind.Other;
+    private volatile ForegroundKind beforeGameBar = ForegroundKind.Other;
     private ICdpSession? sharedContext;
     private DateTimeOffset nextPageCheck = DateTimeOffset.MinValue;
     private DateTimeOffset? pageUnfocusedSince;
@@ -46,6 +47,13 @@ public sealed class GameBarFocusReturner
     public GameBarFocusReturner(SteamThemeEngine engine)
     {
         this.engine = engine;
+    }
+
+    /// <summary>The foreground Game Bar opened over: Big Picture, a game or app, or the desktop.</summary>
+    public ForegroundKind ForegroundBeforeGameBar()
+    {
+        var current = Classify(GetForegroundWindow());
+        return current == ForegroundKind.GameBar ? beforeGameBar : current;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -74,6 +82,11 @@ public sealed class GameBarFocusReturner
             }
 
             lastKind = kind;
+            if (kind != ForegroundKind.GameBar)
+            {
+                beforeGameBar = kind;
+            }
+
             var restore = tracker.Observe(new ForegroundWindow(handle, kind));
             if (restore != IntPtr.Zero)
             {
