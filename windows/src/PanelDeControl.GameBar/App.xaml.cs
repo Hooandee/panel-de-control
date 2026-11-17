@@ -141,6 +141,12 @@ sealed partial class App : Application
             widget.GameBarDisplayModeChanged -= OnGameBarDisplayModeChanged;
         }
 
+        // Closed while Game Bar was open, the widget never hears it close: the next opening must still count.
+        lock (GameBarReportGate)
+        {
+            GameBarShownFor.Reset();
+        }
+
         widget = null;
         Window.Current.Closed -= OnWidgetClosed;
     }

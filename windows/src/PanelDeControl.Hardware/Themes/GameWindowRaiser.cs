@@ -5,8 +5,9 @@ namespace PanelDeControl.Hardware.Themes;
 
 /// <summary>
 /// Resuming a game from Big Picture is Steam raising the game's window (steamButton.ts raiseRunningGame). After Big
-/// Picture came back over the game by window order, Windows refuses that too and Steam's logo stays in front: the
-/// host signals the raise through a DevTools binding and this brings the game's window above Big Picture the same way.
+/// Picture came back over the game by window order (<see cref="GameBarFocusReturner.RaiseBigPictureAsync"/>), Windows
+/// refuses that too and Steam's logo stays in front: the host signals every raise through a DevTools binding, and only
+/// after such a return does this bring the game's window above Big Picture the same way.
 /// </summary>
 public sealed class GameWindowRaiser
 {
@@ -17,13 +18,15 @@ public sealed class GameWindowRaiser
 
     private readonly ISteamDevTools devTools;
     private readonly Func<IReadOnlyDictionary<int, ProcessEntry>> processes;
+    private readonly GameBarFocusReturner focus;
     private readonly SemaphoreSlim raise = new(0);
     private ICdpEventSession? session;
 
-    public GameWindowRaiser(ISteamDevTools devTools, Func<IReadOnlyDictionary<int, ProcessEntry>> processes)
+    public GameWindowRaiser(ISteamDevTools devTools, Func<IReadOnlyDictionary<int, ProcessEntry>> processes, GameBarFocusReturner focus)
     {
         this.devTools = devTools;
         this.processes = processes;
+        this.focus = focus;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -39,7 +42,15 @@ public sealed class GameWindowRaiser
                 }
 
                 await Task.Delay(AfterSteam, cancellationToken).ConfigureAwait(false);
-                CompanionLog.Write("themes.game_raise", RaiseGameWindow());
+                while (raise.Wait(0))
+                {
+                    // One resume can signal more than once.
+                }
+
+                if (focus.TakeGameRaiseNeeded())
+                {
+                    CompanionLog.Write("themes.game_raise", RaiseGameWindow());
+                }
             }
         }
         finally
@@ -63,6 +74,7 @@ public sealed class GameWindowRaiser
 
         var ordered = WindowOrder.BringAbove(game);
         GameBarFocusReturner.AskForeground(game);
+        focus.NoteGameRaised();
         return ordered ? "window_order" : "window_order_failed";
     }
 

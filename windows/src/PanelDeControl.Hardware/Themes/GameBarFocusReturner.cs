@@ -38,6 +38,7 @@ public sealed class GameBarFocusReturner
     private IntPtr lastHandle;
     private ForegroundKind lastKind = ForegroundKind.Other;
     private volatile ForegroundKind beforeGameBar = ForegroundKind.Other;
+    private volatile bool bigPictureRaisedByOrder;
     private ICdpSession? sharedContext;
     private DateTimeOffset nextPageCheck = DateTimeOffset.MinValue;
     private DateTimeOffset? pageUnfocusedSince;
@@ -72,9 +73,27 @@ public sealed class GameBarFocusReturner
             return;
         }
 
-        CompanionLog.Write("themes.big_picture_raise", WindowOrder.BringAbove(bigPicture) ? "window_order" : "window_order_failed");
+        var ordered = WindowOrder.BringAbove(bigPicture);
+        CompanionLog.Write("themes.big_picture_raise", ordered ? "window_order" : "window_order_failed");
+        // Windows may still report the game in the foreground: what the player sees is Big Picture.
+        beforeGameBar = ForegroundKind.Steam;
+        bigPictureRaisedByOrder = ordered;
         await RestoreAsync(bigPicture, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Whether Big Picture came over the game by window order since the game was last raised: only then does Steam's
+    /// own raise need help when the game resumes (<see cref="GameWindowRaiser"/>).
+    /// </summary>
+    public bool TakeGameRaiseNeeded()
+    {
+        var needed = bigPictureRaisedByOrder;
+        bigPictureRaisedByOrder = false;
+        return needed;
+    }
+
+    /// <summary>The game came back over Big Picture by window order.</summary>
+    public void NoteGameRaised() => beforeGameBar = ForegroundKind.Other;
 
     /// <summary>Asks Windows for the foreground with a synthetic Alt, which counts as the last input it requires.</summary>
     internal static void AskForeground(IntPtr window)
@@ -272,12 +291,13 @@ public sealed class GameBarFocusReturner
         try
         {
             using var process = Process.GetProcessById((int)processId);
+            // ProcessName throws InvalidOperationException once the process has exited.
             return GameBarProcesses.Contains(process.ProcessName) ? ForegroundKind.GameBar
                 : SteamProcesses.Contains(process.ProcessName) ? (CoversItsMonitor(handle) ? ForegroundKind.Steam : ForegroundKind.Other)
                 : process.ProcessName.Equals("explorer", StringComparison.OrdinalIgnoreCase) ? ForegroundKind.Shell
                 : ForegroundKind.Other;
         }
-        catch (ArgumentException)
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
             return ForegroundKind.Other;
         }
