@@ -18,6 +18,8 @@ export interface BuildInfo {
   engine?: "optiscaler" | "helixsr" | "proton" | "dll";
   way?: "fsr" | "scaler" | null;
   may_fallback?: string | null;
+  /** Runs OptiScaler 10, so ANR FG can go in with it. */
+  anr?: boolean;
 }
 
 export interface UpscalerJob {
@@ -42,6 +44,8 @@ export interface UpscalersOverview {
   device?: string;
   display: [number, number] | null;
   preferred: string;
+  /** The build ANR FG goes in with on this GPU; null where it is not offered. */
+  anr_build?: string | null;
   builds: BuildInfo[];
   cached: string[];
   installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice>; fallback?: ScalerFallback | null }>;
@@ -54,7 +58,7 @@ export interface UpscalersOverview {
   helixsr?: { downloaded: boolean };
 }
 
-export type FgRoute = "game" | "optiscaler";
+export type FgRoute = "game" | "optiscaler" | "anr";
 
 export interface FgPlan {
   input: string;

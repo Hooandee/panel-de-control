@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
 import { GiPlasticDuck, GiSharkFin } from "react-icons/gi";
-import { LuArrowLeftRight, LuLayers, LuTriangleAlert } from "react-icons/lu";
+import { LuArrowLeftRight, LuLayers, LuSparkles, LuTriangleAlert } from "react-icons/lu";
 
 import {
   refreshFrameGenEngine, adoptForeignLsfg, getLsfgStatus, installLsfg, restoreForeignLsfg, setLsfgGame, type LsfgProfile, type LsfgStatus,
@@ -264,6 +264,7 @@ export const FrameGenRow: FC<{
     ...offer.options.map((value) => ({ value: value as Pick, label:
       value === "lsfg" ? optionLabel("Lossless Scaling", <GiPlasticDuck className="pdc-up-lossless-icon" size={16} />) :
       value === "optiscaler" || value === "game" ? optionLabel(t("up.fg.pick.optiscaler"), <LuLayers className="pdc-up-optiscaler-icon" size={16} />) :
+      value === "anr" ? optionLabel(t("up.fg.pick.anr"), <LuSparkles className="pdc-up-anr-icon" size={16} />) :
       optionLabel(t(`up.fg.pick.${value}`)),
     })),
   ];
@@ -287,7 +288,8 @@ export const FrameGenRow: FC<{
             disabled={blocked}
             onChange={(pick) => void choose(pick)}
             options={options}
-            badge={current === "optiscaler" ? <ExperimentalBadge>{t("up.fg.experimental")}</ExperimentalBadge> : undefined}
+            badge={current === "optiscaler" ? <ExperimentalBadge>{t("up.fg.experimental")}</ExperimentalBadge>
+              : current === "anr" ? <ExperimentalBadge>{t("up.fg.beta")}</ExperimentalBadge> : undefined}
           />
         )}
         {current === "mako" && makoProfile && <MakoControls appid={appid} duo={duo} profile={makoProfile} disabled={blocked} onChange={(next) => void run(() => saveMako(next))} />}
@@ -325,6 +327,7 @@ export const FrameGenRow: FC<{
         {(current === "game" || current === "optiscaler") && recommendedRoutes && !recommendedRoutes[current] && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.fg.notRecommended")}</Notice>}
         {current === "game" && dlssBridge && <Notice icon={<LuLayers size={16} />}>{t("up.fg.hint.dlss")}</Notice>}
         {current === "optiscaler" && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.fg.hint.opti")}</Notice>}
+        {current === "anr" && <Notice icon={<LuSparkles size={16} />}>{t(installedRoute === "anr" ? "up.fg.hint.dlss" : "up.fg.hint.anr")}</Notice>}
         {current === "mako" && !makoProfile && makoLeftover.leftover && (
           <>
             <Notice icon={<LuArrowLeftRight size={16} />}>{t("up.mako.leftover")}</Notice>

@@ -296,8 +296,10 @@ export const GameView: FC<{
   const installedOptiscaler = !!install && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton" && installedBuild?.engine !== "dll";
   const installedRoute = install?.options.fg_route ?? detail?.fg_plan?.route ?? detail?.fg_plan?.source ?? null;
   const scalerChoice = { ...choice, fg: install?.options.fg ?? "off" as const, fg_route: install?.options.fg_route ?? null };
+  // ANR FG only runs on OptiScaler 10: another version goes in without it.
+  const dropsAnr = scalerChoice.fg_route === "anr" && !selected?.anr;
   const installSelected = () => startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
-    ...scalerChoice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
+    ...scalerChoice, ...(replacesFsr || dropsAnr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
   });
   const reinstall = () => start(installSelected);
@@ -364,6 +366,7 @@ export const GameView: FC<{
   const applyFrameGeneration = async (fg: "on" | "off", fg_route: UpscalerChoice["fg_route"]) => {
     trace("frame_generation", { ...choice, fg, fg_route });
     if (blocked || running) throw new Error("blocked");
+    if (fg === "on" && fg_route === "anr") return applyAnr();
     const configureInstalled = !!install && (sameBuild || fg === "off");
     const fgSolution = detail?.solutions?.[configureInstalled ? install!.build : choice.build];
     const next = { ...(configureInstalled ? restoredChoice(install!.build, install!.options, builds, preferred) : choice), fg, fg_route };
@@ -383,6 +386,27 @@ export const GameView: FC<{
       setJob(started);
       await waitForJobCompletion(started.id);
     }
+  };
+
+  /** ANR FG: Panel picks the OptiScaler 10 build it runs with (FSR 4.1.2) and installs its provider beside it. */
+  const applyAnr = async () => {
+    const target = installedBuild?.anr ? installedBuild.id : overview.anr_build;
+    if (!target) throw new Error("anr_build");
+    const keep = install?.build === target;
+    const base = keep ? restoredChoice(install!.build, install!.options, builds, preferred) : { ...choice, build: target, model: null };
+    const next = { ...base, fg: "on" as const, fg_route: "anr" as const };
+    keepDraft.current = true;
+    changeChoice(next);
+    if (keep && install?.options.fg_route === "anr") {
+      const result = await configureUpscaler(appid, next);
+      if (gameRunning) setApplied(result.live ? "now" : "restart");
+      await load();
+      onChanged();
+      return;
+    }
+    const started = await startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
+    setJob(started);
+    await waitForJobCompletion(started.id);
   };
 
   const saveAll = async () => {

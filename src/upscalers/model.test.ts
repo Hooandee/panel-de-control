@@ -120,6 +120,12 @@ describe("frame generation offer", () => {
     expect(fgOffer({ game: { input: "dlssg" } }, { dlssg: [] }, "rdna2", false, "game").options).toEqual(["game"]);
   });
 
+  it("offers ANR beside the game's DLSS-FG bridge, before Lossless", () => {
+    const routes = { game: { input: "dlssg" }, optiscaler: {}, anr: { input: "nvngxfg" } };
+    expect(fgOffer(routes, { dlssg: [] }, "rdna3", true, null).options).toEqual(["game", "anr", "lsfg"]);
+    expect(fgOffer(routes, { dlssg: [] }, "rdna3", false, "anr").options).toEqual(["game", "anr"]);
+  });
+
   it("only points to the game's own generator when it already runs on this GPU", () => {
     expect(fgOffer({ game: { input: "fsrfg" }, optiscaler: {} }, { fsrfg: [] }, "rdna2", false)).toEqual({ own: "fsr", options: [] });
     expect(fgOffer({ game: { input: "xefg" } }, { xefg: [] }, "intel", true)).toEqual({ own: "xess", options: ["lsfg"] });

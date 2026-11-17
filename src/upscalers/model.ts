@@ -270,6 +270,7 @@ export function fgOffer(
   const options: FgOption[] = [];
   if (!own && (gameInput === "dlssg" || gameInput === "nukems")) options.push("game");
   else if (!own && !routes.game && "optiscaler" in routes) options.push("optiscaler");
+  if ("anr" in routes) options.push("anr");
   if (installedRoute && !options.includes(installedRoute)) options.push(installedRoute);
   if (lossless) options.push("lsfg");
   return { own, options };

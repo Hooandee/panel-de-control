@@ -226,7 +226,13 @@ class AssetCache:
                     if result.returncode == 0:
                         break
                 else:
-                    raise AssetError("unpack_failed")
+                    # Without bsdtar or 7z a ZIP still unpacks.
+                    if not zipfile.is_zipfile(self.file(asset)):
+                        raise AssetError("unpack_failed")
+                    with zipfile.ZipFile(self.file(asset)) as archive:
+                        if any(name.startswith("/") or ".." in Path(name).parts for name in archive.namelist()):
+                            raise AssetError("unsafe_archive")
+                        archive.extractall(staging)
             for path in staging.rglob("*"):
                 if path.is_symlink() or not path.resolve().is_relative_to(staging.resolve()):
                     raise AssetError("unsafe_archive")

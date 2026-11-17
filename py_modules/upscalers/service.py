@@ -239,6 +239,7 @@ class UpscalerService:
             "device": self.device,
             "display": panel_resolution(self.drm),
             "preferred": catalog.preferred_build(self.gpu),
+            "anr_build": catalog.anr_build(self.gpu),
             "builds": catalog.describe(self.gpu, self.device),
             "cached": [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)],
             "installs": installs,
@@ -695,6 +696,9 @@ class UpscalerService:
             return self._install_proton(appid, build, choice)
         if choice.get("proxy") and str(choice["proxy"]) not in catalog.PROXIES:
             raise UpscalerError("invalid_proxy")
+        wants_anr = choice.get("fg") == "on" and choice.get("fg_route") == "anr"
+        if wants_anr and not catalog.anr_capable(build, self.gpu):
+            raise UpscalerError("anr_build")
 
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
         entry = self._game_state(appid)
@@ -723,6 +727,8 @@ class UpscalerService:
                 result += [catalog.ASSETS[a] for a in dict.fromkeys(chosen_recipe.files.values()) if catalog.ASSETS[a] not in result]
                 if chosen_recipe.optipatcher:
                     result.append(catalog.ASSETS[catalog.OPTIPATCHER])
+            if wants_anr:
+                result.append(catalog.ASSETS[catalog.ANR_FG])
             return result + auto_recipes.assets(automatic)
 
         # Everything is downloaded before the current install comes out: a failed or cancelled download leaves
@@ -770,6 +776,8 @@ class UpscalerService:
             if recipe.optipatcher:
                 sources[f"{prefix}plugins/OptiPatcher.asi"] = paths[catalog.OPTIPATCHER]
             sources = _with_root_files(sources, prefix, recipe.optiscaler_root_files)
+        if wants_anr:
+            sources.update(_anr_sources(paths[catalog.ANR_FG], prefix))
 
         try:
             sources = {**auto_recipes.sources(automatic, paths, self.user_files), **sources}
@@ -782,7 +790,7 @@ class UpscalerService:
             **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
             **({"Plugins.LoadAsiPlugins": "true"} if recipe and recipe.optipatcher else {}),
             **catalog.model_overrides(build, choice.get("model")),
-            **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
+            **catalog.fg_overrides(fg_plan, choice.get("fg") == "on", archive_asset.generation),
         }
         managed = sorted(panel)
         # The wiki's settings are a starting point the user may change in the editor; Panel's own keys win over them
@@ -862,6 +870,7 @@ class UpscalerService:
             "windows_components_error": components_error,
             "components": diagnostics.components([self._component(chosen[asset.id]) for asset in assets]),
             "fg_plan": fg_plan,
+            "anr": wants_anr,
             "managed": managed,
             "edited": dict(edited),
             "image_overrides": dict(image_overrides),
@@ -1298,7 +1307,7 @@ class UpscalerService:
             path = Path(install["target"]) / "OptiScaler.ini"
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
-                path.write_text(ini.apply(text, catalog.fg_overrides(None, False)), encoding="utf-8")
+                path.write_text(ini.apply(text, catalog.fg_overrides(None, False, _generation(install))), encoding="utf-8")
             except OSError:
                 raise UpscalerError("broken") from None
             _wrote_ini(install)
@@ -1317,6 +1326,9 @@ class UpscalerService:
                                              dependencies_ready=bool(automatic))
         if solution:
             _requested_fg(solution, choice)
+        if choice.get("fg") == "on" and choice.get("fg_route") == "anr" and not install.get("anr"):
+            # Its files only go in with an install on OptiScaler 10.
+            raise UpscalerError("anr_reinstall")
         if installed and games.running_under(installed.root, self.proc):
             result = self._configure_running(install, choice)
             if solution:
@@ -1336,7 +1348,7 @@ class UpscalerService:
         install["fg_plan"] = catalog.fg_route_plan(plan, choice.get("fg_route"))
         if solution:
             install["solution"] = solution
-        fg = catalog.fg_overrides(install.get("fg_plan"), choice.get("fg") == "on")
+        fg = catalog.fg_overrides(install.get("fg_plan"), choice.get("fg") == "on", _generation(install))
         build = catalog.BUILDS.get(install.get("build", ""))
         model = catalog.model_overrides(build, choice.get("model"))
         model_changed = model != catalog.model_overrides(build, install.get("options", {}).get("model"))
@@ -2334,6 +2346,15 @@ def _archive_sources(archive: Path, generation: int) -> dict[str, Path]:
     return sources
 
 
+def _anr_sources(unpacked: Path, prefix: str) -> dict[str, Path]:
+    """ANR's provider folder as OptiScaler 10 finds it: `custom/<provider>/dlssg/` next to OptiScaler.dll."""
+    root = unpacked / catalog.ANR_PROVIDER
+    if not (root / "dlssg" / "nvngx_dlssg.dll").is_file():
+        raise UpscalerError("anr_layout")
+    return {f"{prefix}custom/{catalog.ANR_PROVIDER}/{item.relative_to(root).as_posix()}": item
+            for item in root.rglob("*") if item.is_file()}
+
+
 def _wrote_ini(install: dict) -> None:
     """What Panel just left in OptiScaler.ini, so a report can tell a later rewrite (the game, OptiScaler's own
     menu, the user) from a setting Panel never saved."""
@@ -2348,7 +2369,7 @@ def _clean_options(choice: dict) -> dict:
         "quality": quality if quality in catalog.QUALITY_RATIOS else None,
         "sharpness": sharpness if sharpness in catalog.SHARPNESS else None,
         "fg": "on" if choice.get("fg") == "on" else "off",
-        "fg_route": choice.get("fg_route") if choice.get("fg_route") in ("game", "optiscaler") else None,
+        "fg_route": choice.get("fg_route") if choice.get("fg_route") in ("game", "optiscaler", "anr") else None,
         "model": choice.get("model") if isinstance(choice.get("model"), str) and choice.get("model") else None,
     }
 
