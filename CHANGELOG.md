@@ -3,9 +3,47 @@
 ## [0.91.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.90.0...panel-de-control-v0.91.0) (2026-11-17)
 
 
-### Features
+### Español
 
-* **windows:** keep Game Bar usable over a game; press twice or use the widget to go Home ([#1397](https://github.com/Hooandee/panel-de-control/issues/1397)) ([8f84093](https://github.com/Hooandee/panel-de-control/commit/8f84093838446235e7327315ef7f04ccbdf23635))
+* **La Game Bar se puede usar durante la partida en la ROG Xbox Ally:** En Windows, el botón Xbox abre la Game Bar. Antes, cada vez que la abrías con un juego en marcha, Big Picture saltaba al Inicio del tema por encima del juego y no podías tocar el TDP ni el widget de Panel de Control. Ahora, con un juego abierto, una pulsación deja la Game Bar a tu disposición.
+* **Pulsa dos veces para ir al Inicio sin cerrar el juego:** Si pulsas el botón Xbox dos veces seguidas durante la partida, vas al Inicio del tema con el juego todavía abierto. También puedes hacerlo con el nuevo botón «Ir al Inicio de Steam» del widget de Panel de Control.
+* **Reanudar te devuelve al juego:** Al reanudar desde el Inicio del tema, el juego vuelve delante, también los que se abren desde su propio lanzador, como Ubisoft, EA o Rockstar.
+* **El juego vuelve a callarse en el Inicio en Windows:** Con un tema que silencia el juego mientras miras el Inicio, el sonido no se cortaba en Windows. Ahora se silencia al ir al Inicio y vuelve al reanudar.
+
+### English
+
+* **Game Bar can be used while playing on the ROG Xbox Ally:** On Windows the Xbox button opens Game Bar. Before, every time you opened it with a game running, Big Picture jumped to the theme's Home over the game and you couldn't touch TDP or the Panel de Control widget. Now, with a game open, one press leaves Game Bar ready to use.
+* **Press twice to go Home without closing the game:** Pressing the Xbox button twice in a row while playing takes you to the theme's Home with the game still open. You can also use the new "Go to Steam Home" button in the Panel de Control widget.
+* **Resume takes you back to the game:** When you resume from the theme's Home, the game comes back to the front, including games opened from their own launcher, like Ubisoft, EA or Rockstar.
+* **The game goes quiet on Home again on Windows:** With a theme that silences the game while you're on Home, the sound wasn't muted on Windows. Now it goes quiet when you go Home and comes back when you resume.
+
+### Italiano
+
+* **La Game Bar si può usare durante la partita sulla ROG Xbox Ally:** Su Windows il tasto Xbox apre la Game Bar. Prima, ogni volta che la aprivi con un gioco in corso, Big Picture saltava alla Home del tema sopra il gioco e non potevi toccare il TDP né il widget di Panel de Control. Ora, con un gioco aperto, una pressione lascia la Game Bar a tua disposizione.
+* **Premi due volte per andare alla Home senza chiudere il gioco:** Premendo il tasto Xbox due volte di seguito durante la partita vai alla Home del tema con il gioco ancora aperto. Puoi farlo anche con il nuovo pulsante «Vai alla Home di Steam» del widget di Panel de Control.
+* **Riprendi ti riporta al gioco:** Quando riprendi dalla Home del tema, il gioco torna in primo piano, anche quelli aperti dal proprio launcher, come Ubisoft, EA o Rockstar.
+* **Il gioco torna in silenzio sulla Home su Windows:** Con un tema che silenzia il gioco mentre guardi la Home, su Windows l'audio non si interrompeva. Ora si silenzia quando vai alla Home e torna quando riprendi.
+
+### Deutsch
+
+* **Die Game Bar lässt sich auf der ROG Xbox Ally während des Spiels nutzen:** Unter Windows öffnet die Xbox-Taste die Game Bar. Bisher sprang Big Picture jedes Mal, wenn du sie bei laufendem Spiel geöffnet hast, über dem Spiel zur Startseite des Themes, und du konntest weder TDP noch das Widget von Panel de Control bedienen. Jetzt bleibt die Game Bar bei offenem Spiel nach einem Druck für dich offen.
+* **Zweimal drücken, um zur Startseite zu gehen, ohne das Spiel zu schließen:** Drückst du die Xbox-Taste im Spiel zweimal hintereinander, landest du auf der Startseite des Themes, und das Spiel bleibt offen. Das geht auch mit der neuen Schaltfläche „Zur Steam-Startseite“ im Widget von Panel de Control.
+* **Fortsetzen bringt dich zurück ins Spiel:** Wenn du auf der Startseite des Themes fortsetzt, kommt das Spiel wieder nach vorne, auch Spiele, die über ihren eigenen Launcher starten, etwa Ubisoft, EA oder Rockstar.
+* **Das Spiel ist unter Windows auf der Startseite wieder still:** Mit einem Theme, das das Spiel auf der Startseite stummschaltet, lief der Ton unter Windows weiter. Jetzt wird es auf der Startseite stumm und der Ton kommt beim Fortsetzen zurück.
+
+### Português (Brasil)
+
+* **A Game Bar pode ser usada durante a partida no ROG Xbox Ally:** No Windows, o botão Xbox abre a Game Bar. Antes, toda vez que você a abria com um jogo rodando, o Big Picture pulava para o Início do tema por cima do jogo e não dava para mexer no TDP nem no widget do Panel de Control. Agora, com um jogo aberto, um toque deixa a Game Bar à sua disposição.
+* **Aperte duas vezes para ir ao Início sem fechar o jogo:** Apertando o botão Xbox duas vezes seguidas durante a partida, você vai para o Início do tema com o jogo ainda aberto. Também dá para fazer isso com o novo botão «Ir para o Início do Steam» no widget do Panel de Control.
+* **Retomar te leva de volta ao jogo:** Ao retomar a partir do Início do tema, o jogo volta para a frente, inclusive os que abrem pelo próprio launcher, como Ubisoft, EA ou Rockstar.
+* **O jogo volta a ficar em silêncio no Início no Windows:** Com um tema que silencia o jogo enquanto você está no Início, o som não era cortado no Windows. Agora ele fica em silêncio ao ir para o Início e volta ao retomar.
+
+### Français
+
+* **La Game Bar est utilisable en jeu sur la ROG Xbox Ally :** Sous Windows, le bouton Xbox ouvre la Game Bar. Avant, chaque fois que vous l'ouvriez avec un jeu lancé, Big Picture sautait sur l'accueil du thème par-dessus le jeu et vous ne pouviez toucher ni au TDP ni au widget de Panel de Control. Désormais, avec un jeu ouvert, un appui laisse la Game Bar à votre disposition.
+* **Appuyez deux fois pour aller à l'accueil sans fermer le jeu :** En appuyant deux fois de suite sur le bouton Xbox en jeu, vous arrivez sur l'accueil du thème avec le jeu toujours ouvert. Vous pouvez aussi utiliser le nouveau bouton « Aller à l'accueil de Steam » du widget de Panel de Control.
+* **Reprendre vous ramène au jeu :** Quand vous reprenez depuis l'accueil du thème, le jeu revient au premier plan, y compris ceux qui s'ouvrent depuis leur propre lanceur, comme Ubisoft, EA ou Rockstar.
+* **Le jeu se tait de nouveau sur l'accueil sous Windows :** Avec un thème qui coupe le son du jeu pendant que vous êtes sur l'accueil, le son n'était pas coupé sous Windows. Désormais, il se coupe quand vous allez à l'accueil et revient quand vous reprenez.
 
 ## [0.90.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.3...panel-de-control-v0.90.0) (2026-11-16)
 
