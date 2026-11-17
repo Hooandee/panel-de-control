@@ -20,7 +20,7 @@ import {
   type WindowsStorageWrite,
 } from "./storage";
 
-export const WINDOWS_THEME_HOST_VERSION = 9;
+export const WINDOWS_THEME_HOST_VERSION = 10;
 
 export interface WindowsThemeHostState {
   revision: number;

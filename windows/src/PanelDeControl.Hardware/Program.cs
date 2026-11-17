@@ -85,7 +85,7 @@ public static class Program
             var focusReturner = new GameBarFocusReturner(themeEngine);
             var themesServer = new ThemesPipeServer(
                 ThemesPipeServer.PackagedPipeName,
-                new ThemesController(themeService, themeEngine, focusReturner.ForegroundBeforeGameBar),
+                new ThemesController(themeService, themeEngine, focusReturner),
                 PackageNamedPipeServerFactory.CreateControl);
 
             using var reportHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };

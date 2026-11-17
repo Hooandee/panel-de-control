@@ -17,14 +17,14 @@ public sealed class ThemesController : IThemesController
 
     private readonly ThemeService service;
     private readonly SteamThemeEngine engine;
-    private readonly Func<ForegroundKind> foregroundBeforeGameBar;
+    private readonly GameBarFocusReturner focus;
     private readonly GameBarButtonPolicy gameBarButton = new();
 
-    public ThemesController(ThemeService service, SteamThemeEngine engine, Func<ForegroundKind> foregroundBeforeGameBar)
+    public ThemesController(ThemeService service, SteamThemeEngine engine, GameBarFocusReturner focus)
     {
         this.service = service;
         this.engine = engine;
-        this.foregroundBeforeGameBar = foregroundBeforeGameBar;
+        this.focus = focus;
     }
 
     public async Task<ThemesResponse> HandleAsync(ThemesRequest request, CancellationToken cancellationToken)
@@ -66,11 +66,11 @@ public sealed class ThemesController : IThemesController
                     service.EnableSteamDebugging();
                     return await ReadbackAsync(cancellationToken).ConfigureAwait(false);
                 case ThemesOperation.SteamHome:
-                    CompanionLog.Write("themes.steam_home", await engine.GameHomeAsync(cancellationToken).ConfigureAwait(false));
+                    CompanionLog.Write("themes.steam_home", await GameHomeAsync(cancellationToken).ConfigureAwait(false));
                     return Response(engine.Status);
                 case ThemesOperation.GameBarShown:
                 {
-                    var before = foregroundBeforeGameBar();
+                    var before = focus.ForegroundBeforeGameBar();
                     var answer = await engine.GameBarShownAsync(before == ForegroundKind.Steam, cancellationToken).ConfigureAwait(false);
                     gameBarButton.Shown(answer);
                     CompanionLog.Write("themes.game_bar_shown", $"{answer} over={before}");
@@ -82,7 +82,7 @@ public sealed class ThemesController : IThemesController
                     var home = gameBarButton.Hidden(TimeSpan.FromMilliseconds(shownFor));
                     CompanionLog.Write(
                         "themes.game_bar_hidden",
-                        home ? $"{shownFor}ms {await engine.GameHomeAsync(cancellationToken).ConfigureAwait(false)}" : $"{shownFor}ms");
+                        home ? $"{shownFor}ms {await GameHomeAsync(cancellationToken).ConfigureAwait(false)}" : $"{shownFor}ms");
                     return Response(engine.Status);
                 }
                 case ThemesOperation.RestartSteam:
@@ -112,6 +112,17 @@ public sealed class ThemesController : IThemesController
                 _ => "themes_failed",
             });
         }
+    }
+
+    private async Task<string> GameHomeAsync(CancellationToken cancellationToken)
+    {
+        var answer = await engine.GameHomeAsync(cancellationToken).ConfigureAwait(false);
+        if (answer == "game_home")
+        {
+            await focus.RaiseBigPictureAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return answer;
     }
 
     private async Task<ThemesResponse> ReadbackAsync(CancellationToken cancellationToken)

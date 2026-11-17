@@ -49,11 +49,41 @@ public sealed class GameBarFocusReturner
         this.engine = engine;
     }
 
-    /// <summary>The foreground Game Bar opened over: Big Picture, a game or app, or the desktop.</summary>
+    /// <summary>
+    /// What the player had in front when Game Bar opened: Big Picture (Steam) or a game or app (Other). On the ROG Xbox
+    /// Ally X an open Game Bar leaves the shell's immersive window in the foreground, and it stays there after Game Bar
+    /// closes until something else takes it, so neither Game Bar nor the shell counts.
+    /// </summary>
     public ForegroundKind ForegroundBeforeGameBar()
     {
         var current = Classify(GetForegroundWindow());
-        return current == ForegroundKind.GameBar ? beforeGameBar : current;
+        return current is ForegroundKind.Steam or ForegroundKind.Other ? current : beforeGameBar;
+    }
+
+    /// <summary>Raises Big Picture over the game after it went Home; Windows refuses Steam's own request from behind.</summary>
+    public async Task RaiseBigPictureAsync(CancellationToken cancellationToken)
+    {
+        var bigPicture = FindBigPictureWindow();
+        if (bigPicture != IntPtr.Zero && GetForegroundWindow() != bigPicture)
+        {
+            await RestoreAsync(bigPicture, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static IntPtr FindBigPictureWindow()
+    {
+        var found = IntPtr.Zero;
+        EnumWindows((handle, _) =>
+        {
+            if (IsWindowVisible(handle) && Classify(handle) == ForegroundKind.Steam)
+            {
+                found = handle;
+                return false;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return found;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -82,7 +112,7 @@ public sealed class GameBarFocusReturner
             }
 
             lastKind = kind;
-            if (kind != ForegroundKind.GameBar)
+            if (kind is ForegroundKind.Steam or ForegroundKind.Other)
             {
                 beforeGameBar = kind;
             }
@@ -273,6 +303,16 @@ public sealed class GameBarFocusReturner
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetShellWindow();
+
+    private delegate bool EnumWindowsProc(IntPtr handle, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr handle);
 
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
