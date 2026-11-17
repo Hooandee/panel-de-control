@@ -1,0 +1,160 @@
+using System.Runtime.InteropServices;
+
+namespace PanelDeControl.Hardware.Themes;
+
+/// <summary>
+/// Once Game Bar has closed over a game on the ROG Xbox Ally X, Windows refuses the foreground to Steam and to
+/// <c>SetForegroundWindow</c>, both for Big Picture and for the game coming back. Changing the window order needs no
+/// foreground rights. A window goes topmost and, unless it has to stay above a topmost window, straight back, which
+/// leaves it above every other normal window.
+/// </summary>
+internal static class WindowOrder
+{
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoActivate = 0x0010;
+    private const uint SwpShowWindow = 0x0040;
+    private const uint KeepPlace = SwpNoSize | SwpNoMove | SwpShowWindow;
+    private const int GwlExStyle = -20;
+    private const int WsExTopmost = 0x00000008;
+    private const int WsExToolWindow = 0x00000080;
+    private const uint GwOwner = 4;
+    private const int DwmCloaked = 14;
+    private const int SwRestore = 9;
+    private static readonly IntPtr HwndTopmost = new(-1);
+    private static readonly IntPtr HwndNoTopmost = new(-2);
+    private static readonly IntPtr HwndBottom = new(1);
+
+    /// <summary>Brings the window above every normal window; it stays topmost only when told to.</summary>
+    public static bool Raise(IntPtr handle, bool stayTopmost)
+    {
+        if (IsIconic(handle))
+        {
+            ShowWindow(handle, SwRestore);
+        }
+
+        if (!SetWindowPos(handle, HwndTopmost, 0, 0, 0, 0, KeepPlace))
+        {
+            return false;
+        }
+
+        if (stayTopmost || SetWindowPos(handle, HwndNoTopmost, 0, 0, 0, 0, KeepPlace))
+        {
+            return true;
+        }
+
+        // Never leave a window topmost that nobody holds.
+        Release(handle);
+        return false;
+    }
+
+    public static void Release(IntPtr handle) =>
+        SetWindowPos(handle, HwndNoTopmost, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate);
+
+    /// <summary>Whether <paramref name="window"/> comes before <paramref name="other"/> in window order.</summary>
+    public static bool IsAbove(IntPtr window, IntPtr other)
+    {
+        var first = IntPtr.Zero;
+        EnumWindows((handle, _) =>
+        {
+            if (handle == window || handle == other)
+            {
+                first = handle;
+                return false;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return first == window;
+    }
+
+    /// <summary>Sends the window under every other one without activating anything.</summary>
+    public static bool SendToBottom(IntPtr handle) =>
+        SetWindowPos(handle, HwndBottom, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate);
+
+    public static int ProcessOf(IntPtr handle)
+    {
+        GetWindowThreadProcessId(handle, out var processId);
+        return (int)processId;
+    }
+
+    public static bool IsTopmost(IntPtr handle) => (GetWindowLong(handle, GwlExStyle) & WsExTopmost) != 0;
+
+    /// <summary>
+    /// The first window, in window order, that matches: top-level and shown, without an owner, not a tool window, not
+    /// minimized unless <paramref name="background"/>, and not cloaked unless <paramref name="background"/>. In Xbox
+    /// mode (ROG Xbox Ally X) the shell cloaks a game while another app is in front: a game coming back is looked for
+    /// with <paramref name="background"/>.
+    /// </summary>
+    public static IntPtr FindTopWindow(Func<IntPtr, bool> matches, bool background = false)
+    {
+        var found = IntPtr.Zero;
+        EnumWindows((handle, _) =>
+        {
+            if (IsWindowVisible(handle)
+                && (background || !IsCloaked(handle))
+                && GetWindow(handle, GwOwner) == IntPtr.Zero
+                && (GetWindowLong(handle, GwlExStyle) & WsExToolWindow) == 0
+                && (background || !IsIconic(handle))
+                && HasArea(handle)
+                && matches(handle))
+            {
+                found = handle;
+                return false;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    public static bool IsCloaked(IntPtr handle) =>
+        DwmGetWindowAttribute(handle, DwmCloaked, out var cloaked, sizeof(int)) == 0 && cloaked != 0;
+
+    private static bool HasArea(IntPtr handle) =>
+        IsIconic(handle) || (GetWindowRect(handle, out var rect) && rect.Right - rect.Left > 1 && rect.Bottom - rect.Top > 1);
+
+    private delegate bool EnumWindowsProc(IntPtr handle, IntPtr parameter);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr handle, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr handle, int command);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr handle, uint command);
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr handle, int index);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr handle, out Rect rect);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out int value, int size);
+}

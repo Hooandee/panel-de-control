@@ -82,9 +82,10 @@ public static class Program
                 SteamThemeHostBundle.Read,
                 classTable,
                 new ThemeStorageStore(ThemeLibrary.DefaultRoot));
+            var focusReturner = new GameBarFocusReturner(themeEngine);
             var themesServer = new ThemesPipeServer(
                 ThemesPipeServer.PackagedPipeName,
-                new ThemesController(themeService, themeEngine),
+                new ThemesController(themeService, themeEngine, focusReturner),
                 PackageNamedPipeServerFactory.CreateControl);
 
             using var reportHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
@@ -113,7 +114,8 @@ public static class Program
                 SuperviseAsync("reports", () => reportServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("themes.engine", () => themeEngine.RunAsync(token), token),
                 SuperviseAsync("themes.pipe", () => themesServer.RunUntilCancelledAsync(token), token),
-                SuperviseAsync("themes.focus", () => new GameBarFocusReturner(themeEngine).RunAsync(token), token),
+                SuperviseAsync("themes.focus", () => focusReturner.RunAsync(token), token),
+                SuperviseAsync("themes.game_raise", () => new GameWindowRaiser(steamDevTools, gameProcesses, focusReturner, () => themeEngine.Status.Host.Present ? themeEngine.Status.Host.GameRunning : null).RunAsync(token), token),
                 SuperviseAsync("themes.game_audio", () => new GameAudioSilencer(
                     steamDevTools,
                     gameMixer,

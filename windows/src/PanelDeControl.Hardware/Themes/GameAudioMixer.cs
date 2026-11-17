@@ -29,7 +29,7 @@ public sealed class CoreAudioGameMixer : IGameAudioMixer
     public IGameAudioScan Scan(IReadOnlyDictionary<int, ProcessEntry> processes)
     {
         var scan = new CoreAudioScan(processes);
-        var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+        var enumerator = CoreAudioDeviceEnumerator.Create<IMMDeviceEnumerator>();
         try
         {
             Marshal.ThrowExceptionForHR(enumerator.EnumAudioEndpoints(RenderFlow, DeviceStateActive, out var devices));
@@ -67,7 +67,7 @@ public sealed class CoreAudioGameMixer : IGameAudioMixer
         }
         finally
         {
-            Release(enumerator);
+            CoreAudioDeviceEnumerator.Release(enumerator);
         }
     }
 
@@ -243,12 +243,6 @@ public sealed class CoreAudioGameMixer : IGameAudioMixer
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseHandle(IntPtr handle);
-
-    [ComImport]
-    [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-    private class MMDeviceEnumeratorComObject
-    {
-    }
 
     // COM interop does not inherit interfaces: every vtable slot is declared in order, unused ones included.
     [ComImport]
