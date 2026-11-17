@@ -60,14 +60,24 @@ public sealed class GameBarFocusReturner
         return current is ForegroundKind.Steam or ForegroundKind.Other ? current : beforeGameBar;
     }
 
-    /// <summary>Raises Big Picture over the game after it went Home; Windows refuses Steam's own request from behind.</summary>
+    /// <summary>
+    /// Raises Big Picture over the game after it went Home. Once Game Bar has closed over a game, Windows refuses the
+    /// foreground to Steam's own request and to <c>SetForegroundWindow</c> (ROG Xbox Ally X with chiaki-ng): the window
+    /// order is changed first, which needs no foreground rights, and the focus is asked for after it.
+    /// </summary>
     public async Task RaiseBigPictureAsync(CancellationToken cancellationToken)
     {
         var bigPicture = FindBigPictureWindow();
-        if (bigPicture != IntPtr.Zero && GetForegroundWindow() != bigPicture)
+        if (bigPicture == IntPtr.Zero)
         {
-            await RestoreAsync(bigPicture, cancellationToken).ConfigureAwait(false);
+            return;
         }
+
+        const uint keepPlace = SwpNoSize | SwpNoMove | SwpShowWindow;
+        var raised = SetWindowPos(bigPicture, HwndTopmost, 0, 0, 0, 0, keepPlace)
+            && SetWindowPos(bigPicture, HwndNoTopmost, 0, 0, 0, 0, keepPlace);
+        CompanionLog.Write("themes.big_picture_raise", raised ? "window_order" : "window_order_failed");
+        await RestoreAsync(bigPicture, cancellationToken).ConfigureAwait(false);
     }
 
     private static IntPtr FindBigPictureWindow()
@@ -303,6 +313,16 @@ public sealed class GameBarFocusReturner
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetShellWindow();
+
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpShowWindow = 0x0040;
+    private static readonly IntPtr HwndTopmost = new(-1);
+    private static readonly IntPtr HwndNoTopmost = new(-2);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr handle, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
     private delegate bool EnumWindowsProc(IntPtr handle, IntPtr parameter);
 
