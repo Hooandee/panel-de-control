@@ -23,6 +23,7 @@ internal static class WindowOrder
     private const int SwRestore = 9;
     private static readonly IntPtr HwndTopmost = new(-1);
     private static readonly IntPtr HwndNoTopmost = new(-2);
+    private static readonly IntPtr HwndBottom = new(1);
 
     /// <summary>Brings the window above every normal window; it stays topmost only when told to.</summary>
     public static bool Raise(IntPtr handle, bool stayTopmost)
@@ -49,6 +50,10 @@ internal static class WindowOrder
 
     public static void Release(IntPtr handle) =>
         SetWindowPos(handle, HwndNoTopmost, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate);
+
+    /// <summary>Sends the window under every other one without activating anything.</summary>
+    public static bool SendToBottom(IntPtr handle) =>
+        SetWindowPos(handle, HwndBottom, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate);
 
     public static int ProcessOf(IntPtr handle)
     {
@@ -88,7 +93,7 @@ internal static class WindowOrder
         return found;
     }
 
-    private static bool IsCloaked(IntPtr handle) =>
+    public static bool IsCloaked(IntPtr handle) =>
         DwmGetWindowAttribute(handle, DwmCloaked, out var cloaked, sizeof(int)) == 0 && cloaked != 0;
 
     private static bool HasArea(IntPtr handle) =>

@@ -6,8 +6,7 @@ namespace PanelDeControl.Hardware.Themes;
 /// Resuming a game from Big Picture is Steam raising the game's window (steamButton.ts raiseRunningGame). After Big
 /// Picture came back over the game by window order (<see cref="GameBarFocusReturner.RaiseBigPictureAsync"/>), Windows
 /// refuses that too and Steam's logo stays in front: the host signals every raise through a DevTools binding, and only
-/// after such a return does this bring the game's window above Big Picture the same way. A game that was topmost
-/// keeps it.
+/// after such a return does this bring the game back (<see cref="GameBarFocusReturner.GameResumedAsync"/>).
 /// </summary>
 public sealed class GameWindowRaiser
 {
@@ -15,6 +14,7 @@ public sealed class GameWindowRaiser
     private static readonly TimeSpan Reconnect = TimeSpan.FromSeconds(2);
     // Steam's own raise goes first; this one only matters where Windows refused it.
     private static readonly TimeSpan AfterSteam = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan GameStarting = TimeSpan.FromSeconds(5);
 
     private readonly ISteamDevTools devTools;
     private readonly Func<IReadOnlyDictionary<int, ProcessEntry>> processes;
@@ -46,7 +46,14 @@ public sealed class GameWindowRaiser
                 if (!await raise.WaitAsync(Reconnect, cancellationToken).ConfigureAwait(false))
                 {
                     // Two readings in a row: one failed host read also reports no game.
-                    cyclesWithoutGame = gameRunning() ? 0 : cyclesWithoutGame + 1;
+                    var running = gameRunning();
+                    if (running && cyclesWithoutGame >= 2)
+                    {
+                        // A game just started: its window takes the foreground through the shell.
+                        focus.HoldStill(GameStarting);
+                    }
+
+                    cyclesWithoutGame = running ? 0 : cyclesWithoutGame + 1;
                     if (cyclesWithoutGame == 2)
                     {
                         focus.Foreground.GameEnded();
@@ -62,11 +69,10 @@ public sealed class GameWindowRaiser
                     // One resume can signal more than once.
                 }
 
-                var needed = focus.Foreground.GameResumed();
-                focus.ReleaseBigPicture();
-                if (needed)
+                var raised = await focus.GameResumedAsync(FindGameWindow, cancellationToken).ConfigureAwait(false);
+                if (raised is not null)
                 {
-                    CompanionLog.Write("themes.game_raise", RaiseGameWindow());
+                    CompanionLog.Write("themes.game_raise", raised);
                 }
             }
         }
@@ -76,20 +82,11 @@ public sealed class GameWindowRaiser
         }
     }
 
-    private string RaiseGameWindow()
+    // In Xbox mode the shell cloaks a game while another app is in front: it is looked for among cloaked windows too.
+    private IntPtr FindGameWindow()
     {
         var running = processes();
-        var game = WindowOrder.FindTopWindow(handle => SteamGameProcesses.IsGame(running, WindowOrder.ProcessOf(handle)), background: true);
-        if (game == IntPtr.Zero)
-        {
-            return "no_window";
-        }
-
-        var topmost = WindowOrder.IsTopmost(game);
-        var raised = WindowOrder.Raise(game, stayTopmost: topmost) && WindowOrder.IsOnTop(game, GameBarFocusReturner.IsAppWindow);
-        // On top is not enough: the game also needs the focus for its input.
-        GameBarFocusReturner.AskForeground(game);
-        return raised ? (topmost ? "on_top topmost" : "on_top") : "below";
+        return WindowOrder.FindTopWindow(handle => SteamGameProcesses.IsGame(running, WindowOrder.ProcessOf(handle)), background: true);
     }
 
     private async Task KeepSessionAsync(CancellationToken cancellationToken)

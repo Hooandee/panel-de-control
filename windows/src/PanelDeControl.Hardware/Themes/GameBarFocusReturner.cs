@@ -37,8 +37,10 @@ public sealed class GameBarFocusReturner
     private readonly GameBarFocusTracker tracker = new();
     private IntPtr lastHandle;
     private ForegroundKind lastKind = ForegroundKind.Other;
+    private static readonly TimeSpan AfterGameSignal = TimeSpan.FromSeconds(3);
     private readonly SemaphoreSlim raising = new(1, 1);
     private IntPtr bigPictureHeldTopmost;
+    private long quietUntilTicks;
     private ICdpSession? sharedContext;
     private DateTimeOffset nextPageCheck = DateTimeOffset.MinValue;
     private DateTimeOffset? pageUnfocusedSince;
@@ -64,13 +66,14 @@ public sealed class GameBarFocusReturner
         await raising.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var bigPicture = WindowOrder.FindTopWindow(handle => Classify(handle) == ForegroundKind.Steam);
+            var bigPicture = WindowOrder.FindTopWindow(handle => Classify(handle) == ForegroundKind.Steam, background: true);
             if (bigPicture == IntPtr.Zero)
             {
                 CompanionLog.Write("themes.big_picture_raise", "no_window");
                 return;
             }
 
+            var cloaked = WindowOrder.IsCloaked(bigPicture);
             var above = WindowOrder.FindTopWindow(IsAppWindow);
             var stayTopmost = Volatile.Read(ref bigPictureHeldTopmost) == bigPicture
                 || (above != bigPicture && above != IntPtr.Zero && WindowOrder.IsTopmost(above) && CoversItsMonitor(above));
@@ -84,8 +87,10 @@ public sealed class GameBarFocusReturner
                 WindowOrder.Release(bigPicture);
             }
 
-            CompanionLog.Write("themes.big_picture_raise", raised ? (stayTopmost ? "on_top topmost" : "on_top") : "below");
             Foreground.BigPictureRaised(raised);
+            CompanionLog.Write(
+                "themes.big_picture_raise",
+                (raised ? (stayTopmost ? "on_top topmost" : "on_top") : "below") + (cloaked ? " cloaked" : string.Empty));
             await RestoreAsync(bigPicture, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -93,6 +98,66 @@ public sealed class GameBarFocusReturner
             raising.Release();
         }
     }
+
+    /// <summary>
+    /// Steam resumed the game. Where Big Picture had come over it by window order, Windows also refuses Steam's raise
+    /// of the game: the game is raised the same way and given the focus, and if Windows still keeps the foreground
+    /// from it, Big Picture goes to the bottom so the shell (Xbox mode) shows the game. Returns what happened, or null
+    /// when nothing had to be done.
+    /// </summary>
+    public async Task<string?> GameResumedAsync(Func<IntPtr> findGame, CancellationToken cancellationToken)
+    {
+        HoldStill(AfterGameSignal);
+        await raising.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var needed = Foreground.GameResumed();
+            var bigPicture = Interlocked.Exchange(ref bigPictureHeldTopmost, IntPtr.Zero);
+            if (bigPicture != IntPtr.Zero && IsWindow(bigPicture))
+            {
+                WindowOrder.Release(bigPicture);
+            }
+
+            if (!needed)
+            {
+                return null;
+            }
+
+            var game = findGame();
+            if (game == IntPtr.Zero)
+            {
+                return "no_window";
+            }
+
+            WindowOrder.Raise(game, stayTopmost: WindowOrder.IsTopmost(game));
+            for (var attempt = 1; attempt <= RestoreAttempts; attempt++)
+            {
+                AskForeground(game);
+                await Task.Delay(200, cancellationToken).ConfigureAwait(false);
+                if (GetForegroundWindow() == game)
+                {
+                    return $"foreground attempt={attempt}";
+                }
+            }
+
+            var steam = WindowOrder.FindTopWindow(handle => Classify(handle) == ForegroundKind.Steam, background: true);
+            var lowered = steam != IntPtr.Zero && WindowOrder.SendToBottom(steam);
+            return lowered ? "big_picture_to_bottom" : "refused";
+        }
+        finally
+        {
+            raising.Release();
+        }
+    }
+
+    /// <summary>
+    /// A game is starting or resuming: for a moment the foreground passes through the shell, and giving it back to
+    /// Big Picture would cover the game.
+    /// </summary>
+    public void HoldStill(TimeSpan duration) =>
+        Interlocked.Exchange(ref quietUntilTicks, (DateTimeOffset.UtcNow + duration).UtcTicks);
+
+    private bool Quiet => DateTimeOffset.UtcNow.UtcTicks < Interlocked.Read(ref quietUntilTicks);
 
     /// <summary>Big Picture, a game or an app: the shell (taskbar included, which is topmost) and Game Bar do not count.</summary>
     internal static bool IsAppWindow(IntPtr handle) => Classify(handle) is ForegroundKind.Steam or ForegroundKind.Other;
@@ -107,7 +172,7 @@ public sealed class GameBarFocusReturner
     }
 
     /// <summary>Asks Windows for the foreground with a synthetic Alt, which counts as the last input it requires.</summary>
-    internal static void AskForeground(IntPtr window)
+    private static void AskForeground(IntPtr window)
     {
         keybd_event(VkMenu, 0, 0, UIntPtr.Zero);
         keybd_event(VkMenu, 0, KeyEventKeyUp, UIntPtr.Zero);
@@ -132,7 +197,8 @@ public sealed class GameBarFocusReturner
         {
             await Task.Delay(Poll, cancellationToken).ConfigureAwait(false);
             var handle = GetForegroundWindow();
-            if (handle == lastHandle)
+            // No foreground window is a passing state while windows switch, not the shell.
+            if (handle == IntPtr.Zero || handle == lastHandle)
             {
                 if (lastKind == ForegroundKind.Steam)
                 {
@@ -160,7 +226,7 @@ public sealed class GameBarFocusReturner
             }
 
             var restore = tracker.Observe(new ForegroundWindow(handle, kind));
-            if (restore != IntPtr.Zero)
+            if (restore != IntPtr.Zero && !Quiet && await SteamUiStateAsync(cancellationToken).ConfigureAwait(false) != SteamUiState.RunningPage)
             {
                 await RestoreAsync(restore, cancellationToken).ConfigureAwait(false);
             }
@@ -176,7 +242,7 @@ public sealed class GameBarFocusReturner
         }
 
         nextPageCheck = now + PageFocusCheck;
-        var focused = await SteamUiHasFocusAsync(cancellationToken).ConfigureAwait(false);
+        var focused = Quiet ? null : await SteamUiHasFocusAsync(cancellationToken).ConfigureAwait(false);
         if (focused != false)
         {
             pageUnfocusedSince = null;
@@ -205,9 +271,11 @@ public sealed class GameBarFocusReturner
         CompanionLog.Write("themes.focus_bounce", restored ? "steam_ui_focused" : "steam_ui_still_unfocused");
     }
 
-    // Every Steam document that hosts a navigation tree (Big Picture, quick access, menus, keyboard).
+    // Every Steam document that hosts a navigation tree (Big Picture, quick access, menus, keyboard). While Big Picture
+    // shows the running game's page the game belongs in front, and Big Picture is neither restored nor bounced over it.
     private const string SteamUiFocusExpression = """
         (() => {
+          if (SteamUIStore?.WindowStore?.GamepadUIMainWindowInstance?.m_history?.location?.pathname?.startsWith('/apprunning')) return 'running_page';
           const docs = new Set();
           const page = SteamUIStore?.WindowStore?.GamepadUIMainWindowInstance?.BrowserWindow?.document;
           if (page) docs.add(page);
@@ -226,7 +294,23 @@ public sealed class GameBarFocusReturner
         """;
 
     /// <summary>Whether any of Steam's UI documents has keyboard focus, or null when Steam cannot be asked.</summary>
-    private async Task<bool?> SteamUiHasFocusAsync(CancellationToken cancellationToken)
+    private async Task<bool?> SteamUiHasFocusAsync(CancellationToken cancellationToken) =>
+        await SteamUiStateAsync(cancellationToken).ConfigureAwait(false) switch
+        {
+            SteamUiState.Focused => true,
+            SteamUiState.Unfocused => false,
+            _ => null,
+        };
+
+    private enum SteamUiState
+    {
+        Unknown,
+        Focused,
+        Unfocused,
+        RunningPage,
+    }
+
+    private async Task<SteamUiState> SteamUiStateAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -242,15 +326,16 @@ public sealed class GameBarFocusReturner
 
             if (sharedContext is null)
             {
-                return null;
+                return SteamUiState.Unknown;
             }
 
             var focused = await sharedContext.EvaluateAsync(SteamUiFocusExpression, cancellationToken).ConfigureAwait(false);
             return focused.ValueKind switch
             {
-                System.Text.Json.JsonValueKind.True => true,
-                System.Text.Json.JsonValueKind.False => false,
-                _ => null,
+                System.Text.Json.JsonValueKind.True => SteamUiState.Focused,
+                System.Text.Json.JsonValueKind.False => SteamUiState.Unfocused,
+                System.Text.Json.JsonValueKind.String => SteamUiState.RunningPage,
+                _ => SteamUiState.Unknown,
             };
         }
         catch (Exception exception) when (exception is CdpException or System.Net.WebSockets.WebSocketException
@@ -258,7 +343,7 @@ public sealed class GameBarFocusReturner
         {
             cancellationToken.ThrowIfCancellationRequested();
             sharedContext = null;
-            return null;
+            return SteamUiState.Unknown;
         }
     }
 
