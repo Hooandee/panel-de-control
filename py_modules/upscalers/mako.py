@@ -30,9 +30,18 @@ PAYLOAD = ("bin/mako-launch", "bin/mako-cli", "bin/mako-vrr-lease",
            "lib/libmako-render.so", "lib32/libmako-render.so",
            "share/mako-render/vulkan/implicit_layer.d/VkLayer_MAKO_render.json",
            "share/mako-render/vulkan/implicit_layer.d/VkLayer_MAKO_render.x86.json")
+# MAKO 5 bundles its own frame generation model; MAKO 4 needs the user's Lossless.dll.
+VERSION5 = "5.0.0"
+ASSET5 = Asset("mako-render-5.0.0", "MAKO-Renderer-v5.0.0-linux.tar.xz",
+               "c59eda9681aab614474fc74a99194fe6445190fcea500eed89367e09b299fb9f", 8734820,
+               ("https://github.com/eugeniosegala/MAKO/releases/download/render-v5.0.0/MAKO-Renderer-v5.0.0-linux.tar.xz",))
+PAYLOAD5 = PAYLOAD + ("lib/mako-fg/version.json", "lib/mako-fg/mako-fg-host",
+                      "lib/mako-fg/model/weights.bin", "lib/mako-fg/model/ops.spv",
+                      "lib/mako-fg/model/transport.spv", "lib/mako-fg/model/mixture.spv")
 FLOW = {"quality": 1.0, "balanced": 0.75, "performance": 0.5, "fastest": 0.25}
-DEFAULTS = {"enabled": True, "mode": "fixed", "multiplier": 2, "target_fps": 120,
-            "max_multiplier": 3, "flow": "quality", "performance": False,
+FG_MODES = ("quality", "balanced", "performance", "extra-performance")
+DEFAULTS = {"enabled": True, "engine": 4, "mode": "fixed", "multiplier": 2, "target_fps": 120,
+            "max_multiplier": 3, "flow": "quality", "flow_scale": 0.75, "fg_mode": "balanced", "performance": False,
             "scaling_enabled": False, "scaling_factor": 1.5, "scaling_sharpness": 0.8}
 LOG = logging.getLogger(__name__)
 MAX_JSON = 128 * 1024
@@ -69,11 +78,13 @@ def _options(config):
             raise MakoError("mako_options")
     if (not isinstance(result['mode'], str) or not isinstance(result['flow'], str)
             or type(result['enabled']) is not bool or type(result['performance']) is not bool
-            or result['mode'] not in ('fixed', 'adaptive') or result['flow'] not in FLOW):
+            or result['mode'] not in ('fixed', 'adaptive') or result['flow'] not in (*FLOW, 'manual')):
+        raise MakoError("mako_options")
+    if result['engine'] not in (4, 5) or type(result['engine']) is not int or result['fg_mode'] not in FG_MODES:
         raise MakoError("mako_options")
     if type(result['scaling_enabled']) is not bool:
         raise MakoError("mako_options")
-    for key, lo, hi in (("scaling_factor", 1, 2), ("scaling_sharpness", 0, 1)):
+    for key, lo, hi in (("scaling_factor", 1, 2), ("scaling_sharpness", 0, 1), ("flow_scale", 0.25, 1)):
         if type(result[key]) not in (int, float) or not math.isfinite(result[key]) or not lo <= result[key] <= hi:
             raise MakoError("mako_options")
     return result
@@ -83,6 +94,7 @@ class Mako:
     def __init__(self, home: str, state_dir: Path):
         self.home = Path(home)
         self.prefix = self.home / '.local/share/panel-de-control/mako' / INSTALL_SLOT
+        self.prefix5 = self.home / '.local/share/panel-de-control/mako' / '5'
         self.config_root = self.home / '.config/panel-de-control/mako'
         self.manifest_path = Path(state_dir) / 'mako.json'
         self._lock = threading.RLock()
@@ -166,10 +178,19 @@ class Mako:
         except OSError:
             return None
 
-    def _installed(self, state):
-        files = state.get('files', {})
-        return bool(files) and all((self.prefix / name).is_file() and not (self.prefix / name).is_symlink()
-                                   for name in PAYLOAD) and set(files) == set(PAYLOAD)
+    def _line(self, state, line):
+        """MAKO 4 keeps its install record at the top of the manifest; MAKO 5 has its own beside it."""
+        if line == 4:
+            return state, self.prefix, PAYLOAD, VERSION
+        if not isinstance(state.get('v5'), dict):
+            state['v5'] = {}
+        return state['v5'], self.prefix5, PAYLOAD5, VERSION5
+
+    def _installed(self, state, line=4):
+        record, prefix, payload, _ = self._line(state, line)
+        files = record.get('files', {})
+        return isinstance(files, dict) and bool(files) and all(
+            (prefix / name).is_file() and not (prefix / name).is_symlink() for name in payload) and set(files) == set(payload)
 
     def status(self):
         with self._lock:
@@ -191,33 +212,47 @@ class Mako:
                     profiles[key] = _options({field: value[field] for field in DEFAULTS if field in value})
                 except MakoError:
                     continue
-            return {'installed': installed, 'ready': reason is None, 'reason': reason,
+            installed5 = self._installed(state, 5)
+            v5 = {'installed': installed5, 'ready': supported and installed5,
+                  'reason': 'mako_arch' if not supported else None if installed5 else 'mako_not_installed',
+                  'version': state['v5'].get('version', VERSION5) if installed5 else None}
+            return {'installed': installed, 'ready': reason is None, 'reason': reason, 'v5': v5,
+                    'notice_dismissed': state.get('notice_dismissed') is True,
                     'supported': supported, 'spatial_ready': supported and installed, 'dll': bool(dll), 'version': state.get('version', VERSION) if installed else None,
                     'foreign': (self.home / '.local/bin/mako-run').exists() or (self.home / '.local/bin/mako-launch').exists(),
                     'profiles': profiles}
 
-    def install(self, cache, progress=None, cancelled=None, *, asset=None, version=None, before_commit=None):
-        asset = asset or ASSET
-        version = version or VERSION
+    def dismiss_notice(self):
+        with self._lock:
+            state = self._state()
+            state['notice_dismissed'] = True
+            self._save(state)
+            return self.status()
+
+    def install(self, cache, progress=None, cancelled=None, *, asset=None, version=None, before_commit=None, line=4):
+        asset = asset or (ASSET if line == 4 else ASSET5)
         progress = progress or (lambda size: None)
         cancelled = cancelled or (lambda: False)
         with self._lock:
             if platform.machine().lower() not in ('x86_64', 'amd64'):
                 raise MakoError('mako_arch')
             state = self._state()
-            upgrading = self._installed(state)
+            record, prefix, payload, default_version = self._line(state, line)
+            version = version or default_version
+            upgrading = self._installed(state, line)
             if upgrading:
-                self._verify_install(state)
-                if state.get('version', VERSION) == version:
+                self._verify_install(state, line)
+                if record.get('version', default_version) == version:
                     return self.status()
-            self._safe(self.prefix)
-            if self.prefix.exists() and not upgrading:
+            self._safe(prefix)
+            if prefix.exists() and not upgrading:
                 raise MakoError('mako_conflict')
             archive = cache.ensure(asset, progress, cancelled)
             if sha256(archive) != asset.sha256:
                 raise MakoError('mako_checksum')
             self.prefix.parent.mkdir(parents=True, exist_ok=True)
-            staging = Path(tempfile.mkdtemp(prefix='.mako-', dir=self.prefix.parent))
+            prefix.parent.mkdir(parents=True, exist_ok=True)
+            staging = Path(tempfile.mkdtemp(prefix='.mako-', dir=prefix.parent))
             published = False
             committed = False
             backup = staging.with_name(staging.name + "-previous")
@@ -228,9 +263,9 @@ class Mako:
                         name = str(Path(member.name))
                         if Path(name).is_absolute() or '..' in Path(name).parts or member.issym() or member.islnk():
                             raise MakoError('mako_archive')
-                        if name not in PAYLOAD:
+                        if name not in payload:
                             continue
-                        if name in found or not member.isfile() or not 0 < member.size <= 16 * 1024 * 1024:
+                        if name in found or not member.isfile() or not 0 < member.size <= 64 * 1024 * 1024:
                             raise MakoError('mako_archive')
                         if cancelled():
                             raise MakoError('cancelled')
@@ -238,16 +273,19 @@ class Mako:
                         target.parent.mkdir(parents=True, exist_ok=True)
                         with handle.extractfile(member) as source, target.open('wb') as dest:
                             shutil.copyfileobj(source, dest)
-                        target.chmod(0o755 if name.startswith('bin/') else 0o644)
+                        target.chmod(0o755 if name.startswith('bin/') or name.endswith('mako-fg-host') else 0o644)
                         found.add(name)
-                if found != set(PAYLOAD):
+                if found != set(payload):
                     raise MakoError('mako_archive')
-                files = {name: sha256(staging / name) for name in PAYLOAD}
+                files = {name: sha256(staging / name) for name in payload}
                 if upgrading:
-                    state.pop('inspection', None)
-                    if any(profile.get('enabled', True) for profile in state['profiles'].values()):
-                        self._inspect(state, self._dll(), prefix=staging)
-                    for appid, profile in {**state.get('paused', {}), **state['profiles']}.items():
+                    mine = {appid: profile for appid, profile in {**state.get('paused', {}), **state['profiles']}.items()
+                            if not isinstance(profile, dict) or profile.get('engine', 4) == line}
+                    if line == 4:
+                        state.pop('inspection', None)
+                        if any(profile.get('enabled', True) for profile in state['profiles'].values() if profile.get('engine', 4) == 4):
+                            self._inspect(state, self._dll(), prefix=staging)
+                    for appid, profile in mine.items():
                         if not re.fullmatch(r'[0-9]{1,20}', appid):
                             raise MakoError('mako_conflict')
                         config = self.config_root / appid / 'conf.toml'
@@ -258,21 +296,21 @@ class Mako:
                 if before_commit:
                     before_commit()
                 if upgrading:
-                    self.prefix.rename(backup)
-                staging.rename(self.prefix)
+                    prefix.rename(backup)
+                staging.rename(prefix)
                 published = True
-                for name in PAYLOAD:
-                    ownership.own_with_parents(self.home, self.prefix / name)
-                state.update(files=files, version=version, asset_sha256=asset.sha256)
+                for name in payload:
+                    ownership.own_with_parents(self.home, prefix / name)
+                record.update(files=files, version=version, asset_sha256=asset.sha256)
                 self._event(state, 'update' if upgrading else 'install')
                 self._persist_files({}, state)
                 committed = True
             except (tarfile.TarError, EOFError, OSError, MakoError) as error:
                 try:
                     if published:
-                        self.prefix.rename(staging)
+                        prefix.rename(staging)
                     if backup.exists():
-                        backup.rename(self.prefix)
+                        backup.rename(prefix)
                 except OSError as restore_error:
                     LOG.error('MAKO action=install code=mako_restore_failed')
                     raise MakoError('mako_restore_failed') from restore_error
@@ -292,12 +330,13 @@ class Mako:
                         LOG.warning("MAKO action=update code=backup_cleanup_failed")
             return self.status()
 
-    def _verify_install(self, state):
-        if not self._installed(state):
+    def _verify_install(self, state, line=4):
+        if not self._installed(state, line):
             raise MakoError('mako_not_installed')
-        for name in PAYLOAD:
-            self._safe(self.prefix / name)
-            if sha256(self.prefix / name) != state['files'][name]:
+        record, prefix, payload, _ = self._line(state, line)
+        for name in payload:
+            self._safe(prefix / name)
+            if sha256(prefix / name) != record['files'][name]:
                 raise MakoError('mako_conflict')
 
     def _inspect(self, state, dll, *, prefix=None):
@@ -375,12 +414,15 @@ class Mako:
                     raise MakoError('mako_arch')
                 if appid not in state['profiles'] and len(state['profiles']) + len(paused) >= 256 and appid not in paused:
                     raise MakoError('mako_profile_limit')
-                self._verify_install(state)
+                line = options['engine']
+                self._verify_install(state, line)
+                _, prefix, _, _ = self._line(state, line)
                 dll = self._dll() if options['enabled'] else None
-                if options['enabled']:
+                if options['enabled'] and line == 4:
                     self._inspect(state, dll)
                 def boolean(value):
                     return str(value).lower()
+                flow = round(options['flow_scale'], 2) if options['flow'] == 'manual' else FLOW[options['flow']]
                 content = ('version = 2\n[global]\ndll = ' + json.dumps(str(dll) if dll else '') + '\nallow_fp16 = true\n'
                            '[[profile]]\nname = "pdc-' + appid + '"\nactive_in = []\n'
                            f'frame_generation_provisioned = {boolean(options["enabled"])}\n'
@@ -388,12 +430,14 @@ class Mako:
                            f'frame_generation_enabled = {boolean(options["enabled"])}\n'
                            f'multiplier = {options["multiplier"]}\nadaptive = {boolean(options["mode"] == "adaptive")}\n'
                            f'target_fps = {options["target_fps"]}\nadaptive_max_multiplier = {options["max_multiplier"]}\n'
-                           f'flow_scale = {FLOW[options["flow"]]}\nperformance_mode = {boolean(options["performance"])}\n')
+                           f'flow_scale = {flow}\nperformance_mode = {boolean(options["performance"] and line == 4)}\n')
+                if line == 5:
+                    content += f'frame_generation_model = "mako-fg"\nmako_fg_mode = "{options["fg_mode"]}"\n'
                 if options['scaling_enabled']:
                     content += ('scaling_method = "mako"\nscaling_supersampling = false\n'
                                 f'scaling_factor = {options["scaling_factor"]}\n'
                                 f'scaling_sharpness = {options["scaling_sharpness"]}\n')
-                self._validate(content)
+                self._validate(content, prefix=prefix)
                 launcher_content = '# Managed by Panel de Control\n'
                 state['profiles'][appid] = options | {'hash': hashlib.sha256(content.encode()).hexdigest(),
                                                      'launcher_hash': hashlib.sha256(launcher_content.encode()).hexdigest()}
@@ -403,7 +447,7 @@ class Mako:
                 self._persist_files({path: content, launcher_config: launcher_content}, state)
                 return {'env': {'MAKO_CONFIG': str(path), 'MAKO_PROFILE': 'pdc-' + appid,
                                 'MAKO_LAUNCH_CONFIG': str(launcher_config)},
-                        'wrappers': [str(self.prefix / 'bin/mako-launch')], 'profile': options}
+                        'wrappers': [str(prefix / 'bin/mako-launch')], 'profile': options}
             except (OSError, MakoError) as error:
                 code = error.code if isinstance(error, MakoError) else 'mako_write_failed'
                 state = self._state()
@@ -519,7 +563,8 @@ class Mako:
         def projection(value):
             if not isinstance(value, dict):
                 return {}
-            return {key: item for key, item in value.items() if key in fields and type(item) in (int, float, bool)}
+            return {key: item for key, item in value.items() if key in fields and type(item) in (int, float, bool)
+                    or key in ('frame_generation_model', 'mako_fg_mode') and item in ('mako-fg', 'lossless-scaling', *FG_MODES)}
         pending = data.get('pending', {})
         spatial = data.get('spatial_scaling', {})
         scaling_active = spatial.get('active') if isinstance(spatial, dict) else None
@@ -539,6 +584,8 @@ class Mako:
                 'requested': projection(data.get('requested')), 'applied': projection(data.get('applied')),
                 'pending': {key: pending[key] for key in ('frame_generation_private', 'spatial_private', 'swapchain_recreation', 'process_restart')
                             if isinstance(pending, dict) and type(pending.get(key)) is bool},
+                'fg_unavailable': (str(unavailable.get('reason'))[:64] if isinstance(unavailable := data.get('frame_generation_unavailable'), dict)
+                                   and isinstance(unavailable.get('reason'), str) else None),
                 'error': 'mako_runtime_error' if data.get('error') else None}
 
     def report(self):

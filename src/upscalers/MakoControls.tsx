@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type FC } from "react";
 import { ContainedSlider } from "../components/ContainedSlider";
-import type { MakoProfile } from "../api";
+import type { MakoFgMode, MakoProfile } from "../api";
+import { FlowScale } from "./FlowScale";
 import { useI18n } from "../i18n";
 import { ListCard, ListRow, PickerButton } from "./parts";
 
 const MULTIPLIERS = [2, 3, 4, 5] as const;
-const FLOWS = ["quality", "balanced", "performance", "fastest"] as const;
+const FLOWS = ["quality", "balanced", "performance", "fastest", "manual"] as const;
+const FG_MODES: MakoFgMode[] = ["quality", "balanced", "performance", "extra-performance"];
 
 export const MakoControls: FC<{
   profile: MakoProfile;
@@ -28,7 +30,12 @@ export const MakoControls: FC<{
     cancel();
     pending.current = setTimeout(() => { pending.current = null; onChange({ ...profile, target_fps: next }); }, 350);
   };
+  const mako5 = profile.engine === 5;
   return <ListCard>
+    {mako5 && <PickerButton duo={duo} controlId={`${appid}:mako-fg-mode`} showLabel label={t("up.mako.fgMode")}
+      value={profile.fg_mode ?? "balanced"} disabled={disabled}
+      options={FG_MODES.map(mode => ({ value: mode, label: t(`up.mako.fgMode.${mode}`) }))}
+      onChange={fg_mode => change({ ...profile, fg_mode })} />}
     <PickerButton duo={duo} controlId={`${appid}:mako-mode`} showLabel label={t("up.mako.mode")}
       value={profile.mode} disabled={disabled}
       options={(["fixed", "adaptive"] as const).map(mode => ({ value: mode, label: t(`up.mako.${mode}`) }))}
@@ -48,7 +55,9 @@ export const MakoControls: FC<{
       value={profile.flow} disabled={disabled}
       options={FLOWS.map(flow => ({ value: flow, label: t(`up.lsfg.flow.${flow}`) }))}
       onChange={flow => change({ ...profile, flow })} />
-    <ListRow label={t("up.lsfg.light")} caption={t("up.lsfg.lightHint")} on={profile.performance} disabled={disabled}
-      onPress={() => change({ ...profile, performance: !profile.performance })} />
+    {profile.flow === "manual" && <FlowScale appid={appid} value={profile.flow_scale ?? 0.75} disabled={disabled}
+      onCommit={flow_scale => change({ ...profile, flow_scale })} />}
+    {!mako5 && <ListRow label={t("up.lsfg.light")} caption={t("up.lsfg.lightHint")} on={profile.performance} disabled={disabled}
+      onPress={() => change({ ...profile, performance: !profile.performance })} />}
   </ListCard>;
 };

@@ -338,3 +338,37 @@ def test_namespace_scan_limit_fails_closed(setup, monkeypatch):
             pass
     monkeypatch.setattr(mako.os, 'scandir', lambda path: Entries())
     assert not manager._process_matches(3714, 898084)
+
+
+def test_mako5_installs_beside_mako4_and_needs_no_dll(setup, monkeypatch, tmp_path):
+    manager, cache, dll, calls = setup
+    manager.install(cache)
+    archive = tmp_path / 'mako5.tar.xz'
+    with tarfile.open(archive, 'w:xz') as handle:
+        for name in mako.PAYLOAD5:
+            content = b'#!/bin/sh\nexit 0\n' if name.startswith('bin/') else b'payload'
+            info = tarfile.TarInfo('./' + name)
+            info.size = len(content)
+            handle.addfile(info, io.BytesIO(content))
+    monkeypatch.setattr(mako, 'ASSET5', SimpleNamespace(sha256=hashlib.sha256(archive.read_bytes()).hexdigest()))
+    manager.install(SimpleNamespace(ensure=lambda *args: archive), line=5)
+    dll.unlink()
+    status = manager.status()
+    assert status['installed'] and status['v5'] == {'installed': True, 'ready': True, 'reason': None, 'version': '5.0.0'}
+    assert (manager.prefix5 / 'lib/mako-fg/mako-fg-host').stat().st_mode & 0o111
+    result = manager.set_game('7', 'Game', {'engine': 5, 'fg_mode': 'performance', 'flow': 'manual', 'flow_scale': 0.6})
+    config = Path(result['env']['MAKO_CONFIG']).read_text()
+    assert 'frame_generation_model = "mako-fg"' in config and 'mako_fg_mode = "performance"' in config
+    assert 'flow_scale = 0.6' in config and 'performance_mode = false' in config
+    assert result['wrappers'] == [str(manager.prefix5 / 'bin/mako-launch')]
+    assert not any('inspect-dll' in call for call in calls)
+    with pytest.raises(mako.MakoError, match='mako_dll_missing'):
+        manager.set_game('8', 'Old', {'engine': 4})
+
+
+@pytest.mark.parametrize('config', [{'engine': 6}, {'engine': True}, {'fg_mode': 'ultra'}, {'flow': 'manual', 'flow_scale': 0.1}])
+def test_mako5_options_are_bounded(setup, config):
+    manager, cache, _, _ = setup
+    manager.install(cache)
+    with pytest.raises(mako.MakoError, match='mako_options'):
+        manager.set_game('9', 'Game', config)

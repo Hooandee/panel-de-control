@@ -27,7 +27,7 @@ LOG_LINES = 60
 LINE_CHARS = 220
 
 
-REQUEST_KEYS = ("build", "model", "quality", "fg", "fg_route", "proxy", "sharpness", "hud_fix", "confirm_anti_cheat", "key", "value", "key_action", "value_omitted", "multiplier", "flow", "flow_scale", "performance", "enabled", "mode", "target_fps", "max_multiplier", "int8", "scaling_enabled", "scaling_factor", "scaling_sharpness")
+REQUEST_KEYS = ("build", "model", "quality", "fg", "fg_route", "proxy", "sharpness", "hud_fix", "confirm_anti_cheat", "key", "value", "key_action", "value_omitted", "multiplier", "flow", "flow_scale", "performance", "enabled", "mode", "target_fps", "max_multiplier", "int8", "scaling_enabled", "scaling_factor", "scaling_sharpness", "engine", "fg_mode")
 
 
 def fields(value, keys, limit=160):

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from test_tdp_guard_rpc import plugin
+from upscalers import mako
 from upscalers.service import UpscalerService
 
 
@@ -38,7 +39,7 @@ def test_support_snapshot_keeps_loop_alive_while_mako_is_locked(plugin, tmp_path
         writer.join(2)
     assert released_by_heartbeat == [True]
     assert snapshot["gpu"] == "rdna2"
-    assert snapshot["mako"]["profiles"] == profile["profiles"]
+    assert snapshot["mako"]["profiles"] == {key: {**mako.DEFAULTS, **value} for key, value in profile["profiles"].items()}
     assert snapshot["installs"] == {}
 
 

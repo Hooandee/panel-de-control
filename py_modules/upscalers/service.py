@@ -1838,19 +1838,19 @@ class UpscalerService:
             raise engine_updates.UpdateError("engine_deferred") from error
 
     def refresh_engine(self, engine: str, apply: bool = False) -> dict:
-        if engine not in ("mako", "lsfg") or type(apply) is not bool:
+        if engine not in ("mako", "mako5", "lsfg") or type(apply) is not bool:
             raise UpscalerError("engine_unknown")
         with self._engine_lock:
-            status = self.mako.status() if engine == "mako" else self.lsfg.status()
-            current = status.get("version") or (mako.VERSION if engine == "mako" else catalog.LSFG_ARCHIVE.removeprefix("lsfg-vk-"))
+            status = self.mako.status() if engine == "mako" else {**self.mako.status()["v5"], "supported": self.mako.status()["supported"]} if engine == "mako5" else self.lsfg.status()
+            current = status.get("version") or (mako.VERSION if engine == "mako" else mako.VERSION5 if engine == "mako5" else catalog.LSFG_ARCHIVE.removeprefix("lsfg-vk-"))
             current = current.removeprefix("lsfg-vk-")
             result = {"state": "current", "version": current}
-            if engine == "lsfg" and status.get("foreign") or engine == "mako" and not status.get("supported"):
+            if engine == "lsfg" and status.get("foreign") or engine != "lsfg" and not status.get("supported"):
                 return {**result, "state": "unmanaged"}
             try:
                 cached = self._engine_checks.get(engine)
                 if cached is None or cached[0] + 60 < time.monotonic() or cached[1] != current:
-                    candidate = engine_updates.discover(engine, current)
+                    candidate = engine_updates.discover("mako" if engine == "mako5" else engine, current)
                     self._engine_checks[engine] = (time.monotonic(), current, candidate)
                     self.record_action("global", "engine_check_" + engine, "done", {"build": current, "value": candidate["version"] if candidate else current})
                     if self.logger:
@@ -1864,9 +1864,10 @@ class UpscalerService:
                     return result
                 self._ensure_engine_idle()
                 self.record_action("global", "engine_update_" + engine, "started", {"build": candidate["version"]})
-                asset = engine_updates.prepare(engine, candidate, self.cache)
-                if engine == "mako":
-                    self.mako.install(self.cache, asset=asset, version=candidate["version"], before_commit=self._ensure_engine_idle)
+                asset = engine_updates.prepare("mako" if engine == "mako5" else engine, candidate, self.cache)
+                if engine in ("mako", "mako5"):
+                    self.mako.install(self.cache, asset=asset, version=candidate["version"], before_commit=self._ensure_engine_idle,
+                                      line=5 if engine == "mako5" else 4)
                 else:
                     with tempfile.TemporaryDirectory(prefix="lsfg-update-", dir=self.cache.root) as temp:
                         unpacked = Path(temp)
@@ -1991,13 +1992,31 @@ class UpscalerService:
             profiles[appid] = profiles.pop(key)
         return {**status, "profiles": profiles}
 
-    def mako_install(self) -> dict:
-        if self.mako.status()["installed"]:
-            return self.mako.status()
+    def mako_install(self, line: int = 4) -> dict:
+        if line not in (4, 5):
+            raise UpscalerError("mako_options")
+        status = self.mako.status()
+        if (status["v5"] if line == 5 else status)["installed"]:
+            return status
         try:
-            return self.mako.install(self.cache)
+            if line == 5:
+                # MAKO 5 always starts from the newest published 5.x; the pinned release covers a failed lookup.
+                try:
+                    candidate = engine_updates.discover("mako", mako.VERSION5)
+                    if candidate:
+                        asset = engine_updates.prepare("mako", candidate, self.cache)
+                        return self.mako.install(self.cache, asset=asset, version=candidate["version"], line=5)
+                except (engine_updates.UpdateError, OSError, ValueError) as error:
+                    self.record_action("global", "engine_check_mako5", "failed", {"build": mako.VERSION5}, getattr(error, "code", "engine_check_failed"))
+            return self.mako.install(self.cache, line=line)
         except (AssetError, mako.MakoError) as error:
             raise UpscalerError(error.code) from None
+
+    def mako5_install(self) -> dict:
+        return self.mako_install(5)
+
+    def mako_dismiss_notice(self) -> dict:
+        return self.mako.dismiss_notice()
 
     def mako_game(self, appid: str, config: dict | None) -> dict:
         installed = self._find(appid)

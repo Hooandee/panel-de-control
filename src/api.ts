@@ -1437,7 +1437,7 @@ export const setUpscalerIni = callable<[appid: string, key: string, value: strin
 export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] } | null; resolution_source?: "initialization_only" | "unavailable"; fg?: boolean | null; fg_toggle?: boolean; fps?: number | null; fallback?: import("./upscalers/types").ScalerFallback | null; provider_family?: "fsr" | "dlss" | "xess" | null; provider_name?: "FSR" | "DLSS" | "XeSS" | null; provider_version?: string | null; provider_source?: "optiscaler_log" | "unavailable"; provider_confidence?: "family_only" | "unknown" }>("get_upscaler_live");
 export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow_scale: number; flow_manual?: boolean; manual_scale?: number | null; performance: boolean }
 export interface EngineUpdate { state: "current" | "available" | "updated" | "deferred" | "failed" | "unmanaged"; version: string; available?: string }
-export const refreshFrameGenEngine = callable<[engine: "mako" | "lsfg", apply?: boolean], EngineUpdate>("refresh_framegen_engine");
+export const refreshFrameGenEngine = callable<[engine: "mako" | "mako5" | "lsfg", apply?: boolean], EngineUpdate>("refresh_framegen_engine");
 export interface LsfgStatus { version?: string | null; installed: boolean; foreign: boolean; foreign_backup?: boolean; cleared?: string[]; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
 export const adoptForeignLsfg = callable<[], LsfgStatus>("adopt_foreign_lsfg");
 export const restoreForeignLsfg = callable<[], LsfgStatus>("restore_foreign_lsfg");
@@ -1446,10 +1446,12 @@ export const restoreForeignUpscaler = callable<[appid: string], { restored: stri
 export const getLsfgStatus = callable<[], LsfgStatus>("get_lsfg_status");
 export const installLsfg = callable<[], LsfgStatus>("install_lsfg");
 export const setLsfgGame = callable<[appid: string, config: Partial<LsfgProfile> | null], { env: Record<string, string>; profile: LsfgProfile | null }>("set_lsfg_game");
-export interface MakoProfile { enabled?: boolean; scaling_enabled?: boolean; scaling_factor?: number; scaling_sharpness?: number; name?: string; mode: "fixed" | "adaptive"; multiplier: 2 | 3 | 4 | 5; target_fps: number; max_multiplier: 2 | 3 | 4 | 5; flow: "quality" | "balanced" | "performance" | "fastest"; performance: boolean }
-export interface MakoStatus { scaler_transition_pending?: boolean; spatial_ready?: boolean; installed: boolean; ready: boolean; supported: boolean; reason: string | null; dll: boolean; foreign: boolean; version: string | null; profiles: Record<string, MakoProfile> }
+export type MakoFgMode = "quality" | "balanced" | "performance" | "extra-performance";
+export interface MakoProfile { enabled?: boolean; engine?: 4 | 5; fg_mode?: MakoFgMode; flow_scale?: number; scaling_enabled?: boolean; scaling_factor?: number; scaling_sharpness?: number; name?: string; mode: "fixed" | "adaptive"; multiplier: 2 | 3 | 4 | 5; target_fps: number; max_multiplier: 2 | 3 | 4 | 5; flow: "quality" | "balanced" | "performance" | "fastest" | "manual"; performance: boolean }
+export interface MakoStatus { scaler_transition_pending?: boolean; spatial_ready?: boolean; installed: boolean; ready: boolean; supported: boolean; reason: string | null; dll: boolean; foreign: boolean; version: string | null; notice_dismissed?: boolean; v5?: { installed: boolean; ready: boolean; reason: string | null; version: string | null }; profiles: Record<string, MakoProfile> }
 export const getMakoStatus = callable<[appid?: string], MakoStatus>("get_mako_status");
-export const installMako = callable<[], MakoStatus>("install_mako");
+export const installMako = callable<[line?: 4 | 5], MakoStatus>("install_mako");
+export const dismissMakoNotice = callable<[], MakoStatus>("dismiss_mako_notice");
 export const setMakoGame = callable<[appid: string, config: Partial<MakoProfile> | null], { env: Record<string, string>; wrappers: string[]; profile: MakoProfile | null }>("set_mako_game");
 export const getMakoRuntime = callable<[appid: string], { observed: boolean; active?: boolean | null; scaling_active?: boolean; spatial_resolution?: { render: [number, number]; output: [number, number] } | null; spatial_methods?: { requested_method?: string; active_method?: string }; scaling_inactive_reason?: "gamescope-presentation-target-no-headroom" | null; role?: string; requested?: Record<string, number | boolean | string>; applied?: Record<string, number | boolean | string>; pending?: Partial<Record<"frame_generation_private" | "spatial_private" | "swapchain_recreation" | "process_restart", boolean>>; error?: string | null }>("get_mako_runtime");
 export const getUpscalerLaunchReceipt = callable<[appid: string, owner: string], import("./upscalers/launchOwnership").LaunchReceipt | null>("get_upscaler_launch_receipt");

@@ -4,9 +4,10 @@ import { LuArrowLeftRight, LuLayers, LuSparkles, LuTriangleAlert } from "react-i
 
 import {
   refreshFrameGenEngine, adoptForeignLsfg, getLsfgStatus, installLsfg, restoreForeignLsfg, setLsfgGame, type LsfgProfile, type LsfgStatus,
-  getMakoStatus, installMako, type MakoProfile, type MakoStatus,
+  dismissMakoNotice, getMakoStatus, installMako, type MakoProfile, type MakoStatus,
 } from "../api";
 import { ExperimentalBadge } from "../components/ExperimentalBadge";
+import { NoticeCard } from "../components/NoticeCard";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { readLosslessBranch, switchLosslessBranch, type LosslessBranchState } from "./losslessBranch";
@@ -22,7 +23,8 @@ import { transitionFrameGen, type FrameGenStep } from "./frameGenTransition";
 import { upscalerErrorCode } from "./errorCode";
 import { MakoControls } from "./MakoControls";
 
-type Pick = "off" | FgRoute | "lsfg" | "mako";
+type Pick = "off" | FgRoute | "lsfg" | "mako" | "mako5";
+const MAKO_NAME = { mako: "Mako 4 Lossless", mako5: "Mako 5" } as const;
 const MULTIPLIERS = [2, 3, 4, 5, 6] as const;
 
 function showFrameGenIcon(element: HTMLSpanElement | null) {
@@ -80,7 +82,10 @@ export const FrameGenRow: FC<{
   const offer = fgOffer(routes, inputs, gpu, lossless || !!profile, installedRoute);
   const gameInput = (routes.game as { input?: string } | undefined)?.input;
   const dlssBridge = !offer.own && (gameInput === "dlssg" || gameInput === "nukems");
-  const current: Pick = selection ?? (makoProfile ? "mako" : profile ? "lsfg" : optiscaler.fg === "on" && offer.options.includes(optiscaler.route) ? optiscaler.route : "off");
+  const makoPick = makoProfile ? (makoProfile.engine === 5 ? "mako5" : "mako") : null;
+  const current: Pick = selection ?? (makoPick ?? (profile ? "lsfg" : optiscaler.fg === "on" && offer.options.includes(optiscaler.route) ? optiscaler.route : "off"));
+  const isMako = current === "mako" || current === "mako5";
+  const makoEngine = current === "mako5" ? 5 : 4;
   const blocked = busy || disabled || enginePhase !== null;
 
   useEffect(() => {
@@ -113,10 +118,10 @@ export const FrameGenRow: FC<{
   }, [current, !!mako?.dll]);
 
   useEffect(() => {
-    if (current !== "mako" && current !== "lsfg") { setEnginePhase(null); return; }
+    if (current !== "mako" && current !== "mako5" && current !== "lsfg") { setEnginePhase(null); return; }
     const engine = current;
-    const loaded = engine === "mako" ? mako !== null : status !== null;
-    if (!loaded || (engine === "lsfg" && status?.foreign) || (engine === "mako" && !mako?.supported)) return;
+    const loaded = engine === "lsfg" ? status !== null : mako !== null;
+    if (!loaded || (engine === "lsfg" && status?.foreign) || (engine !== "lsfg" && !mako?.supported)) return;
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const refresh = async () => {
@@ -124,14 +129,14 @@ export const FrameGenRow: FC<{
       try {
         let result = await refreshFrameGenEngine(engine, false);
         if (!alive) return;
-        const installed = engine === "mako" ? mako?.installed : status?.installed;
+        const installed = engine === "mako" ? mako?.installed : engine === "mako5" ? mako?.v5?.installed : status?.installed;
         if (result.state === "available" && installed) {
           setEnginePhase("updating");
           result = await refreshFrameGenEngine(engine, true);
           if (!alive) return;
         }
         if (result.state === "updated") {
-          if (engine === "mako") { const next = await getMakoStatus(appid); if (alive) setMako(next); }
+          if (engine !== "lsfg") { const next = await getMakoStatus(appid); if (alive) setMako(next); }
           else { const next = await getLsfgStatus(); if (alive) setStatus(next); }
         }
         if (!alive) return;
@@ -145,7 +150,7 @@ export const FrameGenRow: FC<{
     };
     void refresh();
     return () => { alive = false; if (timer) clearTimeout(timer); };
-  }, [current, appid, mako !== null, status !== null, mako?.installed, status?.installed]);
+  }, [current, appid, mako !== null, status !== null, mako?.installed, mako?.v5?.installed, status?.installed]);
 
   const saveLsfg = async (next: Partial<LsfgProfile> | null) => {
     const result = await setLsfgGame(appid, next);
@@ -164,8 +169,9 @@ export const FrameGenRow: FC<{
 
   const saveMako = async (next: Partial<MakoProfile> | null) => {
     const patch = next ? {
-      enabled: true, mode: next.mode, multiplier: next.multiplier, target_fps: next.target_fps,
+      enabled: true, engine: next.engine ?? 4, mode: next.mode, multiplier: next.multiplier, target_fps: next.target_fps,
       max_multiplier: next.max_multiplier, flow: next.flow, performance: next.performance,
+      ...(next.fg_mode ? { fg_mode: next.fg_mode } : {}), ...(next.flow_scale !== undefined ? { flow_scale: next.flow_scale } : {}),
     } : { enabled: false };
     await saveMakoProfile(appid, liveAppid, patch, isNonSteam);
     if (gameRunning) setMessage(t("up.mako.restart"));
@@ -205,18 +211,22 @@ export const FrameGenRow: FC<{
   const choose = (pick: Pick) => {
     if (blocked) return;
     setSelection(pick);
-    if (pick !== "lsfg" && pick !== "mako") onOptiscaler(pick === "off" ? "off" : "on", pick === "off" ? null : pick);
+    if (pick !== "lsfg" && pick !== "mako" && pick !== "mako5") onOptiscaler(pick === "off" ? "off" : "on", pick === "off" ? null : pick);
   };
-  const selectedActive = current === "mako" ? !!makoProfile : current === "lsfg" ? !!profile : current !== "off" && current === installedRoute && !profile && !makoProfile;
+  const selectedActive = isMako ? makoPick === current : current === "lsfg" ? !!profile : current !== "off" && current === installedRoute && !profile && !makoProfile;
   const applySelection = () => run(async () => {
     if (blocked) return;
-    if (current === "mako") {
-      if (makoProfile) { await saveMako(null); setSelection("off"); }
+    if (isMako) {
+      if (selectedActive) { await saveMako(null); setSelection("off"); }
       else {
-        if (!mako?.supported || !mako.dll || mako.reason === "mako_identity_ambiguous") return;
-        if (!mako.installed) setMako(await installMako());
+        if (!mako?.supported || (makoEngine === 4 && !mako.dll) || mako.reason === "mako_identity_ambiguous") return;
+        if (!(makoEngine === 5 ? mako.v5?.installed : mako.installed)) setMako(await installMako(makoEngine));
+        if (makoProfile) { await saveMako({ ...makoProfile, engine: makoEngine }); return; }
+        const start: MakoProfile = makoEngine === 5
+          ? { engine: 5, mode: "fixed", multiplier: 2, target_fps: 120, max_multiplier: 3, flow: "balanced", fg_mode: "balanced", performance: false }
+          : { engine: 4, mode: "fixed", multiplier: 2, target_fps: 120, max_multiplier: 3, flow: "balanced", performance: true };
         await transitionFrameGen([
-          { apply: () => saveMako({ mode: "fixed", multiplier: 2, target_fps: 120, max_multiplier: 3, flow: "balanced", performance: true }), restore: () => saveMako(makoProfile) },
+          { apply: () => saveMako(start), restore: () => saveMako(makoProfile) },
           ...retireOther("mako"),
         ]);
         onOptiscaler("off", null);
@@ -261,7 +271,7 @@ export const FrameGenRow: FC<{
   );
   const options: { value: Pick; label: ReactNode }[] = [
     { value: "off", label: optionLabel(t("up.fg.pick.off")) },
-    ...(mako ? [{ value: "mako" as Pick, label: optionLabel("Mako", <GiSharkFin className="pdc-up-mako-icon" size={16} />) }] : []),
+    ...(mako ? (["mako5", "mako"] as const).map((value) => ({ value: value as Pick, label: optionLabel(MAKO_NAME[value], <GiSharkFin className="pdc-up-mako-icon" size={16} />) })) : []),
     ...offer.options.map((value) => ({ value: value as Pick, label:
       value === "lsfg" ? optionLabel("Lossless Scaling", <GiPlasticDuck className="pdc-up-lossless-icon" size={16} />) :
       value === "optiscaler" || value === "game" ? optionLabel(t("up.fg.pick.optiscaler"), <LuLayers className="pdc-up-optiscaler-icon" size={16} />) :
@@ -293,10 +303,15 @@ export const FrameGenRow: FC<{
               : current === "anr" ? <ExperimentalBadge>{t("up.fg.beta")}</ExperimentalBadge> : undefined}
           />
         )}
-        {current === "mako" && makoProfile && <MakoControls appid={appid} duo={duo} profile={makoProfile} disabled={blocked} onChange={(next) => void run(() => saveMako(next))} />}
-        {current === "mako" && mako?.reason === "mako_identity_ambiguous" && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.identity")}</Notice>}
+        {isMako && selectedActive && makoProfile && <MakoControls appid={appid} duo={duo} profile={makoProfile} disabled={blocked} onChange={(next) => void run(() => saveMako(next))} />}
+        {isMako && mako?.reason === "mako_identity_ambiguous" && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.identity")}</Notice>}
         {current === "mako" && !mako?.dll && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.requirement")}</Notice>}
-        {current === "mako" && mako && !mako.supported && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.unsupported")}</Notice>}
+        {current === "mako" && mako?.dll && !mako.notice_dismissed && (
+          <NoticeCard icon={<GiPlasticDuck size={16} />} tone={theme.color.accent} title={t("up.mako.notice.title")}
+            description={t("up.mako.notice.body")} dismissLabel={t("up.mako.notice.dismiss")}
+            onDismiss={() => void dismissMakoNotice().then(setMako).catch(() => {})} />
+        )}
+        {isMako && mako && !mako.supported && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.unsupported")}</Notice>}
         {current === "lsfg" && profile && (
           <ListCard>
               <PickerButton
@@ -330,7 +345,7 @@ export const FrameGenRow: FC<{
         {current === "optiscaler" && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.fg.hint.opti")}</Notice>}
         {current === "anr" && <Notice icon={<LuSparkles size={16} />}>{t(installedRoute === "anr" ? "up.fg.hint.anrGame" : "up.fg.hint.anr")}</Notice>}
         {current === "anr" && anrSettings.map((entry) => <Notice key={entry.setting} icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.gameSetting", entry)}</Notice>)}
-        {current === "mako" && !makoProfile && makoLeftover.leftover && (
+        {isMako && !makoProfile && makoLeftover.leftover && (
           <>
             <Notice icon={<LuArrowLeftRight size={16} />}>{t("up.mako.leftover")}</Notice>
             <Row><ActionButton label={t("up.mako.leftover.clear")} busy={busy} disabled={disabled || gameRunning} onPress={() => void run(makoLeftover.clear)} /></Row>
@@ -342,11 +357,11 @@ export const FrameGenRow: FC<{
             <Row><ActionButton label={t("up.lsfg.adopt")} busy={busy} disabled={disabled || !status.dll} onPress={() => void run(async () => { const adopted = await adoptForeignLsfg(); setStatus(adopted); })} /></Row>
           </>
         )}
-        {(current !== "off" || !!profile || !!makoProfile || !!installedRoute) && !(current === "lsfg" && status?.foreign) && !(current === "mako" && !makoProfile && makoLeftover.leftover) && (
+        {(current !== "off" || !!profile || !!makoProfile || !!installedRoute) && !(current === "lsfg" && status?.foreign) && !(isMako && !makoProfile && makoLeftover.leftover) && (
           <ActionButton
-            label={enginePhase ? t(`up.engine.${enginePhase}`) : activating ? t("up.activating") : t(selectedActive || current === "off" ? "up.deactivate" : installedRoute || profile || makoProfile ? "up.save" : "up.activate", { name: current === "mako" || (current === "off" && makoProfile) ? "Mako" : current === "lsfg" || (current === "off" && profile) ? "Lossless Scaling" : t(`up.fg.pick.${current === "off" ? installedRoute ?? "optiscaler" : current}`) })}
+            label={enginePhase ? t(`up.engine.${enginePhase}`) : activating ? t("up.activating") : t(selectedActive || current === "off" ? "up.deactivate" : installedRoute || profile || makoProfile ? "up.save" : "up.activate", { name: isMako ? MAKO_NAME[current] : current === "off" && makoPick ? MAKO_NAME[makoPick] : current === "lsfg" || (current === "off" && profile) ? "Lossless Scaling" : t(`up.fg.pick.${current === "off" ? installedRoute ?? "optiscaler" : current}`) })}
             busy={busy || enginePhase !== null}
-            disabled={disabled || (current === "mako" ? (!makoProfile && (!mako?.supported || !mako.dll || mako.reason === "mako_identity_ambiguous" || (!!installedRoute && !onApplyOptiscaler))) : current === "lsfg" ? (!profile && (!status?.dll || (!!installedRoute && !onApplyOptiscaler))) : !(current === "off" && (profile || makoProfile) && !installedRoute) && (!onApplyOptiscaler || optiscalerDisabled))}
+            disabled={disabled || (isMako ? (!selectedActive && (!mako?.supported || (makoEngine === 4 && !mako.dll) || mako.reason === "mako_identity_ambiguous" || (!makoProfile && !!installedRoute && !onApplyOptiscaler))) : current === "lsfg" ? (!profile && (!status?.dll || (!!installedRoute && !onApplyOptiscaler))) : !(current === "off" && (profile || makoProfile) && !installedRoute) && (!onApplyOptiscaler || optiscalerDisabled))}
             onPress={() => void applySelection()}
           />
         )}
