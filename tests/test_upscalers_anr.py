@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from upscalers import catalog, diagnostics, ini, recipe_catalog
+from upscalers import catalog, diagnostics, ini, logread, recipe_catalog
 from upscalers.catalog import Asset, Build
 from upscalers.service import UpscalerError, UpscalerService
 
@@ -134,3 +134,17 @@ def test_anr_never_goes_in_on_optiscaler_09_or_by_configure_alone(anr_setup):
         service.configure(APPID, {"fg": "on", "fg_route": "anr"})
     assert refused.value.code == "anr_reinstall"
     assert not (game / PROVIDER).exists()
+
+
+def test_anr_counts_as_generating_only_while_its_pacing_summaries_keep_coming(tmp_path):
+    folder = tmp_path / "dlssg"
+    assert logread.anr_generating(folder, 0) is None
+    log = _write(folder / "nr_fg-1.log", "[16:38:04.831] [info] frame generation feature: 3840x2160\n")
+    assert logread.anr_generating(folder, log.stat().st_mtime) is None
+    with open(log, "a") as handle:
+        handle.write("[16:40:57.540] [info] pacing: 274 real frames in 10.0 s, interval median 36.45 ms; "
+                     "evaluates ours 274 NVIDIA's 0; our evaluate CPU p99 0.390\n")
+    modified = log.stat().st_mtime
+    assert logread.anr_generating(folder, modified + 5) is True
+    # End stops the evaluations: no newer summary arrives.
+    assert logread.anr_generating(folder, modified + logread.ANR_FRESH_S + 1) is False

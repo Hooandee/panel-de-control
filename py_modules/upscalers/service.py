@@ -1789,6 +1789,9 @@ class UpscalerService:
             generating = facts["fg_state"] == "true" and bool(facts.get("fg"))
         elif not blind and facts.get("fg"):
             generating = True
+        if install.get("anr") and (install.get("options") or {}).get("fg_route") == "anr":
+            folder = Path(install["target"]) / "OptiScaler" / "custom" / catalog.ANR_PROVIDER / "dlssg"
+            generating = logread.anr_generating(folder, time.time())
         return {"result": _verdict(install, facts), "resolution": facts.get("resolution"),
                 "resolution_source": facts.get("resolution_source", "unavailable"), "fg": generating, "fg_toggle": not blind,
                 "fallback": facts.get("fallback"),
