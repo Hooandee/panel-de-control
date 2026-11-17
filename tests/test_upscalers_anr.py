@@ -179,3 +179,10 @@ def test_hogwarts_tells_what_its_menu_needs_for_anr_and_keeps_its_wiki_facts():
     assert dict(recipe.anr_settings)["Upscale Type"] == "NVIDIA DLSS"
     assert recipe.optipatcher and recipe.status == "works"
     assert not recipe.exe and not recipe.ini and not recipe.args
+
+
+def test_games_whose_dlss_fg_stays_locked_on_amd_never_offer_anr():
+    from upscalers import recipes
+    analysis = {"inputs": DLSSG, "apis": ["d3d12"], "streamline": 2}
+    plan = solution_plan.resolve("rdna2", analysis, recipes.recipe_for("2531310"), generation=10)
+    assert "anr" not in plan["offered_fg_plan"]["routes"] and "game" in plan["offered_fg_plan"]["routes"]

@@ -57,6 +57,8 @@ class Recipe:
     game_settings: tuple[tuple[str, str], ...] = ()
     # What the game's own menu needs so its DLSS Frame Generation reaches ANR.
     anr_settings: tuple[tuple[str, str], ...] = ()
+    # False where the game never offers DLSS Frame Generation on AMD, so ANR has nothing to take over.
+    anr: bool = True
 
 
 RECIPES: dict[str, Recipe] = {
@@ -76,6 +78,8 @@ RECIPES: dict[str, Recipe] = {
         # Hogwarts Legacy lists DLSS Frame Generation only while its upscaler is DLSS; both apply on restart.
         Recipe("990080", anr_settings=(("Upscale Type", "NVIDIA DLSS"),
                                        ("Frame Generation", "NVIDIA DLSS Frame Generation x2"))),
+        # The Last of Us Part II keeps Reflex, and with it DLSS Frame Generation, locked off NVIDIA.
+        Recipe("2531310", anr=False),
     )
 }
 
