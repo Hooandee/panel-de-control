@@ -36,13 +36,11 @@ internal static class WindowOrder
             && (stayTopmost || SetWindowPos(handle, HwndNoTopmost, 0, 0, 0, 0, KeepPlace));
     }
 
-    /// <summary>Gives up a topmost place taken with <see cref="Raise"/>, without moving the window otherwise.</summary>
     public static void Release(IntPtr handle) =>
         SetWindowPos(handle, HwndNoTopmost, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate);
 
     public static bool IsTopmost(IntPtr handle) => (GetWindowLong(handle, GwlExStyle) & WsExTopmost) != 0;
 
-    /// <summary>Whether this is the first of the windows that count, in window order.</summary>
     public static bool IsOnTop(IntPtr handle, Func<IntPtr, bool> counts) => FindTopWindow(counts) == handle;
 
     /// <summary>

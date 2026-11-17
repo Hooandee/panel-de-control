@@ -151,16 +151,12 @@ public sealed class SteamThemeEngine
     }
 
     /// <summary>
-    /// The Xbox button that Windows gave to Game Bar instead of Steam: the theme host presses Steam's Home in its place
-    /// (steamButton.ts pressHome). Returns what the host did, for the log.
+    /// Game Bar came to the foreground, where Windows keeps the Xbox button for it: the theme host answers it as
+    /// Steam's button (steamButton.ts) unless it opened over a running game ("game"). Returns the answer, for the log.
     /// </summary>
-    public Task<string> PressSteamHomeAsync(CancellationToken cancellationToken) => CallHostAsync("pressHome?.()", cancellationToken);
-
-    /// <summary>Game Bar came to the foreground: Steam's button unless it opened over a running game ("game").</summary>
     public Task<string> GameBarShownAsync(bool foregroundWasSteam, CancellationToken cancellationToken) =>
         CallHostAsync(foregroundWasSteam ? "gameBarShown?.(true)" : "gameBarShown?.(false)", cancellationToken);
 
-    /// <summary>Big Picture's Home over the running game, at once.</summary>
     public Task<string> GameHomeAsync(CancellationToken cancellationToken) => CallHostAsync("gameHome?.()", cancellationToken);
 
     private async Task<string> CallHostAsync(string call, CancellationToken cancellationToken)

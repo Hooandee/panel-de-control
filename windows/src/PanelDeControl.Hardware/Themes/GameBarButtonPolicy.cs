@@ -18,7 +18,6 @@ public sealed class GameBarButtonPolicy
     private bool shownOverGame;
     private DateTimeOffset explicitHome = DateTimeOffset.MinValue;
 
-    /// <summary>Records what the theme host answered to Game Bar opening.</summary>
     public void Shown(string hostAnswer)
     {
         lock (gate)
@@ -27,7 +26,6 @@ public sealed class GameBarButtonPolicy
         }
     }
 
-    /// <summary>The widget's Home button asked for Big Picture's Home.</summary>
     public void ExplicitHome(DateTimeOffset at)
     {
         lock (gate)

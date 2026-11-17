@@ -14,7 +14,6 @@ public sealed class GameBarForeground
     private ForegroundKind? noted;
     private bool bigPictureRaisedByOrder;
 
-    /// <summary>A new foreground window, as the companion's poll sees it.</summary>
     public void Observe(ForegroundKind kind)
     {
         if (kind is not (ForegroundKind.Steam or ForegroundKind.Other))

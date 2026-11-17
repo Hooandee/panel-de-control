@@ -49,7 +49,6 @@ public sealed class GameBarFocusReturner
         this.engine = engine;
     }
 
-    /// <summary>What the player had in front when Game Bar opened, and what the companion raised for it.</summary>
     public GameBarForeground Foreground { get; } = new();
 
     public ForegroundKind ForegroundBeforeGameBar() => Foreground.BeforeGameBar(Classify(GetForegroundWindow()));
@@ -84,7 +83,6 @@ public sealed class GameBarFocusReturner
     /// <summary>Big Picture, a game or an app: the shell (taskbar included, which is topmost) and Game Bar do not count.</summary>
     internal static bool IsAppWindow(IntPtr handle) => Classify(handle) is ForegroundKind.Steam or ForegroundKind.Other;
 
-    /// <summary>Gives up the topmost place Big Picture took over a full screen game.</summary>
     public void ReleaseBigPicture()
     {
         var held = bigPictureHeldTopmost;
@@ -162,13 +160,9 @@ public sealed class GameBarFocusReturner
             return;
         }
 
-        keybd_event(VkMenu, 0, 0, UIntPtr.Zero);
-        keybd_event(VkMenu, 0, KeyEventKeyUp, UIntPtr.Zero);
-        SetForegroundWindow(GetShellWindow());
+        AskForeground(GetShellWindow());
         await Task.Delay(60, cancellationToken).ConfigureAwait(false);
-        keybd_event(VkMenu, 0, 0, UIntPtr.Zero);
-        keybd_event(VkMenu, 0, KeyEventKeyUp, UIntPtr.Zero);
-        SetForegroundWindow(steamWindow);
+        AskForeground(steamWindow);
         await Task.Delay(300, cancellationToken).ConfigureAwait(false);
         var restored = await SteamUiHasFocusAsync(cancellationToken).ConfigureAwait(false) == true;
         failedBounces = restored ? 0 : failedBounces + 1;
@@ -257,9 +251,7 @@ public sealed class GameBarFocusReturner
                 break;
             }
 
-            keybd_event(VkMenu, 0, 0, UIntPtr.Zero);
-            keybd_event(VkMenu, 0, KeyEventKeyUp, UIntPtr.Zero);
-            SetForegroundWindow(steamWindow);
+            AskForeground(steamWindow);
             await Task.Delay(200, cancellationToken).ConfigureAwait(false);
             if (GetForegroundWindow() == steamWindow)
             {
