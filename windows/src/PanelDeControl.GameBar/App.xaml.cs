@@ -89,6 +89,30 @@ sealed partial class App : Application
     private static readonly Stopwatch GameBarShownFor = new();
     private static readonly object GameBarReportGate = new();
     private static Task gameBarReports = Task.CompletedTask;
+    private static bool closingForHome;
+
+    /// <summary>
+    /// The widget's Home button closes Game Bar first: Big Picture is asked for its Home once Game Bar is gone, since
+    /// closing Game Bar hands the game the foreground again.
+    /// </summary>
+    internal static void ExpectGameBarCloseForHome()
+    {
+        lock (GameBarReportGate)
+        {
+            closingForHome = true;
+        }
+    }
+
+    /// <summary>Whether Game Bar never closed and the Home request is still the caller's to send.</summary>
+    internal static bool TakeHomeStillPending()
+    {
+        lock (GameBarReportGate)
+        {
+            var pending = closingForHome;
+            closingForHome = false;
+            return pending;
+        }
+    }
 
     private static void OnGameBarDisplayModeChanged(XboxGameBarWidget sender, object args)
     {
@@ -105,6 +129,12 @@ sealed partial class App : Application
             {
                 GameBarShownFor.Restart();
                 report = client => client.GameBarShownAsync();
+            }
+            else if (closingForHome)
+            {
+                closingForHome = false;
+                GameBarShownFor.Stop();
+                report = client => client.SteamHomeAsync();
             }
             else
             {

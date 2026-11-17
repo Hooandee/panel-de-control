@@ -66,6 +66,7 @@ public sealed class ThemesController : IThemesController
                     service.EnableSteamDebugging();
                     return await ReadbackAsync(cancellationToken).ConfigureAwait(false);
                 case ThemesOperation.SteamHome:
+                    gameBarButton.ExplicitHome(DateTimeOffset.UtcNow);
                     CompanionLog.Write("themes.steam_home", await GameHomeAsync(cancellationToken).ConfigureAwait(false));
                     return Response(engine.Status);
                 case ThemesOperation.GameBarShown:
@@ -79,7 +80,7 @@ public sealed class ThemesController : IThemesController
                 case ThemesOperation.GameBarHidden:
                 {
                     var shownFor = request.ShownMilliseconds!.Value;
-                    var home = gameBarButton.Hidden(TimeSpan.FromMilliseconds(shownFor));
+                    var home = gameBarButton.Hidden(TimeSpan.FromMilliseconds(shownFor), DateTimeOffset.UtcNow, engine.Status.Host.GameRunning);
                     CompanionLog.Write(
                         "themes.game_bar_hidden",
                         home ? $"{shownFor}ms {await GameHomeAsync(cancellationToken).ConfigureAwait(false)}" : $"{shownFor}ms");
@@ -114,12 +115,16 @@ public sealed class ThemesController : IThemesController
         }
     }
 
+    // The window order and focus take up to a couple of seconds: they run apart so the pipe stays free for Game Bar's
+    // next opening or closing.
     private async Task<string> GameHomeAsync(CancellationToken cancellationToken)
     {
         var answer = await engine.GameHomeAsync(cancellationToken).ConfigureAwait(false);
         if (answer == "game_home")
         {
-            await focus.RaiseBigPictureAsync(cancellationToken).ConfigureAwait(false);
+            _ = Task.Run(() => focus.RaiseBigPictureAsync(CancellationToken.None), CancellationToken.None).ContinueWith(
+                task => CompanionLog.Write("themes.big_picture_raise", task.Exception!),
+                TaskContinuationOptions.OnlyOnFaulted);
         }
 
         return answer;

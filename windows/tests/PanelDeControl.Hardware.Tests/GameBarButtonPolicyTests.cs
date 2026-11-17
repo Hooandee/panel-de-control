@@ -4,9 +4,11 @@ using Xunit;
 namespace PanelDeControl.Hardware.Tests;
 
 // Measured on a ROG Xbox Ally X (companion.log): Game Bar opened over chiaki-ng launched from Steam and closed again
-// 420 ms later went Home; opened over the same game and left open 129754 ms did not.
+// 375-430 ms later went Home; opened over the same game and left open 129754 ms did not.
 public sealed class GameBarButtonPolicyTests
 {
+    private static readonly DateTimeOffset Now = new(2026, 11, 17, 18, 56, 20, TimeSpan.Zero);
+
     [Fact]
     public void OpeningAndClosingGameBarAtOnceOverAGameGoesHome()
     {
@@ -14,7 +16,7 @@ public sealed class GameBarButtonPolicyTests
 
         policy.Shown(GameBarButtonPolicy.OverGame);
 
-        Assert.True(policy.Hidden(TimeSpan.FromMilliseconds(420)));
+        Assert.True(policy.Hidden(TimeSpan.FromMilliseconds(420), Now, gameRunning: true));
     }
 
     [Fact]
@@ -24,7 +26,7 @@ public sealed class GameBarButtonPolicyTests
 
         policy.Shown(GameBarButtonPolicy.OverGame);
 
-        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(129754)));
+        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(129754), Now, gameRunning: true));
     }
 
     [Theory]
@@ -38,7 +40,7 @@ public sealed class GameBarButtonPolicyTests
 
         policy.Shown(hostAnswer);
 
-        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(420)));
+        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(420), Now, gameRunning: true));
     }
 
     [Fact]
@@ -47,8 +49,32 @@ public sealed class GameBarButtonPolicyTests
         var policy = new GameBarButtonPolicy();
 
         policy.Shown(GameBarButtonPolicy.OverGame);
-        Assert.True(policy.Hidden(TimeSpan.FromMilliseconds(420)));
+        Assert.True(policy.Hidden(TimeSpan.FromMilliseconds(420), Now, gameRunning: true));
 
-        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(300)));
+        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(300), Now, gameRunning: true));
+    }
+
+    [Fact]
+    public void GameBarClosingAsTheGameEndsIsNotTheButton()
+    {
+        var policy = new GameBarButtonPolicy();
+
+        policy.Shown(GameBarButtonPolicy.OverGame);
+
+        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(420), Now, gameRunning: false));
+    }
+
+    [Fact]
+    public void GameBarClosedByTheWidgetsHomeButtonIsNotASecondPress()
+    {
+        var policy = new GameBarButtonPolicy();
+
+        policy.Shown(GameBarButtonPolicy.OverGame);
+        policy.ExplicitHome(Now);
+
+        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(420), Now.AddMilliseconds(400), gameRunning: true));
+
+        policy.Shown(GameBarButtonPolicy.OverGame);
+        Assert.True(policy.Hidden(TimeSpan.FromMilliseconds(420), Now.AddSeconds(5), gameRunning: true));
     }
 }

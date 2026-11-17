@@ -37,8 +37,7 @@ public sealed class GameBarFocusReturner
     private readonly GameBarFocusTracker tracker = new();
     private IntPtr lastHandle;
     private ForegroundKind lastKind = ForegroundKind.Other;
-    private volatile ForegroundKind beforeGameBar = ForegroundKind.Other;
-    private volatile bool bigPictureRaisedByOrder;
+    private IntPtr bigPictureHeldTopmost;
     private ICdpSession? sharedContext;
     private DateTimeOffset nextPageCheck = DateTimeOffset.MinValue;
     private DateTimeOffset? pageUnfocusedSince;
@@ -50,50 +49,51 @@ public sealed class GameBarFocusReturner
         this.engine = engine;
     }
 
-    /// <summary>
-    /// What the player had in front when Game Bar opened: Big Picture (Steam) or a game or app (Other). On the ROG Xbox
-    /// Ally X an open Game Bar leaves the shell's immersive window in the foreground, and it stays there after Game Bar
-    /// closes until something else takes it, so neither Game Bar nor the shell counts.
-    /// </summary>
-    public ForegroundKind ForegroundBeforeGameBar()
-    {
-        var current = Classify(GetForegroundWindow());
-        return current is ForegroundKind.Steam or ForegroundKind.Other ? current : beforeGameBar;
-    }
+    /// <summary>What the player had in front when Game Bar opened, and what the companion raised for it.</summary>
+    public GameBarForeground Foreground { get; } = new();
+
+    public ForegroundKind ForegroundBeforeGameBar() => Foreground.BeforeGameBar(Classify(GetForegroundWindow()));
 
     /// <summary>
     /// Raises Big Picture over the game after it went Home: Windows refuses Steam's own request from behind a game,
-    /// so the window order goes first (<see cref="WindowOrder"/>) and the focus is asked for after it.
+    /// so the window order goes first (<see cref="WindowOrder"/>) and the focus is asked for after it. Over a topmost
+    /// game (full screen) Big Picture stays topmost until the game resumes or ends.
     /// </summary>
     public async Task RaiseBigPictureAsync(CancellationToken cancellationToken)
     {
         var bigPicture = WindowOrder.FindTopWindow(handle => Classify(handle) == ForegroundKind.Steam);
         if (bigPicture == IntPtr.Zero)
         {
+            CompanionLog.Write("themes.big_picture_raise", "no_window");
             return;
         }
 
-        var ordered = WindowOrder.BringAbove(bigPicture);
-        CompanionLog.Write("themes.big_picture_raise", ordered ? "window_order" : "window_order_failed");
-        // Windows may still report the game in the foreground: what the player sees is Big Picture.
-        beforeGameBar = ForegroundKind.Steam;
-        bigPictureRaisedByOrder = ordered;
+        var above = WindowOrder.FindTopWindow(IsAppWindow);
+        var overTopmost = above != bigPicture && above != IntPtr.Zero && WindowOrder.IsTopmost(above);
+        var raised = WindowOrder.Raise(bigPicture, stayTopmost: overTopmost) && WindowOrder.IsOnTop(bigPicture, IsAppWindow);
+        if (raised && overTopmost)
+        {
+            bigPictureHeldTopmost = bigPicture;
+        }
+
+        CompanionLog.Write("themes.big_picture_raise", raised ? (overTopmost ? "on_top topmost" : "on_top") : "below");
+        Foreground.BigPictureRaised(raised);
         await RestoreAsync(bigPicture, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Whether Big Picture came over the game by window order since the game was last raised: only then does Steam's
-    /// own raise need help when the game resumes (<see cref="GameWindowRaiser"/>).
-    /// </summary>
-    public bool TakeGameRaiseNeeded()
-    {
-        var needed = bigPictureRaisedByOrder;
-        bigPictureRaisedByOrder = false;
-        return needed;
-    }
+    /// <summary>Big Picture, a game or an app: the shell (taskbar included, which is topmost) and Game Bar do not count.</summary>
+    internal static bool IsAppWindow(IntPtr handle) => Classify(handle) is ForegroundKind.Steam or ForegroundKind.Other;
 
-    /// <summary>The game came back over Big Picture by window order.</summary>
-    public void NoteGameRaised() => beforeGameBar = ForegroundKind.Other;
+    /// <summary>Gives up the topmost place Big Picture took over a full screen game.</summary>
+    public void ReleaseBigPicture()
+    {
+        var held = bigPictureHeldTopmost;
+        bigPictureHeldTopmost = IntPtr.Zero;
+        if (held != IntPtr.Zero && IsWindow(held))
+        {
+            WindowOrder.Release(held);
+        }
+    }
 
     /// <summary>Asks Windows for the foreground with a synthetic Alt, which counts as the last input it requires.</summary>
     internal static void AskForeground(IntPtr window)
@@ -129,10 +129,7 @@ public sealed class GameBarFocusReturner
             }
 
             lastKind = kind;
-            if (kind is ForegroundKind.Steam or ForegroundKind.Other)
-            {
-                beforeGameBar = kind;
-            }
+            Foreground.Observe(kind);
 
             var restore = tracker.Observe(new ForegroundWindow(handle, kind));
             if (restore != IntPtr.Zero)

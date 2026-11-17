@@ -7,7 +7,8 @@ namespace PanelDeControl.Hardware.Themes;
 /// Resuming a game from Big Picture is Steam raising the game's window (steamButton.ts raiseRunningGame). After Big
 /// Picture came back over the game by window order (<see cref="GameBarFocusReturner.RaiseBigPictureAsync"/>), Windows
 /// refuses that too and Steam's logo stays in front: the host signals every raise through a DevTools binding, and only
-/// after such a return does this bring the game's window above Big Picture the same way.
+/// after such a return does this bring the game's window above Big Picture the same way. A game that was topmost
+/// keeps it.
 /// </summary>
 public sealed class GameWindowRaiser
 {
@@ -19,14 +20,20 @@ public sealed class GameWindowRaiser
     private readonly ISteamDevTools devTools;
     private readonly Func<IReadOnlyDictionary<int, ProcessEntry>> processes;
     private readonly GameBarFocusReturner focus;
+    private readonly Func<bool> gameRunning;
     private readonly SemaphoreSlim raise = new(0);
     private ICdpEventSession? session;
 
-    public GameWindowRaiser(ISteamDevTools devTools, Func<IReadOnlyDictionary<int, ProcessEntry>> processes, GameBarFocusReturner focus)
+    public GameWindowRaiser(
+        ISteamDevTools devTools,
+        Func<IReadOnlyDictionary<int, ProcessEntry>> processes,
+        GameBarFocusReturner focus,
+        Func<bool> gameRunning)
     {
         this.devTools = devTools;
         this.processes = processes;
         this.focus = focus;
+        this.gameRunning = gameRunning;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -38,6 +45,12 @@ public sealed class GameWindowRaiser
                 await KeepSessionAsync(cancellationToken).ConfigureAwait(false);
                 if (!await raise.WaitAsync(Reconnect, cancellationToken).ConfigureAwait(false))
                 {
+                    if (!gameRunning())
+                    {
+                        focus.Foreground.GameEnded();
+                        focus.ReleaseBigPicture();
+                    }
+
                     continue;
                 }
 
@@ -47,7 +60,9 @@ public sealed class GameWindowRaiser
                     // One resume can signal more than once.
                 }
 
-                if (focus.TakeGameRaiseNeeded())
+                var needed = focus.Foreground.GameResumed();
+                focus.ReleaseBigPicture();
+                if (needed)
                 {
                     CompanionLog.Write("themes.game_raise", RaiseGameWindow());
                 }
@@ -62,20 +77,22 @@ public sealed class GameWindowRaiser
     private string RaiseGameWindow()
     {
         var running = processes();
-        var game = WindowOrder.FindTopWindow(handle =>
-        {
-            GetWindowThreadProcessId(handle, out var processId);
-            return SteamGameProcesses.IsGame(running, (int)processId) && HasArea(handle);
-        });
+        var game = WindowOrder.FindTopWindow(
+            handle =>
+            {
+                GetWindowThreadProcessId(handle, out var processId);
+                return SteamGameProcesses.IsGame(running, (int)processId);
+            },
+            minimized: true);
         if (game == IntPtr.Zero)
         {
             return "no_window";
         }
 
-        var ordered = WindowOrder.BringAbove(game);
+        var topmost = WindowOrder.IsTopmost(game);
+        var raised = WindowOrder.Raise(game, stayTopmost: topmost) && WindowOrder.IsOnTop(game, GameBarFocusReturner.IsAppWindow);
         GameBarFocusReturner.AskForeground(game);
-        focus.NoteGameRaised();
-        return ordered ? "window_order" : "window_order_failed";
+        return raised ? (topmost ? "on_top topmost" : "on_top") : "below";
     }
 
     private async Task KeepSessionAsync(CancellationToken cancellationToken)
@@ -128,19 +145,6 @@ public sealed class GameWindowRaiser
             await closing.DisposeAsync().ConfigureAwait(false);
         }
     }
-
-    private static bool HasArea(IntPtr handle) =>
-        GetWindowRect(handle, out var rect) && rect.Right - rect.Left > 1 && rect.Bottom - rect.Top > 1;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Rect
-    {
-        public int Left, Top, Right, Bottom;
-    }
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowRect(IntPtr handle, out Rect rect);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
