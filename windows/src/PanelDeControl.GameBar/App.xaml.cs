@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.Threading.Tasks;
 using Microsoft.Gaming.XboxGameBar;
 using Windows.ApplicationModel.Activation;
 using Windows.UI.Xaml;
@@ -15,7 +17,7 @@ sealed partial class App : Application
         UnhandledException += (_, args) => CrashLog.Write("unhandled", args.Exception, args.Message);
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             CrashLog.Write("domain", args.ExceptionObject as Exception, args.ExceptionObject?.ToString());
-        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, args) =>
+        TaskScheduler.UnobservedTaskException += (_, args) =>
             CrashLog.Write("task", args.Exception);
         try
         {
@@ -84,14 +86,14 @@ sealed partial class App : Application
     // opening is Steam's button for the theme; over a game Game Bar stays usable, and opening and closing it at once
     // (the button pressed twice) is Steam's button. How long it was shown is measured here, where the events arrive,
     // and the reports go out one after another so a slow pipe cannot reorder them.
-    private static readonly System.Diagnostics.Stopwatch GameBarShownFor = new();
+    private static readonly Stopwatch GameBarShownFor = new();
     private static readonly object GameBarReportGate = new();
-    private static System.Threading.Tasks.Task gameBarReports = System.Threading.Tasks.Task.CompletedTask;
+    private static Task gameBarReports = Task.CompletedTask;
 
     private static void OnGameBarDisplayModeChanged(XboxGameBarWidget sender, object args)
     {
         var shown = sender.GameBarDisplayMode == XboxGameBarDisplayMode.Foreground;
-        Func<ThemesClient, System.Threading.Tasks.Task> report;
+        Func<ThemesClient, Task> report;
         lock (GameBarReportGate)
         {
             if (shown == GameBarShownFor.IsRunning)
@@ -112,11 +114,11 @@ sealed partial class App : Application
             }
 
             gameBarReports = gameBarReports
-                .ContinueWith(_ => report(new ThemesClient()), System.Threading.Tasks.TaskScheduler.Default)
+                .ContinueWith(_ => report(new ThemesClient()), TaskScheduler.Default)
                 .Unwrap()
                 .ContinueWith(
                     task => CrashLog.Write("game-bar-report", task.Exception),
-                    System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+                    TaskContinuationOptions.OnlyOnFaulted);
         }
     }
 
@@ -126,7 +128,7 @@ sealed partial class App : Application
     {
         _ = HardwareBrokerLauncher.EnsureStartedAsync().ContinueWith(
             task => CrashLog.Write("companion-start", task.Exception),
-            System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+            TaskContinuationOptions.OnlyOnFaulted);
     }
 
     private void OnWidgetClosed(
