@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.91.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.90.0...panel-de-control-v0.91.0) (2026-11-17)
+
+
+### Español
+
+* **La Game Bar ya se puede usar en mitad de una partida:** En Windows, con un juego abierto, el botón Xbox abría la Game Bar pero Big Picture se ponía encima con el Inicio del tema, y no había forma de tocar el TDP ni el widget de Panel de Control. Ahora una pulsación abre solo la Game Bar y el juego sigue a la vista.
+* **Dos pulsaciones te llevan al Inicio sin cerrar el juego:** Pulsa el botón Xbox dos veces seguidas durante la partida y vas al Inicio del tema con el juego abierto. El widget de Panel de Control tiene también un botón nuevo, Ir al Inicio de Steam, que hace lo mismo.
+* **Al reanudar vuelves al juego:** Desde el Inicio del tema, Reanudar pone el juego otra vez delante, también si lo abriste desde otro lanzador como Ubisoft, EA o Rockstar.
+* **El sonido del juego se corta en el Inicio:** Los temas que silencian el juego mientras estás en el Inicio no conseguían hacerlo en Windows. Ahora el juego se calla al ir al Inicio y vuelve a sonar al reanudar.
+
+### English
+
+* **Game Bar now works in the middle of a game:** On Windows, with a game open, the Xbox button opened Game Bar but Big Picture jumped on top with the theme's Home, so there was no way to reach TDP or the Panel de Control widget. Now one press opens just Game Bar and the game stays in view.
+* **Two presses take you Home without closing the game:** Press the Xbox button twice in a row while playing and you land on the theme's Home with the game still open. The Panel de Control widget also has a new Go to Steam Home button that does the same.
+* **Resume takes you back to the game:** From the theme's Home, Resume brings the game to the front again, also when you started it from another launcher like Ubisoft, EA or Rockstar.
+* **Game sound stops on Home:** Themes that silence the game while you're on Home couldn't do it on Windows. Now the game goes quiet when you go Home and plays again when you resume.
+
+### Italiano
+
+* **La Game Bar ora funziona a metà partita:** Su Windows, con un gioco aperto, il tasto Xbox apriva la Game Bar ma Big Picture si metteva sopra con la Home del tema, e non c'era modo di toccare il TDP né il widget di Panel de Control. Ora una pressione apre solo la Game Bar e il gioco resta in vista.
+* **Due pressioni ti portano alla Home senza chiudere il gioco:** Premi il tasto Xbox due volte di seguito durante la partita e arrivi alla Home del tema con il gioco ancora aperto. Il widget di Panel de Control ha anche un nuovo pulsante, Vai alla Home di Steam, che fa lo stesso.
+* **Riprendendo torni al gioco:** Dalla Home del tema, Riprendi rimette il gioco in primo piano, anche se l'hai avviato da un altro launcher come Ubisoft, EA o Rockstar.
+* **L'audio del gioco si ferma sulla Home:** I temi che silenziano il gioco mentre sei sulla Home non ci riuscivano su Windows. Ora il gioco tace quando vai alla Home e torna a suonare quando riprendi.
+
+### Deutsch
+
+* **Die Game Bar funktioniert jetzt mitten im Spiel:** Unter Windows öffnete die Xbox-Taste bei laufendem Spiel zwar die Game Bar, aber Big Picture legte sich mit der Startseite des Themes darüber, sodass TDP und das Widget von Panel de Control nicht erreichbar waren. Jetzt öffnet ein Druck nur die Game Bar und das Spiel bleibt sichtbar.
+* **Zweimal drücken bringt dich zur Startseite, ohne das Spiel zu schließen:** Drück im Spiel zweimal hintereinander die Xbox-Taste und du landest auf der Startseite des Themes, während das Spiel offen bleibt. Das Widget von Panel de Control hat dafür auch eine neue Schaltfläche, Zur Steam-Startseite.
+* **Fortsetzen bringt dich zurück ins Spiel:** Auf der Startseite des Themes holt Fortsetzen das Spiel wieder nach vorne, auch wenn du es über einen anderen Launcher wie Ubisoft, EA oder Rockstar gestartet hast.
+* **Der Spielton verstummt auf der Startseite:** Themes, die das Spiel auf der Startseite stummschalten, schafften das unter Windows nicht. Jetzt wird das Spiel auf der Startseite still und ist beim Fortsetzen wieder zu hören.
+
+### Português (Brasil)
+
+* **A Game Bar agora funciona no meio da partida:** No Windows, com um jogo aberto, o botão Xbox abria a Game Bar, mas o Big Picture ficava por cima com o Início do tema e não dava para mexer no TDP nem no widget do Panel de Control. Agora um toque abre só a Game Bar e o jogo continua à vista.
+* **Dois toques te levam ao Início sem fechar o jogo:** Aperte o botão Xbox duas vezes seguidas durante a partida e você vai para o Início do tema com o jogo ainda aberto. O widget do Panel de Control também tem um botão novo, Ir para o Início do Steam, que faz o mesmo.
+* **Ao retomar você volta ao jogo:** No Início do tema, Retomar traz o jogo de volta para a frente, também quando você o abriu por outro launcher, como Ubisoft, EA ou Rockstar.
+* **O som do jogo para no Início:** Os temas que silenciam o jogo enquanto você está no Início não conseguiam fazer isso no Windows. Agora o jogo fica em silêncio ao ir para o Início e volta a tocar ao retomar.
+
+### Français
+
+* **La Game Bar fonctionne maintenant en pleine partie :** Sous Windows, avec un jeu ouvert, le bouton Xbox ouvrait la Game Bar mais Big Picture passait par-dessus avec l'accueil du thème, et impossible d'atteindre le TDP ou le widget de Panel de Control. Maintenant, un appui ouvre seulement la Game Bar et le jeu reste visible.
+* **Deux appuis vous mènent à l'accueil sans fermer le jeu :** Appuyez deux fois de suite sur le bouton Xbox en jeu et vous arrivez sur l'accueil du thème avec le jeu toujours ouvert. Le widget de Panel de Control a aussi un nouveau bouton, Aller à l'accueil de Steam, qui fait la même chose.
+* **Reprendre vous ramène au jeu :** Depuis l'accueil du thème, Reprendre remet le jeu au premier plan, même si vous l'avez lancé depuis un autre lanceur comme Ubisoft, EA ou Rockstar.
+* **Le son du jeu se coupe sur l'accueil :** Les thèmes qui coupent le son du jeu pendant que vous êtes sur l'accueil n'y arrivaient pas sous Windows. Maintenant, le jeu se tait quand vous allez à l'accueil et se fait entendre de nouveau quand vous reprenez.
+
 ## [0.90.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.3...panel-de-control-v0.90.0) (2026-11-16)
 
 
