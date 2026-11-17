@@ -75,4 +75,38 @@ public sealed class GameBarForegroundTests
 
         Assert.False(foreground.GameResumed());
     }
+
+    private static readonly DateTimeOffset Raised = new(2026, 11, 17, 20, 30, 26, TimeSpan.Zero);
+
+    [Fact]
+    public void ClosingGameBarRightAfterTheRaiseDoesNotLetBigPictureGo()
+    {
+        var foreground = new GameBarForeground();
+        foreground.BigPictureHeld(Raised);
+
+        Assert.False(foreground.GameTookForeground(Raised.AddMilliseconds(500)));
+        Assert.True(foreground.GameTookForeground(Raised.AddSeconds(5)));
+    }
+
+    [Fact]
+    public void TheGameTakingTheForegroundOnlyCountsWhileBigPictureIsHeld()
+    {
+        var foreground = new GameBarForeground();
+
+        Assert.False(foreground.GameTookForeground(Raised.AddSeconds(5)));
+
+        foreground.BigPictureHeld(Raised);
+        foreground.BigPictureLet();
+        Assert.False(foreground.GameTookForeground(Raised.AddSeconds(5)));
+    }
+
+    [Fact]
+    public void BigPictureGivesWayOnlyOnce()
+    {
+        var foreground = new GameBarForeground();
+        foreground.BigPictureHeld(Raised);
+
+        Assert.True(foreground.GameTookForeground(Raised.AddSeconds(5)));
+        Assert.False(foreground.GameTookForeground(Raised.AddSeconds(6)));
+    }
 }

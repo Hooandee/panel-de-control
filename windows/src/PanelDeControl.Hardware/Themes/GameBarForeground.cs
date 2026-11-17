@@ -13,6 +13,13 @@ public sealed class GameBarForeground
     private ForegroundKind observed = ForegroundKind.Other;
     private ForegroundKind? noted;
     private bool bigPictureRaisedByOrder;
+    private DateTimeOffset? bigPictureHeldSince;
+
+    /// <summary>
+    /// Closing Game Bar hands the game the foreground for a moment right after Big Picture was raised over it; only a
+    /// return to the game seen after that counts as the player going back to it.
+    /// </summary>
+    public static readonly TimeSpan SettleAfterRaise = TimeSpan.FromSeconds(2);
 
     public void Observe(ForegroundKind kind)
     {
@@ -65,6 +72,42 @@ public sealed class GameBarForeground
     }
 
     /// <summary>No game runs any more: nothing raised for it still holds.</summary>
+    /// <summary>Big Picture stays topmost over a full screen game from <paramref name="at"/>.</summary>
+    public void BigPictureHeld(DateTimeOffset at)
+    {
+        lock (gate)
+        {
+            bigPictureHeldSince = at;
+        }
+    }
+
+    /// <summary>
+    /// A game or app took the foreground at <paramref name="at"/>. Returns whether Big Picture, held topmost over the
+    /// game, must give way: the player went back to the game (Alt+Tab, Xbox's switcher) without Steam.
+    /// </summary>
+    public bool GameTookForeground(DateTimeOffset at)
+    {
+        lock (gate)
+        {
+            if (bigPictureHeldSince is not { } since || at - since < SettleAfterRaise)
+            {
+                return false;
+            }
+
+            bigPictureHeldSince = null;
+            return true;
+        }
+    }
+
+    /// <summary>Big Picture no longer holds a topmost place.</summary>
+    public void BigPictureLet()
+    {
+        lock (gate)
+        {
+            bigPictureHeldSince = null;
+        }
+    }
+
     public void GameEnded()
     {
         lock (gate)

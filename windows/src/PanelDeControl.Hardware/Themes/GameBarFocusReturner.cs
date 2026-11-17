@@ -41,6 +41,7 @@ public sealed class GameBarFocusReturner
     private readonly SemaphoreSlim raising = new(1, 1);
     private IntPtr bigPictureHeldTopmost;
     private long quietUntilTicks;
+    private volatile bool stopped;
     private ICdpSession? sharedContext;
     private DateTimeOffset nextPageCheck = DateTimeOffset.MinValue;
     private DateTimeOffset? pageUnfocusedSince;
@@ -77,10 +78,13 @@ public sealed class GameBarFocusReturner
             var above = WindowOrder.FindTopWindow(IsAppWindow);
             var stayTopmost = Volatile.Read(ref bigPictureHeldTopmost) == bigPicture
                 || (above != bigPicture && above != IntPtr.Zero && WindowOrder.IsTopmost(above) && CoversItsMonitor(above));
-            var raised = WindowOrder.Raise(bigPicture, stayTopmost) && WindowOrder.IsOnTop(bigPicture, IsAppWindow);
-            if (raised && stayTopmost)
+            // Above whatever was in front before: other small topmost windows (overlays) do not matter.
+            var raised = WindowOrder.Raise(bigPicture, stayTopmost)
+                && (above == IntPtr.Zero || above == bigPicture || WindowOrder.IsAbove(bigPicture, above));
+            if (raised && stayTopmost && !stopped)
             {
                 Volatile.Write(ref bigPictureHeldTopmost, bigPicture);
+                Foreground.BigPictureHeld(DateTimeOffset.UtcNow);
             }
             else if (WindowOrder.IsTopmost(bigPicture))
             {
@@ -112,11 +116,7 @@ public sealed class GameBarFocusReturner
         try
         {
             var needed = Foreground.GameResumed();
-            var bigPicture = Interlocked.Exchange(ref bigPictureHeldTopmost, IntPtr.Zero);
-            if (bigPicture != IntPtr.Zero && IsWindow(bigPicture))
-            {
-                WindowOrder.Release(bigPicture);
-            }
+            ReleaseBigPicture();
 
             if (!needed)
             {
@@ -164,6 +164,7 @@ public sealed class GameBarFocusReturner
 
     public void ReleaseBigPicture()
     {
+        Foreground.BigPictureLet();
         var held = Interlocked.Exchange(ref bigPictureHeldTopmost, IntPtr.Zero);
         if (held != IntPtr.Zero && IsWindow(held))
         {
@@ -181,12 +182,21 @@ public sealed class GameBarFocusReturner
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
+        stopped = false;
+        // A companion that stopped (update, crash) while Big Picture was held topmost left it there.
+        var leftTopmost = WindowOrder.FindTopWindow(handle => Classify(handle) == ForegroundKind.Steam, background: true);
+        if (leftTopmost != IntPtr.Zero && Volatile.Read(ref bigPictureHeldTopmost) == IntPtr.Zero && WindowOrder.IsTopmost(leftTopmost))
+        {
+            WindowOrder.Release(leftTopmost);
+        }
+
         try
         {
             await PollAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
+            stopped = true;
             ReleaseBigPicture();
         }
     }
@@ -219,10 +229,18 @@ public sealed class GameBarFocusReturner
 
             lastKind = kind;
             Foreground.Observe(kind);
-            if (kind == ForegroundKind.Other)
+            if (kind == ForegroundKind.Other && Foreground.GameTookForeground(DateTimeOffset.UtcNow))
             {
                 // The player went back to the game (Alt+Tab, Xbox's switcher) without Steam: nothing may stay over it.
-                ReleaseBigPicture();
+                await raising.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    ReleaseBigPicture();
+                }
+                finally
+                {
+                    raising.Release();
+                }
             }
 
             var restore = tracker.Observe(new ForegroundWindow(handle, kind));

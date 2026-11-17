@@ -51,6 +51,23 @@ internal static class WindowOrder
     public static void Release(IntPtr handle) =>
         SetWindowPos(handle, HwndNoTopmost, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate);
 
+    /// <summary>Whether <paramref name="window"/> comes before <paramref name="other"/> in window order.</summary>
+    public static bool IsAbove(IntPtr window, IntPtr other)
+    {
+        var first = IntPtr.Zero;
+        EnumWindows((handle, _) =>
+        {
+            if (handle == window || handle == other)
+            {
+                first = handle;
+                return false;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return first == window;
+    }
+
     /// <summary>Sends the window under every other one without activating anything.</summary>
     public static bool SendToBottom(IntPtr handle) =>
         SetWindowPos(handle, HwndBottom, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate);
@@ -62,8 +79,6 @@ internal static class WindowOrder
     }
 
     public static bool IsTopmost(IntPtr handle) => (GetWindowLong(handle, GwlExStyle) & WsExTopmost) != 0;
-
-    public static bool IsOnTop(IntPtr handle, Func<IntPtr, bool> counts) => FindTopWindow(counts) == handle;
 
     /// <summary>
     /// The first window, in window order, that matches: top-level and shown, without an owner, not a tool window, not
