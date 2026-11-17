@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.91.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.90.0...panel-de-control-v0.91.0) (2026-11-17)
+
+
+### Features
+
+* **windows:** keep Game Bar usable over a game; press twice or use the widget to go Home ([#1397](https://github.com/Hooandee/panel-de-control/issues/1397)) ([8f84093](https://github.com/Hooandee/panel-de-control/commit/8f84093838446235e7327315ef7f04ccbdf23635))
+
 ## [0.90.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.3...panel-de-control-v0.90.0) (2026-11-16)
 
 
