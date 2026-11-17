@@ -3,8 +3,6 @@ using Xunit;
 
 namespace PanelDeControl.Hardware.Tests;
 
-// On a ROG Xbox Ally X an open Game Bar reads as the shell's immersive window, and after Big Picture was raised by
-// window order Windows kept reporting the shell in the foreground while Big Picture was on screen.
 public sealed class GameBarForegroundTests
 {
     [Fact]

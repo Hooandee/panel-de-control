@@ -66,7 +66,7 @@ public sealed class ThemesController : IThemesController
                     service.EnableSteamDebugging();
                     return await ReadbackAsync(cancellationToken).ConfigureAwait(false);
                 case ThemesOperation.SteamHome:
-                    gameBarButton.ExplicitHome(DateTimeOffset.UtcNow);
+                    gameBarButton.Forget();
                     CompanionLog.Write("themes.steam_home", await GameHomeAsync(cancellationToken).ConfigureAwait(false));
                     return Response(engine.Status);
                 case ThemesOperation.GameBarShown:
@@ -80,7 +80,7 @@ public sealed class ThemesController : IThemesController
                 case ThemesOperation.GameBarHidden:
                 {
                     var shownFor = request.ShownMilliseconds!.Value;
-                    var home = gameBarButton.Hidden(TimeSpan.FromMilliseconds(shownFor), DateTimeOffset.UtcNow, engine.Status.Host.GameRunning);
+                    var home = gameBarButton.Hidden(TimeSpan.FromMilliseconds(shownFor), engine.Status.Host.GameRunning);
                     CompanionLog.Write(
                         "themes.game_bar_hidden",
                         home ? $"{shownFor}ms {await GameHomeAsync(cancellationToken).ConfigureAwait(false)}" : $"{shownFor}ms");

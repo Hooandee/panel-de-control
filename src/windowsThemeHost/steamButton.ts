@@ -12,6 +12,8 @@ const COMPOSITION_OVERLAY = 2;
 const REACTIVATE_DELAYS_MS = [0, 120, 400];
 /** A game asking for its overlay (store page, purchase) is followed within this window by the activation. */
 const GAME_REQUEST_WINDOW_MS = 1_500;
+/** Where Steam also gets the Xbox button, its overlay opens with Game Bar: Steam answers, the companion stands down. */
+const STEAM_HAD_BUTTON_MS = 1_500;
 const OVERLAY_POLL_MS = 1_000;
 /** The companion's DevTools binding that raises the game's window as well. */
 export const RAISE_GAME_BINDING = "pdcHostRaiseGame";
@@ -102,6 +104,7 @@ export function installSteamButtonHome(
   const steam = scope as unknown as SteamButtonScope;
   const main = () => steam.SteamUIStore?.WindowStore?.GamepadUIMainWindowInstance;
   let lastGameRequest = -Infinity;
+  let lastPlayerOverlay = -Infinity;
 
   const activateBigPicture = () => {
     const window = main();
@@ -158,6 +161,7 @@ export function installSteamButtonHome(
       lastGameRequest = Date.now();
     }));
     registrations.push(steam.SteamClient?.Overlay?.RegisterForOverlayActivated?.((_pid, appId, active, user) => {
+      if (user) lastPlayerOverlay = Date.now();
       if (!active || !user || !isActive() || Date.now() - lastGameRequest < GAME_REQUEST_WINDOW_MS) return;
       showBigPictureHome(appId);
     }));
@@ -277,6 +281,7 @@ export function installSteamButtonHome(
 
   const gameHome = (): string => {
     if (!isActive()) return "inactive";
+    if (Date.now() - lastPlayerOverlay < STEAM_HAD_BUTTON_MS) return "steam_had_button";
     const running = runningAppId();
     if (!running) return pressHome();
     showBigPictureHome(running);

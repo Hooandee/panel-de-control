@@ -3,12 +3,10 @@ using Xunit;
 
 namespace PanelDeControl.Hardware.Tests;
 
-// Measured on a ROG Xbox Ally X (companion.log): Game Bar opened over chiaki-ng launched from Steam and closed again
-// 375-430 ms later went Home; opened over the same game and left open 129754 ms did not.
+// Timings measured with Game Bar over a game: opened and closed again 375-430 ms later (two presses), left open
+// 129754 ms (one press).
 public sealed class GameBarButtonPolicyTests
 {
-    private static readonly DateTimeOffset Now = new(2026, 11, 17, 18, 56, 20, TimeSpan.Zero);
-
     [Fact]
     public void OpeningAndClosingGameBarAtOnceOverAGameGoesHome()
     {
@@ -16,7 +14,7 @@ public sealed class GameBarButtonPolicyTests
 
         policy.Shown(GameBarButtonPolicy.OverGame);
 
-        Assert.True(policy.Hidden(TimeSpan.FromMilliseconds(420), Now, gameRunning: true));
+        Assert.True(policy.Hidden(TimeSpan.FromMilliseconds(420), gameRunning: true));
     }
 
     [Fact]
@@ -26,7 +24,7 @@ public sealed class GameBarButtonPolicyTests
 
         policy.Shown(GameBarButtonPolicy.OverGame);
 
-        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(129754), Now, gameRunning: true));
+        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(129754), gameRunning: true));
     }
 
     [Theory]
@@ -40,7 +38,7 @@ public sealed class GameBarButtonPolicyTests
 
         policy.Shown(hostAnswer);
 
-        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(420), Now, gameRunning: true));
+        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(420), gameRunning: true));
     }
 
     [Fact]
@@ -49,9 +47,9 @@ public sealed class GameBarButtonPolicyTests
         var policy = new GameBarButtonPolicy();
 
         policy.Shown(GameBarButtonPolicy.OverGame);
-        Assert.True(policy.Hidden(TimeSpan.FromMilliseconds(420), Now, gameRunning: true));
+        Assert.True(policy.Hidden(TimeSpan.FromMilliseconds(420), gameRunning: true));
 
-        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(300), Now, gameRunning: true));
+        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(300), gameRunning: true));
     }
 
     [Fact]
@@ -61,7 +59,7 @@ public sealed class GameBarButtonPolicyTests
 
         policy.Shown(GameBarButtonPolicy.OverGame);
 
-        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(420), Now, gameRunning: false));
+        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(420), gameRunning: false));
     }
 
     [Fact]
@@ -70,11 +68,8 @@ public sealed class GameBarButtonPolicyTests
         var policy = new GameBarButtonPolicy();
 
         policy.Shown(GameBarButtonPolicy.OverGame);
-        policy.ExplicitHome(Now);
+        policy.Forget();
 
-        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(420), Now.AddMilliseconds(400), gameRunning: true));
-
-        policy.Shown(GameBarButtonPolicy.OverGame);
-        Assert.True(policy.Hidden(TimeSpan.FromMilliseconds(420), Now.AddSeconds(5), gameRunning: true));
+        Assert.False(policy.Hidden(TimeSpan.FromMilliseconds(420), gameRunning: true));
     }
 }

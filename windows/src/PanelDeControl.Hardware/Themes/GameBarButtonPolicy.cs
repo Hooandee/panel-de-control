@@ -3,8 +3,7 @@ namespace PanelDeControl.Hardware.Themes;
 /// <summary>
 /// Where Windows keeps the Xbox button for Game Bar, Game Bar opening over a running game is left to Game Bar (TDP,
 /// Panel's widget). Pressing the button twice in a row opens and closes Game Bar at once: that is Steam's button over
-/// the game, Big Picture's Home. Game Bar closing because the widget's own Home button closed it, or with no game
-/// running any more, is not.
+/// the game, Big Picture's Home; with no game running any more it is not.
 /// </summary>
 public sealed class GameBarButtonPolicy
 {
@@ -12,11 +11,9 @@ public sealed class GameBarButtonPolicy
     public const string OverGame = "game";
 
     public static readonly TimeSpan DoublePress = TimeSpan.FromMilliseconds(1000);
-    public static readonly TimeSpan AfterExplicitHome = TimeSpan.FromMilliseconds(1500);
 
     private readonly object gate = new();
     private bool shownOverGame;
-    private DateTimeOffset explicitHome = DateTimeOffset.MinValue;
 
     public void Shown(string hostAnswer)
     {
@@ -26,22 +23,23 @@ public sealed class GameBarButtonPolicy
         }
     }
 
-    public void ExplicitHome(DateTimeOffset at)
+    /// <summary>The widget's Home button closed Game Bar: that closing is not a second press.</summary>
+    public void Forget()
     {
         lock (gate)
         {
-            explicitHome = at;
+            shownOverGame = false;
         }
     }
 
     /// <summary>Whether Game Bar closing after being shown this long asks for Big Picture's Home over the game.</summary>
-    public bool Hidden(TimeSpan shownFor, DateTimeOffset at, bool gameRunning)
+    public bool Hidden(TimeSpan shownFor, bool gameRunning)
     {
         lock (gate)
         {
             var overGame = shownOverGame;
             shownOverGame = false;
-            return overGame && gameRunning && shownFor < DoublePress && at - explicitHome >= AfterExplicitHome;
+            return overGame && gameRunning && shownFor < DoublePress;
         }
     }
 }

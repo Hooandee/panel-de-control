@@ -7,8 +7,8 @@ namespace PanelDeControl.Hardware.Tests;
 
 public sealed class CoreAudioDeviceEnumeratorTests
 {
-    // companion.log on a ROG Xbox Ally X: the volume pipe made the enumerator first, and every game audio scan after
-    // it failed with "Unable to cast object of type 'MMDeviceEnumeratorComObject' to type 'MMDeviceEnumeratorComObject'".
+    // The volume pipe makes the enumerator first; every game audio scan after it used to fail with
+    // "Unable to cast object of type 'MMDeviceEnumeratorComObject' to type 'MMDeviceEnumeratorComObject'".
     [Fact]
     public void GameAudioScanWorksAfterTheVolumeEndpointOpened()
     {
@@ -28,8 +28,15 @@ public sealed class CoreAudioDeviceEnumeratorTests
                 // A machine without an output device still made the enumerator.
             }
 
-            using var scan = new CoreAudioGameMixer().Scan(new Dictionary<int, ProcessEntry>());
-            Assert.NotNull(scan.Sessions);
+            try
+            {
+                using var scan = new CoreAudioGameMixer().Scan(new Dictionary<int, ProcessEntry>());
+                Assert.NotNull(scan.Sessions);
+            }
+            catch (COMException)
+            {
+                // No audio service on this machine; the cast already succeeded.
+            }
         }
     }
 }

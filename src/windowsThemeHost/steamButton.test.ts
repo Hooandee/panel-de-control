@@ -212,6 +212,16 @@ describe("Steam button on Windows", () => {
       home();
     });
 
+    it("leaves the Home over the game to Steam where its overlay just answered the same button", () => {
+      const { scope, calls, activate } = withPage(true);
+      const home = installSteamButtonHome(scope, () => true, log);
+      activate(false);
+      calls.length = 0;
+      expect(home.gameHome()).toBe("steam_had_button");
+      expect(calls).toEqual([]);
+      home();
+    });
+
     it("brings Big Picture Home over the game at once for gameHome", () => {
       const { scope, calls } = withPage(true);
       const home = installSteamButtonHome(scope, () => true, log);

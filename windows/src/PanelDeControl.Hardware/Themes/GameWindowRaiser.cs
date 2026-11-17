@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace PanelDeControl.Hardware.Themes;
@@ -23,6 +22,7 @@ public sealed class GameWindowRaiser
     private readonly Func<bool> gameRunning;
     private readonly SemaphoreSlim raise = new(0);
     private ICdpEventSession? session;
+    private int cyclesWithoutGame;
 
     public GameWindowRaiser(
         ISteamDevTools devTools,
@@ -45,7 +45,9 @@ public sealed class GameWindowRaiser
                 await KeepSessionAsync(cancellationToken).ConfigureAwait(false);
                 if (!await raise.WaitAsync(Reconnect, cancellationToken).ConfigureAwait(false))
                 {
-                    if (!gameRunning())
+                    // Two readings in a row: one failed host read also reports no game.
+                    cyclesWithoutGame = gameRunning() ? 0 : cyclesWithoutGame + 1;
+                    if (cyclesWithoutGame == 2)
                     {
                         focus.Foreground.GameEnded();
                         focus.ReleaseBigPicture();
@@ -77,13 +79,7 @@ public sealed class GameWindowRaiser
     private string RaiseGameWindow()
     {
         var running = processes();
-        var game = WindowOrder.FindTopWindow(
-            handle =>
-            {
-                GetWindowThreadProcessId(handle, out var processId);
-                return SteamGameProcesses.IsGame(running, (int)processId);
-            },
-            minimized: true);
+        var game = WindowOrder.FindTopWindow(handle => SteamGameProcesses.IsGame(running, WindowOrder.ProcessOf(handle)), minimized: true);
         if (game == IntPtr.Zero)
         {
             return "no_window";
@@ -91,6 +87,7 @@ public sealed class GameWindowRaiser
 
         var topmost = WindowOrder.IsTopmost(game);
         var raised = WindowOrder.Raise(game, stayTopmost: topmost) && WindowOrder.IsOnTop(game, GameBarFocusReturner.IsAppWindow);
+        // On top is not enough: the game also needs the focus for its input.
         GameBarFocusReturner.AskForeground(game);
         return raised ? (topmost ? "on_top topmost" : "on_top") : "below";
     }
@@ -145,7 +142,4 @@ public sealed class GameWindowRaiser
             await closing.DisposeAsync().ConfigureAwait(false);
         }
     }
-
-    [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
 }

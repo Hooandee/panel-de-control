@@ -37,6 +37,7 @@ public sealed class GameBarFocusReturner
     private readonly GameBarFocusTracker tracker = new();
     private IntPtr lastHandle;
     private ForegroundKind lastKind = ForegroundKind.Other;
+    private readonly SemaphoreSlim raising = new(1, 1);
     private IntPtr bigPictureHeldTopmost;
     private ICdpSession? sharedContext;
     private DateTimeOffset nextPageCheck = DateTimeOffset.MinValue;
@@ -56,28 +57,41 @@ public sealed class GameBarFocusReturner
     /// <summary>
     /// Raises Big Picture over the game after it went Home: Windows refuses Steam's own request from behind a game,
     /// so the window order goes first (<see cref="WindowOrder"/>) and the focus is asked for after it. Over a topmost
-    /// game (full screen) Big Picture stays topmost until the game resumes or ends.
+    /// full screen game Big Picture stays topmost until the game resumes, ends or comes back to the foreground.
     /// </summary>
     public async Task RaiseBigPictureAsync(CancellationToken cancellationToken)
     {
-        var bigPicture = WindowOrder.FindTopWindow(handle => Classify(handle) == ForegroundKind.Steam);
-        if (bigPicture == IntPtr.Zero)
+        await raising.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            CompanionLog.Write("themes.big_picture_raise", "no_window");
-            return;
-        }
+            var bigPicture = WindowOrder.FindTopWindow(handle => Classify(handle) == ForegroundKind.Steam);
+            if (bigPicture == IntPtr.Zero)
+            {
+                CompanionLog.Write("themes.big_picture_raise", "no_window");
+                return;
+            }
 
-        var above = WindowOrder.FindTopWindow(IsAppWindow);
-        var overTopmost = above != bigPicture && above != IntPtr.Zero && WindowOrder.IsTopmost(above);
-        var raised = WindowOrder.Raise(bigPicture, stayTopmost: overTopmost) && WindowOrder.IsOnTop(bigPicture, IsAppWindow);
-        if (raised && overTopmost)
+            var above = WindowOrder.FindTopWindow(IsAppWindow);
+            var stayTopmost = Volatile.Read(ref bigPictureHeldTopmost) == bigPicture
+                || (above != bigPicture && above != IntPtr.Zero && WindowOrder.IsTopmost(above) && CoversItsMonitor(above));
+            var raised = WindowOrder.Raise(bigPicture, stayTopmost) && WindowOrder.IsOnTop(bigPicture, IsAppWindow);
+            if (raised && stayTopmost)
+            {
+                Volatile.Write(ref bigPictureHeldTopmost, bigPicture);
+            }
+            else if (WindowOrder.IsTopmost(bigPicture))
+            {
+                WindowOrder.Release(bigPicture);
+            }
+
+            CompanionLog.Write("themes.big_picture_raise", raised ? (stayTopmost ? "on_top topmost" : "on_top") : "below");
+            Foreground.BigPictureRaised(raised);
+            await RestoreAsync(bigPicture, cancellationToken).ConfigureAwait(false);
+        }
+        finally
         {
-            bigPictureHeldTopmost = bigPicture;
+            raising.Release();
         }
-
-        CompanionLog.Write("themes.big_picture_raise", raised ? (overTopmost ? "on_top topmost" : "on_top") : "below");
-        Foreground.BigPictureRaised(raised);
-        await RestoreAsync(bigPicture, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Big Picture, a game or an app: the shell (taskbar included, which is topmost) and Game Bar do not count.</summary>
@@ -85,8 +99,7 @@ public sealed class GameBarFocusReturner
 
     public void ReleaseBigPicture()
     {
-        var held = bigPictureHeldTopmost;
-        bigPictureHeldTopmost = IntPtr.Zero;
+        var held = Interlocked.Exchange(ref bigPictureHeldTopmost, IntPtr.Zero);
         if (held != IntPtr.Zero && IsWindow(held))
         {
             WindowOrder.Release(held);
@@ -102,6 +115,18 @@ public sealed class GameBarFocusReturner
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await PollAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseBigPicture();
+        }
+    }
+
+    private async Task PollAsync(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -128,6 +153,11 @@ public sealed class GameBarFocusReturner
 
             lastKind = kind;
             Foreground.Observe(kind);
+            if (kind == ForegroundKind.Other)
+            {
+                // The player went back to the game (Alt+Tab, Xbox's switcher) without Steam: nothing may stay over it.
+                ReleaseBigPicture();
+            }
 
             var restore = tracker.Observe(new ForegroundWindow(handle, kind));
             if (restore != IntPtr.Zero)

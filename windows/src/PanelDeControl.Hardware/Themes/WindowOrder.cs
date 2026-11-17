@@ -32,12 +32,29 @@ internal static class WindowOrder
             ShowWindow(handle, SwRestore);
         }
 
-        return SetWindowPos(handle, HwndTopmost, 0, 0, 0, 0, KeepPlace)
-            && (stayTopmost || SetWindowPos(handle, HwndNoTopmost, 0, 0, 0, 0, KeepPlace));
+        if (!SetWindowPos(handle, HwndTopmost, 0, 0, 0, 0, KeepPlace))
+        {
+            return false;
+        }
+
+        if (stayTopmost || SetWindowPos(handle, HwndNoTopmost, 0, 0, 0, 0, KeepPlace))
+        {
+            return true;
+        }
+
+        // Never leave a window topmost that nobody holds.
+        Release(handle);
+        return false;
     }
 
     public static void Release(IntPtr handle) =>
         SetWindowPos(handle, HwndNoTopmost, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate);
+
+    public static int ProcessOf(IntPtr handle)
+    {
+        GetWindowThreadProcessId(handle, out var processId);
+        return (int)processId;
+    }
 
     public static bool IsTopmost(IntPtr handle) => (GetWindowLong(handle, GwlExStyle) & WsExTopmost) != 0;
 
@@ -112,6 +129,9 @@ internal static class WindowOrder
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(IntPtr handle, out Rect rect);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out int value, int size);
