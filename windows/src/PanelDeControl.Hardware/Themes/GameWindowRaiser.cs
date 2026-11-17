@@ -19,16 +19,16 @@ public sealed class GameWindowRaiser
     private readonly ISteamDevTools devTools;
     private readonly Func<IReadOnlyDictionary<int, ProcessEntry>> processes;
     private readonly GameBarFocusReturner focus;
-    private readonly Func<bool> gameRunning;
+    private readonly Func<bool?> gameRunning;
+    private readonly GamePresence presence = new();
     private readonly SemaphoreSlim raise = new(0);
     private ICdpEventSession? session;
-    private int cyclesWithoutGame;
 
     public GameWindowRaiser(
         ISteamDevTools devTools,
         Func<IReadOnlyDictionary<int, ProcessEntry>> processes,
         GameBarFocusReturner focus,
-        Func<bool> gameRunning)
+        Func<bool?> gameRunning)
     {
         this.devTools = devTools;
         this.processes = processes;
@@ -45,19 +45,16 @@ public sealed class GameWindowRaiser
                 await KeepSessionAsync(cancellationToken).ConfigureAwait(false);
                 if (!await raise.WaitAsync(Reconnect, cancellationToken).ConfigureAwait(false))
                 {
-                    // Two readings in a row: one failed host read also reports no game.
-                    var running = gameRunning();
-                    if (running && cyclesWithoutGame >= 2)
+                    switch (presence.Read(gameRunning()))
                     {
-                        // A game just started: its window takes the foreground through the shell.
-                        focus.HoldStill(GameStarting);
-                    }
-
-                    cyclesWithoutGame = running ? 0 : cyclesWithoutGame + 1;
-                    if (cyclesWithoutGame == 2)
-                    {
-                        focus.Foreground.GameEnded();
-                        focus.ReleaseBigPicture();
+                        case GamePresenceChange.Started:
+                            // Its window takes the foreground through the shell.
+                            focus.HoldStill(GameStarting);
+                            break;
+                        case GamePresenceChange.Ended:
+                            focus.Foreground.GameEnded();
+                            focus.ReleaseBigPicture();
+                            break;
                     }
 
                     continue;

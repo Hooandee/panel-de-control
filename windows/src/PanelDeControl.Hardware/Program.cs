@@ -115,7 +115,7 @@ public static class Program
                 SuperviseAsync("themes.engine", () => themeEngine.RunAsync(token), token),
                 SuperviseAsync("themes.pipe", () => themesServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("themes.focus", () => focusReturner.RunAsync(token), token),
-                SuperviseAsync("themes.game_raise", () => new GameWindowRaiser(steamDevTools, gameProcesses, focusReturner, () => themeEngine.Status.Host is not { Present: true, GameRunning: false }).RunAsync(token), token),
+                SuperviseAsync("themes.game_raise", () => new GameWindowRaiser(steamDevTools, gameProcesses, focusReturner, () => themeEngine.Status.Host.Present ? themeEngine.Status.Host.GameRunning : null).RunAsync(token), token),
                 SuperviseAsync("themes.game_audio", () => new GameAudioSilencer(
                     steamDevTools,
                     gameMixer,

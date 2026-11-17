@@ -71,7 +71,6 @@ public sealed class GameBarForeground
         }
     }
 
-    /// <summary>No game runs any more: nothing raised for it still holds.</summary>
     /// <summary>Big Picture stays topmost over a full screen game from <paramref name="at"/>.</summary>
     public void BigPictureHeld(DateTimeOffset at)
     {
@@ -108,6 +107,7 @@ public sealed class GameBarForeground
         }
     }
 
+    /// <summary>No game runs any more: nothing raised for it still holds.</summary>
     public void GameEnded()
     {
         lock (gate)

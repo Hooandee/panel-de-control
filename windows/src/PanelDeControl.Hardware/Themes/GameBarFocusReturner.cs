@@ -42,6 +42,7 @@ public sealed class GameBarFocusReturner
     private IntPtr bigPictureHeldTopmost;
     private long quietUntilTicks;
     private volatile bool stopped;
+    private IntPtr pendingRestore;
     private ICdpSession? sharedContext;
     private DateTimeOffset nextPageCheck = DateTimeOffset.MinValue;
     private DateTimeOffset? pageUnfocusedSince;
@@ -75,7 +76,8 @@ public sealed class GameBarFocusReturner
             }
 
             var cloaked = WindowOrder.IsCloaked(bigPicture);
-            var above = WindowOrder.FindTopWindow(IsAppWindow);
+            // Small topmost windows of other apps (overlays, picture in picture) are not what Big Picture goes over.
+            var above = WindowOrder.FindTopWindow(handle => IsAppWindow(handle) && (!WindowOrder.IsTopmost(handle) || CoversItsMonitor(handle)));
             var stayTopmost = Volatile.Read(ref bigPictureHeldTopmost) == bigPicture
                 || (above != bigPicture && above != IntPtr.Zero && WindowOrder.IsTopmost(above) && CoversItsMonitor(above));
             // Above whatever was in front before: other small topmost windows (overlays) do not matter.
@@ -207,8 +209,24 @@ public sealed class GameBarFocusReturner
         {
             await Task.Delay(Poll, cancellationToken).ConfigureAwait(false);
             var handle = GetForegroundWindow();
-            // No foreground window is a passing state while windows switch, not the shell.
-            if (handle == IntPtr.Zero || handle == lastHandle)
+            if (handle == IntPtr.Zero)
+            {
+                // No foreground window is a passing state while windows switch, not the shell.
+                continue;
+            }
+
+            if (pendingRestore != IntPtr.Zero && !Quiet)
+            {
+                var steamWindow = pendingRestore;
+                pendingRestore = IntPtr.Zero;
+                if (handle != steamWindow && IsWindow(steamWindow)
+                    && await SteamUiStateAsync(cancellationToken).ConfigureAwait(false) != SteamUiState.RunningPage)
+                {
+                    await RestoreAsync(steamWindow, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            if (handle == lastHandle)
             {
                 if (lastKind == ForegroundKind.Steam)
                 {
@@ -244,9 +262,18 @@ public sealed class GameBarFocusReturner
             }
 
             var restore = tracker.Observe(new ForegroundWindow(handle, kind));
-            if (restore != IntPtr.Zero && !Quiet && await SteamUiStateAsync(cancellationToken).ConfigureAwait(false) != SteamUiState.RunningPage)
+            if (restore != IntPtr.Zero && Quiet)
+            {
+                // Kept for when the game has settled: Big Picture without the focus leaves the controller dead.
+                pendingRestore = restore;
+            }
+            else if (restore != IntPtr.Zero && await SteamUiStateAsync(cancellationToken).ConfigureAwait(false) != SteamUiState.RunningPage)
             {
                 await RestoreAsync(restore, cancellationToken).ConfigureAwait(false);
+            }
+            else if (kind != ForegroundKind.Shell)
+            {
+                pendingRestore = IntPtr.Zero;
             }
         }
     }
