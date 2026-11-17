@@ -52,8 +52,7 @@ public sealed class GameWindowRaiser
                             focus.HoldStill(GameStarting);
                             break;
                         case GamePresenceChange.Ended:
-                            focus.Foreground.GameEnded();
-                            focus.ReleaseBigPicture();
+                            await focus.GameEndedAsync(cancellationToken).ConfigureAwait(false);
                             break;
                     }
 

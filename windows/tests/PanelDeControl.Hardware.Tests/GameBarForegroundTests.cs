@@ -109,4 +109,18 @@ public sealed class GameBarForegroundTests
         Assert.True(foreground.GameTookForeground(Raised.AddSeconds(5)));
         Assert.False(foreground.GameTookForeground(Raised.AddSeconds(6)));
     }
+
+    [Fact]
+    public void AnEndedGameLeavesNeitherARaiseNorAHeldBigPictureForTheNextOne()
+    {
+        var foreground = new GameBarForeground();
+        foreground.BigPictureRaised(byOrder: true);
+        foreground.BigPictureHeld(Raised);
+
+        foreground.GameEnded();
+        foreground.BigPictureLet();
+
+        Assert.False(foreground.GameResumed());
+        Assert.False(foreground.GameTookForeground(Raised.AddSeconds(10)));
+    }
 }

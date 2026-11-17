@@ -43,6 +43,8 @@ public sealed class GameBarFocusReturner
     private long quietUntilTicks;
     private volatile bool stopped;
     private IntPtr pendingRestore;
+    private int nullReadings;
+    private const int NullReadingsAsShell = 3;
     private ICdpSession? sharedContext;
     private DateTimeOffset nextPageCheck = DateTimeOffset.MinValue;
     private DateTimeOffset? pageUnfocusedSince;
@@ -164,6 +166,21 @@ public sealed class GameBarFocusReturner
     /// <summary>Big Picture, a game or an app: the shell (taskbar included, which is topmost) and Game Bar do not count.</summary>
     internal static bool IsAppWindow(IntPtr handle) => Classify(handle) is ForegroundKind.Steam or ForegroundKind.Other;
 
+    /// <summary>No game runs any more: Big Picture no longer stays over one, under the same lock as its raise.</summary>
+    public async Task GameEndedAsync(CancellationToken cancellationToken)
+    {
+        await raising.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            Foreground.GameEnded();
+            ReleaseBigPicture();
+        }
+        finally
+        {
+            raising.Release();
+        }
+    }
+
     public void ReleaseBigPicture()
     {
         Foreground.BigPictureLet();
@@ -209,13 +226,14 @@ public sealed class GameBarFocusReturner
         {
             await Task.Delay(Poll, cancellationToken).ConfigureAwait(false);
             var handle = GetForegroundWindow();
-            if (handle == IntPtr.Zero)
+            nullReadings = handle == IntPtr.Zero ? nullReadings + 1 : 0;
+            if (handle == IntPtr.Zero && nullReadings < NullReadingsAsShell)
             {
-                // No foreground window is a passing state while windows switch, not the shell.
+                // No foreground window for a moment is windows switching; for longer, Windows left it to nobody.
                 continue;
             }
 
-            if (pendingRestore != IntPtr.Zero && !Quiet)
+            if (pendingRestore != IntPtr.Zero && !Quiet && Classify(handle) == ForegroundKind.Shell)
             {
                 var steamWindow = pendingRestore;
                 pendingRestore = IntPtr.Zero;
