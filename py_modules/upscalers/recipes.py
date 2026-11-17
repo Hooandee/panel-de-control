@@ -74,8 +74,15 @@ RECIPES: dict[str, Recipe] = {
         # on top crashes it. REFramework comes from the RE Engine rule.
         Recipe("2246340", ini={"Spoofing.Dxgi": "false"}, needs=("reframework",)),
         # Hogwarts Legacy lists DLSS Frame Generation only while its upscaler is DLSS; both apply on restart.
-        Recipe("990080", anr_settings=(("Upscale Type", "NVIDIA DLSS"),
-                                       ("Frame Generation", "NVIDIA DLSS Frame Generation x2"))),
+        Recipe("990080", anr_settings=(("Upscale Type (Tipo de escalado)", "NVIDIA DLSS"),
+                                       ("Frame Generation (Generación de fotogramas)", "NVIDIA DLSS Frame Generation x2"))),
+        # Cyberpunk 2077 waits on REDlauncher under Proton.
+        Recipe("1091500", args=("--launcher-skip",),
+               anr_settings=(("Resolution Scaling (Escalado de resolución)", "DLSS Super Resolution"),
+                             ("Frame Generation (Generación de fotogramas)", "DLSS Frame Generation"))),
+        Recipe("2124490", anr_settings=(("Supersampling (Supermuestreo)", "DLSS"),
+                                        ("Frame Generation (Generación de fotogramas)", "On (Activada)"))),
+        Recipe("1182900", anr_settings=(("NVIDIA DLSS Frame Generation", "On (Sí)"),)),
     )
 }
 

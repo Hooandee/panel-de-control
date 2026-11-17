@@ -176,6 +176,13 @@ def test_a_newer_anr_release_in_another_layout_falls_back_before_the_game_is_tou
 def test_hogwarts_tells_what_its_menu_needs_for_anr_and_keeps_its_wiki_facts():
     from upscalers import recipes
     recipe = recipes.recipe_for("990080")
-    assert dict(recipe.anr_settings)["Upscale Type"] == "NVIDIA DLSS"
+    assert dict(recipe.anr_settings)["Upscale Type (Tipo de escalado)"] == "NVIDIA DLSS"
     assert recipe.optipatcher and recipe.status == "works"
     assert not recipe.exe and not recipe.ini and not recipe.args
+
+
+def test_cyberpunk_skips_its_launcher_and_validated_games_tell_their_anr_settings():
+    from upscalers import recipes
+    cyberpunk = recipes.recipe_for("1091500")
+    assert "--launcher-skip" in cyberpunk.args and cyberpunk.anr_settings
+    assert recipes.recipe_for("2124490").anr_settings and recipes.recipe_for("1182900").anr_settings
