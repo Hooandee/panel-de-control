@@ -61,19 +61,21 @@ internal static class WindowOrder
     public static bool IsOnTop(IntPtr handle, Func<IntPtr, bool> counts) => FindTopWindow(counts) == handle;
 
     /// <summary>
-    /// The first window the player can see, in window order, that matches: top-level, shown and not cloaked by the
-    /// shell, without an owner, not a tool window, and not minimized unless <paramref name="minimized"/>.
+    /// The first window, in window order, that matches: top-level and shown, without an owner, not a tool window, not
+    /// minimized unless <paramref name="background"/>, and not cloaked unless <paramref name="background"/>. In Xbox
+    /// mode (ROG Xbox Ally X) the shell cloaks a game while another app is in front: a game coming back is looked for
+    /// with <paramref name="background"/>.
     /// </summary>
-    public static IntPtr FindTopWindow(Func<IntPtr, bool> matches, bool minimized = false)
+    public static IntPtr FindTopWindow(Func<IntPtr, bool> matches, bool background = false)
     {
         var found = IntPtr.Zero;
         EnumWindows((handle, _) =>
         {
             if (IsWindowVisible(handle)
-                && !IsCloaked(handle)
+                && (background || !IsCloaked(handle))
                 && GetWindow(handle, GwOwner) == IntPtr.Zero
                 && (GetWindowLong(handle, GwlExStyle) & WsExToolWindow) == 0
-                && (minimized || !IsIconic(handle))
+                && (background || !IsIconic(handle))
                 && HasArea(handle)
                 && matches(handle))
             {

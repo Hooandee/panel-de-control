@@ -79,7 +79,7 @@ public sealed class GameWindowRaiser
     private string RaiseGameWindow()
     {
         var running = processes();
-        var game = WindowOrder.FindTopWindow(handle => SteamGameProcesses.IsGame(running, WindowOrder.ProcessOf(handle)), minimized: true);
+        var game = WindowOrder.FindTopWindow(handle => SteamGameProcesses.IsGame(running, WindowOrder.ProcessOf(handle)), background: true);
         if (game == IntPtr.Zero)
         {
             return "no_window";
