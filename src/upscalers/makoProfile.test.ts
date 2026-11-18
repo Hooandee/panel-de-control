@@ -102,3 +102,12 @@ it("takes back a shortcut's Mako options, whose profile is its launch identity",
   await saveMakoProfile("ns:game", 3456789012, { enabled: false }, true);
   expect(api.setUpscalerLaunchReceipt).toHaveBeenCalledWith("ns:game", "mako", expect.objectContaining({ wrappers: expect.objectContaining({ added: ["/h/.local/share/panel-de-control/mako/4.6.0/bin/mako-launch"] }) }));
 });
+
+it("puts its options back when they vanished from the launch options while the profile stayed", async () => {
+  api.getUpscalerLaunchReceipt.mockResolvedValue(receipt);
+  api.readAppDetails.mockResolvedValue({ launch: "" });
+  api.setUpscalerLaunchReceipt.mockResolvedValue(true);
+  await saveMakoProfile("1", 1, { enabled: true, engine: 5 });
+  expect(api.setUpscalerLaunchReceipt).toHaveBeenCalledWith("1", "mako", { version: 1, env: [], wrappers: { before: [], applied: [], added: [] } });
+  expect(api.applyManagedLaunch).toHaveBeenCalled();
+});
