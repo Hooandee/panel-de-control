@@ -306,11 +306,6 @@ export const FrameGenRow: FC<{
         {isMako && selectedActive && makoProfile && <MakoControls appid={appid} duo={duo} profile={makoProfile} disabled={blocked} onChange={(next) => void run(() => saveMako(next))} />}
         {isMako && mako?.reason === "mako_identity_ambiguous" && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.identity")}</Notice>}
         {current === "mako" && !mako?.dll && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.requirement")}</Notice>}
-        {current === "mako" && mako?.dll && !mako.notice_dismissed && (
-          <NoticeCard icon={<GiPlasticDuck size={16} />} tone={theme.color.accent} title={t("up.mako.notice.title")}
-            description={t("up.mako.notice.body")} dismissLabel={t("up.mako.notice.dismiss")}
-            onDismiss={() => void dismissMakoNotice().then(setMako).catch(() => {})} />
-        )}
         {isMako && mako && !mako.supported && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.unsupported")}</Notice>}
         {current === "lsfg" && profile && (
           <ListCard>
@@ -364,6 +359,11 @@ export const FrameGenRow: FC<{
             disabled={disabled || (isMako ? (!selectedActive && (!mako?.supported || (makoEngine === 4 && !mako.dll) || mako.reason === "mako_identity_ambiguous" || (!makoProfile && !!installedRoute && !onApplyOptiscaler))) : current === "lsfg" ? (!profile && (!status?.dll || (!!installedRoute && !onApplyOptiscaler))) : !(current === "off" && (profile || makoProfile) && !installedRoute) && (!onApplyOptiscaler || optiscalerDisabled))}
             onPress={() => void applySelection()}
           />
+        )}
+        {current === "mako" && mako?.dll && !mako.notice_dismissed && (
+          <NoticeCard icon={<GiPlasticDuck size={16} />} tone={theme.color.accent} title={t("up.mako.notice.title")}
+            description={t("up.mako.notice.body")} dismissLabel={t("up.mako.notice.dismiss")}
+            onDismiss={() => void dismissMakoNotice().then(setMako).catch(() => {})} />
         )}
         {current === "lsfg" && branch?.supported && branch.available && branch.selected !== null && branch.selected !== "lsfg-vk" && (
           <ActionButton label={t("up.lsfg.switchBranch")} busy={busy} disabled={disabled} onPress={() => void run(async () => {
