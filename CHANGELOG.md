@@ -3,9 +3,47 @@
 ## [0.92.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.91.1...panel-de-control-v0.92.0) (2026-11-18)
 
 
-### Features
+### Español
 
-* **upscalers:** Apex Neural Rendering and Mako 5 frame generation ([#1400](https://github.com/Hooandee/panel-de-control/issues/1400)) ([347a06c](https://github.com/Hooandee/panel-de-control/commit/347a06c4629a1560b7eb29115def97c7184f4b73))
+* **Generación de frames con Apex Neural Rendering (Beta):** En juegos DX12 que tienen Generación de frames de DLSS, con gráfica AMD, ya puedes elegir Apex ANR en el selector de generación de frames. Panel pasa el juego a OptiScaler 10 con FSR 4.1.2 y lo deja todo listo; tú solo activas la Generación de frames de DLSS en el juego. Varios juegos traen una nota con las opciones exactas de su menú, y la píldora del juego te dice si está generando frames.
+* **Mako 5:** Ahora puedes elegir Mako 5 junto a Mako 4 Lossless. Trae su propio modelo de generación de frames, así que no necesitas tener Lossless Scaling. La píldora, las portadas y la lista de juegos dicen qué versión estás usando.
+* **Mako responde mientras se descarga:** El estado de Mako ya no se queda colgado mientras baja. Y si las opciones de lanzamiento del juego pierden lo que había puesto Panel, al guardar se vuelven a poner.
+* **Arreglos en algunos juegos:** Cyberpunk 2077 se salta su lanzador, que se quedaba colgado, y Deep Rock Galactic arranca en DX12. En The Last of Us Part II y Spider-Man 2, Panel ya no confunde el programa de informes de errores con el juego.
+
+### English
+
+* **Frame generation with Apex Neural Rendering (Beta):** In DX12 games that have DLSS Frame Generation, on AMD graphics, you can now pick Apex ANR in the frame generation selector. Panel moves the game to OptiScaler 10 with FSR 4.1.2 and sets everything up; you just turn on DLSS Frame Generation in the game. Several games come with a note listing the exact options to set in their menu, and the in-game pill tells you whether it is generating frames.
+* **Mako 5:** You can now pick Mako 5 next to Mako 4 Lossless. It comes with its own frame generation model, so you don't need Lossless Scaling. The pill, covers and game list show which version you are using.
+* **Mako keeps responding while it downloads:** Mako's status no longer hangs while it downloads. And if the game's launch options lose what Panel had added, saving puts it back.
+* **Fixes for some games:** Cyberpunk 2077 skips its launcher, which used to hang, and Deep Rock Galactic starts in DX12. In The Last of Us Part II and Spider-Man 2, Panel no longer mistakes the crash reporter for the game.
+
+### Italiano
+
+* **Generazione di frame con Apex Neural Rendering (Beta):** Nei giochi DX12 che hanno la Generazione di frame DLSS, con grafica AMD, ora puoi scegliere Apex ANR nel selettore della generazione di frame. Panel passa il gioco a OptiScaler 10 con FSR 4.1.2 e prepara tutto; tu devi solo attivare la Generazione di frame DLSS nel gioco. Diversi giochi hanno una nota con le opzioni esatte da impostare nel loro menu, e la pillola del gioco ti dice se sta generando frame.
+* **Mako 5:** Ora puoi scegliere Mako 5 accanto a Mako 4 Lossless. Ha un suo modello di generazione di frame, quindi non ti serve Lossless Scaling. La pillola, le copertine e l'elenco dei giochi mostrano quale versione stai usando.
+* **Mako risponde mentre si scarica:** Lo stato di Mako non si blocca più durante il download. E se le opzioni di avvio del gioco perdono quello che aveva messo Panel, salvando vengono rimesse.
+* **Correzioni per alcuni giochi:** Cyberpunk 2077 salta il suo launcher, che si bloccava, e Deep Rock Galactic si avvia in DX12. In The Last of Us Part II e Spider-Man 2, Panel non scambia più il programma di segnalazione errori per il gioco.
+
+### Deutsch
+
+* **Frame-Generierung mit Apex Neural Rendering (Beta):** In DX12-Spielen mit DLSS Frame Generation kannst du mit AMD-Grafik jetzt Apex ANR in der Auswahl der Frame-Generierung wählen. Panel stellt das Spiel auf OptiScaler 10 mit FSR 4.1.2 um und richtet alles ein; du schaltest nur DLSS Frame Generation im Spiel ein. Mehrere Spiele haben einen Hinweis mit den genauen Optionen für ihr Menü, und die Pille im Spiel zeigt dir, ob Frames generiert werden.
+* **Mako 5:** Du kannst jetzt Mako 5 neben Mako 4 Lossless wählen. Es bringt ein eigenes Modell für die Frame-Generierung mit, du brauchst also kein Lossless Scaling. Pille, Cover und Spieleliste zeigen, welche Version du nutzt.
+* **Mako reagiert auch während des Downloads:** Der Status von Mako hängt beim Herunterladen nicht mehr. Und wenn die Startoptionen des Spiels verlieren, was Panel eingetragen hatte, werden sie beim Speichern wieder gesetzt.
+* **Korrekturen für einige Spiele:** Cyberpunk 2077 überspringt seinen Launcher, der hängen blieb, und Deep Rock Galactic startet in DX12. Bei The Last of Us Part II und Spider-Man 2 hält Panel das Programm für Fehlerberichte nicht mehr für das Spiel.
+
+### Português (Brasil)
+
+* **Geração de quadros com Apex Neural Rendering (Beta):** Em jogos DX12 que têm Geração de quadros DLSS, com placa AMD, agora você pode escolher Apex ANR no seletor de geração de quadros. O Panel passa o jogo para o OptiScaler 10 com FSR 4.1.2 e deixa tudo pronto; você só ativa a Geração de quadros DLSS no jogo. Vários jogos vêm com uma nota com as opções exatas do menu, e a pílula do jogo mostra se ele está gerando quadros.
+* **Mako 5:** Agora você pode escolher o Mako 5 ao lado do Mako 4 Lossless. Ele traz seu próprio modelo de geração de quadros, então você não precisa ter o Lossless Scaling. A pílula, as capas e a lista de jogos mostram qual versão você está usando.
+* **O Mako responde enquanto baixa:** O status do Mako não trava mais durante o download. E se as opções de inicialização do jogo perderem o que o Panel tinha colocado, ao salvar elas voltam.
+* **Correções em alguns jogos:** Cyberpunk 2077 pula o próprio launcher, que travava, e Deep Rock Galactic abre em DX12. Em The Last of Us Part II e Spider-Man 2, o Panel não confunde mais o programa de relatório de erros com o jogo.
+
+### Français
+
+* **Génération d'images avec Apex Neural Rendering (Bêta) :** Dans les jeux DX12 qui ont la Génération d'images DLSS, avec une carte graphique AMD, tu peux maintenant choisir Apex ANR dans le sélecteur de génération d'images. Panel passe le jeu sur OptiScaler 10 avec FSR 4.1.2 et prépare tout ; tu n'as qu'à activer la Génération d'images DLSS dans le jeu. Plusieurs jeux ont une note avec les options exactes à régler dans leur menu, et la pastille du jeu t'indique s'il génère des images.
+* **Mako 5 :** Tu peux maintenant choisir Mako 5 à côté de Mako 4 Lossless. Il a son propre modèle de génération d'images, donc tu n'as pas besoin de Lossless Scaling. La pastille, les jaquettes et la liste des jeux indiquent quelle version tu utilises.
+* **Mako répond pendant son téléchargement :** L'état de Mako ne reste plus bloqué pendant le téléchargement. Et si les options de lancement du jeu perdent ce que Panel avait ajouté, elles sont remises quand tu enregistres.
+* **Corrections pour certains jeux :** Cyberpunk 2077 passe son lanceur, qui restait bloqué, et Deep Rock Galactic démarre en DX12. Dans The Last of Us Part II et Spider-Man 2, Panel ne prend plus le programme de rapport d'erreurs pour le jeu.
 
 ## [0.91.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.91.0...panel-de-control-v0.91.1) (2026-11-18)
 
