@@ -8,6 +8,8 @@
  * controller to its own UI (focused appid 769); Hidden gives it back to the game. */
 const COMPOSITION_HIDDEN = 0;
 const COMPOSITION_OVERLAY = 2;
+/** Hybrid themes' STEAM press (hooandee-private-themes `runtime/hybridSteamButton.ts`). */
+const HYBRID_HOME_PRESS = "pdc-hyb-home-press";
 /** The overlay takes the navigation context when it activates; Big Picture's is taken back after it. */
 const REACTIVATE_DELAYS_MS = [0, 120, 400];
 /** A game asking for its overlay (store page, purchase) is followed within this window by the activation. */
@@ -40,7 +42,7 @@ interface SteamWindowInstance {
   MainRunningAppID?: number;
   Navigator?: { Home?(): void };
   BrowserWindow?: (Pick<Window, "addEventListener" | "removeEventListener"> & {
-    document?: Pick<Document, "hasFocus"> & { hidden?: boolean };
+    document?: Pick<Document, "hasFocus"> & Partial<Pick<Document, "dispatchEvent">> & { hidden?: boolean };
     SteamClient?: { Window?: { BringToFront?(): void } };
   }) | null;
   m_history?: SteamHistory;
@@ -128,6 +130,9 @@ export function installSteamButtonHome(
       if (gameId) steam.SteamClient?.Overlay?.SetOverlayState?.(gameId, COMPOSITION_OVERLAY);
       const window = main();
       window?.Navigator?.Home?.();
+      // Hybrid themes (Duo, Vida) keep their black launch screen over Big Picture until their own STEAM press goes
+      // Home: this Home is that press for them.
+      window?.BrowserWindow?.document?.dispatchEvent?.(new Event(HYBRID_HOME_PRESS));
       window?.BrowserWindow?.SteamClient?.Window?.BringToFront?.();
     } catch {
       log("steam_button_home_failed");

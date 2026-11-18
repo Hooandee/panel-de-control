@@ -43,7 +43,6 @@ public sealed class GameBarFocusReturner
     private long quietUntilTicks;
     private volatile bool stopped;
     private IntPtr pendingRestore;
-    private int resumes;
     // The window Big Picture came over: a game started by another launcher does not descend from steam.exe.
     private IntPtr coveredGame;
     private int nullReadings;
@@ -104,11 +103,6 @@ public sealed class GameBarFocusReturner
             }
 
             Foreground.BigPictureRaised(raised);
-            if (raised)
-            {
-                _ = NudgeShellAsync(bigPicture, Volatile.Read(ref resumes));
-            }
-
             CompanionLog.Write(
                 "themes.big_picture_raise",
                 (raised ? (stayTopmost ? "on_top topmost" : "on_top") : "below") + (cloaked ? " cloaked" : string.Empty));
@@ -120,107 +114,6 @@ public sealed class GameBarFocusReturner
         }
     }
 
-    // Xbox mode's shell can keep showing the game's black launch screen over Big Picture until a touch arrives (mouse
-    // and keyboard input do not clear it). A tap on an empty strip at the bottom of Big Picture goes out once the screen
-    // is up, and again later, while Big Picture is still in front and the game has not been resumed.
-    private static readonly int[] ShellNudgesMs = { 600, 1500 };
-
-    private async Task NudgeShellAsync(IntPtr bigPicture, int resumesAtRaise)
-    {
-        var waited = 0;
-        foreach (var at in ShellNudgesMs)
-        {
-            await Task.Delay(at - waited).ConfigureAwait(false);
-            waited = at;
-            if (stopped || GetForegroundWindow() != bigPicture || Volatile.Read(ref resumes) != resumesAtRaise)
-            {
-                return;
-            }
-
-            CompanionLog.Write("themes.shell_nudge", $"{at}ms {TapEmptyStrip(bigPicture)}");
-        }
-    }
-
-    private static string TapEmptyStrip(IntPtr bigPicture)
-    {
-        if (!GetWindowRect(bigPicture, out var window))
-        {
-            return "no_rect";
-        }
-
-        if (!touchInjectionReady)
-        {
-            touchInjectionReady = InitializeTouchInjection(1, TouchFeedbackDefault);
-            if (!touchInjectionReady)
-            {
-                return $"init_failed {Marshal.GetLastWin32Error()}";
-            }
-        }
-
-        var x = window.Left + (window.Right - window.Left) * 365 / 1000;
-        var y = window.Top + (window.Bottom - window.Top) * 977 / 1000;
-        var contact = new PointerTouchInfo
-        {
-            PointerInfo = new PointerInfo { PointerType = PointerTypeTouch, PixelLocation = new Point { X = x, Y = y } },
-            TouchMask = TouchMaskContactArea | TouchMaskOrientation | TouchMaskPressure,
-            Contact = new Rect { Left = x - 2, Top = y - 2, Right = x + 2, Bottom = y + 2 },
-            Orientation = 90,
-            Pressure = 32000,
-        };
-        contact.PointerInfo.PointerFlags = PointerFlagDown | PointerFlagInRange | PointerFlagInContact;
-        if (!InjectTouchInput(1, new[] { contact }))
-        {
-            return $"down_failed {Marshal.GetLastWin32Error()}";
-        }
-
-        Thread.Sleep(60);
-        contact.PointerInfo.PointerFlags = PointerFlagUp;
-        return InjectTouchInput(1, new[] { contact }) ? "tap" : $"up_failed {Marshal.GetLastWin32Error()}";
-    }
-
-    private static bool touchInjectionReady;
-    private const uint TouchFeedbackDefault = 1;
-    private const int PointerTypeTouch = 2;
-    private const uint PointerFlagInRange = 0x2, PointerFlagInContact = 0x4, PointerFlagDown = 0x10000, PointerFlagUp = 0x40000;
-    private const uint TouchMaskContactArea = 0x1, TouchMaskOrientation = 0x2, TouchMaskPressure = 0x4;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Point
-    {
-        public int X, Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct PointerInfo
-    {
-        public int PointerType;
-        public uint PointerId, FrameId, PointerFlags;
-        public IntPtr SourceDevice, HwndTarget;
-        public Point PixelLocation, HimetricLocation, PixelLocationRaw, HimetricLocationRaw;
-        public uint Time, HistoryCount;
-        public int InputData;
-        public uint KeyStates;
-        public ulong PerformanceCount;
-        public int ButtonChangeType;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct PointerTouchInfo
-    {
-        public PointerInfo PointerInfo;
-        public uint TouchFlags, TouchMask;
-        public Rect Contact, ContactRaw;
-        public uint Orientation, Pressure;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool InitializeTouchInjection(uint maxCount, uint feedbackMode);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool InjectTouchInput(uint count, PointerTouchInfo[] contacts);
-
     /// <summary>
     /// Steam resumed the game. Where Big Picture had come over it by window order, Windows also refuses Steam's raise
     /// of the game: the game is raised the same way and given the focus, and if Windows still keeps the foreground
@@ -230,7 +123,6 @@ public sealed class GameBarFocusReturner
     public async Task<string?> GameResumedAsync(Func<IntPtr> findGame, CancellationToken cancellationToken)
     {
         HoldStill(AfterGameSignal);
-        Interlocked.Increment(ref resumes);
         await raising.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -607,6 +499,7 @@ public sealed class GameBarFocusReturner
 
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
+
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Rect
