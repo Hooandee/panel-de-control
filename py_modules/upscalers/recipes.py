@@ -83,6 +83,8 @@ RECIPES: dict[str, Recipe] = {
         Recipe("2124490", anr_settings=(("Supersampling (Supermuestreo)", "DLSS"),
                                         ("Frame Generation (Generación de fotogramas)", "On (Activada)"))),
         Recipe("1182900", anr_settings=(("NVIDIA DLSS Frame Generation", "On (Sí)"),)),
+        # Deep Rock Galactic asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.
+        Recipe("548430", args=("-dx12",), anr_settings=(("Frame Generation", "On"),)),
     )
 }
 

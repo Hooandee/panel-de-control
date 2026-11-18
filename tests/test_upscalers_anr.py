@@ -189,6 +189,7 @@ def test_cyberpunk_skips_its_launcher_and_validated_games_tell_their_anr_setting
     cyberpunk = recipes.recipe_for("1091500")
     assert "--launcher-skip" in cyberpunk.args and cyberpunk.anr_settings
     assert recipes.recipe_for("2124490").anr_settings and recipes.recipe_for("1182900").anr_settings
+    assert "-dx12" in recipes.recipe_for("548430").args
 
 
 def test_nixxes_crash_reporter_is_never_taken_for_the_game(tmp_path):
