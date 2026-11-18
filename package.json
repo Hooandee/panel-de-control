@@ -1,6 +1,6 @@
 {
   "name": "panel-de-control",
-  "version": "0.91.0",
+  "version": "0.91.1",
   "description": "Panel de control definitivo para PCs portátiles: TDP, ventiladores y más.",
   "repository": "https://github.com/Hooandee/panel-de-control",
   "type": "module",
