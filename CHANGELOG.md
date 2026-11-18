@@ -3,9 +3,41 @@
 ## [0.91.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.91.0...panel-de-control-v0.91.1) (2026-11-18)
 
 
-### Bug Fixes
+### Español
 
-* **windows:** open the desktop app again and make Game Bar only Game Bar outside a game ([#1409](https://github.com/Hooandee/panel-de-control/issues/1409)) ([11097c6](https://github.com/Hooandee/panel-de-control/commit/11097c6143eba86ceee18ea9ad8f293e95629276))
+* **La app de escritorio vuelve a abrirse bien:** En Windows, al abrir Panel de Control fuera de la Game Bar solo se veía el nombre del equipo, sin ninguna sección. Ya se abre completa.
+* **Fuera de una partida, el botón Xbox solo abre la Game Bar:** Con Big Picture delante o sin ningún juego abierto, pulsar el botón Xbox también hacía saltar el Inicio del tema, y con un juego abierto podía acabar en una pantalla negra de carga con el juego escondido detrás. Ahora una pulsación abre solo la Game Bar y dos no hacen nada.
+* **Dos pulsaciones con un juego recién abierto te llevan al Inicio:** Si abrías un juego desde el tema y pulsabas dos veces el botón Xbox, se quedaba la pantalla negra de carga con el logo del juego durante casi un minuto sin responder al mando. Ahora vas directo al Inicio con el juego abierto, también si pulsas mientras se está cargando.
+
+### English
+
+* **The desktop app opens properly again:** On Windows, opening Panel de Control outside Game Bar showed only the device name and no sections. It now opens in full.
+* **Outside a game, the Xbox button only opens Game Bar:** With Big Picture in front or no game open, pressing the Xbox button also jumped to the theme's Home, and with a game open it could end on a black loading screen with the game hidden behind it. Now one press opens just Game Bar and two do nothing.
+* **Two presses right after opening a game take you Home:** If you opened a game from the theme and pressed the Xbox button twice, the black loading screen with the game's logo stayed for almost a minute and ignored the controller. Now you go straight Home with the game still open, also if you press while it is loading.
+
+### Italiano
+
+* **L'app desktop si apre di nuovo bene:** Su Windows, aprendo Panel de Control fuori dalla Game Bar si vedeva solo il nome del dispositivo, senza nessuna sezione. Ora si apre completa.
+* **Fuori da una partita, il tasto Xbox apre solo la Game Bar:** Con Big Picture davanti o senza nessun gioco aperto, premere il tasto Xbox faceva saltare anche la Home del tema, e con un gioco aperto si poteva finire su una schermata nera di caricamento con il gioco nascosto dietro. Ora una pressione apre solo la Game Bar e due non fanno nulla.
+* **Due pressioni con un gioco appena aperto ti portano alla Home:** Se aprivi un gioco dal tema e premevi due volte il tasto Xbox, la schermata nera di caricamento con il logo del gioco restava quasi un minuto senza rispondere al controller. Ora vai dritto alla Home con il gioco aperto, anche se premi mentre si sta caricando.
+
+### Deutsch
+
+* **Die Desktop-App öffnet sich wieder richtig:** Unter Windows zeigte Panel de Control außerhalb der Game Bar nur den Gerätenamen und keinen Bereich. Jetzt öffnet sie sich vollständig.
+* **Außerhalb eines Spiels öffnet die Xbox-Taste nur die Game Bar:** Mit Big Picture im Vordergrund oder ohne offenes Spiel sprang die Xbox-Taste auch zum Home des Themes, und mit offenem Spiel konnte man auf einem schwarzen Ladebildschirm landen, hinter dem das Spiel versteckt war. Jetzt öffnet ein Druck nur die Game Bar und zwei tun nichts.
+* **Zwei Drücke direkt nach dem Start eines Spiels bringen dich zum Home:** Wenn du ein Spiel aus dem Theme gestartet und zweimal die Xbox-Taste gedrückt hast, blieb der schwarze Ladebildschirm mit dem Spiellogo fast eine Minute stehen und reagierte nicht auf den Controller. Jetzt landest du direkt im Home und das Spiel bleibt offen, auch wenn du während des Ladens drückst.
+
+### Português (Brasil)
+
+* **O app de desktop volta a abrir direito:** No Windows, ao abrir o Panel de Control fora da Game Bar aparecia só o nome do aparelho, sem nenhuma seção. Agora ele abre completo.
+* **Fora de uma partida, o botão Xbox só abre a Game Bar:** Com o Big Picture na frente ou sem nenhum jogo aberto, apertar o botão Xbox também pulava para o Início do tema, e com um jogo aberto dava para cair numa tela preta de carregamento com o jogo escondido atrás. Agora um toque abre só a Game Bar e dois não fazem nada.
+* **Dois toques logo depois de abrir um jogo te levam ao Início:** Se você abria um jogo pelo tema e apertava o botão Xbox duas vezes, a tela preta de carregamento com o logo do jogo ficava quase um minuto sem responder ao controle. Agora você vai direto ao Início com o jogo aberto, também se apertar enquanto ele carrega.
+
+### Français
+
+* **L'application de bureau s'ouvre de nouveau correctement :** Sous Windows, en ouvrant Panel de Control hors de la Game Bar, on ne voyait que le nom de l'appareil, sans aucune section. Elle s'ouvre maintenant en entier.
+* **Hors d'une partie, le bouton Xbox ouvre seulement la Game Bar :** Avec Big Picture au premier plan ou sans jeu ouvert, appuyer sur le bouton Xbox faisait aussi apparaître l'Accueil du thème, et avec un jeu ouvert on pouvait tomber sur un écran noir de chargement avec le jeu caché derrière. Maintenant un appui ouvre seulement la Game Bar et deux ne font rien.
+* **Deux appuis juste après avoir lancé un jeu t'amènent à l'Accueil :** Si tu lançais un jeu depuis le thème et appuyais deux fois sur le bouton Xbox, l'écran noir de chargement avec le logo du jeu restait presque une minute sans réagir à la manette. Maintenant tu vas directement à l'Accueil avec le jeu ouvert, même si tu appuies pendant le chargement.
 
 ## [0.91.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.90.0...panel-de-control-v0.91.0) (2026-11-17)
 
