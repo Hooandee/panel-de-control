@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.91.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.91.0...panel-de-control-v0.91.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **windows:** open the desktop app again and make Game Bar only Game Bar outside a game ([#1409](https://github.com/Hooandee/panel-de-control/issues/1409)) ([11097c6](https://github.com/Hooandee/panel-de-control/commit/11097c6143eba86ceee18ea9ad8f293e95629276))
+
 ## [0.91.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.90.0...panel-de-control-v0.91.0) (2026-11-17)
 
 
