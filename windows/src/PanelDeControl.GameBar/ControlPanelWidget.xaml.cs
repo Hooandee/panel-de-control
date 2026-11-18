@@ -1347,11 +1347,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         WidgetShell.Visibility = Visibility.Collapsed;
         DesktopShell.Visibility = Visibility.Visible;
         WidgetShell.Children.Remove(HeaderBlock);
-        WidgetShell.Children.Remove(ConnectionStatus);
+        WidgetShell.Children.Remove(StatusBlock);
         WidgetShell.Children.Remove(SectionHeaderBlock);
         WidgetScroller.Content = null;
         DesktopHeaderSlot.Children.Add(HeaderBlock);
-        DesktopHeaderSlot.Children.Add(ConnectionStatus);
+        DesktopHeaderSlot.Children.Add(StatusBlock);
         DesktopContent.Children.Add(SectionHeaderBlock);
         DesktopContent.Children.Add(SectionHost);
         HeaderDetail.TextWrapping = TextWrapping.Wrap;

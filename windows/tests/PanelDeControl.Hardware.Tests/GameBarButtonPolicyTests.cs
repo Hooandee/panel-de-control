@@ -28,11 +28,11 @@ public sealed class GameBarButtonPolicyTests
     }
 
     [Theory]
-    [InlineData("scheduled")]
+    [InlineData("none")]
     [InlineData("inactive")]
     [InlineData("no_host")]
     [InlineData("unreachable")]
-    public void OverBigPictureOrWithoutATheme_OpeningWasAlreadyTheButton(string hostAnswer)
+    public void OverBigPictureWithoutAGameOrATheme_TwoPressesDoNothing(string hostAnswer)
     {
         var policy = new GameBarButtonPolicy();
 

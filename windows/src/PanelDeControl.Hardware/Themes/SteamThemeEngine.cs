@@ -58,7 +58,7 @@ public sealed class SteamThemeEngine
     private const string HostGlobal = "__pdcWindowsThemeHost";
 
     /// <summary>Must match <c>WINDOWS_THEME_HOST_VERSION</c>: an older host left in Steam by a previous build is replaced.</summary>
-    public const int HostVersion = 10;
+    public const int HostVersion = 13;
 
     private static readonly TimeSpan CycleInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan IdleCycleInterval = TimeSpan.FromSeconds(30);
@@ -151,8 +151,8 @@ public sealed class SteamThemeEngine
     }
 
     /// <summary>
-    /// Game Bar came to the foreground, where Windows keeps the Xbox button for it: the theme host answers it as
-    /// Steam's button (steamButton.ts) unless it opened over a running game ("game"). Returns the answer, for the log.
+    /// Game Bar came to the foreground, where Windows keeps the Xbox button for it: the theme host answers "game" when
+    /// it opened over a running game (steamButton.ts) and does nothing else. Returns the answer, for the log.
     /// </summary>
     public Task<string> GameBarShownAsync(bool foregroundWasSteam, CancellationToken cancellationToken) =>
         CallHostAsync(foregroundWasSteam ? "gameBarShown?.(true)" : "gameBarShown?.(false)", cancellationToken);
