@@ -120,9 +120,9 @@ public sealed class GameBarFocusReturner
         }
     }
 
-    // Xbox mode's shell can keep showing the game's black switch screen over Big Picture until some input arrives (a
-    // touch fixes it). The screen goes up a moment after the raise, so a one pixel mouse move there and back comes once
-    // it is up, and again later, while Big Picture is still in front and the game has not been resumed.
+    // Xbox mode's shell can keep showing the game's black launch screen over Big Picture until keyboard or touch input
+    // arrives (mouse input does not clear it). When Steam raised itself no synthetic Alt went out, so one goes out once
+    // the screen is up, and again later, while Big Picture is still in front and the game has not been resumed.
     private static readonly int[] ShellNudgesMs = { 600, 1500 };
 
     private async Task NudgeShellAsync(IntPtr bigPicture, int resumesAtRaise)
@@ -137,8 +137,8 @@ public sealed class GameBarFocusReturner
                 return;
             }
 
-            mouse_event(MouseEventMove, 1, 0, 0, UIntPtr.Zero);
-            mouse_event(MouseEventMove, -1, 0, 0, UIntPtr.Zero);
+            keybd_event(VkMenu, 0, 0, UIntPtr.Zero);
+            keybd_event(VkMenu, 0, KeyEventKeyUp, UIntPtr.Zero);
             CompanionLog.Write("themes.shell_nudge", $"{at}ms");
         }
     }
@@ -529,12 +529,6 @@ public sealed class GameBarFocusReturner
 
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
-
-    private const uint MouseEventMove = 0x0001;
-
-    [DllImport("user32.dll")]
-    private static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extraInfo);
-
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Rect
