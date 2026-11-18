@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.91.1...panel-de-control-v0.92.0) (2026-11-18)
+
+
+### Features
+
+* **upscalers:** Apex Neural Rendering and Mako 5 frame generation ([#1400](https://github.com/Hooandee/panel-de-control/issues/1400)) ([347a06c](https://github.com/Hooandee/panel-de-control/commit/347a06c4629a1560b7eb29115def97c7184f4b73))
+
 ## [0.91.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.91.0...panel-de-control-v0.91.1) (2026-11-18)
 
 
