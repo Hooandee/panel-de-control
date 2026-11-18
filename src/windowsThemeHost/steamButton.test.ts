@@ -198,6 +198,21 @@ describe("Steam button on Windows", () => {
       home();
     });
 
+    it("counts a hybrid theme's launch screen over Big Picture as the game in front", () => {
+      const { scope, state } = withPage(false);
+      state.bigPictureFocused = true;
+      const page = (scope as unknown as { SteamUIStore: { WindowStore: { GamepadUIMainWindowInstance: { BrowserWindow: { document: Record<string, unknown> } } } } }).SteamUIStore.WindowStore.GamepadUIMainWindowInstance.BrowserWindow.document;
+      let screen: { hidden: boolean } | null = { hidden: false };
+      page.querySelector = (selector: string) => (selector === "[data-pdc-hyb-launch]" ? screen : null);
+      const home = installSteamButtonHome(scope, () => true, log);
+      expect(home.gameBarShown(true)).toBe("game");
+      screen = { hidden: true };
+      expect(home.gameBarShown(true)).toBe("none");
+      screen = null;
+      expect(home.gameBarShown(true)).toBe("none");
+      home();
+    });
+
     it("does nothing when Game Bar opens and no game runs", () => {
       vi.useFakeTimers();
       const harness = withPage(false);
