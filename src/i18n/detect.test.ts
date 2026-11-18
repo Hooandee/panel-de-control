@@ -43,8 +43,17 @@ describe("steamLangToLang (seed the default from Steam's UI language)", () => {
     expect(steamLangToLang("fr")).toBe("fr");
   });
 
+  it("maps Simplified Chinese and its codes to zh-CN", () => {
+    expect(steamLangToLang("schinese")).toBe("zh-CN");
+    expect(steamLangToLang("zh-cn")).toBe("zh-CN");
+    expect(steamLangToLang("zh")).toBe("zh-CN");
+    expect(steamLangToLang("chinese")).toBe("zh-CN");
+    expect(steamLangToLang("Simplified Chinese")).toBe("zh-CN");
+  });
+
   it("maps any other language to es (our default)", () => {
-    expect(steamLangToLang("schinese")).toBe("es");
+    expect(steamLangToLang("tchinese")).toBe("es");
+    expect(steamLangToLang("korean")).toBe("es");
   });
 
   it("degrades to es for null/blank/garbage", () => {

@@ -1,4 +1,5 @@
 import type { Lang } from "../../i18n";
+import { zhCN } from "./stringsZhCN";
 
 const es = {
   "ambient.lib.playAll": "Reproducir todo",
@@ -2102,4 +2103,4 @@ const fr: Record<Key, string> = {
   "ambient.covered.action": "Afficher le mien quand même",
 };
 
-export const AMBIENT_STRINGS: Record<Lang, Record<string, string>> = { es, en, it, de, "pt-BR": ptBR, fr };
+export const AMBIENT_STRINGS: Record<Lang, Record<string, string>> = { es, en, it, de, "pt-BR": ptBR, fr, "zh-CN": zhCN };

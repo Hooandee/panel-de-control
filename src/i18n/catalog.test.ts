@@ -558,7 +558,7 @@ describe("LanguageSelector", () => {
     const selector = screen.getByRole("combobox", { name: "Idioma" });
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     const flags = [...container.querySelectorAll<HTMLImageElement>("[data-language-flag]")];
-    expect(flags).toHaveLength(6);
+    expect(flags).toHaveLength(7);
     expect(flags.every((flag) => flag.tagName === "IMG")).toBe(true);
     expect(flags.every((flag) => flag.src.startsWith("data:image/svg+xml,"))).toBe(true);
     expect([...selector.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
@@ -568,6 +568,7 @@ describe("LanguageSelector", () => {
       "Deutsch",
       "Português (Brasil)",
       "Français",
+      "简体中文",
     ]);
     fireEvent.change(selector, { target: { value: "pt-BR" } });
 
