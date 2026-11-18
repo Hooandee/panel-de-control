@@ -59,6 +59,8 @@ function emit(): void {
 }
 
 /** Publishes what Escaladores knows so covers and the in-game pill follow it without polling. */
+let makoEngines: Record<string, 4 | 5> = {};
+
 export function publishOverview(overview: UpscalersOverview): void {
   const next: Record<string, Badge> = {};
   for (const [appid, install] of Object.entries(overview.installs)) {
@@ -72,6 +74,7 @@ export function publishOverview(overview: UpscalersOverview): void {
     next[appid] = { ...cover, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null, fallback };
   }
   installs = next;
+  makoEngines = Object.fromEntries(Object.entries(overview.engines ?? {}).flatMap(([appid, engines]) => engines.mako?.engine ? [[appid, engines.mako.engine]] : []));
   const covers: Record<string, Badge> = {};
   for (const [appid, engines] of Object.entries(overview.engines ?? {})) {
     if (next[appid]) continue;
@@ -399,7 +402,10 @@ export const InGameBadge: FC = () => {
   useEffect(() => subscribeQamSurface(setSurface), []);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const badge = running ? map[String(running.liveAppid)] : undefined;
-  const { live, lossless, makoResolutionWarning, makoMultiplier, makoSpatial, makoName } = useOverlayLive(running ? String(running.liveAppid) : null, !!badge);
+  const live_ = useOverlayLive(running ? String(running.liveAppid) : null, !!badge);
+  const { live, lossless, makoResolutionWarning, makoMultiplier, makoSpatial } = live_;
+  // A spatial-only or idle runtime may not say which model it loaded; the profile's version still does.
+  const makoName = running && makoEngines[String(running.liveAppid)] === 5 ? "Mako 5" : live_.makoName;
   const resolution = live?.resolution ? [live.resolution.render[1], live.resolution.output[1]] : null;
   const installedDll = badge?.engine === "dll" && badge.state === "not_run";
   const hasContent = installedDll || !!live || !!lossless || makoResolutionWarning || makoMultiplier !== null || !!makoSpatial;

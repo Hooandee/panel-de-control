@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import threading
 import time
 import urllib.request
 import zipfile
@@ -71,8 +72,15 @@ def _untar(archive: Path, destination: Path) -> None:
 
 
 class AssetCache:
+    _locks: dict[str, threading.Lock] = {}
+    _locks_guard = threading.Lock()
+
     def __init__(self, root: Path):
         self.root = root
+
+    def _lock(self, asset: Asset) -> threading.Lock:
+        with AssetCache._locks_guard:
+            return AssetCache._locks.setdefault(asset.sha256, threading.Lock())
 
     def file(self, asset: Asset) -> Path:
         return self.root / asset.sha256 / asset.filename
@@ -95,6 +103,11 @@ class AssetCache:
 
     def ensure(self, asset: Asset, progress: Progress, cancelled: Callable[[], bool]) -> Path:
         """Return the verified file (or unpacked folder for archives), fetching it if needed."""
+        # Two callers fetching the same asset would write into one partial file.
+        with self._lock(asset):
+            return self._ensure(asset, progress, cancelled)
+
+    def _ensure(self, asset: Asset, progress: Progress, cancelled: Callable[[], bool]) -> Path:
         if not self.ready(asset):
             self._download(asset, progress, cancelled)
             if asset.archive:

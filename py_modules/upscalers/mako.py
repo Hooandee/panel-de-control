@@ -186,6 +186,15 @@ class Mako:
             state['v5'] = {}
         return state['v5'], self.prefix5, PAYLOAD5, VERSION5
 
+    def _engine_of(self, appid, profile):
+        if profile.get('engine') in (4, 5):
+            return profile['engine']
+        # Paused profiles written before they recorded their engine: MAKO 5 configs name their model.
+        try:
+            return 5 if 'frame_generation_model = "mako-fg"' in (self.config_root / appid / 'conf.toml').read_text() else 4
+        except (OSError, UnicodeError):
+            return 4
+
     def _installed(self, state, line=4):
         record, prefix, payload, _ = self._line(state, line)
         files = record.get('files', {})
@@ -218,7 +227,7 @@ class Mako:
                   'version': state['v5'].get('version', VERSION5) if installed5 else None}
             return {'installed': installed, 'ready': reason is None, 'reason': reason, 'v5': v5,
                     'notice_dismissed': state.get('notice_dismissed') is True,
-                    'supported': supported, 'spatial_ready': supported and installed, 'dll': bool(dll), 'version': state.get('version', VERSION) if installed else None,
+                    'supported': supported, 'spatial_ready': supported and (installed or installed5), 'dll': bool(dll), 'version': state.get('version', VERSION) if installed else None,
                     'foreign': (self.home / '.local/bin/mako-run').exists() or (self.home / '.local/bin/mako-launch').exists(),
                     'profiles': profiles}
 
@@ -238,7 +247,7 @@ class Mako:
         with self._lock:
             state = self._state()
             record, _, _, default_version = self._line(state, line)
-            if self._installed(state, line) and record.get('version', default_version) == (version or default_version):
+            if self._installed(state, line) and (version is None or record.get('version', default_version) == version):
                 return self.status()
         # Downloading outside the lock keeps status reads (the UI, support snapshots) answering meanwhile.
         archive = cache.ensure(asset, progress, cancelled)
@@ -286,7 +295,7 @@ class Mako:
                 files = {name: sha256(staging / name) for name in payload}
                 if upgrading:
                     mine = {appid: profile for appid, profile in {**state.get('paused', {}), **state['profiles']}.items()
-                            if not isinstance(profile, dict) or profile.get('engine', 4) == line}
+                            if not isinstance(profile, dict) or self._engine_of(appid, profile) == line}
                     if line == 4:
                         state.pop('inspection', None)
                         if any(profile.get('enabled', True) for profile in state['profiles'].values() if profile.get('engine', 4) == 4):
@@ -410,7 +419,8 @@ class Mako:
                             raise MakoError('mako_conflict')
                         content = path.read_text().replace('frame_generation_enabled = true', 'frame_generation_enabled = false').replace('scaling_enabled = true', 'scaling_enabled = false')
                         changes[path] = content
-                        paused[appid] = {'hash': hashlib.sha256(content.encode()).hexdigest(), 'launcher_hash': previous.get('launcher_hash')}
+                        paused[appid] = {'hash': hashlib.sha256(content.encode()).hexdigest(), 'launcher_hash': previous.get('launcher_hash'),
+                                         'engine': previous.get('engine', 4)}
                     state['paused'] = paused
                     state['profiles'].pop(appid, None)
                     self._event(state, 'remove', appid)

@@ -107,7 +107,7 @@ it("puts its options back when they vanished from the launch options while the p
   api.getUpscalerLaunchReceipt.mockResolvedValue(receipt);
   api.readAppDetails.mockResolvedValue({ launch: "" });
   api.setUpscalerLaunchReceipt.mockResolvedValue(true);
-  await saveMakoProfile("1", 1, { enabled: true, engine: 5 });
+  await saveMakoProfile("1", 1, { enabled: true, engine: 5 }, false, true);
   expect(api.setUpscalerLaunchReceipt).toHaveBeenCalledWith("1", "mako", { version: 1, env: [], wrappers: { before: [], applied: [], added: [] } });
   expect(api.applyManagedLaunch).toHaveBeenCalled();
 });

@@ -236,7 +236,7 @@ it("retires newly configured Mako when the previous generator cannot be disabled
   fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
   fireEvent.click((await screen.findByRole("button", { name: "up.save" })));
   expect(await screen.findByText("up.error.generic")).toBeTruthy();
-  expect(api.setMakoGame).toHaveBeenLastCalledWith("1", { enabled: false });
+  expect(api.setMakoGame).toHaveBeenLastCalledWith("1", null);
   await waitFor(() => expect(api.getLsfgStatus).toHaveBeenCalledTimes(2));
 });
 

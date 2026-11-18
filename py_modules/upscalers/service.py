@@ -204,7 +204,7 @@ class UpscalerService:
             try:
                 profile = self.mako_status(str(appid)).get("profiles", {}).get(str(appid))
                 event["applied_mako"] = {"enabled": profile is not None,
-                    **diagnostics.fields(profile, ("enabled", "mode", "multiplier", "target_fps", "max_multiplier", "flow", "performance", "scaling_enabled", "scaling_factor", "scaling_sharpness"))}
+                    **diagnostics.fields(profile, ("enabled", "engine", "fg_mode", "mode", "multiplier", "target_fps", "max_multiplier", "flow", "flow_scale", "performance", "scaling_enabled", "scaling_factor", "scaling_sharpness"))}
             except Exception:
                 event["applied_mako"] = {"status": "unavailable"}
         job = self.job()
@@ -2001,13 +2001,15 @@ class UpscalerService:
         try:
             if line == 5:
                 # MAKO 5 always starts from the newest published 5.x; the pinned release covers a failed lookup.
+                candidate = asset = None
                 try:
                     candidate = engine_updates.discover("mako", mako.VERSION5)
                     if candidate:
                         asset = engine_updates.prepare("mako", candidate, self.cache)
-                        return self.mako.install(self.cache, asset=asset, version=candidate["version"], line=5)
                 except Exception as error:  # network or metadata failures (http.client errors included) fall back to the pinned release
                     self.record_action("global", "engine_check_mako5", "failed", {"build": mako.VERSION5}, getattr(error, "code", "engine_check_failed"))
+                if asset:
+                    return self.mako.install(self.cache, asset=asset, version=candidate["version"], line=5)
             return self.mako.install(self.cache, line=line)
         except (AssetError, mako.MakoError) as error:
             raise UpscalerError(error.code) from None
@@ -2201,7 +2203,7 @@ class UpscalerService:
         mako_status = self.mako.status()
         return {
             "gpu": self.gpu,
-            "mako": {key: mako_status[key] for key in ("installed", "ready", "reason", "profiles") if key in mako_status},
+            "mako": {key: mako_status[key] for key in ("installed", "ready", "reason", "v5", "profiles") if key in mako_status},
             "installs": {
                 appid: {
                     "build": entry["install"].get("build"),

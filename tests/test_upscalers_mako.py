@@ -400,3 +400,28 @@ def test_status_answers_while_the_archive_downloads(setup):
         return cache.ensure(*args)
     manager.install(SimpleNamespace(ensure=slow_ensure))
     assert answered == [False] and manager.status()['installed'] is True
+
+
+def test_mako4_upgrade_skips_paused_mako5_profiles(setup, monkeypatch, tmp_path):
+    manager, cache, _, _ = setup
+    manager.install(cache)
+    archive = tmp_path / 'mako5.tar.xz'
+    with tarfile.open(archive, 'w:xz') as handle:
+        for name in mako.PAYLOAD5:
+            info = tarfile.TarInfo('./' + name)
+            info.size = 1
+            handle.addfile(info, io.BytesIO(b'x'))
+    monkeypatch.setattr(mako, 'ASSET5', SimpleNamespace(sha256=hashlib.sha256(archive.read_bytes()).hexdigest()))
+    manager.install(SimpleNamespace(ensure=lambda *args: archive), line=5)
+    manager.set_game('7', 'Game', {'engine': 5})
+    manager.set_game('7', 'Game', None)
+    validated = []
+    def run(args, **kwargs):
+        if args[1] == 'validate':
+            validated.append(Path(args[3]).read_text())
+        kwargs['stdout'].write(b'{"compatible":true}')
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(mako.subprocess, 'run', run)
+    manager.install(cache, asset=mako.ASSET, version='4.6.1')
+    assert manager.status()['version'] == '4.6.1'
+    assert not any('mako-fg' in content for content in validated)

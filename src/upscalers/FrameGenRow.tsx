@@ -167,15 +167,18 @@ export const FrameGenRow: FC<{
     }
   };
 
-  const saveMako = async (next: Partial<MakoProfile> | null) => {
+  const saveMako = async (next: Partial<MakoProfile> | null, reclaim = false) => {
     const patch = next ? {
       enabled: true, engine: next.engine ?? 4, mode: next.mode, multiplier: next.multiplier, target_fps: next.target_fps,
       max_multiplier: next.max_multiplier, flow: next.flow, performance: next.performance,
       ...(next.fg_mode ? { fg_mode: next.fg_mode } : {}), ...(next.flow_scale !== undefined ? { flow_scale: next.flow_scale } : {}),
     } : { enabled: false };
-    await saveMakoProfile(appid, liveAppid, patch, isNonSteam);
+    await saveMakoProfile(appid, liveAppid, patch, isNonSteam, reclaim);
     if (gameRunning) setMessage(t("up.mako.restart"));
   };
+
+  // Puts back exactly what was stored, engine and spatial scaling included, not a fresh frame generation profile.
+  const restoreMako = async () => { await saveMakoProfile(appid, liveAppid, storedMako, isNonSteam); };
 
   const run = async (work: () => Promise<void>, activate = false) => {
     setBusy(true);
@@ -195,7 +198,7 @@ export const FrameGenRow: FC<{
 
   const retireOther = (keep: "lsfg" | "mako" | "opti"): FrameGenStep[] => [
     ...(profile && keep !== "lsfg" ? [{ apply: () => saveLsfg(null), restore: () => saveLsfg(profile) }] : []),
-    ...(makoProfile && keep !== "mako" ? [{ apply: () => saveMako(null), restore: () => saveMako(makoProfile) }] : []),
+    ...(makoProfile && keep !== "mako" ? [{ apply: () => saveMako(null), restore: restoreMako }] : []),
     ...(installedRoute && onApplyOptiscaler && keep !== "opti" ? [{ apply: () => onApplyOptiscaler("off", null), restore: () => onApplyOptiscaler("on", installedRoute) }] : []),
   ];
   const enableLossless = async (ready: LsfgStatus | null) => {
@@ -221,12 +224,12 @@ export const FrameGenRow: FC<{
       else {
         if (!mako?.supported || (makoEngine === 4 && !mako.dll) || mako.reason === "mako_identity_ambiguous") return;
         if (!(makoEngine === 5 ? mako.v5?.installed : mako.installed)) setMako(await installMako(makoEngine));
-        if (makoProfile) { await saveMako({ ...makoProfile, engine: makoEngine }); return; }
+        if (makoProfile) { await saveMako({ ...makoProfile, engine: makoEngine }, true); return; }
         const start: MakoProfile = makoEngine === 5
           ? { engine: 5, mode: "fixed", multiplier: 2, target_fps: 120, max_multiplier: 3, flow: "balanced", fg_mode: "balanced", performance: false }
           : { engine: 4, mode: "fixed", multiplier: 2, target_fps: 120, max_multiplier: 3, flow: "balanced", performance: true };
         await transitionFrameGen([
-          { apply: () => saveMako(start), restore: () => saveMako(makoProfile) },
+          { apply: () => saveMako(start, true), restore: restoreMako },
           ...retireOther("mako"),
         ]);
         onOptiscaler("off", null);
@@ -303,7 +306,7 @@ export const FrameGenRow: FC<{
               : current === "anr" ? <ExperimentalBadge>{t("up.fg.beta")}</ExperimentalBadge> : undefined}
           />
         )}
-        {isMako && selectedActive && makoProfile && <MakoControls appid={appid} duo={duo} profile={makoProfile} disabled={blocked} onChange={(next) => void run(() => saveMako(next))} />}
+        {isMako && selectedActive && makoProfile && <MakoControls appid={appid} duo={duo} profile={makoProfile} disabled={blocked} onChange={(next) => void run(() => saveMako(next, true))} />}
         {isMako && mako?.reason === "mako_identity_ambiguous" && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.identity")}</Notice>}
         {current === "mako" && !mako?.dll && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.requirement")}</Notice>}
         {isMako && mako && !mako.supported && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.unsupported")}</Notice>}
