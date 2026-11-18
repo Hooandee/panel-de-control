@@ -25,6 +25,7 @@ import { theme } from "../theme";
 import {
   QUALITIES, badgeLabel, buildLabel, defaultChoice, lastOutputHeight, megabytes, renderHeight,
   buildBlocker, gameNotice, gameOutputHeight, protonFsr4Env, restoredChoice, steamMachineStrain,
+  fallbackLine,
 } from "./model";
 import { scalerSwitching } from "./scalerTransition";
 import { MakoScaling } from "./MakoScaling";
@@ -477,6 +478,7 @@ export const GameView: FC<{
   const [live, setGenerating] = useUpscalerLive(appid, playing, status === "pending" ? check : undefined);
 
   const facts = verify?.facts ?? detail?.history[detail.history.length - 1]?.facts;
+  const fallback = (playing ? live.fallback : status === "active" ? facts?.fallback : null) ?? null;
   const render = facts?.resolution?.render[1] ?? null;
   const output = facts?.resolution?.output[1] ?? null;
   const blocked = switchingScaler || foreignBusy || !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
@@ -518,7 +520,7 @@ export const GameView: FC<{
   const subtitle = !detail ? null
     : detail.native ? null
     : playing ? t("up.sub.playing")
-    : install ? runs
+    : install ? (fallback?.observed ?? runs)
     : detail.analysis.foreign ? externalHelix ? "" : t("up.sub.foreign")
     : uses.length ? t(preferredBuild ? "up.sub.usesBetter" : "up.sub.uses", { name: uses.join(", ") })
     : null;
@@ -544,7 +546,7 @@ export const GameView: FC<{
           ) : playing ? (
             <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                <StatusLine icon={<StatusIcon status={status} />} title={runs} />
+                <StatusLine icon={<StatusIcon status={fallback ? "loaded" : status} />} title={fallback ? fallbackLine(fallback, t) : runs} sub={fallback ? t(`up.fallback.reason.${fallback.reason}`) : undefined} tone={fallback ? "warn" : undefined} />
                 {live.render !== null && live.output !== null && (
                   <span style={{ fontSize: theme.font.caption + 2, color: theme.color.textMuted, fontVariantNumeric: "tabular-nums" }}>
                     {t("up.res.arrow", { from: live.render, to: live.output })}
@@ -563,13 +565,13 @@ export const GameView: FC<{
             </div>
           ) : install ? (
             <StatusLine
-              icon={<StatusIcon status={status} />}
-              title={status === "active" ? t("up.state.working", { name: runs }) : status === "broken" ? t("up.status.broken") : t("up.state.installed", { name: runs })}
-              sub={status === "active" && render && output
+              icon={<StatusIcon status={fallback ? "loaded" : status} />}
+              title={fallback ? fallbackLine(fallback, t) : status === "active" ? t("up.state.working", { name: runs }) : status === "broken" ? t("up.status.broken") : t("up.state.installed", { name: runs })}
+              sub={fallback ? t(`up.fallback.reason.${fallback.reason}`) : status === "active" && render && output
                 ? t(render < output ? "up.state.checked" : "up.state.checkedNative", { from: render, to: output })
                 : status === "active" ? undefined : installedBuild?.engine === "dll" && status === "not_run"
                   ? t("up.status.dll_not_run") : t(`up.status.${status}`)}
-              tone={status === "broken" ? "danger" : status === "loaded" ? "warn" : undefined}
+              tone={status === "broken" ? "danger" : status === "loaded" || fallback ? "warn" : undefined}
             />
           ) : detail.analysis.foreign ? (
             <StatusLine icon={<LuArrowLeftRight size={17} />} title={detail.analysis.foreign_identity?.engine === "helixsr" ? `HelixSR${detail.analysis.foreign_identity.variant === "unknown" ? "" : ` ${detail.analysis.foreign_identity.variant.toUpperCase()}`}` : t("up.foreign.title")} sub={detail.analysis.foreign_identity?.engine === "helixsr" ? t("up.helix.foreign", { name: "HelixSR" }) : t("up.foreign.body")} />
@@ -671,9 +673,11 @@ export const GameView: FC<{
       )}
       {detail && !pendingModel && !spatial && !detail.native && !externalHelix && (qualityMode.mode === "game" || replacesFsr) && <Note>{t("up.quality.inGame")}</Note>}
       {detail && !pendingModel && !spatial && qualityMode.mode === "locked" && <Note>{t("up.quality.useInput", { input: qualityMode.input })}</Note>}
-      {notice && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(notice)}</Notice>}
+      {notice && (notice === "up.notice.dx11Launch"
+        ? <Notice icon={<LuInfo size={16} />}>{t(notice)}</Notice>
+        : <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(notice)}</Notice>)}
       {strain && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.steamMachine.${strain}`)}</Notice>}
-      {recommendedInput && <Notice icon={<LuInfo size={16} />}>
+      {recommendedInput && notice !== "up.notice.dx11Launch" && <Notice icon={<LuInfo size={16} />}>
         {t("up.input.recommended", { input: recommendedInput, name: badgeLabel(selected, choice.model, choice.build).full })}
       </Notice>}
       {detail && !spatial && !detail.native && (installedOptiscaler || detail.analysis.foreign_identity?.engine === "helixsr") && (

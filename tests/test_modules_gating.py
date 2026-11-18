@@ -42,6 +42,9 @@ class _FakeChargeLimit:
     def __init__(self):
         self.calls = []
 
+    def get(self):
+        return None
+
     def set(self, p):
         self.calls.append(("set", p))
 
@@ -59,6 +62,7 @@ def _plugin_cl(disabled=None):
         "charge_limit_percent": 80,
     }
     p._charge_limit = _FakeChargeLimit()
+    p._battery = types.SimpleNamespace(read=lambda: {})
     return p
 
 

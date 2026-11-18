@@ -13,6 +13,7 @@ import { disablePlugin, disabledPlugins, installedPlugins } from "./deckyPlugins
 export interface TdpConflictHook {
   conflict: boolean;
   rivals: ConflictResult["rivals"];
+  steamOsManagerActive: boolean;
   takeoverAvailable: boolean;
   monitorOnly: boolean;
   // Turn off SimpleDeckyTDP (Decky) — reversible from Decky.
@@ -82,6 +83,7 @@ export function useTdpConflict(supported: boolean, weControl: boolean): TdpConfl
   return {
     conflict,
     rivals,
+    steamOsManagerActive,
     takeoverAvailable,
     monitorOnly: computeMonitorOnly(supported, weControl),
     disableSdtdp,

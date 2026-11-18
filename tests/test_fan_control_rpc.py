@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -270,6 +271,17 @@ class TestFanCurveRpcNull:
         st = asyncio.run(Plugin().set_fan_preset("balanced", "global", None))
         assert st["supported"] is False
         assert st["preset"] == "balanced"  # persisted even though hardware can't apply
+
+    def test_custom_curve_survives_preset_round_trip(self, Plugin):
+        report = json.loads((Path(__file__).parent / "data/fan_custom_restore.json").read_text())
+        plugin = Plugin()
+        custom = asyncio.run(plugin.set_fan_curve_points(report["custom_points"], "global"))
+        preset = asyncio.run(plugin.set_fan_preset(report["preset"], "global"))
+        assert preset["points"] == report["preset_points"]
+        assert preset["custom_points"] == custom["points"]
+        restored = asyncio.run(plugin.set_fan_curve_points(preset["custom_points"], "global"))
+        assert restored["preset"] == "custom"
+        assert restored["points"] == custom["points"]
 
     def test_fan_follow_global_toggle_keeps_own(self, Plugin):
         p = Plugin()

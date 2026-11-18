@@ -11,7 +11,8 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { readLosslessBranch, switchLosslessBranch, type LosslessBranchState } from "./losslessBranch";
 import { fgOffer } from "./model";
-import { ActionButton, Label, ListCard, ListRow, Notice, PickerButton, Row } from "./parts";
+import { ActionButton, Label, ListCard, ListRow, Note, Notice, PickerButton, Row } from "./parts";
+import { FLOW_MODES, FLOW_PRESETS, FlowScale, flowMode, type FlowMode } from "./FlowScale";
 import type { FgRoute } from "./types";
 
 import { applyManagedLaunch } from "./managedLaunch";
@@ -23,7 +24,6 @@ import { MakoControls } from "./MakoControls";
 
 type Pick = "off" | FgRoute | "lsfg" | "mako";
 const MULTIPLIERS = [2, 3, 4, 5, 6] as const;
-type Flow = LsfgProfile["flow"];
 
 function showFrameGenIcon(element: HTMLSpanElement | null) {
   element?.querySelector("svg")?.style.setProperty("display", "inline-block", "important");
@@ -194,7 +194,7 @@ export const FrameGenRow: FC<{
   const enableLossless = async (ready: LsfgStatus | null) => {
     if (!ready?.installed) setStatus(await installLsfg());
     await transitionFrameGen([
-      { apply: () => saveLsfg({ multiplier: 2, flow: "balanced", performance: true }), restore: () => saveLsfg(profile) },
+      { apply: () => saveLsfg({ multiplier: 2, flow_scale: 0.75, flow_manual: false, performance: true }), restore: () => saveLsfg(profile) },
       ...retireOther("lsfg"),
     ]);
     onOptiscaler("off", null);
@@ -305,11 +305,18 @@ export const FrameGenRow: FC<{
               />
               <PickerButton
                 duo={duo} controlId={`${appid}:flow`} showLabel label={t("up.lsfg.flow")}
-                value={profile.flow}
+                value={flowMode(profile)}
                 disabled={blocked}
-                options={(["quality", "balanced", "performance", "fastest"] as Flow[]).map((f) => ({ value: f, label: t(`up.lsfg.flow.${f}`) }))}
-                onChange={(flow) => void run(() => saveLsfg({ ...profile, flow }))}
+                options={FLOW_MODES.map((mode) => ({ value: mode, label: t(`up.lsfg.flow.${mode}`) }))}
+                onChange={(mode) => void run(() => saveLsfg(mode === "manual"
+                  ? { ...profile, flow_manual: true, flow_scale: profile.manual_scale ?? profile.flow_scale }
+                  : { ...profile, flow_manual: false, flow_scale: FLOW_PRESETS[mode as Exclude<FlowMode, "manual">], manual_scale: flowMode(profile) === "manual" ? profile.flow_scale : profile.manual_scale }))}
               />
+              {flowMode(profile) === "manual" && <>
+                <FlowScale appid={appid} value={profile.flow_scale} disabled={blocked}
+                  onCommit={(flowScale) => void run(() => saveLsfg({ ...profile, flow_manual: true, flow_scale: flowScale, manual_scale: flowScale }))} />
+                <Note>{t("up.lsfg.flowScaleHint")}</Note>
+              </>}
             <ListRow label={t("up.lsfg.light")} caption={t("up.lsfg.lightHint")} on={profile.performance} disabled={blocked}
               onPress={() => void run(() => saveLsfg({ ...profile, performance: !profile.performance }))} />
           </ListCard>

@@ -51,7 +51,9 @@ import { watchQamCover } from "./themes/qamCoverWatch";
 import { ControlCenter } from "./components/ControlCenter";
 import { ReportingBoundary } from "./components/ReportingBoundary";
 import { recordUiDiagnostic, startFrontendErrorReporting } from "./system/uiDiagnostics";
-import { setUiEventSink } from "./system/uiEvents";
+import { setStaleBackendSink } from "./system/staleBackend";
+import { reloadDeckyAfterClosingMenus } from "./system/reloadDecky";
+import { recordUiEvent as queueUiEvent, setUiEventSink } from "./system/uiEvents";
 import { startSteamPerformanceOwnership } from "./steam/performanceOwnership";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startCollectionsHeal } from "./steam/healCollections";
@@ -99,8 +101,6 @@ import { themeActionsChannel } from "./themes/runtime/themeActions";
 import { startPluginQamRuntime } from "./qam/pluginRuntime";
 import { getQamDocument, onQamDocument } from "./qamDocument";
 
-// Localized header title only; the internal plugin name / install folder stays
-// "Panel de Control" (renaming it would break existing installs and the updater).
 // Steam's public beta stopped exposing the module @decky/ui reads these classes from.
 const PluginTitle: FC = () => (
   <div className={staticClasses?.Title}>{translate("app.title")}</div>
@@ -226,6 +226,14 @@ export default definePlugin(() => {
 
   const stopFrontendErrorReporting = startFrontendErrorReporting(window);
   setUiEventSink((area, action, detail, ok) => recordUiEvent(area, action, detail, ok));
+  setStaleBackendSink((detail) => {
+    recordUiDiagnostic("themes", "backend_outdated", detail);
+    toaster.toast({
+      title: translate("backend.outdated.title"),
+      body: translate("backend.outdated.body"),
+      onClick: reloadDeckyAfterClosingMenus,
+    });
+  });
   const stopGameWatcher = startGameWatcher();
   const stopCollectionsHeal = startCollectionsHeal(
     () => (globalThis as { collectionStore?: object }).collectionStore,
@@ -299,6 +307,7 @@ export default definePlugin(() => {
     power: createPowerPort(),
     notify: (title, body) => toaster.toast({ title, body }),
     translate,
+    recordEvent: (action, detail) => queueUiEvent("ambient", action, detail),
   });
 
   const content = (
@@ -326,6 +335,7 @@ export default definePlugin(() => {
       stopSteamPerformanceOwnership();
       stopGameWatcher();
       stopFrontendErrorReporting();
+      setStaleBackendSink(null);
       setUiEventSink(null);
       stopEcoAmbient();
       stopValueToast();

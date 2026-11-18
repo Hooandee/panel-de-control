@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -132,9 +133,13 @@ def test_upgrade_keeps_legacy_history_dimensions_only_as_initial(tmp_path):
 
 
 @pytest.mark.parametrize('events,expected', [
-    ('ffxCreateContext_Dx12 context created: 1EE8\nCreateDLSSContext renderWidth: 960\nCreateXeSSContext\n', 'XeSS'),
-    ('CreateXeSSContext\nffxCreateContext_Dx12 context created: 1EE8\nCreateDLSSContext renderWidth: 960\n', 'FSR3'),
-    ('ffxCreateContext_Dx12 context created: 1EE8\nCreateFSR2Context\n', 'FSR2'),
+    ('ffxCreateContext_Dx12 context created: 1EE8\nCreateDLSSContext renderWidth: 960\nhk_xessD3D11Execute\n', 'XeSS'),
+    ('hk_xessD3D11Execute\nffxCreateContext_Dx12 context created: 1EE8\nCreateDLSSContext renderWidth: 960\n', 'FSR3'),
+    ('ffxCreateContext_Dx12 context created: 1EE8\nffxFsr2ContextCreate_Dx11 context created: 42\n', 'FSR2'),
+    ('hk_xessD3D11Execute\nCreateDLSSContext\n', 'XeSS'),
+    ('hk_xessD3D12Execute\nCreateDLSSContext\n', 'XeSS'),
+    ('hk_xessVKExecute\nCreateDLSSContext\n', 'XeSS'),
+    ('ffxFsr3ContextCreate_Dx12 context created: 42\nCreateDLSSContext\n', 'FSR3'),
 ])
 def test_latest_explicit_input_wins_over_earlier_ffx_context(tmp_path, events, expected):
     service, _ = make_service(tmp_path, events)
@@ -153,15 +158,42 @@ def test_a_d3d11_game_bridged_to_d3d12_counts_as_running(tmp_path):
     (tmp_path / logread.LOG_NAME).write_text(D3D11_LOG)
     facts = logread.read(tmp_path)
     assert logread.verdict(facts) == 'active'
-    assert facts['input'] == 'DLSS'
+    assert 'input' not in facts
     assert facts['initial_resolution'] == {'render': [752, 423], 'output': [1280, 720]}
     assert logread.provider_observation(facts)['provider_family'] == 'fsr'
 
 
-def test_d3d12_logs_read_exactly_as_before(tmp_path):
+def test_d3d12_backend_does_not_identify_the_game_input(tmp_path):
     from upscalers import logread
     (tmp_path / logread.LOG_NAME).write_text('[I] NVSDK_NGX_D3D12_CreateFeature Creating new fsr31 upscaler\nCreateDLSSContext\n')
     facts = logread.read(tmp_path)
-    assert (facts['upscaler'], facts['input'], logread.verdict(facts)) == ('fsr31', 'DLSS', 'active')
+    assert (facts['upscaler'], facts.get('input'), logread.verdict(facts)) == ('fsr31', None, 'active')
     (tmp_path / logread.LOG_NAME).write_text('[I] NVSDK_NGX_D3D11_Init_Ext AppId: 100980011\n')
     assert logread.verdict(logread.read(tmp_path)) == 'loaded'
+
+
+@pytest.mark.parametrize('before,after,expected', [
+    ('', '', None),
+    ('[D] hk_xessD3D11Execute\n[D] CreateDLSSContext\n', '', 'XeSS'),
+    ('', '[D] hk_xessD3D11Execute\n[D] CreateDLSSContext\n', 'XeSS'),
+    ('[D] CreateDLSSContext\n', '', None),
+])
+def test_d3d11_backend_creation_does_not_identify_the_game_input(tmp_path, before, after, expected):
+    from upscalers import logread
+    excerpt = (Path(__file__).parent / 'fixtures/upscalers/d3d11_exposure_fallback.log').read_text()
+    service, install = make_service(tmp_path, before + excerpt + after)
+    entry = service._game_state('292030')
+    entry['history'] = [{'build': install['build']}]
+    facts = service.verify('292030')['facts']
+    assert facts.get('input') == expected
+    assert entry['history'][-1]['facts'].get('input') == expected
+    assert diagnostics.snapshot(install)['observed'].get('input') == expected
+    assert facts['upscaler'] == 'FSR 3.X/4 w/Dx12'
+    assert facts['errors'] == 1
+    assert logread.verdict(facts) == 'active'
+
+
+@pytest.mark.parametrize('marker', ['CreateDLSSContext', 'CreateXeSSContext', 'CreateFSR2Context', 'CreateFSR3Context'])
+def test_unattributed_context_names_do_not_prove_input(tmp_path, marker):
+    service, _ = make_service(tmp_path, f'[D] {marker}\n')
+    assert 'input' not in service.verify('292030')['facts']

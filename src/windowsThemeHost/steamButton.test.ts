@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { installSteamButtonHome, PRESS_HOME_WAIT_MS } from "./steamButton";
+import { installSteamButtonHome, PRESS_HOME_WAIT_MS, RAISE_GAME_BINDING } from "./steamButton";
 
 type Activated = (pid: number, appId: number, active: boolean, user: boolean) => void;
 
@@ -93,14 +93,15 @@ describe("Steam button on Windows", () => {
     stop();
   });
 
-  it("raises the game when Big Picture resumes it", () => {
+  it("raises the game when Big Picture resumes it, and asks the companion to raise its window too", () => {
     const { scope, calls, navigate } = steam();
+    Object.assign(scope, { [RAISE_GAME_BINDING]: (gameId: string) => calls.push(`companion raise ${gameId}`) });
     const stop = installSteamButtonHome(scope, () => true, log);
 
     navigate("/library/home");
     navigate("/apprunning");
 
-    expect(calls).toEqual(["overlay 10798923412957822976 0", "raise 10798923412957822976"]);
+    expect(calls).toEqual(["overlay 10798923412957822976 0", "raise 10798923412957822976", "companion raise 10798923412957822976"]);
     stop();
     expect(errors).toEqual([]);
   });
@@ -173,6 +174,65 @@ describe("Steam button on Windows", () => {
 
       const idle = installSteamButtonHome(withPage(false).scope, () => false, log);
       expect(idle.pressHome()).toBe("inactive");
+      idle();
+    });
+
+    it("leaves Game Bar usable when it opens over a running game", () => {
+      vi.useFakeTimers();
+      const { scope, calls } = withPage(true);
+      const home = installSteamButtonHome(scope, () => true, log);
+      expect(home.gameBarShown(false)).toBe("game");
+      vi.advanceTimersByTime(PRESS_HOME_WAIT_MS * 2);
+      expect(calls).toEqual([]);
+      home();
+    });
+
+    it("keeps Game Bar as Steam's button over Big Picture, with or without a game behind it", () => {
+      vi.useFakeTimers();
+      const { scope, calls, state } = withPage(false);
+      state.bigPictureFocused = true;
+      const home = installSteamButtonHome(scope, () => true, log);
+      expect(home.gameBarShown(true)).toBe("scheduled");
+      vi.advanceTimersByTime(PRESS_HOME_WAIT_MS);
+      expect(calls).toEqual(["theme home"]);
+      home();
+    });
+
+    it("counts Game Bar as Steam's button when no game runs", () => {
+      vi.useFakeTimers();
+      const harness = withPage(false);
+      const store = (harness.scope as unknown as { SteamUIStore: { RunningApps: unknown[]; WindowStore: { GamepadUIMainWindowInstance: { MainRunningAppID?: number } } } }).SteamUIStore;
+      store.RunningApps = [];
+      store.WindowStore.GamepadUIMainWindowInstance.MainRunningAppID = undefined;
+      const home = installSteamButtonHome(harness.scope, () => true, log);
+      expect(home.gameRunning()).toBe(false);
+      expect(home.gameBarShown(false)).toBe("scheduled");
+      vi.advanceTimersByTime(PRESS_HOME_WAIT_MS);
+      expect(harness.calls).toEqual(["theme home"]);
+      home();
+    });
+
+    it("leaves the Home over the game to Steam where its overlay just answered the same button", () => {
+      const { scope, calls, activate } = withPage(true);
+      const home = installSteamButtonHome(scope, () => true, log);
+      activate(false);
+      calls.length = 0;
+      expect(home.gameHome()).toBe("steam_had_button");
+      expect(calls).toEqual([]);
+      home();
+    });
+
+    it("brings Big Picture Home over the game at once for gameHome", () => {
+      const { scope, calls } = withPage(true);
+      const home = installSteamButtonHome(scope, () => true, log);
+      expect(home.gameRunning()).toBe(true);
+      expect(home.gameHome()).toBe("game_home");
+      expect(calls.slice(0, 3)).toEqual(["overlay 10798923412957822976 2", "home", "front"]);
+      home();
+
+      const idle = installSteamButtonHome(withPage(true).scope, () => false, log);
+      expect(idle.gameBarShown(false)).toBe("inactive");
+      expect(idle.gameHome()).toBe("inactive");
       idle();
     });
   });

@@ -1916,3 +1916,107 @@ def test_a_limit_adopted_from_the_system_keeps_following_it(tmp_path, monkeypatc
     assert plugin._settings["charge_limit_chosen"] is False
     assert plugin._settings["charge_limit_enabled"] is False
     assert plugin._charge_limit_operation_for(system)[0] == "disable"
+
+
+# Charge limit 90, Panel starts on battery at 92 %.
+_LIMIT_BOOT = {
+    "present": True,
+    "percent": 92,
+    "status": "Discharging",
+    "health_percent": 97,
+    "cycle_count": None,
+    "energy_now_mwh": 68075,
+    "energy_full_mwh": 75684,
+    "energy_full_design_mwh": 77800,
+    "power_now_w": 9.8,
+    "eta_seconds": 25007,
+}
+
+
+def _transition_logs(p):
+    return [
+        json.loads(args[1])
+        for args in p._test_logs["info"]
+        if args[0] == "Charge limit transition %s"
+    ]
+
+
+def test_reassert_logs_battery_above_limit_before_writing(tmp_path, monkeypatch):
+    backend = _FakeChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    asyncio.run(p.set_charge_limit(True, 90))
+    p._battery = types.SimpleNamespace(read=lambda: dict(_LIMIT_BOOT))
+    monkeypatch.setattr(sys.modules["main"], "read_on_ac", lambda root="/": False)
+
+    p._apply_charge_limit()
+    p._apply_charge_limit()
+
+    logged = _transition_logs(p)[-2:]
+    assert [entry["before"] for entry in logged] == [{
+        "readback": 90,
+        "battery_percent": 92,
+        "battery_status": "Discharging",
+        "energy_now_mwh": 68075,
+        "energy_full_mwh": 75684,
+        "ac_online": False,
+    }] * 2
+    assert "before" not in p._charge_limit_last_apply
+
+
+def test_reassert_within_limit_keeps_deduplication(tmp_path, monkeypatch):
+    backend = _FakeChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    asyncio.run(p.set_charge_limit(True, 90))
+    p._battery = types.SimpleNamespace(read=lambda: {**_LIMIT_BOOT, "percent": 91})
+    count = len(_transition_logs(p))
+
+    p._apply_charge_limit()
+    p._apply_charge_limit()
+
+    assert len(_transition_logs(p)) == count
+
+
+def test_reassert_logs_threshold_lost_while_off(tmp_path, monkeypatch):
+    backend = _FakeChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    asyncio.run(p.set_charge_limit(True, 90))
+    p._battery = types.SimpleNamespace(read=lambda: {**_LIMIT_BOOT, "percent": 90})
+    backend.value = 100
+
+    p._apply_charge_limit()
+
+    assert _transition_logs(p)[-1]["before"]["readback"] == 100
+    assert backend.value == 90
+
+
+def test_unreadable_observation_never_blocks_the_write(tmp_path, monkeypatch):
+    backend = _FakeChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    asyncio.run(p.set_charge_limit(True, 90))
+
+    def broken():
+        raise OSError("EIO")
+
+    p._battery = types.SimpleNamespace(read=broken)
+    monkeypatch.setattr(sys.modules["main"], "read_on_ac", broken)
+    backend.value = 100
+
+    p._apply_charge_limit()
+
+    assert backend.value == 90
+    before = _transition_logs(p)[-1]["before"]
+    assert before["battery_percent"] is None and before["ac_online"] is None
+
+
+def test_on_off_backend_never_flags_the_stored_percent(tmp_path, monkeypatch):
+    backend = _FakeChargeLimit()
+    backend.adjustable = False
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    asyncio.run(p.set_charge_limit(True, 80))
+    p._battery = types.SimpleNamespace(read=lambda: {**_LIMIT_BOOT, "percent": 82})
+    monkeypatch.setattr(sys.modules["main"], "read_on_ac", lambda root="/": False)
+    count = len(_transition_logs(p))
+
+    p._apply_charge_limit()
+
+    assert len(_transition_logs(p)) == count

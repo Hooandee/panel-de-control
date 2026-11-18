@@ -9,6 +9,7 @@ using PanelDeControl.Core.Controls;
 using PanelDeControl.Core.Presentation;
 using PanelDeControl.Core.Reports;
 using PanelDeControl.Core.Telemetry;
+using PanelDeControl.Core.Themes;
 using Windows.Foundation;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.ApplicationModel.Resources;
@@ -50,6 +51,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly RefreshRateClient refreshClient = new();
     private readonly CpuControlClient cpuClient = new();
     private readonly ThemesView themesView = new();
+    private readonly ThemesClient steamHomeClient = new();
+    private bool steamHomeRefreshInProgress;
     private CancellationTokenSource? cpuDebounce;
     private bool cpuRefreshInProgress;
     private bool cpuWritePending;
@@ -159,6 +162,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             gameBarWidget = widget;
             gameBarWidget.VisibleChanged += OnWidgetVisibilityChanged;
+            gameBarWidget.GameBarDisplayModeChanged += OnGameBarDisplayModeChanged;
             RefreshButton.Focus(FocusState.Programmatic);
         }
     }
@@ -178,6 +182,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (gameBarWidget is not null)
         {
             gameBarWidget.VisibleChanged -= OnWidgetVisibilityChanged;
+            gameBarWidget.GameBarDisplayModeChanged -= OnGameBarDisplayModeChanged;
             gameBarWidget = null;
         }
 
@@ -190,7 +195,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (gameBarWidget is null || gameBarWidget.Visible)
         {
             refreshTimer.Start();
-            await RefreshAsync();
+            await Task.WhenAll(RefreshAsync(), ApplySteamHomeAsync());
         }
     }
 
@@ -224,7 +229,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (sender.Visible)
         {
             refreshTimer.Start();
-            await RefreshAsync();
+            await Task.WhenAll(RefreshAsync(), ApplySteamHomeAsync());
         }
         else
         {
@@ -344,6 +349,80 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             ApplyRefreshRateWhenReadyAsync(currentRefreshGeneration),
             ApplyCpuWhenReadyAsync(currentRefreshGeneration),
             RefreshThemesWhenShownAsync());
+    }
+
+    // Over a game the Xbox button opens Game Bar for itself: Steam's Home is one press away here while a theme's Home
+    // is mounted (pressing the button twice also gets there). Asked when Game Bar or the widget comes up, not on the
+    // refresh timer, which runs as long as the widget is pinned.
+    private async Task ApplySteamHomeAsync()
+    {
+        if (gameBarWidget is null || steamHomeRefreshInProgress || disposed)
+        {
+            return;
+        }
+
+        steamHomeRefreshInProgress = true;
+        try
+        {
+            var response = await steamHomeClient.GetAsync();
+            if (!disposed)
+            {
+                var offered = response.Status == ThemesResponseStatus.Ok
+                    && response.GameRunning
+                    && response.Themes.Any(theme => theme.RuntimeMounted);
+                SteamHomeButton.Visibility = offered ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+        finally
+        {
+            steamHomeRefreshInProgress = false;
+        }
+    }
+
+    private async void SteamHomeButton_Click(object sender, RoutedEventArgs args)
+    {
+        var widget = gameBarWidget;
+        SteamHomeButton.IsEnabled = false;
+        try
+        {
+            // Launching through Game Bar closes it; the Home request goes out once it has closed (App).
+            App.ExpectGameBarCloseForHome();
+            var launched = widget is not null && await widget.LaunchUriAsync(new Uri("steam://open/bigpicture"));
+            if (launched)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2));
+            }
+
+            if (App.TakeHomeStillPending())
+            {
+                await steamHomeClient.SteamHomeAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            App.TakeHomeStillPending();
+            CrashLog.Write("steam-home-button", exception);
+        }
+        finally
+        {
+            SteamHomeButton.IsEnabled = true;
+        }
+    }
+
+    private async void OnGameBarDisplayModeChanged(XboxGameBarWidget sender, object args)
+    {
+        if (sender.GameBarDisplayMode != XboxGameBarDisplayMode.Foreground)
+        {
+            return;
+        }
+
+        if (!Dispatcher.HasThreadAccess)
+        {
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => OnGameBarDisplayModeChanged(sender, args));
+            return;
+        }
+
+        await ApplySteamHomeAsync();
     }
 
     private Task RefreshThemesWhenShownAsync()

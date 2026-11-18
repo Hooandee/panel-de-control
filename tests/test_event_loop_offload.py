@@ -1073,3 +1073,73 @@ def test_support_sample_and_auto_tick_read_sysfs_off_the_loop_thread(tmp_path, m
     for name, seen in threads.items():
         assert seen, f"{name} never read"
         assert loop_tid not in seen, f"{name} read on the event loop"
+
+
+def test_battery_state_reads_charge_limit_sysfs_off_the_loop_thread(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    seen = []
+
+    class _RecordingChargeLimit:
+        supported = True
+        adjustable = False
+        name = "lenovo-charge-types"
+
+        def range(self):
+            return (80, 80)
+
+        def get(self):
+            seen.append(threading.get_ident())
+            return None
+
+        def active(self):
+            seen.append(threading.get_ident())
+            return "Standard"
+
+    class _Battery:
+        def read(self):
+            return {"percent": 50}
+
+    p._charge_limit = _RecordingChargeLimit()
+    p._battery = _Battery()
+
+    async def drive():
+        loop_tid = threading.get_ident()
+        await p.get_battery_state()
+        return loop_tid
+
+    loop_tid = asyncio.run(drive())
+    assert seen, "charge limit never read"
+    assert loop_tid not in seen, "charge_types read on the event loop"
+
+
+def test_battery_state_does_not_use_the_serial_apply_executor(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    names = []
+
+    class _Slow:
+        supported = True
+        adjustable = False
+        name = "lenovo-charge-types"
+
+        def range(self):
+            return (80, 80)
+
+        def get(self):
+            return None
+
+        def active(self):
+            names.append(threading.current_thread().name)
+            return "Standard"
+
+    class _Battery:
+        def read(self):
+            return {"percent": 50}
+
+    p._charge_limit = _Slow()
+    p._battery = _Battery()
+    ex = p._ensure_apply_executor()
+    ex_threads = set()
+    ex.submit(lambda: ex_threads.add(threading.current_thread().name)).result()
+
+    asyncio.run(p.get_battery_state())
+    assert names and not (set(names) & ex_threads), "slow sysfs read queued on the serial executor"

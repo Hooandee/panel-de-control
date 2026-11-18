@@ -1,5 +1,6 @@
 import glob
 import os
+import time
 
 from sysfs import read_int, read_str, write_str
 
@@ -223,9 +224,14 @@ class LenovoChargeTypes(ChargeLimitBackend):
     _ON = "Long_Life"
     _OFF = "Standard"
 
-    def __init__(self, root="/"):
+    _ACTIVE_TTL = 30.0
+
+    def __init__(self, root="/", clock=time.monotonic):
         self._path = self._find(root)
         self.supported = self._path is not None
+        self._clock = clock
+        self._cached = None  # (timestamp, value)
+        self._generation = 0  # bumped on every write: a read that straddles one is not cached
 
     @classmethod
     def _find(cls, root):
@@ -236,10 +242,23 @@ class LenovoChargeTypes(ChargeLimitBackend):
                 return path
         return None
 
-    def active(self):
+    def _read(self):
         tokens = (read_str(self._path) or "").split() if self.supported else []
         selected = [t.strip("[]") for t in tokens if t.startswith("[")]
         return selected[0] if selected else (tokens[0] if len(tokens) == 1 else None)
+
+    def active(self):
+        # The ideapad_acpi read can take ~12 s on the Legion Go S and runs off the serial
+        # executor: cache it, but never store a value read across a concurrent write.
+        now = self._clock()
+        cached = self._cached
+        if cached is not None and now - cached[0] < self._ACTIVE_TTL:
+            return cached[1]
+        generation = self._generation
+        value = self._read()
+        if generation == self._generation:
+            self._cached = (now, value)
+        return value
 
     def get(self):
         return None  # firmware-fixed threshold; percent unknown
@@ -247,7 +266,12 @@ class LenovoChargeTypes(ChargeLimitBackend):
     def _select(self, mode):
         if not self.supported:
             return False
-        return write_str(self._path, mode) and self.active() == mode
+        self._generation += 1
+        self._cached = None
+        ok = write_str(self._path, mode)
+        self._generation += 1
+        self._cached = None
+        return ok and self._read() == mode
 
     def set(self, percent):
         return self._select(self._ON)

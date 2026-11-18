@@ -63,9 +63,9 @@ it("uses an observed exact version only with its log source", () => {
   expect(screen.queryByText("up.overlay.configured")).toBeNull();
 });
 it("keeps Lossless configuration separate from confirmed Mako generation", () => {
-  vi.mocked(useOverlayLive).mockReturnValue({ live: null, makoSpatial: null, lossless: { name: "Game", multiplier: 2, flow: "balanced", performance: true }, makoResolutionWarning: false, makoMultiplier: 2 });
+  vi.mocked(useOverlayLive).mockReturnValue({ live: null, makoSpatial: null, lossless: { name: "Game", multiplier: 2, flow_scale: 0.75, performance: true }, makoResolutionWarning: false, makoMultiplier: 2 });
   render(<InGameBadge />);
-  expect(screen.getByText("Lossless Scaling ×2 up.lsfg.flow.balanced").parentElement?.textContent).toContain("up.overlay.configured");
+  expect(screen.getByText("Lossless Scaling ×2 · up.lsfg.flowScale 75 %").parentElement?.textContent).toContain("up.overlay.configured");
   expect(screen.getByText("Mako ×2").parentElement?.textContent).toContain("up.overlay.generating");
 });
 it("shows observed spatial dimensions without any installed badge or frame generation", () => {
@@ -101,8 +101,8 @@ it("keeps the installed label when the log observes the same provider", () => {
 it("does not present an unloaded scaler as working beside an active Lossless", () => {
   publishOverview({ builds: [{ id: "fsr-build", family: "fsr", version: "4.1.2", engine: "optiscaler" }],
     installs: { "1462040": { build: "fsr-build", status: "active", options: {} } } } as never);
-  vi.mocked(useOverlayLive).mockReturnValue({ live: null, lossless: { name: "Game", multiplier: 2, flow: "balanced", performance: true }, makoSpatial: null, makoResolutionWarning: false, makoMultiplier: null });
+  vi.mocked(useOverlayLive).mockReturnValue({ live: null, lossless: { name: "Game", multiplier: 2, flow_scale: 0.75, performance: true }, makoSpatial: null, makoResolutionWarning: false, makoMultiplier: null });
   render(<InGameBadge />);
-  expect(screen.getByText("Lossless Scaling ×2 up.lsfg.flow.balanced")).toBeTruthy();
+  expect(screen.getByText("Lossless Scaling ×2 · up.lsfg.flowScale 75 %")).toBeTruthy();
   expect(screen.queryByText("FSR 4.1.2")).toBeNull();
 });

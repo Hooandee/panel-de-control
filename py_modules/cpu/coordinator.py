@@ -1,6 +1,9 @@
 """Serialized transaction for all CPU controls."""
 
 from dataclasses import dataclass
+import time
+
+_RECOVERY_DELAY_S = 0.2
 
 
 @dataclass(frozen=True)
@@ -12,6 +15,7 @@ class CpuCoordinatorResult:
     error_code: str | None = None
     error_type: str | None = None
     frequency_status: str | None = None
+    recovery: dict | None = None
 
 
 class CpuCoordinator:
@@ -66,6 +70,45 @@ class CpuCoordinator:
                 else None
             ),
         }
+
+    def _apply_frequency(self, frequency):
+        if frequency.get("manual"):
+            return self._frequency.set_window(
+                frequency.get("min_khz"), frequency.get("max_khz")
+            )
+        return self._frequency.set_auto()
+
+    def _recover_readback(self, frequency, first):
+        """One late retry when boost is on and the hardware ceiling allows the target."""
+        rows = [row for row in (first or {}).get("policies", ()) if row.get("target")]
+        if not (
+            rows
+            and self._supported(self._boost)
+            and self._boost.enabled()
+            and all(
+                row.get("hardware_bounds")
+                and row["hardware_bounds"][1] >= row["target"][1]
+                for row in rows
+            )
+        ):
+            return None, None
+        time.sleep(_RECOVERY_DELAY_S)
+        retry = self._apply_frequency(frequency)
+        recovery = {
+            "attempted": True,
+            "recovered": bool(retry.ok),
+            "boost": 1,
+            "delay_ms": int(_RECOVERY_DELAY_S * 1000),
+            "first_failure": first,
+        }
+        if not retry.ok:
+            second = self._frequency.diagnostics().get("last_failure") or {}
+            recovery["retry_reason"] = retry.reason
+            recovery["retry"] = {
+                row.get("name"): {"applied": row.get("applied"), "writes": row.get("writes")}
+                for row in second.get("policies", ())
+            }
+        return retry, recovery
 
     def _rollback(self, completed, snapshot):
         ok = True
@@ -176,6 +219,7 @@ class CpuCoordinator:
         snapshot = self._snapshot()
         completed = []
         frequency_status = None
+        recovery = None
         try:
             targets = {
                 "cores": (
@@ -225,12 +269,13 @@ class CpuCoordinator:
                         "boost_write_failed",
                     )
 
-                if frequency.get("manual"):
-                    freq_result = self._frequency.set_window(
-                        frequency.get("min_khz"), frequency.get("max_khz")
+                freq_result = self._apply_frequency(frequency)
+                if not freq_result.ok and freq_result.reason == "readback_mismatch":
+                    retry, recovery = self._recover_readback(
+                        frequency, self._frequency.diagnostics().get("last_failure"),
                     )
-                else:
-                    freq_result = self._frequency.set_auto()
+                    if retry is not None:
+                        freq_result = retry
                 frequency_status = freq_result.status
                 safe_auto_noop = (
                     not frequency.get("manual")
@@ -246,6 +291,7 @@ class CpuCoordinator:
                         rollback,
                         f"frequency_{freq_result.reason or 'apply_failed'}",
                         frequency_status=frequency_status,
+                        recovery=recovery,
                     )
                 if freq_result.ok:
                     completed.append("frequency")
@@ -290,6 +336,7 @@ class CpuCoordinator:
                 generation,
                 {"attempted": False, "ok": None},
                 frequency_status=frequency_status,
+                recovery=recovery,
             )
         except Exception as error:  # noqa: BLE001
             rollback = self._rollback(completed, snapshot)

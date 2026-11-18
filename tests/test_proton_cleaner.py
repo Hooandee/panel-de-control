@@ -415,3 +415,52 @@ def test_non_proton_compatibility_tools_are_not_presented_as_proton(tmp_path):
     state = ProtonCleanerService(str(home), activity_provider=idle).inventory()
 
     assert [entry["name"] for entry in state["entries"]] == ["GE-Proton-Old"]
+
+
+def steam_machine_with_incomplete_unrelated_coverage(tmp_path):
+    home, steam = make_steam(tmp_path)
+    official(steam, "100", "Proton 10.0", "Proton 10")
+    official(steam, "200", "Steam Linux Runtime 3.0", "SteamLinuxRuntime_sniper")
+    custom(steam, "used", "GE-Proton-Used")
+    custom(steam, "old", "GE-Proton-Old")
+    write(steam / "steamapps/appmanifest_300.acf", '"AppState" { "appid" "300" "installdir" "Game" }')
+    missing = tmp_path / "unplugged-card"
+    write(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "0" {{ "path" "{steam}" }} "1" {{ "path" "{missing}" }} }}')
+    write(
+        steam / "config/config.vdf",
+        '"InstallConfigStore" { "Software" { "Valve" { "Steam" { "CompatToolMapping" { "10" { "name" "GE-Proton-Used" } } } } } }',
+    )
+    return home, steam
+
+
+def test_incomplete_coverage_unrelated_to_references_keeps_unreferenced_custom_tool_selectable(tmp_path):
+    home, steam = steam_machine_with_incomplete_unrelated_coverage(tmp_path)
+    cleaner = ProtonCleanerService(str(home), activity_provider=idle)
+
+    state = cleaner.inventory()
+    entries = {entry["name"]: entry for entry in state["entries"]}
+
+    assert state["coverage_complete"] is False
+    assert entries["GE-Proton-Used"]["status"] == "in_use"
+    assert entries["GE-Proton-Used"]["selectable"] is False
+    assert entries["GE-Proton-Old"]["status"] == "unused"
+    assert entries["GE-Proton-Old"]["selectable"] is True
+    assert not entries["Proton 10.0"]["selectable"]
+    assert not entries["Steam Linux Runtime 3.0"]["selectable"]
+    cleaner.prepare(state["scan_id"], [entries["GE-Proton-Old"]["id"]])
+    with pytest.raises(SteamCleanerError):
+        cleaner.prepare(state["scan_id"], [entries["GE-Proton-Used"]["id"]])
+
+
+@pytest.mark.parametrize("broken", ["config", "localconfig"])
+def test_unreadable_reference_source_keeps_every_custom_tool_protected(tmp_path, broken):
+    home, steam = steam_machine_with_incomplete_unrelated_coverage(tmp_path)
+    target = steam / "config/config.vdf" if broken == "config" else steam / "userdata/1234/config/localconfig.vdf"
+    write(target, '"InstallConfigStore" { "Software"')
+
+    state = ProtonCleanerService(str(home), activity_provider=idle).inventory()
+    custom_entries = [entry for entry in state["entries"] if entry["source"] == "custom"]
+
+    assert len(custom_entries) == 2
+    assert all(entry["status"] == "protected" and entry["reason"] == "coverage_incomplete" for entry in custom_entries)
+    assert not any(entry["selectable"] for entry in state["entries"])

@@ -107,6 +107,7 @@ from fans import expose as fan_expose
 from fans import gpd_recovery
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
+import fan_curves
 from fan_curves import FanCurveStore
 from launch import tools as launch_tools
 from launch import proton_caps
@@ -142,6 +143,7 @@ from ps5.firmware_io import FirmwareIo
 from ps5.led import is_animated as ps5_led_animated
 from ps5.thermal import THRESHOLD_DEFAULT_C as PS5_GUARD_DEFAULT_C, clamp_threshold
 from battery.reader import BatteryReader
+from battery.observation import observe_before_apply, worth_logging
 from battery.charge_limit import (
     NullChargeLimit,
     SteamDeckChargeLimit,
@@ -240,6 +242,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "fans": (
         ("get_fan_curve_state", (
             "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
+            "split", "split_available", "split_preset", "channels", "points_by_channel",
             "target_temp.target", "target_temp.other_controller", "backend_diagnostics",
             "board_fans.enabled", "board_fans.control_off", "board_fans.loaded",
             "board_fans.loaded_by_panel",
@@ -554,6 +557,7 @@ DEFAULTS = {
     "disabled_modules": [],
     # One-time notices (SettingsStore drops keys not in DEFAULTS).
     "seen_tdp_conflict_takeover": False,
+    "hide_tdp_steamos_card": False,
     "seen_autotdp_notice": False,
     "charger_notice_dismissed_at": None,
     "kernel_support_notice_dismissed": False,
@@ -1647,7 +1651,7 @@ class Plugin(AmbientRpc):
 
     async def _support_upscalers_state(self) -> dict:
         service = getattr(self, "_upscaler_service", None)
-        return service.support_state() if service is not None else {"loaded": False}
+        return await asyncio.to_thread(service.support_state) if service is not None else {"loaded": False}
 
     def _close_upscalers_sync(self) -> None:
         self._upscalers_closed = True
@@ -3476,6 +3480,8 @@ class Plugin(AmbientRpc):
                 continue
             sanitized = {}
             for key, value in values.items():
+                if source == "theme_surface" and key == "navigation":
+                    continue
                 if not isinstance(key, str) or len(key) > 32:
                     continue
                 if isinstance(value, bool) or value is None:
@@ -3484,6 +3490,29 @@ class Plugin(AmbientRpc):
                     sanitized[key] = round(float(value), 3)
                 if len(sanitized) >= limit:
                     break
+            if source == "theme_surface" and isinstance(values.get("navigation"), dict):
+                navigation = values["navigation"]
+                allowed = {
+                    "route": {"home", "steamweb", "externalweb", "store", "other"},
+                    "expected": {"blank", "store", "community", "http", "other"},
+                    "requested": {"blank", "store", "community", "http", "other"},
+                    "loaded": {"blank", "store", "community", "http", "other"},
+                    "browser": {"missing", "unready", "ready", "unknown"},
+                }
+                snapshot = {
+                    key: value if isinstance(value := navigation.get(key), str) and value in choices else None
+                    for key, choices in allowed.items()
+                }
+                snapshot["loading"] = navigation.get("loading") if isinstance(navigation.get("loading"), bool) else None
+                history = navigation.get("history")
+                history = history if isinstance(history, dict) else {}
+                snapshot["history"] = {
+                    key: value if type(value := history.get(key)) is int and 0 <= value <= 2147483647 else None
+                    for key in ("index", "entries", "initial", "final")
+                }
+                error = navigation.get("error")
+                snapshot["error"] = error if type(error) is int and -2147483648 <= error <= 2147483647 else None
+                sanitized["navigation"] = snapshot
             result[target] = sanitized
         return result
 
@@ -3738,7 +3767,8 @@ class Plugin(AmbientRpc):
     # ---- Ajustes: per-game profile overview --------------------------------
     def _scoped_stores(self):
         """Every store that keeps per-game profiles, all sharing list_games/forget_game
-        (the controller backend no-ops when it's not InputPlumber)."""
+        (the controller backend no-ops when it's not InputPlumber). HudStore is
+        left out: it belongs to the HUD worker and goes through _hud_call."""
         return (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles,
                 self._gpu_profiles,
                 self._audio_eq, self._controller_backend)
@@ -3795,6 +3825,15 @@ class Plugin(AmbientRpc):
             row["audio"] = {"follows_global": self._audio_eq.is_following_global(appid)}
         return row
 
+    def _hud_profile_rows(self) -> dict:
+        """HudStore is owned by the HUD worker: only call this through _hud_call."""
+        rows = {}
+        for appid in self._hud.list_games():
+            if self._hud.differs_from_global(appid):
+                rows[appid] = {"enabled": bool(self._hud.game_profile(appid).get("enabled")),
+                               "follows_global": self._hud.is_following_global(appid)}
+        return rows
+
     async def list_game_profiles(self) -> list:
         """Every game with a per-game profile that differs from global in ANY section, for
         the Ajustes overview. The frontend resolves names + formats the summaries (i18n)."""
@@ -3802,7 +3841,17 @@ class Plugin(AmbientRpc):
         appids = set()
         for store in self._scoped_stores():
             appids.update(store.list_games())
-        rows = (self._game_profile_row(a) for a in sorted(appids))
+        try:
+            hud_rows = await self._hud_call(self._hud_profile_rows)
+        except RuntimeError:  # HUD worker restarting: list the other sections
+            hud_rows = {}
+        appids.update(hud_rows)
+        rows = []
+        for appid in sorted(appids):
+            row = self._game_profile_row(appid)
+            if appid in hud_rows:
+                row["hud"] = hud_rows[appid]
+            rows.append(row)
         return [r for r in rows if len(r) > 1]  # drop games whose every section == global
 
     async def reset_game_profiles(self, appid) -> list:
@@ -3810,6 +3859,8 @@ class Plugin(AmbientRpc):
         global. Re-applies if it's the running game. Returns the refreshed list."""
         self._init()
         appid = str(appid)
+        # HUD first: if its worker is restarting, nothing has been forgotten yet.
+        await self._hud_call(lambda: self._hud.forget_game(appid))
         for store in self._scoped_stores():
             store.forget_game(appid)
         if appid == self._current_appid:
@@ -4699,6 +4750,16 @@ class Plugin(AmbientRpc):
             await self._ensure_recognised_desktop_migration()
             if getattr(self, "_desktop_recognition_migration_pending", False):
                 return False
+            if callable(getattr(self._tdp_backend, "resume_ownership", None)):
+                resume_cancelled = threading.Event()
+                try:
+                    await self._offload_call(
+                        lambda: self._recover_tdp_runtime_transaction(
+                            resume_control=True, resume_cancelled=resume_cancelled,
+                        )
+                    )
+                finally:
+                    resume_cancelled.set()
             if not await self._probe_tdp_backend(force=True):
                 return False
             if self._low_battery_hold_recovery_pending:
@@ -4767,6 +4828,12 @@ class Plugin(AmbientRpc):
         self._settings["seen_tdp_conflict_takeover"] = bool(seen)
         self._save()
         return bool(seen)
+
+    async def set_hide_tdp_steamos_card(self, hidden: bool) -> bool:
+        self._init()
+        self._settings["hide_tdp_steamos_card"] = bool(hidden)
+        self._save()
+        return bool(hidden)
 
     async def dismiss_kernel_support_notice(self) -> bool:
         self._init()
@@ -5456,6 +5523,8 @@ class Plugin(AmbientRpc):
                 self._log_fan_transition("desktop_channels", ok=ok, profile=profile)
                 return ok and self._sync_fremont_fan_handoff_marker()
             profile = self._fan_curves.effective(self._current_appid)
+            if profile.get("split") and self._fan_split_available():
+                return self._reapply_split_fans_sync(profile)
             preset = profile["preset"]
             points = None
             if preset == "adaptive":
@@ -5496,6 +5565,34 @@ class Plugin(AmbientRpc):
             self._sync_fremont_fan_handoff_marker()
             self._log_fan_transition("apply_failed", ok=False, error=type(error).__name__)
             return False
+
+    def _fan_split_available(self) -> bool:
+        return getattr(self._fan_ctrl, "split_available", False) is True
+
+    def _reapply_split_fans_sync(self, profile: dict) -> bool:
+        """Per-channel ("por separado") apply: each fan gets its own table, verified whole.
+        Any channel failing returns BOTH fans to firmware auto (done by the backend)."""
+        split_preset = profile.get("split_preset", "auto")
+        by_channel = profile.get("points_by_channel")
+        if split_preset == "auto" or not by_channel:
+            mode = "split_auto"
+            res = self._fan_ctrl.set_auto(None)
+            by_channel = None
+        else:
+            mode = "split_curve"
+            res = self._fan_ctrl.apply_curves(by_channel)
+        confirmed = bool(res.get("ok")) if isinstance(res, dict) else False
+        self._fan_apply_confirmed = confirmed
+        self._log_fan_transition(
+            mode,
+            ok=confirmed,
+            preset=split_preset,
+            points_by_channel=by_channel,
+            channels=list(by_channel) if by_channel else None,
+            failed_channels=res.get("failed_channels") if isinstance(res, dict) else None,
+            detail=res.get("detail") if isinstance(res, dict) else "invalid_response",
+        )
+        return confirmed and self._sync_fremont_fan_handoff_marker()
 
     def _log_fan_transition(self, mode: str, *, ok: bool, **fields) -> None:
         if getattr(self._fan_ctrl, "supported", True) is False:
@@ -5543,6 +5640,7 @@ class Plugin(AmbientRpc):
             "pwm_max": hw_state.get("pwm_max", 255),
             "preset": effective["preset"],
             "points": effective["points"],
+            "custom_points": effective.get("custom_points"),
             "bias": effective.get("bias", 0),
             "global_preset": global_curve["preset"],
             "global_points": global_curve["points"],
@@ -5596,6 +5694,23 @@ class Plugin(AmbientRpc):
         else:
             state["independent"] = False
             state["channels"] = []
+            split_available = self._fan_split_available()
+            state["split_available"] = split_available
+            state["split"] = False
+            if split_available:
+                split = self._fan_curves.split_state(self._current_appid)
+                state["split"] = split is not None
+                if split is not None:
+                    split_preset, by_channel = split
+                    state["preset"] = split_preset
+                    state["split_preset"] = split_preset
+                    state["points_by_channel"] = by_channel
+                    state["custom_points_by_channel"] = effective.get("custom_points_by_channel")
+                    state["channels"] = [
+                        {"key": key, "preset": split_preset,
+                         "points": (by_channel or {}).get(key)}
+                        for key in fan_curves.CHANNELS
+                    ]
         return state
 
     def _fan_kernel_pending(self) -> bool:
@@ -5718,7 +5833,10 @@ class Plugin(AmbientRpc):
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._fan_curve_state_offloop()
-        self._fan_curves.set_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
+        if self._fan_split_scope(resolved, appid):
+            self._fan_curves.set_split_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
+        else:
+            self._fan_curves.set_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
@@ -5727,8 +5845,8 @@ class Plugin(AmbientRpc):
         auto-learning for this scope: the learner now drives + re-fits the curve."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
-        if resolved is None:
-            return await self._fan_curve_state_offloop()
+        if resolved is None or self._fan_split_scope(resolved, appid):
+            return await self._fan_curve_state_offloop()  # adaptive only exists joined
         self._fan_curves.set_adaptive(resolved, appid)
         # Re-arm the mid-session drive, then drive the learned curve now (also sets the
         # anti-churn baseline so the periodic re-fit doesn't needlessly re-drive).
@@ -5743,7 +5861,7 @@ class Plugin(AmbientRpc):
         the biased learned curve so the hardware reflects the dial immediately."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
-        if resolved is None:
+        if resolved is None or self._fan_split_scope(resolved, appid):
             return await self._fan_curve_state_offloop()
         self._fan_curves.set_adaptive_bias(resolved, bias, appid)
         # A new bias changes the target curve → reset the anti-churn baseline and drive.
@@ -5752,7 +5870,27 @@ class Plugin(AmbientRpc):
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
-    async def set_fan_curve_points(self, points: list, scope: str, appid=None) -> dict:
+    def _fan_split_scope(self, resolved_scope, appid) -> bool:
+        """Whether a write to this scope is per-channel (profile split AND the hardware can)."""
+        return self._fan_split_available() and self._fan_curves.is_split_scope(resolved_scope, appid)
+
+    async def set_fan_split(self, split: bool, scope: str, appid=None) -> dict:
+        """Joined <-> per-channel ("Juntos / Por separado"). Only where the backend exposes
+        independent channels; both channels start from the current curve, and going back keeps
+        the joined curve untouched."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None or not self._fan_split_available():
+            return await self._fan_curve_state_offloop()
+        seed = None
+        if split and self._fan_curves.effective(appid if resolved == "game" else None).get("preset") == "adaptive":
+            seed = self._adaptive_curve_points(appid if resolved == "game" else None) \
+                or [list(p) for p in fan_presets.RESOLVED["balanced"]]
+        self._fan_curves.set_split(resolved, bool(split), seed, appid)
+        self._reapply_fans()
+        return await self._fan_curve_state_offloop()
+
+    async def set_fan_curve_points(self, points: list, scope: str, appid=None, channel=None) -> dict:
         self._init()
         if not isinstance(points, list) or not points:
             return await self._fan_curve_state_offloop()
@@ -5763,7 +5901,13 @@ class Plugin(AmbientRpc):
         # the same transform applied at write time — so the persisted/returned state
         # reflects what the hardware will actually run. Never show a curve we override.
         safe_points = [list(p) for p in fan_control.sanitize_curve(points)]
-        self._fan_curves.set_custom(resolved, safe_points, appid)
+        if self._fan_split_scope(resolved, appid):
+            if channel in fan_curves.CHANNELS:
+                self._fan_curves.set_split_custom(resolved, channel, safe_points, appid)
+            else:
+                self._fan_curves.set_split_custom_both(resolved, safe_points, appid)
+        else:
+            self._fan_curves.set_custom(resolved, safe_points, appid)
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
@@ -5772,7 +5916,10 @@ class Plugin(AmbientRpc):
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._fan_curve_state_offloop()
-        self._fan_curves.set_auto(resolved, appid)
+        if self._fan_split_scope(resolved, appid):
+            self._fan_curves.set_split_auto(resolved, appid)
+        else:
+            self._fan_curves.set_auto(resolved, appid)
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
@@ -8115,7 +8262,7 @@ class Plugin(AmbientRpc):
             in ("target_not_applied", "live_max_rejected")
             and not getattr(self._tdp_backend, "safety_locked", False)
             and detail.startswith("write not confirmed")
-            and "; rollback confirmed" in detail
+            and ("; rollback confirmed" in detail or "; firmware holds rails" in detail)
         )
 
     def _apply_within_rejected_live_max(self, command, probe_live_max, result):
@@ -9526,7 +9673,9 @@ class Plugin(AmbientRpc):
             self._desktop_power.apply(mode)
 
     # ---- Battery + charge limit --------------------------------------------
-    def _record_charge_limit_apply(self, action, requested, ok, attempts) -> None:
+    def _record_charge_limit_apply(
+        self, action, requested, ok, attempts, before=None
+    ) -> None:
         try:
             readback = self._charge_limit.get()
         except Exception:  # noqa: BLE001
@@ -9540,13 +9689,20 @@ class Plugin(AmbientRpc):
         }
         previous = getattr(self, "_charge_limit_last_apply", None)
         self._charge_limit_last_apply = event
+        notable = before is not None and worth_logging(
+            before,
+            requested,
+            bool(getattr(self._charge_limit, "adjustable", True)),
+        )
+        if before is not None:
+            event = {**event, "before": before}
         if action == "full_once":
             self._charge_limit_full_once_status = (
                 "active" if ok else "failed"
             )
         if ok:
             self._charge_limit_failures = 0
-            if event != previous:
+            if notable or self._charge_limit_last_apply != previous:
                 decky.logger.info(
                     "Charge limit transition %s",
                     json.dumps(event, sort_keys=True, separators=(",", ":")),
@@ -9580,6 +9736,9 @@ class Plugin(AmbientRpc):
     ) -> None:
         if not self._charge_limit_apply_current(generation):
             return
+        before = observe_before_apply(self._charge_limit, self._battery, read_on_ac)
+        if not self._charge_limit_apply_current(generation):
+            return
         attempts = 1
         result = operation()
         if not self._charge_limit_apply_current(generation):
@@ -9594,6 +9753,7 @@ class Plugin(AmbientRpc):
             requested,
             bool(result),
             attempts,
+            before,
         )
 
     def _apply_charge_limit(self, generation=None) -> None:
@@ -10305,7 +10465,12 @@ class Plugin(AmbientRpc):
         battery = await asyncio.to_thread(self._battery.read)
         # Single AC-online source (same one every TDP clamp uses).
         battery["ac_online"] = await asyncio.to_thread(read_on_ac)
-        return {"battery": battery, "charge_limit": self._charge_limit_state()}
+        return {
+            "battery": battery,
+            # Not the serial apply executor: a slow charge_types read would
+            # queue TDP, fan and CPU writes behind it.
+            "charge_limit": await asyncio.to_thread(self._charge_limit_state),
+        }
 
     def _build_cpu_frequency_control(self):
         return select_cpu_frequency(
@@ -10391,12 +10556,24 @@ class Plugin(AmbientRpc):
             "error_type": result.error_type,
             "rollback": result.rollback,
         }
-        if not result.ok and (result.error_code or "").startswith("frequency_"):
+        recovery = getattr(result, "recovery", None)
+        if recovery:
+            event["recovery"] = {
+                key: recovery[key]
+                for key in ("attempted", "recovered", "boost", "delay_ms", "retry_reason", "retry")
+                if recovery.get(key) is not None
+            }
+        if recovery or (
+            not result.ok and (result.error_code or "").startswith("frequency_")
+        ):
             try:
                 failure = self._cpu_frequency_failure_diagnostic(
-                    self._cpu_frequency.diagnostics().get("last_failure")
+                    recovery["first_failure"] if recovery
+                    else self._cpu_frequency.diagnostics().get("last_failure")
                 )
-                if failure and result.error_code == f"frequency_{failure['reason']}":
+                if failure and (
+                    recovery or result.error_code == f"frequency_{failure['reason']}"
+                ):
                     event["frequency_failure"] = failure
             except Exception:  # noqa: BLE001
                 pass
@@ -10431,16 +10608,23 @@ class Plugin(AmbientRpc):
         return result
 
     def _guard_sleep_with_cores_off(self) -> None:
-        """Runs on the serial executor: with any core switched off, make sure the
-        system brings them back before it sleeps."""
+        """Keep offline physical cores or SMT siblings safe before sleep."""
+        if getattr(self, "_cpu_shutdown", False):
+            return
         cores = getattr(self, "_cores", None)
-        if not getattr(cores, "supported", False) or getattr(self, "_cpu_shutdown", False):
-            return
+        smt = getattr(self, "_smt", None)
+        limited = smt_off = False
         try:
-            limited = cores.active() < cores.max_cores
+            if getattr(cores, "supported", False):
+                limited = cores.active() < cores.max_cores
         except Exception:  # noqa: BLE001
-            return
-        if not limited:
+            pass
+        try:
+            if getattr(smt, "supported", False):
+                smt_off = not smt.enabled()
+        except Exception:  # noqa: BLE001
+            pass
+        if not (limited or smt_off):
             return
         guard = getattr(self, "_sleep_core_guard", None)
         if guard is None:
@@ -10452,8 +10636,9 @@ class Plugin(AmbientRpc):
     async def _apply_cpu_awaited(self, intent=None, enabled=None, trigger="rpc"):
         generation = self._next_cpu_generation()
         selected = intent if intent is not None else self._cpu_intent()
-        if trigger != "set_cores":
-            selected = self._hold_cores_after_resume(selected)
+        selected = self._hold_cores_after_resume(
+            selected, allow_cores=trigger == "set_cores", allow_smt=trigger == "set_smt",
+        )
         result = await self._offload_call(
             lambda: self._run_cpu_apply(selected, generation, enabled)
         )
@@ -10722,9 +10907,13 @@ class Plugin(AmbientRpc):
             raise OSError("Could not persist the managed MangoHud presets path") from exc
         self._hud_managed_path = safe_path
 
+    def _hud_model(self) -> dict:
+        """The HUD model the running game applies: its own, or the global one."""
+        return self._hud.effective(self._current_appid)
+
     def _hud_state(self, *, cap=None, model=None) -> dict:
         cap = self._detect_hud() if cap is None else cap
-        model = self._hud.load() if model is None else model
+        model = self._hud_model() if model is None else model
         capability = (
             "ambiguous" if cap.get("ambiguous")
             else "ready" if cap["supported"]
@@ -10759,6 +10948,12 @@ class Plugin(AmbientRpc):
             ),
             "model": model,
             "values": dict(self._pdc_preview_values),
+            "appid": self._current_appid,
+            "followsGlobal": self._hud.is_following_global(self._current_appid),
+            "hasGameProfile": (
+                self._current_appid is not None
+                and self._hud.has_game(self._current_appid)
+            ),
         }
 
     def _record_hud_conflict(self, path, conflict) -> None:
@@ -10871,7 +11066,7 @@ class Plugin(AmbientRpc):
         auto loop, then reloaded through mangohudctl). We never write Steam's own live
         config. When off: clear presets.conf. No-op when the overlay isn't supported."""
         cap = self._detect_hud() if cap is None else cap
-        model = self._hud.load() if model is None else model
+        model = self._hud_model() if model is None else model
         if not model["enabled"]:
             managed_path = self._hud_managed_path or cap["presetsPath"]
             self._hud_power_source = None
@@ -11123,9 +11318,9 @@ class Plugin(AmbientRpc):
                 snap["learn"] = self._tdp_learned_info(appid)
         if self._fan_ctrl.supported and "pdc_fan" in active_ids:
             prof = self._fan_curves.effective(appid)
-            snap["fan_mode"] = prof.get("preset")
+            snap["fan_mode"] = prof.get("split_preset") if prof.get("split") else prof.get("preset")
             snap["fan_confirmed"] = self._fan_apply_confirmed
-            snap["fan_learning"] = (prof.get("preset") == "adaptive"
+            snap["fan_learning"] = (self._fan_curves.is_adaptive(appid)
                                     and not self._fan_suggestion(appid)["available"])
         if "pdc_fan_rpm" in active_ids:
             fans = self._fresh_pdc_source(extras, "fans", self._read_fans)
@@ -11224,7 +11419,7 @@ class Plugin(AmbientRpc):
         """Find a mangoapp that started after the last apply (late session start or a
         restarted mangoapp) and re-apply to it. Returns True when a re-apply ran."""
         self._hud_redetect_at = _monotonic() + _HUD_REDETECT_S
-        model = self._hud.load()
+        model = self._hud_model()
         if not model["enabled"]:
             return False
         self._hud_redetect_count += 1
@@ -11283,7 +11478,7 @@ class Plugin(AmbientRpc):
         now = _monotonic()
         if not self._hud_values_due(values, now):
             return
-        model = self._hud.load()
+        model = self._hud_model()
         if model["enabled"]:
             self._pdc_preview_values = values
             try:
@@ -11385,7 +11580,7 @@ class Plugin(AmbientRpc):
     async def get_hud_state(self) -> dict:
         self._init()
         def refresh_pending_state():
-            model = self._hud.load()
+            model = self._hud_model()
             if model["enabled"] and self._hud_apply_status in (
                 "pending",
                 "unavailable",
@@ -11404,32 +11599,86 @@ class Plugin(AmbientRpc):
         self._apply_hud(cap=cap, model=model)
         return self._hud_state(cap=cap, model=model)
 
-    def _save_apply_hud_state(self, model) -> dict:
-        return self._apply_hud_state(self._hud.save(model))
+    def _save_apply_hud_state(self, model, scope="global", appid=None) -> dict:
+        self._hud.set_model(scope, appid, model)
+        return self._apply_hud_state(self._hud_model())
 
-    async def set_hud_config(self, model: dict) -> dict:
+    def _hud_scope_is_current(self, scope, appid, context_appid) -> bool:
+        return self._scope_context_is_current(scope, appid, context_appid)
+
+    async def set_hud_config(
+        self, model: dict, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
-        return await self._hud_call(lambda: self._save_apply_hud_state(model))
+        def save():
+            if self._is_late_own_hud_edit(scope, appid):
+                # The user edited this game's own HUD and the game closed before
+                # the debounced write landed: keep the edit, apply nothing.
+                self._hud.set_model("game", appid, model)
+                return self._hud_state()
+            if not self._hud_scope_is_current(scope, appid, context_appid):
+                return self._hud_state()
+            return self._save_apply_hud_state(model, scope, appid)
+        return await self._hud_call(save)
+
+    def _is_late_own_hud_edit(self, scope, appid) -> bool:
+        return (
+            scope == "game"
+            and appid is not None
+            and str(appid) != self._current_appid
+            and self._hud.has_game(str(appid))
+            and not self._hud.is_following_global(str(appid))
+        )
 
     async def set_hud_enabled(self, enabled: bool) -> dict:
+        """Turn the HUD of the scope the running game applies on or off."""
         self._init()
         def save_apply_state():
-            model = self._hud.load()
+            model = self._hud_model()
             model["enabled"] = bool(enabled)
-            return self._save_apply_hud_state(model)
+            own = not self._hud.is_following_global(self._current_appid)
+            return self._save_apply_hud_state(
+                model, "game" if own else "global", self._current_appid if own else None
+            )
         return await self._hud_call(save_apply_state)
 
-    async def reset_hud(self) -> dict:
+    async def reset_hud(
+        self, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
-        return await self._hud_call(
-            lambda: self._save_apply_hud_state(mangohud_config.DEFAULT_MODEL)
-        )
+        def reset():
+            if not self._hud_scope_is_current(scope, appid, context_appid):
+                return self._hud_state()
+            return self._save_apply_hud_state(
+                mangohud_config.DEFAULT_MODEL, scope, appid
+            )
+        return await self._hud_call(reset)
+
+    async def set_hud_follow_global(
+        self, follow: bool, appid, context_appid=_RPC_CONTEXT_UNSET
+    ) -> dict:
+        """Toggle a game between its own HUD and the global one, keeping its stored
+        model. Seeds from global the first time it uses its own."""
+        self._init()
+        def toggle():
+            if appid is None or not self._hud_scope_is_current("game", appid, context_appid):
+                return self._hud_state()
+            self._hud.set_follow(str(appid), bool(follow))
+            return self._apply_hud_state(self._hud_model())
+        return await self._hud_call(toggle)
+
+    async def list_hud_games(self) -> list:
+        """Games that apply their own HUD (for the "HUD" badge in Parámetros)."""
+        self._init()
+        return await self._hud_call(lambda: sorted(self._hud.own_hud_games()))
 
     async def reload_hud(self) -> dict:
         """Re-bake presets.conf now with fresh pdc values and reload mangoapp."""
         self._init()
         return await self._hud_call(
-            lambda: self._apply_hud_state(self._hud.load())
+            lambda: self._apply_hud_state(self._hud_model())
         )
 
     def _resolve_hud_conflict_sync(self, action) -> dict:
@@ -11440,9 +11689,7 @@ class Plugin(AmbientRpc):
             return self._hud_state()
         path = conflict["managedPath"]
         if action == "keep_external":
-            model = self._hud.load()
-            model["enabled"] = False
-            model = self._hud.save(model)
+            model = self._hud.disable_all()
             mangohud_ownership.relinquish_managed(
                 path,
                 trusted_root=self._hud_home,
@@ -11456,7 +11703,7 @@ class Plugin(AmbientRpc):
             self._pdc_preview_values = {}
             self._hud_conflict = None
             self._hud_apply_status = "disabled"
-            return self._hud_state(model=model)
+            return self._hud_state(model=self._hud_model())
 
         cap = self._detect_hud()
         if not cap["supported"] or cap["presetsPath"] != path:
@@ -11464,7 +11711,7 @@ class Plugin(AmbientRpc):
                 "ambiguous" if cap.get("ambiguous") else "pending"
             )
             return self._hud_state(cap=cap)
-        model = self._hud.load()
+        model = self._hud_model()
         self._apply_hud(cap=cap, model=model, replace_conflict=True)
         return self._hud_state(cap=cap, model=model)
 
@@ -12000,25 +12247,43 @@ class Plugin(AmbientRpc):
         self._pulse_mark("resume", sync=False, suspend_s=suspend_seconds, token=self._resume_token)
         self._start_resume_hold(self._resume_token)
 
-    def _hold_cores_after_resume(self, intent: dict) -> dict:
-        """During the hold every core stays online; only an explicit core change applies."""
-        if intent.get("cores") is None or not self._resume_hold_active():
+    def _hold_cores_after_resume(
+        self, intent: dict, *, allow_cores=False, allow_smt=False,
+    ) -> dict:
+        """Hold automatic restrictions; an explicit choice overrides only its field."""
+        if not self._resume_hold_active():
             return intent
-        self._note_resume_hold("cores", requested=intent.get("cores"))
-        return {**intent, "cores": None}
+        context = (getattr(self, "_current_appid", None), self._cpu_scope_label())
+        if getattr(self, "_resume_hold_override_context", None) != context:
+            self._resume_hold_overrides = set()
+            self._resume_hold_override_context = context
+        overrides = self._resume_hold_overrides
+        if allow_cores:
+            overrides.add("cores")
+        if allow_smt:
+            overrides.add("smt")
+        selected = dict(intent)
+        if intent.get("cores") is not None and "cores" not in overrides:
+            self._note_resume_hold("cores", requested=intent["cores"])
+            selected["cores"] = None
+        if intent.get("smt") is False and "smt" not in overrides:
+            self._note_resume_hold("smt", requested=False)
+            selected["smt"] = True
+        return selected
 
     def _resume_hold_active(self) -> bool:
         return getattr(self, "_resume_hold_token", None) is not None
 
     def _start_resume_hold(self, token) -> None:
-        """Core limits and a manual GPU clock wait until the machine has been awake
-        for _RESUME_HOLD_S; everything else re-applies as before."""
+        """Automatic CPU restrictions and manual GPU clocks wait after resume."""
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
         self._resume_hold_token = token
         self._resume_hold_noted = set()
+        self._resume_hold_overrides = set()
+        self._resume_hold_override_context = None
         loop.call_later(_RESUME_HOLD_S, self._release_resume_hold, token)
 
     def _note_resume_hold(self, what, **detail) -> None:
@@ -12040,17 +12305,22 @@ class Plugin(AmbientRpc):
 
     def _release_resume_hold(self, token) -> None:
         if getattr(self, "_resume_hold_token", None) != token:
-            return  # a newer resume restarted the hold
-        held = sorted(getattr(self, "_resume_hold_noted", None) or ())
+            return
+        overrides = getattr(self, "_resume_hold_overrides", None) or set()
+        held = sorted(set(getattr(self, "_resume_hold_noted", None) or ()) - overrides)
         self._resume_hold_token = None
         self._resume_hold_noted = None
+        self._resume_hold_overrides = None
+        self._resume_hold_override_context = None
         if getattr(self, "_shutting_down", False):
             return
         self._log_resume_hold("released", held=held)
         if not held:
             return
-        if "cores" in held:
-            self._queue_pulse_mark("release:cores", token)
+        cpu_fields = [field for field in ("cores", "smt") if field in held]
+        if cpu_fields:
+            for field in cpu_fields:
+                self._queue_pulse_mark(f"release:{field}", token)
             self._apply_cpu()
         if "gpu" in held:
             self._queue_pulse_mark("release:gpu", token)
@@ -12062,6 +12332,7 @@ class Plugin(AmbientRpc):
         return {
             "active": self._resume_hold_active(),
             "hold_s": _RESUME_HOLD_S,
+            "overridden": sorted(getattr(self, "_resume_hold_overrides", None) or ()),
             "history": list(getattr(self, "_resume_hold_history", ())),
             "sleep_core_guard": guard.diagnostics() if guard is not None else None,
         }
@@ -12302,10 +12573,15 @@ class Plugin(AmbientRpc):
         policies = value.get("policies") or []
         return {
             "reason": value.get("reason"),
+            **({"boost": value["boost"]} if value.get("boost") is not None else {}),
             "requested": list(value["requested"]) if value.get("requested") else None,
             "policies": [{
                 "name": policy.get("name"),
                 "driver": policy.get("driver"),
+                **{
+                    key: policy[key] for key in ("amd_pstate_max", "writes")
+                    if policy.get(key) is not None
+                },
                 **{
                     key: list(policy[key]) if policy.get(key) else None
                     for key in ("hardware_bounds", "target", "applied")
@@ -13505,6 +13781,8 @@ class Plugin(AmbientRpc):
             "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
             "seen_tdp_conflict_takeover": bool(
                 self._settings.get("seen_tdp_conflict_takeover", False)),
+            "hide_tdp_steamos_card": bool(
+                self._settings.get("hide_tdp_steamos_card", False)),
             "charger_unstable": self._charger_unstable_state(),
             "kernel_support": self._kernel_support_state(),
         }
@@ -14121,15 +14399,59 @@ class Plugin(AmbientRpc):
             self._start_tdp_guard_loop()
         return recovered
 
-    def _recover_tdp_runtime_transaction(self) -> bool:
+    def _recover_tdp_runtime_transaction(
+        self, resume_control=False, resume_cancelled=None,
+    ) -> bool:
         if not getattr(self._tdp_backend, "safety_locked", False):
             return True
         recover = getattr(self._tdp_backend, "recover_runtime_transaction", None)
         if not callable(recover):
             return True
         try:
+            backend = self._tdp_backend
+            generation = getattr(self, "_tdp_generation", None)
+            resume = getattr(backend, "resume_ownership", None)
+            resume_ready = getattr(backend, "ownership_resume_ready", None)
+
+            def authorized():
+                return (
+                    self._tdp_backend is backend
+                    and getattr(self, "_tdp_generation", None) == generation
+                    and not getattr(self, "_shutting_down", False)
+                    and (resume_cancelled is None or not resume_cancelled.is_set())
+                    and (self._tdp_control_on() or resume_control)
+                    and self._tdp_write_authorized()
+                    and self._tdp_external_owner is False
+                    and self._firmware_mode() == _CUSTOM_MODE
+                )
+
+            if (
+                callable(resume) and callable(resume_ready) and resume_ready()
+                and authorized()
+                and self._powerstation_detector.tdp_active() is False
+                and (
+                    self._controller_backend.manager != controller_detect.HHD
+                    or self._hhd_tdp_client.current_tdp_enable() is False
+                )
+                and authorized()
+            ):
+                resumed = trace_tdp_operation(
+                    self._tdp_backend, "resume_ownership",
+                    lambda: resume(write_authorized=True),
+                )
+                if isinstance(resumed, dict) and resumed.get("ok"):
+                    decky.logger.info("TDP ownership: %s", resumed.get("detail"))
+                    return True
             result = trace_tdp_operation(
                 self._tdp_backend, "recover", recover,
+                recovery_owner={
+                    "status": "unknown",
+                    "source": "not_observed_for_recovery",
+                    "runtime_external_owner": self._tdp_external_owner,
+                } if (
+                    self._device.key == "legion_go_2"
+                    and backend.name == "firmware-attr:lenovo-wmi-other"
+                ) else None,
             )
         except Exception as error:  # noqa: BLE001
             decky.logger.error(

@@ -47,6 +47,7 @@ export interface PerformanceEditContext { scope: "global" | "game"; runningGameI
 export type PerformanceWriteStatus = "request_sent" | "unchanged" | "unavailable" | "context_mismatch" | "invalid_value" | "failed";
 
 type Binding = { control: PerformanceSettingControl; write: (value?: number | boolean) => unknown };
+const booleanOrNull = (value: unknown): boolean | null => typeof value === "boolean" ? value : null;
 const numeric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const numbers = (value: unknown): number[] => Array.isArray(value) && value.length > 0
   && value.length <= 1000 && value.every((item) => numeric(item) && Number.isInteger(item) && item >= 0)
@@ -152,6 +153,12 @@ function bindings(deps: PerformanceSettingsDeps): Binding[] {
     if (display?.isVrrCapable === true && limits.is_vrr_supported === true && store.SetVRREnabled) {
       toggle("vrr", settings.is_vrr_enabled, (next) => store.SetVRREnabled!(next as boolean));
     }
+    recordSteamPerformanceDiagnostic("vrr_capability", {
+      display_capable: booleanOrNull(display?.isVrrCapable),
+      limits_supported: booleanOrNull(limits.is_vrr_supported),
+      setting_enabled: booleanOrNull(settings.is_vrr_enabled),
+      setter_present: typeof store.SetVRREnabled === "function",
+    });
   }, undefined);
   const client = deps.settings;
   if (client) {

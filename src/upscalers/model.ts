@@ -1,5 +1,5 @@
 import { addArg, getEnv, hasArg, parse, removeArg, serialize, setEnv } from "../launch/compose";
-import type { BuildInfo, FgRoute, HistoryEntry, Quality, UpscalerChoice } from "./types";
+import type { BuildInfo, FgRoute, HistoryEntry, Quality, ScalerFallback, UpscalerChoice } from "./types";
 
 const OVERRIDES = "WINEDLLOVERRIDES";
 
@@ -49,6 +49,13 @@ export function badgeLabel(build: Pick<BuildInfo, "family" | "version" | "models
   return { full: `${family} ${build.version}${lite}`.trim(), short: `${family} ${major}${lite}`.trim() };
 }
 
+/** What a card or the in-game pill says when the log shows the installed scaler is not the one running. */
+export function fallbackLine(fallback: ScalerFallback, t: (key: string, params?: Record<string, string | number>) => string): string {
+  return fallback.observed
+    ? t("up.fallback.line", { from: fallback.requested, to: fallback.observed })
+    : t("up.fallback.lineNone", { from: fallback.requested });
+}
+
 export function buildLabel(build: Pick<BuildInfo, "family" | "version"> & { channel?: BuildInfo["channel"] }): string {
   const name = build.family === "xess" ? `XeSS ${build.version}`
     : build.family === "helixsr" ? `HLX ${build.version}`
@@ -86,9 +93,10 @@ export function gameOutputHeight(history: readonly Pick<HistoryEntry, "facts">[]
   return lastOutputHeight(outputs) ?? (display ? Math.min(...display) : undefined);
 }
 
-/** Games whose own update took away the input OptiScaler needs; the page says so instead of a silent failure. */
+/** Games whose page says something up front: a lost input, or a launch mode Panel sets for them. */
 const GAME_NOTICES: Record<string, string> = {
   "3564740": "up.notice.dlssRemoved",
+  "4732690": "up.notice.dx11Launch",
 };
 
 export function gameNotice(steamAppid: string | number | null | undefined): string | null {

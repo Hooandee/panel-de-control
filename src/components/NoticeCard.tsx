@@ -12,6 +12,27 @@ interface Props {
   onDismiss: () => void;
 }
 
+export const NoticeDismissButton: FC<{ label: string; onActivate: () => void }> = ({ label, onActivate }) => (
+  <Focusable
+    onActivate={onActivate}
+    onClick={onActivate}
+    noFocusRing
+    style={{
+      marginTop: theme.space.sm,
+      padding: `${theme.space.sm}px ${theme.space.md}px`,
+      borderRadius: theme.radius.sm,
+      background: theme.color.surface,
+      boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
+      color: theme.color.textPrimary,
+      fontSize: theme.font.body,
+      fontWeight: 650,
+      textAlign: "center",
+    }}
+  >
+    {label}
+  </Focusable>
+);
+
 export const NoticeCard: FC<Props> = ({ icon, tone, title, description, dismissLabel, onDismiss }) => (
   <div
     style={{
@@ -45,23 +66,6 @@ export const NoticeCard: FC<Props> = ({ icon, tone, title, description, dismissL
     >
       {description}
     </div>
-    <Focusable
-      onActivate={onDismiss}
-      onClick={onDismiss}
-      noFocusRing
-      style={{
-        marginTop: theme.space.sm,
-        padding: `${theme.space.sm}px ${theme.space.md}px`,
-        borderRadius: theme.radius.sm,
-        background: theme.color.surface,
-        boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-        color: theme.color.textPrimary,
-        fontSize: theme.font.body,
-        fontWeight: 650,
-        textAlign: "center",
-      }}
-    >
-      {dismissLabel}
-    </Focusable>
+    <NoticeDismissButton label={dismissLabel} onActivate={onDismiss} />
   </div>
 );

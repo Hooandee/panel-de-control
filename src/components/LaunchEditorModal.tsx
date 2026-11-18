@@ -10,6 +10,7 @@ import {
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { recordUiEvent } from "../system/uiEvents";
 import { Loading } from "./Loading";
 import { LaunchRow, UnavailableFsrRow } from "./LaunchRow";
 import { LaunchPreview } from "./LaunchPreview";
@@ -41,6 +42,9 @@ const SUBGROUP_ICONS: Record<string, ReactNode> = {
   "params.sub.custom": <LuSlidersHorizontal size={13} />,
 };
 
+// The user's own variables stay outside the folded Advanced section so they are visible on open.
+const CUSTOM_SUBGROUP = "params.sub.custom";
+
 type Editor = ReturnType<typeof useLaunchEditor>;
 
 const TOOLS_FALLBACK: LaunchTools = {
@@ -56,9 +60,10 @@ const Heading: FC<{ icon?: ReactNode; children: ReactNode }> = ({ icon, children
 );
 
 /** Lightweight collapsible for use inside the modal (no PanelSectionRow chrome). */
-const Fold: FC<{ title: ReactNode; summary?: ReactNode; defaultOpen?: boolean; children: ReactNode }> = ({ title, summary, defaultOpen, children }) => {
+const Fold: FC<{ title: ReactNode; summary?: ReactNode; defaultOpen?: boolean; onOpenChange?: (open: boolean) => void; children: ReactNode }> = ({ title, summary, defaultOpen, onOpenChange, children }) => {
   const [open, setOpen] = useState(!!defaultOpen);
   const Chevron = open ? LuChevronDown : LuChevronRight;
+  useEffect(() => { onOpenChange?.(open); }, [open, onOpenChange]);
   return (
     <div>
       <Focusable
@@ -113,6 +118,7 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   const running = useRunningGame();
   const isRunning = !!running && running.liveAppid === game.liveAppid;
   const custom = useCustomVars();
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const { isHidden, hide, unhide } = useHiddenGames();
   const gameHidden = isHidden(game.instanceKey);
   const toggleHidden = async () => {
@@ -140,10 +146,21 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
     };
   }, []);
 
+  const customState = custom.error ? "error" : custom.vars === null ? "loading" : "ready";
+  const editorState = ed.error ? "error" : ed.loading || tools === null || customState === "loading"
+    ? "loading" : ed.malformed ? "malformed" : "ready";
+  const customCount = custom.vars === null ? null
+    : custom.pills.filter((pill) => customPillVisible(pill, ed.selections[pill.id])).length;
+  useEffect(() => {
+    recordUiEvent("launch", "editor_state", {
+      state: editorState, custom_state: customState, custom_count: customCount, advanced_open: advancedOpen,
+    }, editorState !== "error" && customState !== "error");
+  }, [editorState, customState, customCount, advancedOpen]);
+
   const supportedEnvs = capabilities.envs;
   const fsrReason = fsrUnavailableReason(gpu, capabilities);
   const advancedCount = catalog.filter((p) =>
-    p.section === "advanced" && !!selectionForPill(p, ed.selections, gpu, supportedEnvs, catalog) && pillVisible(p, supportedEnvs, gpu)).length;
+    p.section === "advanced" && p.subgroup !== CUSTOM_SUBGROUP && !!selectionForPill(p, ed.selections, gpu, supportedEnvs, catalog) && pillVisible(p, supportedEnvs, gpu)).length;
   const owned = ownedTokens(ed.selections, catalog);
   const frequents: Pill[] = tools ? frequentPills(ed.usage, tools).filter((p) => pillVisible(p, supportedEnvs, gpu)) : [];
   // No usage yet → offer a "Start here" set of safe recommended picks instead.
@@ -229,8 +246,10 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
             <Subgroup key={sg} section="common" subgroup={sg} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} catalog={catalog} />
           ))}
 
-          <Fold title={t("params.advanced")} summary={advancedCount > 0 ? `${advancedCount}` : ""}>
-            {SUBGROUP_ORDER.advanced.map((sg) => (
+          <Subgroup section="advanced" subgroup={CUSTOM_SUBGROUP} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} catalog={catalog} />
+
+          <Fold title={t("params.advanced")} summary={advancedCount > 0 ? `${advancedCount}` : ""} onOpenChange={setAdvancedOpen}>
+            {SUBGROUP_ORDER.advanced.filter((sg) => sg !== CUSTOM_SUBGROUP).map((sg) => (
               <Subgroup key={sg} section="advanced" subgroup={sg} fsrReason={fsrReason} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} catalog={catalog} />
             ))}
           </Fold>

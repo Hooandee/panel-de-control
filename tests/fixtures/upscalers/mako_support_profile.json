@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "42": {
+      "enabled": true,
+      "mode": "fixed",
+      "multiplier": 2,
+      "target_fps": 120,
+      "max_multiplier": 3,
+      "flow": "balanced",
+      "performance": true,
+      "scaling_enabled": false,
+      "scaling_factor": 1.5,
+      "scaling_sharpness": 0.8
+    }
+  }
+}

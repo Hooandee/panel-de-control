@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@decky/ui", () => ({ findSP: () => null }));
 vi.mock("@decky/api", () => ({ routerHook: {}, callable: () => vi.fn(() => Promise.resolve()) }));
 
-import { hostOf, isCollection, isHidden, tileOf } from "./overlays";
+import { renderHook } from "@testing-library/react";
+import { hostOf, isCollection, isHidden, publishOverview, tileOf, useInstalls } from "./overlays";
+import type { UpscalersOverview } from "./types";
 
 function box(el: Element, width: number, height: number): void {
   el.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, width, height, right: width, bottom: height, toJSON: () => ({}) });
@@ -166,5 +168,27 @@ describe("cover badges switch", () => {
     expect(readCoverBadges()).toBe(false);
     writeCoverBadges(true);
     expect(readCoverBadges()).toBe(true);
+  });
+});
+
+describe("cover pill when FSR 4 fell back", () => {
+  const overview = (fallback: unknown) => ({
+    builds: [{ id: "fsr-4.1.2-beta", family: "fsr", version: "4.1.2", models: ["lite", "full"], engine: "optiscaler" }],
+    installs: { "4732690": { build: "fsr-4.1.2-beta", proxy: "d3d12.dll", status: "active", options: { model: "lite" }, fallback } },
+  }) as unknown as UpscalersOverview;
+
+  it("names the scaler that runs instead of the installed one", () => {
+    publishOverview(overview({ requested: "FSR 4", observed: "FSR 2.2", reason: "vulkan_textures" }));
+    const badge = renderHook(() => useInstalls()).result.current["4732690"];
+    expect(badge.state).toBe("fallback");
+    expect(badge.label).toContain("FSR 2.2");
+    expect(badge.label).not.toContain("Lite");
+  });
+
+  it("keeps the installed label when nothing fell back", () => {
+    publishOverview(overview(null));
+    const badge = renderHook(() => useInstalls()).result.current["4732690"];
+    expect(badge.state).toBe("active");
+    expect(badge.label).toBe("FSR 4.1.2 Lite");
   });
 });

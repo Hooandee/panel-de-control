@@ -1,15 +1,20 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import {
   HudModel,
   HudState,
+  Scope,
   getHudState,
   reloadHud,
   resetHud,
   resolveHudConflict,
   setHudConfig,
+  setHudFollowGlobal,
 } from "../api";
 import { useMountedRef } from "../hooks/useMountedRef";
+import { RunningGame, useRunningGame } from "../tdp/useRunningGame";
+import { useScopeSync } from "../useScopeSync";
+import { noteHudScope, syncSteamOverlayForGame } from "./hudGameSync";
 
 const POLL_MS = 4000;
 const DEBOUNCE_MS = 700;
@@ -84,8 +89,20 @@ export function withHudTimeout<T>(promise: Promise<T>): Promise<T> {
 export type ReloadStatus = "idle" | "busy" | "ok" | "pending" | "error";
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
+/** Which stored HUD an edit belongs to: global, or the running game's own. */
+interface HudTarget {
+  scope: Scope;
+  appid: string | null;
+  context: string | null;
+}
+
+const GLOBAL_TARGET: HudTarget = { scope: "global", appid: null, context: null };
+
 export interface HudController {
   state: HudState | null;
+  scope: Scope;
+  game: RunningGame | null;
+  onScope: (scope: Scope) => void;
   setModel: (model: HudModel) => void;
   setEnabled: (enabled: boolean) => void;
   reload: () => void;
@@ -99,6 +116,8 @@ const isApplyError = (status: HudState["applyStatus"]) =>
   status === "failed" || status === "conflict" || status === "ambiguous";
 
 export function useHud(): HudController {
+  const game = useRunningGame();
+  const appid = game?.appid ?? null;
   const [state, setState] = useState<HudState | null>(null);
   const [reloadStatus, setReloadStatus] = useState<ReloadStatus>("idle");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -109,7 +128,11 @@ export function useHud(): HudController {
   const pendingRef = useRef(0);
   const revisionRef = useRef(0);
   const persistingRef = useRef(false);
-  const queuedPersistRef = useRef<{ model: HudModel; revision: number } | null>(null);
+  const queuedPersistRef = useRef<
+    { model: HudModel; revision: number; target: HudTarget } | null
+  >(null);
+  const targetRef = useRef<HudTarget>(GLOBAL_TARGET);
+  const dirtyTargetRef = useRef<HudTarget>(GLOBAL_TARGET);
   const drainWaitersRef = useRef<Array<() => void>>([]);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -123,6 +146,7 @@ export function useHud(): HudController {
     const signature = hudControlSignature(remote);
     stateRef.current = remote;
     modelRef.current = remote.model;
+    noteHudScope(remote.followsGlobal === false);
     publishHudValues(remote.values);
     if (signature !== controlSignatureRef.current) {
       controlSignatureRef.current = signature;
@@ -191,7 +215,7 @@ export function useHud(): HudController {
       commandInFlightRef.current = false;
       const queued = queuedPersistRef.current;
       queuedPersistRef.current = null;
-      if (queued) persist(queued.model, queued.revision);
+      if (queued) persist(queued.model, queued.revision, queued.target);
     };
     void waitForPersistDrain()
       .then(() => {
@@ -214,9 +238,9 @@ export function useHud(): HudController {
       });
   };
 
-  const persist = (model: HudModel, revision: number) => {
+  const persist = (model: HudModel, revision: number, target: HudTarget) => {
     if (persistingRef.current || commandInFlightRef.current) {
-      queuedPersistRef.current = { model, revision };
+      queuedPersistRef.current = { model, revision, target };
       if (mounted.current) setSaveStatus("saving");
       return;
     }
@@ -227,7 +251,7 @@ export function useHud(): HudController {
       clearSaveFeedback();
       setSaveStatus("saving");
     }
-    const request = setHudConfig(model);
+    const request = setHudConfig(model, target.scope, target.appid, target.context);
     void withHudTimeout(request)
       .then((remote) => {
         if (!mounted.current || revision !== revisionRef.current) return;
@@ -247,7 +271,7 @@ export function useHud(): HudController {
         const queued = queuedPersistRef.current;
         queuedPersistRef.current = null;
         if (queued) {
-          persist(queued.model, queued.revision);
+          persist(queued.model, queued.revision, queued.target);
         } else {
           resolvePersistDrain();
         }
@@ -290,10 +314,64 @@ export function useHud(): HudController {
         debounceTimer.current = null;
         dirtyRef.current = false;
         revisionRef.current += 1;
-        persist(modelRef.current, revisionRef.current);
+        persist(modelRef.current, revisionRef.current, dirtyTargetRef.current);
       }
     };
   }, []);
+
+  const flushPendingEdit = () => {
+    if (!debounceTimer.current || !modelRef.current) return;
+    clearDebounce();
+    dirtyRef.current = false;
+    revisionRef.current += 1;
+    persist(modelRef.current, revisionRef.current, dirtyTargetRef.current);
+  };
+
+  const refreshForGame = () => {
+    flushPendingEdit();
+    if (pollingRef.current) return;
+    pollingRef.current = true;
+    const request = getHudState();
+    void withHudTimeout(request)
+      .then((remote) => {
+        if (mounted.current && !dirtyRef.current) accept(remote);
+      })
+      .catch(() => {});
+    void request.catch(() => {}).finally(() => {
+      pollingRef.current = false;
+    });
+  };
+
+  const firstGameRender = useRef(true);
+  useEffect(() => {
+    if (firstGameRender.current) {
+      firstGameRender.current = false;
+      return;
+    }
+    refreshForGame();
+  }, [appid]);
+
+  const applyFollow = useCallback(
+    async (follow: boolean, target: string): Promise<boolean> => {
+      flushPendingEdit();
+      await waitForPersistDrain();
+      try {
+        const remote = await withHudTimeout(setHudFollowGlobal(follow, target, appid));
+        if (!mounted.current) return false;
+        revisionRef.current += 1;
+        accept(remote);
+        void syncSteamOverlayForGame().catch(() => {});
+        return remote.followsGlobal === follow;
+      } catch {
+        return false;
+      }
+    },
+    [appid],
+  );
+  const { scope, onScope } = useScopeSync(appid, state?.followsGlobal, applyFollow);
+  targetRef.current = scope === "game" && appid
+    ? { scope: "game", appid, context: appid }
+    : { scope: "global", appid: null, context: appid };
 
   const setModel = (model: HudModel) => {
     const current = stateRef.current;
@@ -308,10 +386,12 @@ export function useHud(): HudController {
     clearSaveFeedback();
     setSaveStatus("idle");
     clearDebounce();
+    const target = targetRef.current;
+    dirtyTargetRef.current = target;
     debounceTimer.current = setTimeout(() => {
       debounceTimer.current = null;
       dirtyRef.current = false;
-      persist(modelRef.current ?? model, revisionRef.current);
+      persist(modelRef.current ?? model, revisionRef.current, target);
     }, DEBOUNCE_MS);
   };
 
@@ -329,7 +409,7 @@ export function useHud(): HudController {
     modelRef.current = model;
     controlSignatureRef.current = hudControlSignature(optimistic);
     setState(optimistic);
-    persist(model, revision);
+    persist(model, revision, targetRef.current);
   };
 
   const reload = () => {
@@ -341,7 +421,7 @@ export function useHud(): HudController {
     dirtyRef.current = false;
     const revision = revisionRef.current + 1;
     revisionRef.current = revision;
-    if (hadUnsavedModel) persist(latest, revision);
+    if (hadUnsavedModel) persist(latest, revision, dirtyTargetRef.current);
     clearReloadFeedback();
     setReloadStatus("busy");
 
@@ -378,8 +458,9 @@ export function useHud(): HudController {
     queuedPersistRef.current = null;
     clearSaveFeedback();
     setSaveStatus("saving");
+    const target = targetRef.current;
     runCommand(
-      resetHud,
+      () => resetHud(target.scope, target.appid, target.context),
       revision,
       (remote) => {
         accept(remote);
@@ -400,7 +481,7 @@ export function useHud(): HudController {
     dirtyRef.current = false;
     const revision = revisionRef.current + 1;
     revisionRef.current = revision;
-    if (hadUnsavedModel) persist(latest, revision);
+    if (hadUnsavedModel) persist(latest, revision, dirtyTargetRef.current);
     clearSaveFeedback();
     setSaveStatus("saving");
 
@@ -418,6 +499,9 @@ export function useHud(): HudController {
 
   return {
     state,
+    scope,
+    game,
+    onScope,
     setModel,
     setEnabled,
     reload,

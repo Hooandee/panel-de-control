@@ -3,6 +3,7 @@ import { EcoState, getEcoState, setEco, setEcoScreen } from "../api";
 import { translate } from "../i18n";
 import { subscribeActive } from "./activity";
 import { displayBrightness } from "./display";
+import { subscribeDownloadActive } from "./downloads";
 import { hideBlackout, showBlackout } from "./ecoBlackout";
 import { startCountdown } from "./ecoCountdown";
 import { fromPercent, toPercent } from "./logic";
@@ -21,6 +22,8 @@ const AUTO_EXIT_MS = 10000;
 const INPUT_GAP_MS = 4000;
 const TIMER_LATENESS_MS = 1000;
 const EXIT_TIMEOUT_MS = 10000;
+// Steam's queue goes idle for a moment between two downloads.
+const DOWNLOAD_END_GRACE_MS = 30000;
 const INPUT_EVENT = "pdc_eco_input";
 
 let enabled = false;
@@ -40,6 +43,8 @@ let exitPending = false;
 let inputCount = 0;
 let maxInputGap = 0;
 let unsubscribe: (() => void)[] = [];
+let sawDownload = false;
+let downloadEnd: ReturnType<typeof setTimeout> | undefined;
 
 function resetActivity(): void {
   clearTimeout(activityTimer);
@@ -49,8 +54,7 @@ function resetActivity(): void {
   maxInputGap = 0;
 }
 
-async function exitForActivity(activity: { duration_ms: number; input_count: number; max_gap_ms: number }): Promise<void> {
-  const detail = { reason: "sustained_activity", source: "wake_input", ...activity };
+async function exitEco(detail: Record<string, unknown>, toastKey: string): Promise<void> {
   const e = ++epoch;
   exitPending = true;
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -66,7 +70,7 @@ async function exitForActivity(activity: { duration_ms: number; input_count: num
     disable();
     toaster.toast({
       title: translate("system.eco.title"),
-      body: translate("system.eco.autoExit"),
+      body: translate(toastKey),
       duration: 3000,
       playSound: false,
       showNewIndicator: false,
@@ -77,6 +81,24 @@ async function exitForActivity(activity: { duration_ms: number; input_count: num
     clearTimeout(timeout);
     if (e === epoch) exitPending = false;
   }
+}
+
+function exitForActivity(activity: { duration_ms: number; input_count: number; max_gap_ms: number }): Promise<void> {
+  return exitEco({ reason: "sustained_activity", source: "wake_input", ...activity }, "system.eco.autoExit");
+}
+
+function onDownloadActive(active: boolean): void {
+  clearTimeout(downloadEnd);
+  downloadEnd = undefined;
+  if (active) {
+    sawDownload = true;
+    return;
+  }
+  if (!sawDownload) return;
+  downloadEnd = setTimeout(() => {
+    downloadEnd = undefined;
+    if (alive && enabled && !exitPending) void exitEco({ reason: "download_finished", source: "steam_downloads" }, "system.eco.downloadDone");
+  }, DOWNLOAD_END_GRACE_MS);
 }
 
 function recordActivity(): void {
@@ -190,6 +212,7 @@ function onBrightness(fraction: number): void {
 function enable(wake: number, screenOff: boolean): void {
   resetActivity();
   exitPending = false;
+  sawDownload = false;
   enabled = true;
   active = true;
   panel = screenOff;
@@ -198,6 +221,7 @@ function enable(wake: number, screenOff: boolean): void {
   addEventListener(INPUT_EVENT, onRawInput);
   unsubscribe = [
     subscribeActive(onSteamActivity),
+    subscribeDownloadActive(onDownloadActive),
     displayBrightness.subscribe(onBrightness),
     () => removeEventListener(INPUT_EVENT, onRawInput),
   ].filter((u): u is () => void => u !== null);
@@ -219,6 +243,8 @@ function disable(): void {
   clearInterval(poll);
   clearTimeout(debounce);
   clearTimeout(relapse);
+  clearTimeout(downloadEnd);
+  downloadEnd = undefined;
   relapse = undefined;
   stopCountdown();
   hideBlackout();

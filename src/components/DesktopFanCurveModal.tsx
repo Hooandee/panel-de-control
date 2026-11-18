@@ -3,6 +3,7 @@ import { Focusable, ModalRoot, SliderField } from "@decky/ui";
 import { showModal } from "../navigation/showModal";
 
 import { DesktopFanChannel, getFanCurveState, setDesktopFanCurve } from "../api";
+import { isDesktopFanChannel } from "../fans/presentation";
 import { GEOM, Point, clampMonotonic, percentToPwm, pwmToPercent } from "../fans/curve";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -52,7 +53,7 @@ const DesktopFanCurveModalBody: FC<ModalProps> = ({ channelKey, title, initialPo
     getFanCurveState().then((next) => {
       if (!alive) return;
       const channel = next.independent
-        ? next.channels?.find((candidate) => candidate.key === channelKey)
+        ? next.channels?.filter(isDesktopFanChannel).find((candidate) => candidate.key === channelKey)
         : undefined;
       if (!channel?.controllable || channel.preset !== "custom" || !channel.points?.length) {
         setAvailable(false);
@@ -93,7 +94,7 @@ const DesktopFanCurveModalBody: FC<ModalProps> = ({ channelKey, title, initialPo
     setDesktopFanCurve(channelKey, "custom", points, "global", null)
       .then((next) => {
         const confirmed = next?.independent
-          ? next.channels?.find((channel) => channel.key === channelKey)
+          ? next.channels?.filter(isDesktopFanChannel).find((channel) => channel.key === channelKey)
           : undefined;
         if (next.apply_ok !== true || !confirmed?.controllable || confirmed.preset !== "custom" || !confirmed.points?.length) {
           throw new Error("desktop fan curve was not confirmed");

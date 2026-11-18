@@ -1,0 +1,11 @@
+{
+  "report": "PDC-ZSTR",
+  "issue": 1260,
+  "text": "Initially plugin is named 'Panel de control' and after opening, it changes to 'Control panel'. I'm not sure why it should be translated. Panel de control is self explanatory and the plugin deserves its native naming, i think. =)",
+  "pluginVersion": "0.88.0",
+  "device": "Jupiter",
+  "savedLanguage": "en",
+  "initialVisibleName": "Panel de Control",
+  "openedVisibleName": "Control Panel",
+  "productName": "Panel de Control"
+}

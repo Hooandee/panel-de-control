@@ -35,6 +35,39 @@ def test_rows_are_matched_by_name_ignoring_marks_and_demo():
     assert cache.lookup("Unknown") is None
 
 
+# Public compatibility row: https://github.com/optiscaler/OptiScaler/wiki/Compatibility-List
+VILLAGE_ROW = """## Upscaler mods support
+| [Resident Evil 8 Village](Resident-Evil-8-Village) | ✅ | DLSS, XeSS | Requires REFramework mod (pd-upscaler branch) + PDUpscaler plugin + OptiScaler | |
+"""
+
+
+def test_village_steam_title_finds_the_public_wiki_requirements():
+    from upscalers import auto_recipes, recipes
+
+    cache = wiki.WikiCache.__new__(wiki.WikiCache)
+    cache._rows = wiki.parse(VILLAGE_ROW)
+    found = cache.lookup("Resident Evil Village")
+    assert found["page"] == "Resident-Evil-8-Village"
+    assert found["needs"] == ["reframework", "mod"]
+    live = recipes.from_facts("1196590", found, "optiscaler-wiki@live")
+    for recipe in (recipes.recipe_for("1196590"), recipes.recipe_for("1196590", live)):
+        assert recipe.needs == ("reframework", "mod")
+        assert recipe.inputs == ("DLSS", "XeSS")
+        assert auto_recipes.unresolved(recipe, {"inputs": {}}, None)
+        assert not recipe.dependencies and not recipe.files
+        assert recipe.effective_api is None and recipe.recommended_build is None
+
+
+def test_current_wiki_title_wins_over_the_village_alias():
+    cache = wiki.WikiCache.__new__(wiki.WikiCache)
+    cache._rows = wiki.parse(VILLAGE_ROW)
+    current = {"name": "Resident Evil Village", "needs": ["mod"], "inputs": ["XeSS"]}
+    cache._rows[wiki.clean(current["name"])] = current
+    assert cache.lookup("Resident Evil Village") is current
+    assert cache.lookup("Resident Evil Village Demo") is current
+    assert cache.lookup("Resident Evil Village 2") is None
+
+
 def test_refresh_downloads_once_then_keeps_the_copy_when_offline(tmp_path):
     cache = wiki.WikiCache(tmp_path)
     clock = [1000.0]
@@ -188,3 +221,10 @@ def test_a_copy_saved_in_an_older_format_is_ignored_and_fetched_again(tmp_path):
     assert cache.lookup("Stellar Blade") is None
     assert cache.refresh(fetch=lambda *a, **k: Response(TABLE.encode()), now=lambda: 1000.0)["updated"]
     assert cache.lookup("Stellar Blade")["status"] == "works"
+
+
+def test_use_dx12_note_adds_the_dx12_argument():
+    # Wiki notes such as Satisfactory's ("Use DX12 and install to ...") ask for DX12 without the literal flag.
+    for note in ("Use DX12 and install to `Satisfactory/` `Engine/` `Binaries/` `Win64/`.", "Use DX12 mode", "Use DX12, requires enabling Non-Linear sRGB Input for FSR4."):
+        assert wiki.facts("✅", "", note)["args"] == ["-dx12"]
+    assert "args" not in wiki.facts("✅", "", "DX11 only, do not use the DX12 path")

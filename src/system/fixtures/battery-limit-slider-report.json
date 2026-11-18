@@ -1,0 +1,63 @@
+{
+  "battery": {
+    "present": true,
+    "percent": 73,
+    "status": "Discharging",
+    "health_percent": 94,
+    "cycle_count": null,
+    "energy_now_mwh": 27340,
+    "energy_full_mwh": 37472,
+    "energy_full_design_mwh": 40001,
+    "power_now_w": 17.8,
+    "eta_seconds": 5529,
+    "ac_online": false
+  },
+  "chargeLimit": {
+    "backend": "sysfs-threshold",
+    "supported": true,
+    "adjustable": true,
+    "managed": true,
+    "enabled": true,
+    "percent": 70,
+    "applied_percent": 70,
+    "min": 20,
+    "max": 100
+  },
+  "confirmedWrites": [
+    {
+      "requested": 70,
+      "readback": 70,
+      "ok": true
+    },
+    {
+      "requested": 60,
+      "readback": 60,
+      "ok": true
+    },
+    {
+      "requested": 65,
+      "readback": 65,
+      "ok": true
+    },
+    {
+      "requested": 80,
+      "readback": 80,
+      "ok": true
+    },
+    {
+      "requested": 95,
+      "readback": 95,
+      "ok": true
+    },
+    {
+      "requested": 80,
+      "readback": 80,
+      "ok": true
+    },
+    {
+      "requested": 70,
+      "readback": 70,
+      "ok": true
+    }
+  ]
+}

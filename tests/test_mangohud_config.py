@@ -644,3 +644,38 @@ def test_frame_timing_respects_steam_minimal_and_off_levels():
     for level in (2, 3, 4):
         assert "frame_timing=1" in _section(conf, level)
         assert "frametime=0" in _section(conf, level)
+
+
+# ---- horizontal row: stable width ----
+
+_REPORT_1158 = {
+    "enabled": True, "layout": "horizontal", "compact": True, "noSmallFont": True,
+    "fontSize": 24, "fontSizeSecondary": 24, "fontSizeText": 24,
+    "items": _metrics(
+        "fps", "cpu", "cpu_temp", "gpu", "gpu_temp", "gpu_power", "gpu_clock", "ram",
+        "battery", "battery_watt", "device_battery", "time", "pdc_tdp", "pdc_power", "fan",
+    ),
+}
+
+
+def _custom(model, values):
+    return [
+        line for line in to_directives(model, values) if line.startswith("custom_text=")
+    ]
+
+
+def test_horizontal_pdc_values_keep_their_width_across_digit_counts():
+    short = _custom(_REPORT_1158, {"pdc_tdp": "9W", "pdc_power": "8W"})
+    long = _custom(_REPORT_1158, {"pdc_tdp": "15W", "pdc_power": "15W"})
+    assert [len(x) for x in short] == [len(x) for x in long]
+
+
+def test_vertical_pdc_values_are_not_padded():
+    model = {**_REPORT_1158, "layout": "vertical", "items": _metrics("pdc_tdp")}
+    assert _custom(model, {"pdc_tdp": "9W"}) == ["custom_text=TDP 9W"]
+
+
+def test_horizontal_row_keeps_every_metric_the_user_chose():
+    lines = to_directives(_REPORT_1158, {"pdc_tdp": "12W", "pdc_power": "8W"})
+    assert "fan=1" in lines
+    assert "custom_text=TDP 12W" in lines

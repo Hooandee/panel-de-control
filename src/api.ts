@@ -393,6 +393,8 @@ export interface TdpState {
   // One-time full-screen notices already shown (durable across reboot).
   seen_autotdp_notice: boolean;
   seen_tdp_conflict_takeover: boolean;
+  // The user closed the "Stop controlling TDP" card; Panel keeps control.
+  hide_tdp_steamos_card: boolean;
   // AC kept dropping and coming back; null while power has been steady.
   charger_unstable: ChargerUnstable | null;
   // The kernel has asus-armoury but no power limits for this board yet, so TDP runs
@@ -608,6 +610,8 @@ export const setSeenAutotdpNotice =
   callable<[seen: boolean], boolean>("set_seen_autotdp_notice");
 export const setSeenTdpConflictTakeover =
   callable<[seen: boolean], boolean>("set_seen_tdp_conflict_takeover");
+export const setHideTdpSteamosCard =
+  callable<[hidden: boolean], boolean>("set_hide_tdp_steamos_card");
 export const dismissChargerNotice = callable<[], boolean>("dismiss_charger_notice");
 export const dismissKernelSupportNotice = callable<[], boolean>("dismiss_kernel_support_notice");
 
@@ -633,6 +637,7 @@ export interface FanCurveState {
   firmware_points: { temp: number; pct: number }[] | null;
   preset: FanPreset;
   points: [number, number][] | null;
+  custom_points?: [number, number][] | null;
   // Silence↔cool bias for the adaptive mode (-100..100, 0 otherwise).
   bias: number;
   global_preset: FanPreset;
@@ -664,7 +669,16 @@ export interface FanCurveState {
   kernel_pending?: boolean;
   device_key?: string | null;
   independent?: boolean;
-  channels?: DesktopFanChannel[];
+  // Desktop PCs: the independent channels. With `split` (ASUS): one entry per fan
+  // (cpu = pwm1, gpu = pwm2) carrying its own curve.
+  channels?: Array<DesktopFanChannel | SplitFanChannel>;
+  // The hardware exposes two independent tables (ASUS) -> "Juntos / Por separado" is offered.
+  split_available?: boolean;
+  // Per-channel mode is active (always false when !split_available).
+  split?: boolean;
+  split_preset?: Exclude<FanPreset, "adaptive">;
+  points_by_channel?: Record<SplitFanKey, [number, number][]> | null;
+  custom_points_by_channel?: Record<SplitFanKey, [number, number][]> | null;
   apply_ok?: boolean;
   rollback_ok?: boolean;
   board_fans?: BoardFanState;
@@ -696,6 +710,14 @@ export interface BoardFanState {
   channels?: number;
   control_off?: boolean;
   last?: { action: string; ok: boolean; channels: number; detail: string } | null;
+}
+
+export type SplitFanKey = "cpu" | "gpu";
+
+export interface SplitFanChannel {
+  key: SplitFanKey;
+  preset: Exclude<FanPreset, "adaptive">;
+  points: [number, number][] | null;
 }
 
 export interface DesktopFanChannel {
@@ -788,7 +810,11 @@ export const setFanPreset =
 export const setFanFollowGlobal =
   callable<[follow: boolean, appid: string | null], FanCurveState>("set_fan_follow_global");
 export const setFanCurvePoints =
-  callable<[points: [number, number][], scope: FanScope, appid: string | null], FanCurveState>("set_fan_curve_points");
+  callable<[points: [number, number][], scope: FanScope, appid: string | null, channel?: SplitFanKey | null],
+    FanCurveState>("set_fan_curve_points");
+// Joined <-> per-channel ("Juntos / Por separado"); only where `split_available`.
+export const setFanSplit =
+  callable<[split: boolean, scope: FanScope, appid: string | null], FanCurveState>("set_fan_split");
 export const setFanCurveAuto =
   callable<[scope: FanScope, appid: string | null], FanCurveState>("set_fan_auto");
 // Adaptive (learned) mode. Selecting it drives the learned curve (or firmware auto
@@ -1248,6 +1274,7 @@ export interface GameProfileRow {
   gpu?: { manual: boolean; min: number | null; max: number | null; follows_global: boolean };
   mandos?: { count: number; follows_global: boolean };
   audio?: { follows_global: boolean };
+  hud?: { enabled: boolean; follows_global: boolean };
 }
 export const listGameProfiles = callable<[], GameProfileRow[]>("list_game_profiles");
 export const resetGameProfiles =
@@ -1258,8 +1285,19 @@ import type { HudModel, HudState } from "./mangohud/model";
 export type { HudModel, HudState } from "./mangohud/model";
 
 export const getHudState = callable<[], HudState>("get_hud_state");
-export const setHudConfig = callable<[model: HudModel], HudState>("set_hud_config");
-export const resetHud = callable<[], HudState>("reset_hud");
+export const setHudConfig = callable<
+  [model: HudModel, scope: Scope, appid: string | null, contextAppid: string | null],
+  HudState
+>("set_hud_config");
+export const resetHud = callable<
+  [scope: Scope, appid: string | null, contextAppid: string | null],
+  HudState
+>("reset_hud");
+export const setHudFollowGlobal = callable<
+  [follow: boolean, appid: string, contextAppid: string | null],
+  HudState
+>("set_hud_follow_global");
+export const listHudGames = callable<[], string[]>("list_hud_games");
 export const reloadHud = callable<[], HudState>("reload_hud");
 export const resolveHudConflict =
   callable<[action: "keep_external" | "use_pdc"], HudState>("resolve_hud_conflict");
@@ -1396,8 +1434,8 @@ export const setUpscalerImageSettings = callable<[appid: string, values: Upscale
 export const restoreUpscalerImageSettings = callable<[appid: string], UpscalerImageSettings>("restore_upscaler_image_settings");
 export const getUpscalerIni = callable<[appid: string], { sections: IniSection[] }>("get_upscaler_ini");
 export const setUpscalerIni = callable<[appid: string, key: string, value: string], { key: string; value: string }>("set_upscaler_ini");
-export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] } | null; resolution_source?: "initialization_only" | "unavailable"; fg?: boolean | null; fg_toggle?: boolean; fps?: number | null; provider_family?: "fsr" | "dlss" | "xess" | null; provider_name?: "FSR" | "DLSS" | "XeSS" | null; provider_version?: string | null; provider_source?: "optiscaler_log" | "unavailable"; provider_confidence?: "family_only" | "unknown" }>("get_upscaler_live");
-export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow: "quality" | "balanced" | "performance" | "fastest"; performance: boolean }
+export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] } | null; resolution_source?: "initialization_only" | "unavailable"; fg?: boolean | null; fg_toggle?: boolean; fps?: number | null; fallback?: import("./upscalers/types").ScalerFallback | null; provider_family?: "fsr" | "dlss" | "xess" | null; provider_name?: "FSR" | "DLSS" | "XeSS" | null; provider_version?: string | null; provider_source?: "optiscaler_log" | "unavailable"; provider_confidence?: "family_only" | "unknown" }>("get_upscaler_live");
+export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow_scale: number; flow_manual?: boolean; manual_scale?: number | null; performance: boolean }
 export interface EngineUpdate { state: "current" | "available" | "updated" | "deferred" | "failed" | "unmanaged"; version: string; available?: string }
 export const refreshFrameGenEngine = callable<[engine: "mako" | "lsfg", apply?: boolean], EngineUpdate>("refresh_framegen_engine");
 export interface LsfgStatus { version?: string | null; installed: boolean; foreign: boolean; foreign_backup?: boolean; cleared?: string[]; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
@@ -1408,7 +1446,7 @@ export const restoreForeignUpscaler = callable<[appid: string], { restored: stri
 export const getLsfgStatus = callable<[], LsfgStatus>("get_lsfg_status");
 export const installLsfg = callable<[], LsfgStatus>("install_lsfg");
 export const setLsfgGame = callable<[appid: string, config: Partial<LsfgProfile> | null], { env: Record<string, string>; profile: LsfgProfile | null }>("set_lsfg_game");
-export interface MakoProfile { enabled?: boolean; scaling_enabled?: boolean; scaling_factor?: number; scaling_sharpness?: number; name?: string; mode: "fixed" | "adaptive"; multiplier: 2 | 3 | 4 | 5; target_fps: number; max_multiplier: 2 | 3 | 4 | 5; flow: LsfgProfile["flow"]; performance: boolean }
+export interface MakoProfile { enabled?: boolean; scaling_enabled?: boolean; scaling_factor?: number; scaling_sharpness?: number; name?: string; mode: "fixed" | "adaptive"; multiplier: 2 | 3 | 4 | 5; target_fps: number; max_multiplier: 2 | 3 | 4 | 5; flow: "quality" | "balanced" | "performance" | "fastest"; performance: boolean }
 export interface MakoStatus { scaler_transition_pending?: boolean; spatial_ready?: boolean; installed: boolean; ready: boolean; supported: boolean; reason: string | null; dll: boolean; foreign: boolean; version: string | null; profiles: Record<string, MakoProfile> }
 export const getMakoStatus = callable<[appid?: string], MakoStatus>("get_mako_status");
 export const installMako = callable<[], MakoStatus>("install_mako");

@@ -27,7 +27,7 @@ LOG_LINES = 60
 LINE_CHARS = 220
 
 
-REQUEST_KEYS = ("build", "model", "quality", "fg", "fg_route", "proxy", "sharpness", "hud_fix", "confirm_anti_cheat", "key", "value", "key_action", "value_omitted", "multiplier", "flow", "performance", "enabled", "mode", "target_fps", "max_multiplier", "int8", "scaling_enabled", "scaling_factor", "scaling_sharpness")
+REQUEST_KEYS = ("build", "model", "quality", "fg", "fg_route", "proxy", "sharpness", "hud_fix", "confirm_anti_cheat", "key", "value", "key_action", "value_omitted", "multiplier", "flow", "flow_scale", "performance", "enabled", "mode", "target_fps", "max_multiplier", "int8", "scaling_enabled", "scaling_factor", "scaling_sharpness")
 
 
 def fields(value, keys, limit=160):
@@ -254,6 +254,8 @@ def _snapshot(install) -> dict:
                     injector_version=facts.get("version"),
                     **logread.provider_observation(facts if engine == "optiscaler" else {}))
     observed["resolution_source"] = facts.get("resolution_source", "unavailable")
+    if engine == "optiscaler" and (fallen := logread.fallback(install, facts)):
+        observed["fallback"] = fallen
     for name in ("resolution", "initial_resolution"):
         resolution = facts.get(name)
         if isinstance(resolution, dict):
@@ -351,9 +353,16 @@ _LAUNCH_WRAPPERS = {'mako': 'mako', 'mako-run': 'mako', 'mako-launch': 'mako', '
                     'mangohud': 'mangohud', 'gamemoderun': 'gamemoderun'}
 
 
+_LAUNCH_FG_ENV = {
+    'ENABLE_GAMESCOPE_WSI': 'switch', 'DISABLE_LSFGVK': 'switch',
+    'LSFGVK_PROFILE': 'profile', 'MAKO_PROFILE': 'profile',
+    'LSFGVK_CONFIG': 'path', 'MAKO_CONFIG': 'path', 'MAKO_LAUNCH_CONFIG': 'path',
+}
+
+
 def launch_diagnostics(value) -> dict:
     result = {'command_placeholder': False, 'render_flags': [], 'wrappers': [],
-              'dll_overrides': [], 'omitted_count': 0, 'reshade_redirected': False}
+              'dll_overrides': [], 'omitted_count': 0, 'reshade_redirected': False, 'framegen_env': {}}
     if not isinstance(value, str):
         return result
     try:
@@ -368,6 +377,19 @@ def launch_diagnostics(value) -> dict:
             flag = 'dx11' if token.lower() in ('-dx11', '-d3d11') else 'dx12'
             if flag not in result['render_flags']:
                 result['render_flags'].append(flag)
+        elif (name := token.partition('=')[0]) in _LAUNCH_FG_ENV and '=' in token:
+            value_class = 'empty'
+            assigned = token.partition('=')[2]
+            kind = _LAUNCH_FG_ENV[name]
+            if assigned:
+                if kind == 'switch':
+                    value_class = assigned if assigned in ('0', '1') else 'other'
+                elif kind == 'profile':
+                    # A pdc-shaped name is syntax, not ownership or observed activity.
+                    value_class = 'pdc' if re.fullmatch(r'pdc-(?:[0-9]{1,20}|none)', assigned) else 'other'
+                else:
+                    value_class = 'set'
+            result['framegen_env'][name] = value_class
         elif token.startswith('RESHADE_BASE_PATH_OVERRIDE='):
             result['reshade_redirected'] = bool(token.partition('=')[2])
         elif token.startswith('WINEDLLOVERRIDES='):
@@ -512,6 +534,8 @@ def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
     elif install:
         target = Path(install.get("target", ""))
         facts = logread.read(target, since=verification_since(install))
+        if fallen := logread.fallback(install, facts):
+            facts["fallback"] = fallen
         report.update({
             "manifest": _manifest_check(target),
             "ini": ini_values(target / "OptiScaler.ini"),
@@ -531,6 +555,73 @@ _LOADER_DIRS = ("reframework", "OptiScaler", "Luma", "D3D12_Optiscaler", "plugin
 # Steam ownership facts the frontend adds.
 _STORE_FILES = ("steam_emu.ini", "steam_settings", "ColdClientLoader.ini", "OnlineFix.ini", "OnlineFix64.dll",
                 "cream_api.ini", "SmartSteamEmu.ini", "CODEX.ini", "steam_interfaces.txt")
+_REFRAMEWORK_FIELDS = ("pdperf_root_present", "pdperf_version", "xess_root_present", "xess_version",
+                      "config_present", "config_readable", "temporal_enabled", "native_resolution", "quality")
+
+
+def _reframework_inventory(root: Path, target: Path, names: dict) -> dict:
+    result = dict.fromkeys(_REFRAMEWORK_FIELDS)
+    if not target.is_relative_to(root):
+        return result
+    relative = target.relative_to(root)
+    if any((root / part).is_symlink() for part in (relative, *relative.parents)):
+        return result
+
+    def file(name, present):
+        entries = [entry for key, entry in names.items() if key.lower() == name.lower()]
+        if not entries:
+            result[present] = False
+            return None
+        entry = entries[0]
+        if len(entries) != 1 or entry.is_symlink() or not entry.is_file():
+            return None
+        result[present] = True
+        return entry
+
+    for name, present, version_key in (("PDPerfPlugin.dll", "pdperf_root_present", "pdperf_version"),
+                                       ("libxess.dll", "xess_root_present", "xess_version")):
+        if entry := file(name, present):
+            strings = pe.version_strings(str(entry))
+            for key in ("FileVersion", "ProductVersion"):
+                value = strings.get(key, "")
+                if re.fullmatch(r"\d{1,5}(?:\s*[.,]\s*\d{1,5}){1,3}", value):
+                    numbers = [int(part) for part in re.split(r"\s*[.,]\s*", value)]
+                    if all(number <= 65535 for number in numbers):
+                        result[version_key] = numbers
+                        break
+    config = file("re2_fw_config.txt", "config_present")
+    if config is None:
+        return result
+    result["config_readable"] = False
+    try:
+        with config.open("rb") as stream:
+            if os.fstat(stream.fileno()).st_size > 16 * 1024:
+                return result
+            raw = stream.read(16 * 1024)
+            if os.fstat(stream.fileno()).st_size > len(raw):
+                return result
+        text = raw.decode("utf-8-sig")
+    except (OSError, UnicodeError):
+        return result
+    result["config_readable"] = True
+    allowed = {"TemporalUpscaler_Enabled": "temporal_enabled",
+               "TemporalUpscaler_UseNativeResolution": "native_resolution", "TemporalUpscaler_UpscaleQuality": "quality"}
+    seen = set()
+    for line in text.splitlines():
+        key, separator, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if not separator or key not in allowed:
+            continue
+        output = allowed[key]
+        if key in seen:
+            result[output] = None
+            continue
+        seen.add(key)
+        if output == "quality":
+            result[output] = int(value) if value in ("0", "1", "2", "3") else None
+        elif value in ("true", "false"):
+            result[output] = value == "true"
+    return result
 
 
 def game_files(installed, analysis: dict, owned: list[str]) -> dict:
@@ -542,6 +633,7 @@ def game_files(installed, analysis: dict, owned: list[str]) -> dict:
                     "anti_cheat": bool(analysis.get("anti_cheat")),
                     "foreign_identity": fields(analysis.get("foreign_identity"), ("engine", "variant", "manifest_error")),
                     "inputs": {}, "loaders": [], "store_files": []}
+    result["reframework_upscaler"] = dict.fromkeys(_REFRAMEWORK_FIELDS)
     mine = {str(name).lower() for name in owned}
     target_prefix = f"{target.relative_to(root).as_posix()}/" if target and target != root and target.is_relative_to(root) else ""
 
@@ -570,6 +662,8 @@ def game_files(installed, analysis: dict, owned: list[str]) -> dict:
             names = {entry.name: entry for entry in folder.iterdir()}
         except OSError:
             continue
+        if folder == target:
+            result["reframework_upscaler"] = _reframework_inventory(root, target, names)
         for name in _LOADER_FILES + _LOADER_DIRS:
             entry = names.get(name) or next((e for n, e in names.items() if n.lower() == name.lower()), None)
             if entry is None:

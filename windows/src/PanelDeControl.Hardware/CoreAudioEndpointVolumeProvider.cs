@@ -13,7 +13,7 @@ public sealed class CoreAudioEndpointVolumeProvider : IAudioEndpointVolumeProvid
             throw new PlatformNotSupportedException();
         }
 
-        var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+        var enumerator = CoreAudioDeviceEnumerator.Create<IMMDeviceEnumerator>();
         IMMDevice? endpointDevice = null;
         object? endpointVolumeObject = null;
         try
@@ -43,7 +43,7 @@ public sealed class CoreAudioEndpointVolumeProvider : IAudioEndpointVolumeProvid
         }
         finally
         {
-            ReleaseComObject(enumerator);
+            CoreAudioDeviceEnumerator.Release(enumerator);
         }
     }
 
@@ -122,12 +122,6 @@ public sealed class CoreAudioEndpointVolumeProvider : IAudioEndpointVolumeProvid
     private enum Role
     {
         Console = 0,
-    }
-
-    [ComImport]
-    [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-    private class MMDeviceEnumeratorComObject
-    {
     }
 
     [ComImport]

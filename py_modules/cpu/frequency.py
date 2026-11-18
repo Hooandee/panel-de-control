@@ -130,6 +130,7 @@ class LinuxCpuFrequency:
         self._failure_captured = False
         self._attempt_policies = self._policies
         self._attempt_targets = {}
+        self._write_log = {}
         self._load_persisted_state(persisted_state)
 
     @staticmethod
@@ -389,12 +390,20 @@ class LinuxCpuFrequency:
             (policy.scaling_max_path, target[1]),
         )
 
+    def _write_limit(self, policy, path, value):
+        ok = write_str(path, f"{value}\n")
+        kind = "min" if path == policy.scaling_min_path else "max"
+        self._write_log.setdefault(policy.name, []).append(
+            f"{kind}={value}" if ok else f"{kind}={value}!"
+        )
+        return ok
+
     def _apply_pair(self, policy, current, target):
         for attempt in range(2):
             for path, value in self._ordered_writes(policy, current, target):
                 if not self._policy_is_current(policy):
                     return "policy_topology_changed"
-                if not write_str(path, f"{value}\n"):
+                if not self._write_limit(policy, path, value):
                     return "write_failed"
             applied = policy.read_window()
             if not self._policy_is_current(policy):
@@ -416,7 +425,7 @@ class LinuxCpuFrequency:
             for path, value in self._ordered_writes(policy, current, target):
                 if not self._policy_is_current(policy):
                     return False
-                write_str(path, f"{value}\n")
+                self._write_limit(policy, path, value)
             applied = policy.read_window()
             if not self._policy_is_current(policy):
                 return False
@@ -537,6 +546,11 @@ class LinuxCpuFrequency:
                 changed.append("affected_cpus")
             window = policy.read_window() if policy else None
             target = self._attempt_targets.get(name)
+            amd_max = (
+                read_int(os.path.join(policy.path, "amd_pstate_max_freq"))
+                if policy else None
+            )
+            writes = self._write_log.get(name)
             rows.append({
                 "name": name,
                 "driver": policy.driver if policy else before[2],
@@ -547,8 +561,11 @@ class LinuxCpuFrequency:
                 "target": list(target) if target is not None else None,
                 "applied": list(window) if window is not None else None,
                 "identity_changed_fields": changed,
+                **({"amd_pstate_max": amd_max} if amd_max is not None else {}),
+                **({"writes": list(writes[:8])} if writes else {}),
             })
         self._last_failure = {
+            "boost": read_int(os.path.join(self._root, _CPUFREQ, "boost")),
             "reason": reason,
             "requested": list(requested) if requested is not None else None,
             "policies": rows,
@@ -576,6 +593,7 @@ class LinuxCpuFrequency:
         self._failure_captured = False
         self._attempt_policies = self._policies
         self._attempt_targets = {}
+        self._write_log = {}
         reason = self._refresh()
         if reason is not None:
             return self._result(
@@ -715,6 +733,7 @@ class LinuxCpuFrequency:
         self._failure_captured = False
         self._attempt_policies = self._policies
         self._attempt_targets = {}
+        self._write_log = {}
         reason = self._refresh()
         if reason is not None:
             return self._result(

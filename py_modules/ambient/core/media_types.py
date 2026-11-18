@@ -35,3 +35,10 @@ def media_kind(path: str) -> Optional[MediaKind]:
 def mime_type(path: str) -> Optional[str]:
     entry = _TYPES.get(os.path.splitext(path)[1].lower())
     return entry[1] if entry else None
+
+
+LIST_EXTENSIONS = (".m3u", ".m3u8")
+
+
+def is_list_file(path: str) -> bool:
+    return os.path.splitext(path)[1].lower() in LIST_EXTENSIONS

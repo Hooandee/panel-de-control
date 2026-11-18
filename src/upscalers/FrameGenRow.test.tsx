@@ -53,11 +53,11 @@ it("offers detected foreign Lossless without changing it until explicit adoption
   await waitFor(() => expect(onOptiscaler).toHaveBeenCalledWith("off", null));
   expect(api.adoptForeignLsfg).toHaveBeenCalledOnce();
   expect(api.installLsfg).toHaveBeenCalledOnce();
-  expect(api.setLsfgGame).toHaveBeenCalledWith("1", { multiplier: 2, flow: "balanced", performance: true });
+  expect(api.setLsfgGame).toHaveBeenCalledWith("1", { multiplier: 2, flow_scale: 0.75, flow_manual: false, performance: true });
 });
 
 it("keeps restoration out of the main controls and renders it through advanced options", async () => {
-  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false, foreign_backup: true, profiles: { "1": { multiplier: 3, flow: "balanced", performance: false } } });
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false, foreign_backup: true, profiles: { "1": { multiplier: 3, flow_scale: 0.75, performance: false } } });
   const view = (open: boolean) => <FrameGenRow appid="1" liveAppid={1} isNonSteam={false} gameRunning={false} routes={{}} inputs={{}} optiscaler={{ fg: "off", route: "game" }} installedRoute={null} gpu="amd" onOptiscaler={vi.fn()} renderAdvanced={restore => open ? <section aria-label="advanced">{restore}</section> : null} />;
   const { rerender } = render(view(false));
   await screen.findByRole("combobox", { name: "up.lsfg.multiplier" });
@@ -85,8 +85,41 @@ it("only activates managed Lossless after pressing Activate", async () => {
   fireEvent.click((await screen.findByRole("button", { name: "up.activate" })));
   await waitFor(() => expect(api.setLsfgGame).toHaveBeenCalledOnce());
 });
+const lsfgProfile = (extra: object) => ({ multiplier: 3, flow_scale: 0.75, performance: false, ...extra });
+const withLsfg = (profile: object) => {
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, installed: true, foreign: false, profiles: { "1": profile } });
+  api.setLsfgGame.mockResolvedValue({ env: { LSFGVK_PROFILE: "pdc-1" } });
+  api.writeLaunchOptions.mockReturnValue(true);
+  render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
+};
+const flowPicker = () => screen.findByRole("combobox", { name: "up.lsfg.flow" }) as Promise<HTMLSelectElement>;
+it("shows a saved preset value as that preset, without the slider", async () => {
+  withLsfg(lsfgProfile({ flow_scale: 0.5 }));
+  expect((await flowPicker()).value).toBe("performance");
+  expect(screen.queryByRole("slider", { name: "up.lsfg.flowScale" })).toBeNull();
+});
+it("shows any other saved value as Manual with that value on the slider", async () => {
+  withLsfg(lsfgProfile({ flow_scale: 0.65 }));
+  expect((await flowPicker()).value).toBe("manual");
+  expect((screen.getByRole("slider", { name: "up.lsfg.flowScale" }) as HTMLInputElement).value).toBe("65");
+});
+it("applies a preset's value and keeps the last manual one", async () => {
+  withLsfg(lsfgProfile({ flow_scale: 0.6, flow_manual: true, manual_scale: 0.6 }));
+  fireEvent.change(await flowPicker(), { target: { value: "quality" } });
+  await waitFor(() => expect(api.setLsfgGame).toHaveBeenCalledWith("1", lsfgProfile({ flow_scale: 1, flow_manual: false, manual_scale: 0.6 })));
+});
+it("returns to the last manual value when Manual is chosen again", async () => {
+  withLsfg(lsfgProfile({ flow_scale: 1, flow_manual: false, manual_scale: 0.6 }));
+  fireEvent.change(await flowPicker(), { target: { value: "manual" } });
+  await waitFor(() => expect(api.setLsfgGame).toHaveBeenCalledWith("1", lsfgProfile({ flow_scale: 0.6, flow_manual: true, manual_scale: 0.6 })));
+});
+it("saves the slider value as the manual one with the rest of the Lossless profile", async () => {
+  withLsfg(lsfgProfile({ flow_scale: 0.65, flow_manual: true }));
+  fireEvent.change(await screen.findByRole("slider", { name: "up.lsfg.flowScale" }), { target: { value: "40" } });
+  await waitFor(() => expect(api.setLsfgGame).toHaveBeenCalledWith("1", lsfgProfile({ flow_scale: 0.4, flow_manual: true, manual_scale: 0.4 })));
+});
 it("deactivates an active Lossless profile explicitly", async () => {
-  api.getLsfgStatus.mockResolvedValue({ ...foreign, installed: true, foreign: false, profiles: { "1": { multiplier: 2, flow: "balanced", performance: true } } });
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, installed: true, foreign: false, profiles: { "1": { multiplier: 2, flow_scale: 0.75, performance: true } } });
   api.setLsfgGame.mockResolvedValue({ env: {} });
   api.writeLaunchOptions.mockReturnValue(true);
   render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
@@ -169,7 +202,7 @@ it("rolls back Mako configuration when launch composition fails", async () => {
 });
 
 it("retires newly configured Mako when the previous generator cannot be disabled", async () => {
-  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false, profiles: { "1": { multiplier: 2, flow: "balanced", performance: true } } });
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false, profiles: { "1": { multiplier: 2, flow_scale: 0.75, performance: true } } });
   api.getMakoStatus.mockResolvedValue(makoReady);
   api.setMakoGame.mockResolvedValue({ env: {}, wrappers: [] });
   api.setLsfgGame.mockRejectedValue(new Error("disk"));

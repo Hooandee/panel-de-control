@@ -5,6 +5,7 @@ import { LuCpu, LuPlugZap } from "react-icons/lu";
 import {
   dismissChargerNotice,
   dismissKernelSupportNotice,
+  setHideTdpSteamosCard,
   setSeenTdpConflictTakeover,
 } from "../api";
 import { useI18n } from "../i18n";
@@ -18,6 +19,7 @@ import { useController } from "../mandos/useController";
 import { MandosProvider } from "../mandos/mandosContext";
 import { useTdp } from "../tdp/useTdp";
 import { useTdpConflict } from "../tdp/useTdpConflict";
+import { conflictCardVisible, steamOnlyConflict } from "../tdp/conflict";
 import { PotenciaProvider } from "../tdp/potenciaContext";
 import { useModules, setModuleDisabled } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
@@ -102,6 +104,10 @@ export const PotenciaProviderMount: FC<{
     () => setModuleDisabled("power", true).then(() => refresh()),
     [refresh],
   );
+  const onHideSteamCard = useCallback(
+    () => setHideTdpSteamosCard(true).then(() => refresh()).catch(() => {}),
+    [refresh],
+  );
   const onDismissCharger = useCallback(
     () => dismissChargerNotice().then(() => refresh()).catch(() => {}),
     [refresh],
@@ -128,14 +134,22 @@ export const PotenciaProviderMount: FC<{
   }, [conflict.conflict, conflict.takeoverAvailable, tdp, refresh]);
 
   return (
-    <PotenciaProvider value={{ ...tdpCtl, monitorOnly: conflict.monitorOnly, autoTdpEnabled, onReactivate }}>
-      {conflict.conflict && (
+    <PotenciaProvider value={{
+      ...tdpCtl,
+      monitorOnly: conflict.monitorOnly,
+      autoTdpEnabled,
+      onReactivate,
+      steamOsManagerActive: conflict.steamOsManagerActive,
+      onReleaseControl: onDisablePdcTdp,
+    }}>
+      {conflictCardVisible(conflict, tdp?.hide_tdp_steamos_card === true) && (
         <PanelSectionRow>
           <TdpConflictCard
             rivals={conflict.rivals}
             onDisableSdtdp={() => void conflict.disableSdtdp()}
             onTakeHhd={() => void conflict.takeHhd()}
             onDisablePdcTdp={() => void onDisablePdcTdp()}
+            onHide={steamOnlyConflict(conflict.rivals) ? () => void onHideSteamCard() : undefined}
           />
         </PanelSectionRow>
       )}

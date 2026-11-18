@@ -35,6 +35,7 @@ export class GameMediaDirector {
     private readonly lookup: (appid: string) => Promise<GameMedia>,
     private readonly onChange: () => void,
     private readonly neighbors: () => string[] = () => [],
+    private readonly onRequest: (appid: string) => void = () => undefined,
   ) {}
 
   select(appid: string | null): void {
@@ -71,7 +72,11 @@ export class GameMediaDirector {
   }
 
   private async resolve(appid: string): Promise<void> {
-    const media = this.cache.get(appid) ?? await this.lookup(appid).catch(() => ({ trailer: null, theme: null }));
+    const cached = this.cache.get(appid);
+    if (!cached) {
+      try { this.onRequest(appid); } catch {}
+    }
+    const media = cached ?? await this.lookup(appid).catch(() => ({ trailer: null, theme: null }));
     this.cache.set(appid, media);
     if (appid !== this.selected) return;
     this.resolved = appid;

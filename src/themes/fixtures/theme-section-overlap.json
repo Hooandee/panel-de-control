@@ -1,0 +1,38 @@
+{
+  "installed": [
+    {
+      "name": "Hooandee Gallery",
+      "version": "0.9.54",
+      "active": false,
+      "sections": {
+        "Estilizar Inicio": "Yes",
+        "Estilizar Biblioteca y parrilla": "Yes",
+        "Estilizar detalles del juego": "Yes",
+        "Estilizar Ajustes": "Yes",
+        "Estilizar Descargas": "Yes",
+        "Estilizar multimedia y logros": "Yes",
+        "Estilizar menús y barras": "Yes",
+        "Estilizar notificaciones": "Yes"
+      }
+    },
+    {
+      "name": "Hooandee Luminous Atlas",
+      "version": "1.1.1",
+      "active": true,
+      "sections": {
+        "Estilizar Inicio": "Yes",
+        "Estilizar Biblioteca": "Yes",
+        "Estilizar detalles del juego": "Yes",
+        "Estilizar Ajustes": "Yes",
+        "Estilizar Descargas": "Yes",
+        "Estilizar logros": "Yes",
+        "Estilizar menú de Steam": "Yes",
+        "Estilizar QAM y Decky": "Yes",
+        "Estilizar notificaciones": "Yes",
+        "Estilizar Panel de Control": "Yes",
+        "Estilizar configurador de mando": "Yes"
+      }
+    }
+  ],
+  "other_active_themes": 5
+}

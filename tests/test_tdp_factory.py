@@ -2741,3 +2741,21 @@ def test_every_intel_handheld_drives_both_rapl_surfaces(tmp_path):
         path = os.path.join(root, "sys/devices/virtual/powercap", base, "constraint_0_power_limit_uw")
         with open(path) as handle:
             assert int(handle.read()) == firmware
+
+
+def test_exact_legion_go_2_83n1_low_battery_pin_does_not_lock_tdp(tmp_path, monkeypatch):
+    # The 83N1 firmware runs its own rails at <=20 % battery and ignores
+    # writes; nothing Panel wrote is left, so TDP must stay available.
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N1", "custom", current=(30, 30, 30))
+    backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    _go_2_firmware_out_of_custom(backend, root)
+    lock_path = os.path.join(root, "run/panel-de-control/firmware-lenovo-wmi-other.lock")
+
+    result = backend.set_levels(17, 17, 17, ac=False)
+
+    assert result.ok is False
+    assert result.failure_kind == "target_not_applied"
+    assert backend.ready() is True
+    assert not os.path.exists(lock_path)

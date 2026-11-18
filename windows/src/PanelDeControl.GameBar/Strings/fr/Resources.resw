@@ -464,4 +464,10 @@
   <data name="ThemesRemoveDescription" xml:space="preserve"><value>Ses fichiers et ses réglages seront supprimés. Vous pourrez le réinstaller plus tard.</value></data>
   <data name="ThemesRemoveConfirm" xml:space="preserve"><value>Supprimer</value></data>
   <data name="ThemesRemoveCancel" xml:space="preserve"><value>Annuler</value></data>
+  <data name="SteamHomeButtonText.Text" xml:space="preserve">
+    <value>Aller à l'accueil de Steam</value>
+  </data>
+  <data name="SteamHomeButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Aller à l'accueil de Steam</value>
+  </data>
 </root>

@@ -917,3 +917,34 @@ def test_report_tells_early_installs_apart_until_another_build_replaces_them(the
     asyncio.run(plugin.prepare_remote_theme_install("hooandee-duo", "0.3.0"))
     asyncio.run(plugin.commit_theme_install("stable"))
     assert early_flags() == [False]
+
+
+@pytest.mark.parametrize("capture", json.loads((ROOT / "src/themes/fixtures/steam-web-states.json").read_text()))
+def test_report_keeps_allowlisted_navigation_from_native_store_trace(theme_rpc, capture):
+    main, _, _ = theme_rpc
+    surface = {"navigation": capture["want"], **{f"geometry_{n}": n for n in range(30)}}
+    result = main.Plugin._with_theme_display({}, {"theme_surface": surface})
+    assert result["surface"]["navigation"] == capture["want"]
+    assert len([key for key in result["surface"] if key != "navigation"]) == 24
+
+
+def test_report_rejects_private_or_malformed_navigation_values(theme_rpc):
+    main, _, _ = theme_rpc
+    result = main.Plugin._with_theme_display({}, {"theme_surface": {"navigation": {
+        "route": "/chat/private-account", "expected": "https://example.test/private-secret",
+        "requested": ["store"], "loaded": "store", "browser": "ready", "loading": "false",
+        "history": {"index": True, "entries": -1, "initial": 1.5, "final": 2, "url": "private-secret"},
+        "error": "private-secret", "url": "private-secret", "title": "private-secret",
+    }}})
+    assert result["surface"]["navigation"] == {
+        "route": None, "expected": None, "requested": None, "loaded": "store", "browser": "ready", "loading": None,
+        "history": {"index": None, "entries": None, "initial": None, "final": 2}, "error": None,
+    }
+    assert "private" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("navigation", [True, None, "private-url", [], 4])
+def test_report_only_accepts_navigation_as_a_typed_object(theme_rpc, navigation):
+    main, _, _ = theme_rpc
+    result = main.Plugin._with_theme_display({}, {"theme_surface": {"navigation": navigation}})
+    assert "navigation" not in result["surface"]

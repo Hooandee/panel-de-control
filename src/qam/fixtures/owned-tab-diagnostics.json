@@ -1,0 +1,44 @@
+{
+  "registry_count": 3,
+  "registry_owned_count": 2,
+  "registry_pdc_home_count": 1,
+  "rendered_count": 9,
+  "scenarios": [
+    {
+      "viewport": [
+        855,
+        498
+      ],
+      "decky_box": {
+        "x": 4.957932949066162,
+        "y": 482.8534240722656,
+        "width": 41.99970245361328,
+        "height": 43.991207122802734
+      },
+      "body_box": {
+        "x": 0,
+        "y": 0,
+        "width": 855.2885131835938,
+        "height": 0
+      }
+    },
+    {
+      "viewport": [
+        855,
+        498
+      ],
+      "decky_box": {
+        "x": 0,
+        "y": 442.73260498046875,
+        "width": 47.994293212890625,
+        "height": 55.33259582519531
+      },
+      "body_box": {
+        "x": 0,
+        "y": 0,
+        "width": 855.2885131835938,
+        "height": 0
+      }
+    }
+  ]
+}

@@ -1,4 +1,7 @@
 import json
+from pathlib import Path
+
+import pytest
 
 from fan_curves import FanCurveStore
 
@@ -198,3 +201,95 @@ def test_adaptive_with_stray_points_loads_without_them(tmp_path):
     assert eff["preset"] == "adaptive"
     assert eff["points"] is None
     assert eff["bias"] == 20
+
+
+@pytest.fixture
+def custom_restore():
+    return json.loads((Path(__file__).parent / "data" / "fan_custom_restore.json").read_text())
+
+
+@pytest.mark.parametrize("mode", ["performance", "auto", "adaptive"])
+def test_manual_curve_survives_mode_switch_and_reload(tmp_path, custom_restore, mode):
+    path = str(tmp_path / "fan_curves.json")
+    store = FanCurveStore(path)
+    store.set_custom("global", custom_restore["custom_points"])
+    if mode == "performance":
+        store.set_preset("global", custom_restore["preset"], custom_restore["preset_points"])
+    elif mode == "auto":
+        store.set_auto("global")
+    else:
+        store.set_adaptive("global")
+    profile = FanCurveStore(path).effective(None)
+    assert profile["preset"] == mode
+    assert profile["points"] == (custom_restore["preset_points"] if mode == "performance" else None)
+    assert profile["custom_points"] == custom_restore["custom_points"]
+    restored = FanCurveStore(path)
+    restored.set_custom("global", profile["custom_points"])
+    assert FanCurveStore(path).effective(None) == {"preset": "custom", "points": custom_restore["custom_points"]}
+
+
+def test_adaptive_bias_keeps_manual_curve_while_bias_changes(tmp_path, custom_restore):
+    path = str(tmp_path / "fan_curves.json")
+    store = FanCurveStore(path)
+    store.set_custom("global", custom_restore["custom_points"])
+    store.set_adaptive_bias("global", 25)
+    store.set_adaptive_bias("global", -30)
+    profile = FanCurveStore(path).effective(None)
+    assert profile == {"preset": "adaptive", "points": None, "bias": -30, "custom_points": custom_restore["custom_points"]}
+
+
+def test_game_mode_keeps_own_manual_curve_instead_of_followed_global(tmp_path, custom_restore):
+    path = str(tmp_path / "fan_curves.json")
+    store = FanCurveStore(path)
+    store.set_custom("global", custom_restore["custom_points"])
+    store.set_custom("game", custom_restore["preset_points"], appid="game-a")
+    store.set_follow_global("game-a", True)
+    store.set_auto("game", appid="game-a")
+    assert store.is_following_global("game-a") is False
+    store.set_preset("global", custom_restore["preset"], custom_restore["preset_points"])
+    loaded = FanCurveStore(path)
+    assert loaded.effective(None)["custom_points"] == custom_restore["custom_points"]
+    assert loaded.game_profile("game-a")["custom_points"] == custom_restore["preset_points"]
+    loaded.set_custom("game", loaded.game_profile("game-a")["custom_points"], appid="game-a")
+    assert FanCurveStore(path).effective("game-a")["points"] == custom_restore["preset_points"]
+    assert FanCurveStore(path).effective(None)["custom_points"] == custom_restore["custom_points"]
+
+
+def test_first_game_mode_preserves_inherited_manual_curve_without_changing_global(tmp_path, custom_restore):
+    store = _store(tmp_path)
+    store.set_custom("global", custom_restore["custom_points"])
+    store.set_auto("game", appid="game-a")
+    assert store.effective("game-a")["custom_points"] == custom_restore["custom_points"]
+    assert store.effective(None) == {"preset": "custom", "points": custom_restore["custom_points"]}
+
+
+def test_new_manual_curve_replaces_saved_curve_and_has_no_stale_cache(tmp_path, custom_restore):
+    store = _store(tmp_path)
+    store.set_custom("global", custom_restore["custom_points"])
+    store.set_auto("global")
+    store.set_custom("global", custom_restore["preset_points"])
+    assert store.effective(None) == {"preset": "custom", "points": custom_restore["preset_points"]}
+    store.set_auto("global")
+    assert store.effective(None)["custom_points"] == custom_restore["preset_points"]
+
+
+def test_loading_custom_uses_active_points_and_discards_obsolete_cache(tmp_path, custom_restore):
+    path = tmp_path / "fan_curves.json"
+    _write_raw(path, {"global": {"preset": "custom", "points": custom_restore["custom_points"], "custom_points": custom_restore["preset_points"]}})
+    assert FanCurveStore(str(path)).effective(None) == {"preset": "custom", "points": custom_restore["custom_points"]}
+
+
+def test_learned_custom_migration_never_creates_a_manual_curve(tmp_path, custom_restore):
+    path = tmp_path / "fan_curves.json"
+    _write_raw(path, {"global": {"preset": "custom", "points": custom_restore["custom_points"], "learned": True, "custom_points": custom_restore["preset_points"]}})
+    store = FanCurveStore(str(path))
+    assert store.effective(None) == {"preset": "adaptive", "points": None, "bias": 0}
+    store.set_auto("global")
+    assert "custom_points" not in FanCurveStore(str(path)).effective(None)
+
+
+@pytest.mark.parametrize("cache", [[], [[40]], "invalid", [[40, None]]])
+def test_loading_noncustom_ignores_invalid_manual_cache(tmp_path, custom_restore, cache):
+    path = tmp_path / "fan_curves.json"
+    _write_raw(path, {"global": {"preset": custom_restore["preset"], "points": custom_restore["preset_points"], "custom_points": cache}})
+    assert FanCurveStore(str(path)).effective(None) == {"preset": custom_restore["preset"], "points": custom_restore["preset_points"]}

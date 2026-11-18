@@ -17,10 +17,11 @@ _FACTS = (
     ("gpu", re.compile(r"Adapter Desc:\s*(.+)")),
     ("upscaler", re.compile(r"Creating new (.+?) upscaler")),
     ("upscaler", re.compile(r"Creating (.+?) upscaler feature")),
-    # D3D11 games reach OptiScaler through DLSS only, and it names the backend it bridges to D3D12 differently:
-    # "NVSDK_NGX_D3D11_CreateFeature Creating new FSR 3.X w/Dx12 feature".
+    # XeSS D3D11 also calls NGX internally: this names the backend, not the game's input.
     ("d3d11_upscaler", re.compile(r"NVSDK_NGX_D3D11_CreateFeature Creating new (.+?)(?: w/Dx1[12])? feature")),
-    ("input", re.compile(r"Create(DLSS|FSR2|FSR3|XeSS)Context")),
+    # CreateDLSSContext is also an internal helper for XeSS and FSR, so only identify their API entry points.
+    ("xess_input", re.compile(r"(?:^|\]\s+)hk_xess(?:D3D11|D3D12|VK)Execute\s*$")),
+    ("fsr_input", re.compile(r"\bffxFsr([23])ContextCreate_(?:Dx11|Dx12|Vk) context created:")),
     ("ffx_input", re.compile(r"(ffxCreateContext_Dx12) context created")),
     ("fg_state", re.compile(r"D3D12_Configure Enabled: (true|false), result|SetEnabled: (true|false), result")),
     ("fg_input", re.compile(r"FrameGen\.FGInput: (\w+)")),
@@ -31,6 +32,8 @@ _FACTS = (
     ("fg", re.compile(r"(D3D12_Configure Enabled: true, result: (?:0\b|FFX_API_RETURN_OK)|SetEnabled: true, result: \w*SUCCESS|Nukem.{0,40}(?:initialized|loaded))", re.I)),
     ("initial_resolution", re.compile(r"Render Resolution:\s*(\d{2,5})x(\d{2,5}),\s*Display Resolution\s*(\d{2,5})x(\d{2,5})")),
 )
+# OptiScaler cannot hand a Vulkan game's textures to FSR 4 (D3D12 only) and drops to an older FSR.
+_TEXTURE_FAILURE = re.compile(r"CreateSharedTexture Failed to get memory Win32 handle|Can't process Vulkan textures")
 _CLOCK = re.compile(r"\[(\d{2}):(\d{2}):(\d{2})\.\d+\]")
 _ERROR = re.compile(r"\[(?:E|C)\]\s")
 
@@ -60,26 +63,19 @@ def read(target: Path, since: float | None = None) -> dict:
         facts["stale"] = True
         return facts
     errors = 0
-    ffx_input = False
     for line in text.splitlines():
         for key, pattern in _FACTS:
             match = pattern.search(line)
             if not match:
                 continue
             if key == "ffx_input":
-                ffx_input = True
                 facts["input"] = "FSR3"
-            elif key == "input":
-                value = match.group(1)
-                # FFX uses the shared CreateDLSSContext path after its own context creation.
-                if value == "DLSS" and ffx_input:
-                    value = "FSR3"
-                else:
-                    ffx_input = False
-                facts["input"] = value
+            elif key == "xess_input":
+                facts["input"] = "XeSS"
+            elif key == "fsr_input":
+                facts["input"] = "FSR" + match.group(1)
             elif key == "d3d11_upscaler":
                 facts["upscaler"] = match.group(1).strip()[:120]
-                facts["input"] = "DLSS"
             elif key == "initial_resolution":
                 facts[key] = {
                     "render": [int(match.group(1)), int(match.group(2))],
@@ -89,6 +85,8 @@ def read(target: Path, since: float | None = None) -> dict:
                 facts[key] = next(g for g in match.groups() if g is not None).strip()[:120]
         if _ERROR.search(line):
             errors += 1
+        if _TEXTURE_FAILURE.search(line):
+            facts["texture_failure"] = True
     # OptiFG starts generating as soon as its context exists and logs no activation until toggled;
     # inputs from the game's own generator wait for the game to switch it on.
     context = facts.pop("fg_context", None)
@@ -125,3 +123,26 @@ def provider_observation(facts: dict) -> dict:
             "provider_version": None,
             "provider_source": "optiscaler_log" if available else "unavailable",
             "provider_confidence": "family_only" if family else "unknown"}
+
+
+_OLD_FSR = re.compile(r"FSR (?:(2)\.(\d+)|(3)\.(\d+))(?:\.\d+)?")
+
+
+def fallback(install: dict, facts: dict) -> dict | None:
+    """FSR 4 was installed but the log shows OptiScaler running an older FSR (or failing to feed it textures).
+
+    `fsr31` and `FSR 3.X/4` are not an older FSR: with FSR 4 they are the entry point it runs through.
+    """
+    if install.get("engine", "optiscaler") != "optiscaler" or not str(install.get("build", "")).startswith("fsr-4"):
+        return None
+    if not facts.get("present") or facts.get("stale"):
+        return None
+    token = str(facts.get("upscaler") or "").strip()
+    if token.startswith("FSR 4"):
+        return None
+    old = _OLD_FSR.fullmatch(token)
+    texture = bool(facts.get("texture_failure"))
+    if not old and not texture:
+        return None
+    observed = f"FSR {old[1] or old[3]}.{old[2] or old[4]}" if old else None
+    return {"requested": "FSR 4", "observed": observed, "reason": "vulkan_textures" if texture else "backend_changed"}
