@@ -103,6 +103,14 @@ public sealed class GameBarFocusReturner
             }
 
             Foreground.BigPictureRaised(raised);
+            if (raised)
+            {
+                // Xbox mode's shell can keep showing the game's black switch screen over Big Picture until some input
+                // arrives (a touch fixes it): a one pixel mouse move there and back is that input.
+                mouse_event(MouseEventMove, 1, 0, 0, UIntPtr.Zero);
+                mouse_event(MouseEventMove, -1, 0, 0, UIntPtr.Zero);
+            }
+
             CompanionLog.Write(
                 "themes.big_picture_raise",
                 (raised ? (stayTopmost ? "on_top topmost" : "on_top") : "below") + (cloaked ? " cloaked" : string.Empty));
@@ -499,6 +507,11 @@ public sealed class GameBarFocusReturner
 
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
+
+    private const uint MouseEventMove = 0x0001;
+
+    [DllImport("user32.dll")]
+    private static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extraInfo);
 
 
     [StructLayout(LayoutKind.Sequential)]
