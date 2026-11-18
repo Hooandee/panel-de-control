@@ -51,7 +51,7 @@ it("names Mako and Lossless in the list instead of the game's own techniques", a
     engines: { "1": { mako: { spatial: true, fg: true, multiplier: 2 } }, "2": { lossless: { multiplier: 4 } } } } as never);
   vi.mocked(api.getUpscalersCompat).mockResolvedValueOnce({ "1": { inputs: ["DLSS", "XeSS"], native: false } } as never);
   await act(async () => { render(<EscaladoresSection />); });
-  expect(screen.getByText("Mako ×2")).toBeTruthy();
+  expect(screen.getByText("Mako 4 ×2")).toBeTruthy();
   expect(screen.getByText("Lossless ×4")).toBeTruthy();
   expect(screen.queryByText("DLSS, XeSS")).toBeNull();
 });

@@ -141,11 +141,12 @@ export const EscaladoresSection: FC = () => {
             const busy = overview.job?.state === "running" && overview.job.appid === String(game.liveAppid);
             const info = compat[String(game.liveAppid)];
             const engines = overview.engines?.[String(game.liveAppid)];
-            const frameGen = engines?.mako?.fg ? `Mako${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
+            const makoName = engines?.mako?.engine === 5 ? "Mako 5" : "Mako 4";
+            const frameGen = engines?.mako?.fg ? `${makoName}${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
               : engines?.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
             const fallback = install?.fallback ?? null;
-            const scaler = install ? (fallback ? (fallback.observed ?? t("up.fallback.coverNone", { from: fallback.requested })) : badgeLabel(build, install.options?.model, install.build).full) : engines?.mako?.spatial ? "Mako" : null;
-            const active = scaler === "Mako" && frameGen?.startsWith("Mako") ? frameGen : [scaler, frameGen].filter(Boolean).join(" - ");
+            const scaler = install ? (fallback ? (fallback.observed ?? t("up.fallback.coverNone", { from: fallback.requested })) : badgeLabel(build, install.options?.model, install.build).full) : engines?.mako?.spatial ? makoName : null;
+            const active = scaler === makoName && frameGen?.startsWith(makoName) ? frameGen : [scaler, frameGen].filter(Boolean).join(" - ");
             return (
               <FocusableCard key={game.instanceKey} onActivate={() => setSelected(game)}>
                 <GameCover urls={game.coverUrls} name={game.name} width={30} />
