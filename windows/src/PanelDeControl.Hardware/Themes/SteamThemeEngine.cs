@@ -151,8 +151,8 @@ public sealed class SteamThemeEngine
     }
 
     /// <summary>
-    /// Game Bar came to the foreground, where Windows keeps the Xbox button for it: the theme host answers it as
-    /// Steam's button (steamButton.ts) unless it opened over a running game ("game"). Returns the answer, for the log.
+    /// Game Bar came to the foreground, where Windows keeps the Xbox button for it: the theme host answers "game" when
+    /// it opened over a running game (steamButton.ts) and does nothing else. Returns the answer, for the log.
     /// </summary>
     public Task<string> GameBarShownAsync(bool foregroundWasSteam, CancellationToken cancellationToken) =>
         CallHostAsync(foregroundWasSteam ? "gameBarShown?.(true)" : "gameBarShown?.(false)", cancellationToken);

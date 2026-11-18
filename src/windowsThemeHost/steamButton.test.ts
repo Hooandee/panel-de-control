@@ -187,18 +187,18 @@ describe("Steam button on Windows", () => {
       home();
     });
 
-    it("goes Home over Big Picture with a game behind it, instead of Steam's button opening the game's page", () => {
+    it("does nothing when Game Bar opens over Big Picture with a game behind it", () => {
       vi.useFakeTimers();
       const { scope, calls, state } = withPage(false);
       state.bigPictureFocused = true;
       const home = installSteamButtonHome(scope, () => true, log);
-      expect(home.gameBarShown(true)).toBe("home");
+      expect(home.gameBarShown(true)).toBe("none");
       vi.advanceTimersByTime(PRESS_HOME_WAIT_MS);
-      expect(calls).toEqual(["home"]);
+      expect(calls).toEqual([]);
       home();
     });
 
-    it("counts Game Bar as Steam's button when no game runs", () => {
+    it("does nothing when Game Bar opens and no game runs", () => {
       vi.useFakeTimers();
       const harness = withPage(false);
       const store = (harness.scope as unknown as { SteamUIStore: { RunningApps: unknown[]; WindowStore: { GamepadUIMainWindowInstance: { MainRunningAppID?: number } } } }).SteamUIStore;
@@ -206,9 +206,10 @@ describe("Steam button on Windows", () => {
       store.WindowStore.GamepadUIMainWindowInstance.MainRunningAppID = undefined;
       const home = installSteamButtonHome(harness.scope, () => true, log);
       expect(home.gameRunning()).toBe(false);
-      expect(home.gameBarShown(false)).toBe("scheduled");
+      expect(home.gameBarShown(false)).toBe("none");
+      expect(home.gameBarShown(true)).toBe("none");
       vi.advanceTimersByTime(PRESS_HOME_WAIT_MS);
-      expect(harness.calls).toEqual(["theme home"]);
+      expect(harness.calls).toEqual([]);
       home();
     });
 
