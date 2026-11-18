@@ -43,6 +43,7 @@ public sealed class GameBarFocusReturner
     private long quietUntilTicks;
     private volatile bool stopped;
     private IntPtr pendingRestore;
+    private int resumes;
     // The window Big Picture came over: a game started by another launcher does not descend from steam.exe.
     private IntPtr coveredGame;
     private int nullReadings;
@@ -105,10 +106,7 @@ public sealed class GameBarFocusReturner
             Foreground.BigPictureRaised(raised);
             if (raised)
             {
-                // Xbox mode's shell can keep showing the game's black switch screen over Big Picture until some input
-                // arrives (a touch fixes it): a one pixel mouse move there and back is that input.
-                mouse_event(MouseEventMove, 1, 0, 0, UIntPtr.Zero);
-                mouse_event(MouseEventMove, -1, 0, 0, UIntPtr.Zero);
+                _ = NudgeShellAsync(bigPicture, Volatile.Read(ref resumes));
             }
 
             CompanionLog.Write(
@@ -122,6 +120,29 @@ public sealed class GameBarFocusReturner
         }
     }
 
+    // Xbox mode's shell can keep showing the game's black switch screen over Big Picture until some input arrives (a
+    // touch fixes it). The screen goes up a moment after the raise, so a one pixel mouse move there and back comes once
+    // it is up, and again later, while Big Picture is still in front and the game has not been resumed.
+    private static readonly int[] ShellNudgesMs = { 600, 1500 };
+
+    private async Task NudgeShellAsync(IntPtr bigPicture, int resumesAtRaise)
+    {
+        var waited = 0;
+        foreach (var at in ShellNudgesMs)
+        {
+            await Task.Delay(at - waited).ConfigureAwait(false);
+            waited = at;
+            if (stopped || GetForegroundWindow() != bigPicture || Volatile.Read(ref resumes) != resumesAtRaise)
+            {
+                return;
+            }
+
+            mouse_event(MouseEventMove, 1, 0, 0, UIntPtr.Zero);
+            mouse_event(MouseEventMove, -1, 0, 0, UIntPtr.Zero);
+            CompanionLog.Write("themes.shell_nudge", $"{at}ms");
+        }
+    }
+
     /// <summary>
     /// Steam resumed the game. Where Big Picture had come over it by window order, Windows also refuses Steam's raise
     /// of the game: the game is raised the same way and given the focus, and if Windows still keeps the foreground
@@ -131,6 +152,7 @@ public sealed class GameBarFocusReturner
     public async Task<string?> GameResumedAsync(Func<IntPtr> findGame, CancellationToken cancellationToken)
     {
         HoldStill(AfterGameSignal);
+        Interlocked.Increment(ref resumes);
         await raising.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
