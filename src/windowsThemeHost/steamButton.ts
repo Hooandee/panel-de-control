@@ -276,8 +276,6 @@ export function installSteamButtonHome(
     return "scheduled";
   };
 
-  // Over a game Game Bar opens for itself (TDP, Panel's widget): only Steam's own window in front makes it Steam's
-  // button. A game behind Big Picture is not in front: the theme's button answers as before.
   // Game Bar opening is only Game Bar: over a game, pressing twice goes Home (the companion's gameHome); anywhere else
   // it does nothing. Treating it as Steam's button opened the running game's page on Windows (themes such as Duo hand
   // the button to Steam while a game runs), with the game hidden behind it.
