@@ -273,10 +273,18 @@ export function installSteamButtonHome(
 
   // Over a game Game Bar opens for itself (TDP, Panel's widget): only Steam's own window in front makes it Steam's
   // button. A game behind Big Picture is not in front: the theme's button answers as before.
+  // Over Big Picture with a game behind it the press goes Home: Steam's own button (which themes such as Duo hand it
+  // to with a game running) opens the running game's page instead, and the game stays hidden behind it on Windows.
   const gameBarShown = (foregroundWasSteam: boolean): string => {
     if (!isActive()) return "inactive";
-    if (!foregroundWasSteam && runningAppId()) return "game";
-    return pressHome();
+    if (!runningAppId()) return pressHome();
+    if (!foregroundWasSteam) return "game";
+    try {
+      main()?.Navigator?.Home?.();
+    } catch {
+      log("steam_button_home_failed");
+    }
+    return "home";
   };
 
   const gameHome = (): string => {

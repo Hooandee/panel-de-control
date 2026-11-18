@@ -187,14 +187,14 @@ describe("Steam button on Windows", () => {
       home();
     });
 
-    it("keeps Game Bar as Steam's button over Big Picture, with or without a game behind it", () => {
+    it("goes Home over Big Picture with a game behind it, instead of Steam's button opening the game's page", () => {
       vi.useFakeTimers();
       const { scope, calls, state } = withPage(false);
       state.bigPictureFocused = true;
       const home = installSteamButtonHome(scope, () => true, log);
-      expect(home.gameBarShown(true)).toBe("scheduled");
+      expect(home.gameBarShown(true)).toBe("home");
       vi.advanceTimersByTime(PRESS_HOME_WAIT_MS);
-      expect(calls).toEqual(["theme home"]);
+      expect(calls).toEqual(["home"]);
       home();
     });
 
