@@ -8,6 +8,9 @@
  * controller to its own UI (focused appid 769); Hidden gives it back to the game. */
 const COMPOSITION_HIDDEN = 0;
 const COMPOSITION_OVERLAY = 2;
+/** Hybrid themes' STEAM press (hooandee-private-themes `runtime/hybridSteamButton.ts`). */
+const HYBRID_HOME_PRESS = "pdc-hyb-home-press";
+const HYBRID_LAUNCH_SCREEN = "[data-pdc-hyb-launch]";
 /** The overlay takes the navigation context when it activates; Big Picture's is taken back after it. */
 const REACTIVATE_DELAYS_MS = [0, 120, 400];
 /** A game asking for its overlay (store page, purchase) is followed within this window by the activation. */
@@ -40,7 +43,7 @@ interface SteamWindowInstance {
   MainRunningAppID?: number;
   Navigator?: { Home?(): void };
   BrowserWindow?: (Pick<Window, "addEventListener" | "removeEventListener"> & {
-    document?: Pick<Document, "hasFocus"> & { hidden?: boolean };
+    document?: Pick<Document, "hasFocus"> & Partial<Pick<Document, "dispatchEvent" | "querySelector">> & { hidden?: boolean };
     SteamClient?: { Window?: { BringToFront?(): void } };
   }) | null;
   m_history?: SteamHistory;
@@ -128,6 +131,9 @@ export function installSteamButtonHome(
       if (gameId) steam.SteamClient?.Overlay?.SetOverlayState?.(gameId, COMPOSITION_OVERLAY);
       const window = main();
       window?.Navigator?.Home?.();
+      // Hybrid themes (Duo, Vida) keep their black launch screen over Big Picture until their own STEAM press goes
+      // Home: this Home is that press for them.
+      window?.BrowserWindow?.document?.dispatchEvent?.(new Event(HYBRID_HOME_PRESS));
       window?.BrowserWindow?.SteamClient?.Window?.BringToFront?.();
     } catch {
       log("steam_button_home_failed");
@@ -271,12 +277,21 @@ export function installSteamButtonHome(
     return "scheduled";
   };
 
-  // Over a game Game Bar opens for itself (TDP, Panel's widget): only Steam's own window in front makes it Steam's
-  // button. A game behind Big Picture is not in front: the theme's button answers as before.
+  // Game Bar opening is only Game Bar: over a game, pressing twice goes Home (the companion's gameHome); anywhere else
+  // it does nothing. Treating it as Steam's button opened the running game's page on Windows (themes such as Duo hand
+  // the button to Steam while a game runs), with the game hidden behind it. A hybrid theme's launch screen in front
+  // stands for the game it is loading: the game may already be up behind it.
+  const launchScreenUp = () => {
+    try {
+      const screen = main()?.BrowserWindow?.document?.querySelector?.(HYBRID_LAUNCH_SCREEN);
+      return Boolean(screen && !(screen as HTMLElement).hidden);
+    } catch {
+      return false;
+    }
+  };
   const gameBarShown = (foregroundWasSteam: boolean): string => {
     if (!isActive()) return "inactive";
-    if (!foregroundWasSteam && runningAppId()) return "game";
-    return pressHome();
+    return (!foregroundWasSteam || launchScreenUp()) && runningAppId() ? "game" : "none";
   };
 
   const gameHome = (): string => {

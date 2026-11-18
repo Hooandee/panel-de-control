@@ -31,7 +31,7 @@ function steam() {
           GetFocusNavContext: () => ({ SetActive: (active: boolean) => calls.push(`context ${active}`) }),
           Navigator: { Home: () => calls.push("home") },
           BrowserWindow: {
-            document: { hasFocus: () => state.bigPictureFocused },
+            document: { hasFocus: () => state.bigPictureFocused, dispatchEvent: (event: Event) => { calls.push(`event ${event.type}`); return true; } },
             addEventListener: (_type: string, listener: () => void) => { focusListeners.push(listener); },
             removeEventListener: () => {},
             SteamClient: { Window: { BringToFront: () => calls.push("front") } },
@@ -71,7 +71,7 @@ describe("Steam button on Windows", () => {
     overlay.OnHomeButtonPressed();
     vi.advanceTimersByTime(500);
 
-    expect(calls).toEqual(["overlay 10798923412957822976 2", "home", "front", "context true", "context true", "context true"]);
+    expect(calls).toEqual(["overlay 10798923412957822976 2", "home", "event pdc-hyb-home-press", "front", "context true", "context true", "context true"]);
     stop();
     calls.length = 0;
     overlay.OnHomeButtonPressed();
@@ -83,7 +83,7 @@ describe("Steam button on Windows", () => {
     const stop = installSteamButtonHome(scope, () => true, log);
 
     activate(true);
-    expect(calls.slice(0, 3)).toEqual(["overlay 10798923412957822976 2", "home", "front"]);
+    expect(calls.slice(0, 4)).toEqual(["overlay 10798923412957822976 2", "home", "event pdc-hyb-home-press", "front"]);
 
     calls.length = 0;
     activate(false, false);
@@ -156,7 +156,7 @@ describe("Steam button on Windows", () => {
       const home = installSteamButtonHome(scope, () => true, log);
       home.pressHome();
       vi.advanceTimersByTime(PRESS_HOME_WAIT_MS);
-      expect(calls.slice(0, 3)).toEqual(["overlay 10798923412957822976 2", "home", "front"]);
+      expect(calls.slice(0, 4)).toEqual(["overlay 10798923412957822976 2", "home", "event pdc-hyb-home-press", "front"]);
       expect(calls).not.toContain("theme home");
       home();
     });
@@ -187,18 +187,33 @@ describe("Steam button on Windows", () => {
       home();
     });
 
-    it("keeps Game Bar as Steam's button over Big Picture, with or without a game behind it", () => {
+    it("does nothing when Game Bar opens over Big Picture with a game behind it", () => {
       vi.useFakeTimers();
       const { scope, calls, state } = withPage(false);
       state.bigPictureFocused = true;
       const home = installSteamButtonHome(scope, () => true, log);
-      expect(home.gameBarShown(true)).toBe("scheduled");
+      expect(home.gameBarShown(true)).toBe("none");
       vi.advanceTimersByTime(PRESS_HOME_WAIT_MS);
-      expect(calls).toEqual(["theme home"]);
+      expect(calls).toEqual([]);
       home();
     });
 
-    it("counts Game Bar as Steam's button when no game runs", () => {
+    it("counts a hybrid theme's launch screen over Big Picture as the game in front", () => {
+      const { scope, state } = withPage(false);
+      state.bigPictureFocused = true;
+      const page = (scope as unknown as { SteamUIStore: { WindowStore: { GamepadUIMainWindowInstance: { BrowserWindow: { document: Record<string, unknown> } } } } }).SteamUIStore.WindowStore.GamepadUIMainWindowInstance.BrowserWindow.document;
+      let screen: { hidden: boolean } | null = { hidden: false };
+      page.querySelector = (selector: string) => (selector === "[data-pdc-hyb-launch]" ? screen : null);
+      const home = installSteamButtonHome(scope, () => true, log);
+      expect(home.gameBarShown(true)).toBe("game");
+      screen = { hidden: true };
+      expect(home.gameBarShown(true)).toBe("none");
+      screen = null;
+      expect(home.gameBarShown(true)).toBe("none");
+      home();
+    });
+
+    it("does nothing when Game Bar opens and no game runs", () => {
       vi.useFakeTimers();
       const harness = withPage(false);
       const store = (harness.scope as unknown as { SteamUIStore: { RunningApps: unknown[]; WindowStore: { GamepadUIMainWindowInstance: { MainRunningAppID?: number } } } }).SteamUIStore;
@@ -206,9 +221,10 @@ describe("Steam button on Windows", () => {
       store.WindowStore.GamepadUIMainWindowInstance.MainRunningAppID = undefined;
       const home = installSteamButtonHome(harness.scope, () => true, log);
       expect(home.gameRunning()).toBe(false);
-      expect(home.gameBarShown(false)).toBe("scheduled");
+      expect(home.gameBarShown(false)).toBe("none");
+      expect(home.gameBarShown(true)).toBe("none");
       vi.advanceTimersByTime(PRESS_HOME_WAIT_MS);
-      expect(harness.calls).toEqual(["theme home"]);
+      expect(harness.calls).toEqual([]);
       home();
     });
 
@@ -227,7 +243,7 @@ describe("Steam button on Windows", () => {
       const home = installSteamButtonHome(scope, () => true, log);
       expect(home.gameRunning()).toBe(true);
       expect(home.gameHome()).toBe("game_home");
-      expect(calls.slice(0, 3)).toEqual(["overlay 10798923412957822976 2", "home", "front"]);
+      expect(calls.slice(0, 4)).toEqual(["overlay 10798923412957822976 2", "home", "event pdc-hyb-home-press", "front"]);
       home();
 
       const idle = installSteamButtonHome(withPage(true).scope, () => false, log);
@@ -281,7 +297,7 @@ describe("Steam button on Windows", () => {
     state.focusedAppid = 2514320289;
     focusBigPicture();
 
-    expect(calls.slice(0, 3)).toEqual(["overlay 10798923412957822976 2", "home", "front"]);
+    expect(calls.slice(0, 4)).toEqual(["overlay 10798923412957822976 2", "home", "event pdc-hyb-home-press", "front"]);
     stop();
   });
 });

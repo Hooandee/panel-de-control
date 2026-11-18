@@ -82,10 +82,10 @@ sealed partial class App : Application
     }
 
     // On some handhelds (ROG Xbox Ally X with Gaming Services 39.118) Windows keeps the Xbox button for Game Bar and
-    // Steam never sees it. The companion hears every time Game Bar opens and closes: over Big Picture or the desktop
-    // opening is Steam's button for the theme; over a game Game Bar stays usable, and opening and closing it at once
-    // (the button pressed twice) is Steam's button. How long it was shown is measured here, where the events arrive,
-    // and the reports go out one after another so a slow pipe cannot reorder them.
+    // Steam never sees it. The companion hears every time Game Bar opens and closes: one press is only Game Bar, and
+    // over a game opening and closing it at once (the button pressed twice) goes to Steam's Home. How long it was
+    // shown is measured here, where the events arrive, and the reports go out one after another so a slow pipe cannot
+    // reorder them.
     private static readonly Stopwatch GameBarShownFor = new();
     private static readonly object GameBarReportGate = new();
     private static Task gameBarReports = Task.CompletedTask;

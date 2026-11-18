@@ -81,7 +81,7 @@
                 </Button>
             </Grid>
 
-            <StackPanel Grid.Row="1">
+            <StackPanel x:Name="StatusBlock" Grid.Row="1">
                 <TextBlock
                     x:Name="ConnectionStatus"
                     x:Uid="ConnectionStatus"
