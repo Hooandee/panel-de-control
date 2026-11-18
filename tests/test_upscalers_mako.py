@@ -387,3 +387,16 @@ def test_mako5_install_falls_back_to_pinned_release_when_lookup_breaks(monkeypat
     monkeypatch.setattr(engine_updates, 'discover', broken)
     assert UpscalerService.mako_install(service, 5) == 'installed'
     assert installs == [{'line': 5}] and actions[0][2] == 'failed'
+
+
+def test_status_answers_while_the_archive_downloads(setup):
+    import threading
+    manager, cache, _, _ = setup
+    answered = []
+    def slow_ensure(*args):
+        reader = threading.Thread(target=lambda: answered.append(manager.status()['installed']))
+        reader.start()
+        reader.join(2)
+        return cache.ensure(*args)
+    manager.install(SimpleNamespace(ensure=slow_ensure))
+    assert answered == [False] and manager.status()['installed'] is True
