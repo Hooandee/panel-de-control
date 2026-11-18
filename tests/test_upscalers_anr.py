@@ -201,3 +201,11 @@ def test_nixxes_crash_reporter_is_never_taken_for_the_game(tmp_path):
     # The real crs-video.exe imports d3d11 and would win over a packed game exe that imports none.
     assert all(games._SKIP_EXE.search(name) for name in ("crs-video.exe", "crs-handler.exe", "crs-uploader.exe"))
     assert not games._SKIP_EXE.search("cyberpunk2077.exe")
+
+
+def test_a_recipe_that_forces_d3d11_the_unity_way_rules_anr_out():
+    from upscalers.recipes import Recipe
+    endfield = Recipe("4732690", args=("-force-d3d11",))
+    plan = solution_plan.resolve("rdna3", {"inputs": DLSSG, "apis": [], "streamline": 2}, endfield, generation=10)
+    assert plan["effective_api"] == "d3d11"
+    assert "anr" not in ((plan["offered_fg_plan"] or {}).get("routes") or {})

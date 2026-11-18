@@ -6,7 +6,8 @@ def resolve(gpu, analysis, recipe=None, generation=9, engine="optiscaler", route
     declared = getattr(recipe, "effective_api", None)
     forced = {value for argument in getattr(recipe, "args", ())
               if (value := {"-dx11": "d3d11", "-d3d11": "d3d11", "-dx12": "d3d12",
-                            "-d3d12": "d3d12", "-vulkan": "vulkan"}.get(argument.lower()))}
+                            "-d3d12": "d3d12", "-vulkan": "vulkan", "-force-d3d11": "d3d11",
+                            "-force-d3d12": "d3d12", "-force-vulkan": "vulkan"}.get(argument.lower()))}
     if declared:
         forced.add(declared)
     detected = set(analysis.get("apis", ())) & {"d3d11", "d3d12", "vulkan"}
