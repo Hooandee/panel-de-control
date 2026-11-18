@@ -2009,7 +2009,10 @@ class UpscalerService:
                 except Exception as error:  # network or metadata failures (http.client errors included) fall back to the pinned release
                     self.record_action("global", "engine_check_mako5", "failed", {"build": mako.VERSION5}, getattr(error, "code", "engine_check_failed"))
                 if asset:
-                    return self.mako.install(self.cache, asset=asset, version=candidate["version"], line=5)
+                    try:
+                        return self.mako.install(self.cache, asset=asset, version=candidate["version"], line=5)
+                    except mako.MakoError as error:  # a newer 5.x laid out differently: the pinned release still installs
+                        self.record_action("global", "engine_check_mako5", "failed", {"build": mako.VERSION5}, error.code)
             return self.mako.install(self.cache, line=line)
         except (AssetError, mako.MakoError) as error:
             raise UpscalerError(error.code) from None

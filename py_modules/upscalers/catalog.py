@@ -316,11 +316,10 @@ def anr_capable(build: Build | None, gpu: str) -> bool:
                 and gpu in build.gpus and ASSETS[build.archive].generation >= 10)
 
 
-def anr_build(gpu: str, current: str | None = None) -> str | None:
-    """The build ANR FG goes in with: the installed one when it already runs OptiScaler 10, else FSR 4.1.2 on 10."""
-    if anr_capable(BUILDS.get(str(current)), gpu):
-        return str(current)
-    return ANR_BUILDS.get(gpu)
+def anr_build(gpu: str) -> str | None:
+    """The build ANR FG goes in with when the game isn't already on OptiScaler 10."""
+    name = ANR_BUILDS.get(gpu)
+    return name if anr_capable(BUILDS.get(str(name)), gpu) else None
 
 
 QUALITY_RATIOS = {"native": 1.0, "quality": 1.5, "balanced": 1.7, "performance": 2.0, "ultra": 3.0}
@@ -464,7 +463,7 @@ def fg_routes(gpu: str, inputs: dict, apis: list | tuple = (), streamline: int |
         routes["optiscaler"] = {"input": "upscaler", "output": output, "follows_game": False,
                                 "source": "optiscaler", "experimental": True}
     # Offered whatever the build: choosing it moves the game to OptiScaler 10 (`anr_build`).
-    if "dlssg" in inputs and dx12 and gpu in ANR_BUILDS:
+    if "dlssg" in inputs and dx12 and anr_build(gpu):
         routes["anr"] = {"input": "nvngxfg", "output": "auto", "follows_game": True, "source": "anr",
                          "experimental": True, "provider": ANR_PROVIDER}
     return routes

@@ -256,16 +256,16 @@ class Mako:
         with self._lock:
             state = self._state()
             record, prefix, payload, default_version = self._line(state, line)
-            version = version or default_version
             upgrading = self._installed(state, line)
             if upgrading:
                 self._verify_install(state, line)
-                if record.get('version', default_version) == version:
+                # Only a named version replaces an installed line: a plain install racing an update never downgrades it.
+                if version is None or record.get('version', default_version) == version:
                     return self.status()
+            version = version or default_version
             self._safe(prefix)
             if prefix.exists() and not upgrading:
                 raise MakoError('mako_conflict')
-            self.prefix.parent.mkdir(parents=True, exist_ok=True)
             prefix.parent.mkdir(parents=True, exist_ok=True)
             staging = Path(tempfile.mkdtemp(prefix='.mako-', dir=prefix.parent))
             published = False
@@ -301,7 +301,7 @@ class Mako:
                         if any(profile.get('enabled', True) for profile in state['profiles'].values() if profile.get('engine', 4) == 4):
                             self._inspect(state, self._dll(), prefix=staging)
                     for appid, profile in mine.items():
-                        if not re.fullmatch(r'[0-9]{1,20}', appid):
+                        if not isinstance(profile, dict) or not re.fullmatch(r'[0-9]{1,20}', appid):
                             raise MakoError('mako_conflict')
                         config = self.config_root / appid / 'conf.toml'
                         self._safe(config)
@@ -600,8 +600,6 @@ class Mako:
                 'requested': projection(data.get('requested')), 'applied': projection(data.get('applied')),
                 'pending': {key: pending[key] for key in ('frame_generation_private', 'spatial_private', 'swapchain_recreation', 'process_restart')
                             if isinstance(pending, dict) and type(pending.get(key)) is bool},
-                'fg_unavailable': (str(unavailable.get('reason'))[:64] if isinstance(unavailable := data.get('frame_generation_unavailable'), dict)
-                                   and isinstance(unavailable.get('reason'), str) else None),
                 'error': 'mako_runtime_error' if data.get('error') else None}
 
     def report(self):

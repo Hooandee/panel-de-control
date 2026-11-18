@@ -389,6 +389,23 @@ def test_mako5_install_falls_back_to_pinned_release_when_lookup_breaks(monkeypat
     assert installs == [{'line': 5}] and actions[0][2] == 'failed'
 
 
+def test_mako5_install_falls_back_to_pinned_release_when_the_newest_has_another_layout(monkeypatch):
+    from upscalers import engine_updates
+    from upscalers.service import UpscalerService
+    installs = []
+    def install(cache, **kwargs):
+        installs.append(kwargs)
+        if 'asset' in kwargs:
+            raise mako.MakoError('mako_archive')
+        return 'installed'
+    manager = SimpleNamespace(status=lambda: {'installed': True, 'v5': {'installed': False}}, install=install)
+    service = SimpleNamespace(mako=manager, cache=object(), record_action=lambda *args: None)
+    monkeypatch.setattr(engine_updates, 'discover', lambda *args: {'version': '5.9.0'})
+    monkeypatch.setattr(engine_updates, 'prepare', lambda *args: object())
+    assert UpscalerService.mako_install(service, 5) == 'installed'
+    assert installs[-1] == {'line': 5}
+
+
 def test_status_answers_while_the_archive_downloads(setup):
     import threading
     manager, cache, _, _ = setup

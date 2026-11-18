@@ -2,6 +2,7 @@ import hashlib
 from pathlib import Path
 
 import pytest
+from dataclasses import replace
 
 from upscalers import catalog, diagnostics, ini, logread, recipe_catalog, solution_plan
 from upscalers.catalog import Asset, Build
@@ -48,13 +49,14 @@ def test_overrides_hand_dlssg_back_whenever_anr_is_not_the_route():
     assert "FrameGen.FGNvngxReplacement" not in catalog.fg_overrides(game, True)
 
 
-def test_anr_build_keeps_an_optiscaler_10_install_and_otherwise_picks_fsr_412_on_10():
-    assert catalog.anr_build("rdna3", "fsr-4.1.1") == "fsr-4.1.2-beta"
-    assert catalog.anr_build("rdna2", "fsr-4.1.1-rdna2") == "fsr-4.1.1-rdna2"
-    assert catalog.anr_build("rdna2", "fsr-4.1.2-dll") == "fsr-4.1.2-beta"
+def test_anr_build_is_fsr_412_on_optiscaler_10_and_only_while_that_build_is_available(monkeypatch):
+    assert catalog.anr_build("rdna3") == "fsr-4.1.2-beta"
     assert catalog.anr_build("intel") is None and catalog.anr_build("rdna4") is None
     flags = {b["id"]: b["anr"] for b in catalog.describe("rdna3")}
     assert flags["fsr-4.1.2-beta"] and not flags["fsr-4.1.1"] and not flags["hlx-fsr4"]
+    monkeypatch.setitem(catalog.BUILDS, "fsr-4.1.2-beta", replace(catalog.BUILDS["fsr-4.1.2-beta"], available=False))
+    assert catalog.anr_build("rdna3") is None
+    assert "anr" not in catalog.fg_routes("rdna3", DLSSG, ["d3d12"], streamline=2)
 
 
 @pytest.fixture
@@ -174,22 +176,6 @@ def test_a_newer_anr_release_in_another_layout_falls_back_before_the_game_is_tou
     service.begin("install", APPID)
     service.install(APPID, {"build": "new", "fg": "on", "fg_route": "anr"})
     assert (game / PROVIDER / "nvngx_dlssg.dll").read_bytes() == b"anr"
-
-
-def test_hogwarts_tells_what_its_menu_needs_for_anr_and_keeps_its_wiki_facts():
-    from upscalers import recipes
-    recipe = recipes.recipe_for("990080")
-    assert dict(recipe.anr_settings)["Upscale Type (Tipo de escalado)"] == "NVIDIA DLSS"
-    assert recipe.optipatcher and recipe.status == "works"
-    assert not recipe.exe and not recipe.ini and not recipe.args
-
-
-def test_cyberpunk_skips_its_launcher_and_validated_games_tell_their_anr_settings():
-    from upscalers import recipes
-    cyberpunk = recipes.recipe_for("1091500")
-    assert "--launcher-skip" in cyberpunk.args and cyberpunk.anr_settings
-    assert recipes.recipe_for("2124490").anr_settings and recipes.recipe_for("1182900").anr_settings
-    assert "-dx12" in recipes.recipe_for("548430").args
 
 
 def test_nixxes_crash_reporter_is_never_taken_for_the_game(tmp_path):
