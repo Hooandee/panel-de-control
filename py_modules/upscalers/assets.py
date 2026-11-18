@@ -1,6 +1,7 @@
 """Download, verify and unpack catalog assets into the plugin's cache."""
 
 import hashlib
+import http.client
 import os
 import shutil
 import subprocess
@@ -157,7 +158,7 @@ class AssetCache:
                         raise
                     self.partial(asset).unlink(missing_ok=True)
                     break
-                except OSError as error:
+                except (OSError, http.client.HTTPException) as error:
                     last_error = AssetError("download_failed", f"{type(error).__name__}: {error}"[:200])
         raise last_error
 

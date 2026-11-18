@@ -372,3 +372,18 @@ def test_mako5_options_are_bounded(setup, config):
     manager.install(cache)
     with pytest.raises(mako.MakoError, match='mako_options'):
         manager.set_game('9', 'Game', config)
+
+
+def test_mako5_install_falls_back_to_pinned_release_when_lookup_breaks(monkeypatch):
+    import http.client
+    from upscalers import engine_updates
+    from upscalers.service import UpscalerService
+    installs, actions = [], []
+    manager = SimpleNamespace(status=lambda: {'installed': True, 'v5': {'installed': False}},
+                              install=lambda cache, **kwargs: installs.append(kwargs) or 'installed')
+    service = SimpleNamespace(mako=manager, cache=object(), record_action=lambda *args: actions.append(args))
+    def broken(*args):
+        raise http.client.IncompleteRead(b'')
+    monkeypatch.setattr(engine_updates, 'discover', broken)
+    assert UpscalerService.mako_install(service, 5) == 'installed'
+    assert installs == [{'line': 5}] and actions[0][2] == 'failed'

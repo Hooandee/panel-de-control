@@ -2006,7 +2006,7 @@ class UpscalerService:
                     if candidate:
                         asset = engine_updates.prepare("mako", candidate, self.cache)
                         return self.mako.install(self.cache, asset=asset, version=candidate["version"], line=5)
-                except (engine_updates.UpdateError, OSError, ValueError) as error:
+                except Exception as error:  # network or metadata failures (http.client errors included) fall back to the pinned release
                     self.record_action("global", "engine_check_mako5", "failed", {"build": mako.VERSION5}, getattr(error, "code", "engine_check_failed"))
             return self.mako.install(self.cache, line=line)
         except (AssetError, mako.MakoError) as error:
