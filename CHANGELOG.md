@@ -43,7 +43,14 @@
 * **La Game Bar fonctionne maintenant en pleine partie :** Sous Windows, avec un jeu ouvert, le bouton Xbox ouvrait la Game Bar mais Big Picture passait par-dessus avec l'accueil du thème, et impossible d'atteindre le TDP ou le widget de Panel de Control. Maintenant, un appui ouvre seulement la Game Bar et le jeu reste visible.
 * **Deux appuis vous mènent à l'accueil sans fermer le jeu :** Appuyez deux fois de suite sur le bouton Xbox en jeu et vous arrivez sur l'accueil du thème avec le jeu toujours ouvert. Le widget de Panel de Control a aussi un nouveau bouton, Aller à l'accueil de Steam, qui fait la même chose.
 * **Reprendre vous ramène au jeu :** Depuis l'accueil du thème, Reprendre remet le jeu au premier plan, même si vous l'avez lancé depuis un autre lanceur comme Ubisoft, EA ou Rockstar.
-* **Le son du jeu se coupe sur l'accueil :** Les thèmes qui coupent le son du jeu pendant que vous êtes sur l'accueil n'y arrivaient pas sous Windows. Maintenant, le jeu se tait quand vous allez à l'accueil et se fait entendre de nouveau quand vous reprenez.
+* **Le son du jeu se coupe sur l'accueil :** Les thèmes qui coupent le son du jeu pendant que vous êtes sur l'accueil n'y arrivaient pas sous Windows. Maintenant, le jeu se tait quand vous allez à l'accueil et se fait entendre de nouveau quand vous reprenez.
+
+### Русский
+
+* **Game Bar теперь работает прямо посреди игры:** В Windows с открытой игрой кнопка Xbox открывала Game Bar, но Big Picture перехватывал экран Главной темой, и добраться до TDP или виджета Panel de Control было нельзя. Теперь одно нажатие открывает только Game Bar, а игра остаётся на виду.
+* **Два нажатия приводят на Главную, не закрывая игру:** Нажми кнопку Xbox дважды подряд во время игры, и ты окажешься на Главной темы, а игра останется открытой. В виджете Panel de Control тоже есть новая кнопка «На главную Steam», которая делает то же самое.
+* **При возобновлении ты возвращаешься в игру:** С Главной темы кнопка «Продолжить» снова выводит игру на передний план, даже если ты запустил её через другой лаунчер, например Ubisoft, EA или Rockstar.
+* **Звук игры замолкает на Главной:** Темы, которые глушат звук игры на Главной, не справлялись с этим в Windows. Теперь игра замолкает при переходе на Главную и снова звучит при возобновлении.
 
 ## [0.90.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.3...panel-de-control-v0.90.0) (2026-11-16)
 

@@ -38,7 +38,7 @@ class DeckState:
     colores: dict | None = None
 
 
-_DECIMAL_COMMA_LANGS = ("es", "it", "de", "pt-BR", "fr")
+_DECIMAL_COMMA_LANGS = ("es", "it", "de", "pt-BR", "fr", "ru")
 
 
 def _number(value: float, digits: int, lang: str) -> str:
@@ -50,6 +50,8 @@ def _grouped(value: int, lang: str) -> str:
     text = f"{value:,}"
     if lang == "fr":
         return text.replace(",", "\u202f")
+    if lang == "ru":
+        return text.replace(",", "\u00a0")
     return text.replace(",", ".") if lang in _DECIMAL_COMMA_LANGS else text
 
 

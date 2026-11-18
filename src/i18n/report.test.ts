@@ -11,13 +11,14 @@ vi.mock("../system/pdcStorage", () => ({
 import { translateForLang } from "./index";
 
 describe("report translations", () => {
-  it.each(["es", "en", "it", "de", "pt-BR", "fr"] as const)("uses the Escaladores page name for its report category in %s", (lang) => {
+  it.each(["es", "en", "it", "de", "pt-BR", "fr", "ru"] as const)("uses the Escaladores page name for its report category in %s", (lang) => {
     expect(translateForLang(lang, "report.cat.upscalers")).toBe(translateForLang(lang, "nav.upscalers"));
   });
 
   it.each([
     ["es", "Ambiente"], ["en", "Ambient"], ["it", "Atmosfera"],
     ["de", "Ambiente"], ["pt-BR", "Ambiente"], ["fr", "Ambiance"],
+    ["ru", "Атмосфера"],
   ] as const)("translates the Ambiente category in %s", (lang, expected) => {
     expect(translateForLang(lang, "report.cat.ambient")).toBe(expected);
   });
@@ -28,6 +29,7 @@ describe("report translations", () => {
     ["it", "Temi"],
     ["pt-BR", "Temas"],
     ["fr", "Thèmes"],
+    ["ru", "Темы"],
   ] as const)("translates the themes category in %s", (lang, expected) => {
     expect(translateForLang(lang, "report.cat.themes")).toBe(expected);
   });
@@ -39,6 +41,7 @@ describe("report translations", () => {
     ["de", "Automatische TDP-Steuerung"],
     ["pt-BR", "TDP automático"],
     ["fr", "TDP automatique"],
+    ["ru", "Автоматический TDP"],
   ] as const)("names AutoTDP independently from manual TDP in %s", (lang, expected) => {
     expect(translateForLang(lang, "report.cat.auto_tdp")).toBe(expected);
   });
@@ -50,6 +53,7 @@ describe("report translations", () => {
     ["de", "Einen Wunsch oder eine Idee", "Das ist keine Fehlermeldung."],
     ["pt-BR", "Um pedido ou uma ideia", "Isto não é um relatório de erro."],
     ["fr", "Une demande ou une idée", "Ce n'est pas un rapport de bug."],
+    ["ru", "Просьбу или идею", "Это не ошибка."],
   ] as const)("makes feature requests explicit in %s", (lang, label, explanation) => {
     expect(translateForLang(lang, "report.kind.feature")).toBe(label);
     expect(translateForLang(lang, "report.intro.feature")).toContain(explanation);
@@ -62,6 +66,7 @@ describe("report translations", () => {
     ["de", "Ändern"],
     ["pt-BR", "Alterar"],
     ["fr", "Changer"],
+    ["ru", "Изменить"],
   ] as const)("offers a translated report-type change action in %s", (lang, label) => {
     expect(translateForLang(lang, "report.kind.change")).toBe(label);
   });

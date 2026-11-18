@@ -1,0 +1,513 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AudioConnectFailed" xml:space="preserve">
+    <value>Не удалось подключиться к управлению звуком</value>
+  </data>
+  <data name="AudioNoDefault" xml:space="preserve">
+    <value>Нет аудиоустройства по умолчанию</value>
+  </data>
+  <data name="BatteryLabel.Text" xml:space="preserve">
+    <value>Батарея</value>
+  </data>
+  <data name="BrightnessAvailable" xml:space="preserve">
+    <value>Встроенная панель доступна</value>
+  </data>
+  <data name="BrightnessChecking" xml:space="preserve">
+    <value>Проверяем встроенную панель…</value>
+  </data>
+  <data name="BrightnessControlFailed" xml:space="preserve">
+    <value>Не удалось управлять яркостью встроенной панели</value>
+  </data>
+  <data name="BrightnessLabel.Text" xml:space="preserve">
+    <value>Яркость</value>
+  </data>
+  <data name="BrightnessMismatch" xml:space="preserve">
+    <value>Изменение не совпадает со считанным значением</value>
+  </data>
+  <data name="BrightnessPermission" xml:space="preserve">
+    <value>Windows запретила управлять яркостью</value>
+  </data>
+  <data name="BrightnessReadFailed" xml:space="preserve">
+    <value>Не удалось прочитать яркость встроенной панели</value>
+  </data>
+  <data name="BrightnessSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Задаёт реальную яркость встроенной панели и подтверждает процент, который считывает Windows</value>
+  </data>
+  <data name="BrightnessSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Яркость встроенного экрана</value>
+  </data>
+  <data name="BrightnessStatus.Text" xml:space="preserve">
+    <value>Проверяем встроенную панель…</value>
+  </data>
+  <data name="BrightnessUnavailable" xml:space="preserve">
+    <value>Яркость встроенной панели недоступна</value>
+  </data>
+  <data name="CapabilityAbsent" xml:space="preserve">
+    <value>Не найдено</value>
+  </data>
+  <data name="CapabilityAsusAtkacpi" xml:space="preserve">
+    <value>Интерфейс ASUS ATKACPI</value>
+  </data>
+  <data name="CapabilityLenovoFan" xml:space="preserve">
+    <value>WMI вентиляторов Lenovo</value>
+  </data>
+  <data name="CapabilityLenovoGameZone" xml:space="preserve">
+    <value>WMI Lenovo GameZone</value>
+  </data>
+  <data name="CapabilityLenovoOther" xml:space="preserve">
+    <value>WMI питания Lenovo</value>
+  </data>
+  <data name="CapabilityMsiAcpi" xml:space="preserve">
+    <value>WMI MSI_ACPI</value>
+  </data>
+  <data name="CapabilityPresent" xml:space="preserve">
+    <value>Доступно</value>
+  </data>
+  <data name="CapabilityRivalArmoury" xml:space="preserve">
+    <value>Armoury Crate</value>
+  </data>
+  <data name="CapabilityRivalIntelDtt" xml:space="preserve">
+    <value>Теплоуправление Intel</value>
+  </data>
+  <data name="CapabilityRivalLegionSpace" xml:space="preserve">
+    <value>Legion Space</value>
+  </data>
+  <data name="CapabilityRivalMsiCenter" xml:space="preserve">
+    <value>MSI Center M</value>
+  </data>
+  <data name="CapabilityRowFormat" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="CapabilitySensorDriver" xml:space="preserve">
+    <value>Драйвер датчиков (PawnIO)</value>
+  </data>
+  <data name="CapabilityService" xml:space="preserve">
+    <value>Служба Panel de Control</value>
+  </data>
+  <data name="ConnectionStatus.Text" xml:space="preserve">
+    <value>Подключаемся к оборудованию…</value>
+  </data>
+  <data name="CpuLoadValue.Text" xml:space="preserve">
+    <value>Нагрузка —</value>
+  </data>
+  <data name="DeviceName.Text" xml:space="preserve">
+    <value>Ищем устройство…</value>
+  </data>
+  <data name="DeviceUnrecognized" xml:space="preserve">
+    <value>Нераспознанное устройство</value>
+  </data>
+  <data name="DiagnosticsLoading" xml:space="preserve">
+    <value>Проверяем устройство…</value>
+  </data>
+  <data name="DiagnosticsToggle.Content" xml:space="preserve">
+    <value>Диагностика</value>
+  </data>
+  <data name="DiagnosticsToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Показать или скрыть диагностику устройства</value>
+  </data>
+  <data name="DiagnosticsUnavailable" xml:space="preserve">
+    <value>Не удалось прочитать диагностику</value>
+  </data>
+  <data name="GpuLoadValue.Text" xml:space="preserve">
+    <value>Нагрузка —</value>
+  </data>
+  <data name="LoadFormat" xml:space="preserve">
+    <value>Нагрузка {0}</value>
+  </data>
+  <data name="MuteAvailable" xml:space="preserve">
+    <value>Состояние без звука доступно</value>
+  </data>
+  <data name="MuteChecking" xml:space="preserve">
+    <value>Проверяем состояние без звука…</value>
+  </data>
+  <data name="MuteLabel.Text" xml:space="preserve">
+    <value>Без звука</value>
+  </data>
+  <data name="MutePermission" xml:space="preserve">
+    <value>Windows требует разрешение на отключение звука</value>
+  </data>
+  <data name="MuteReadFailed" xml:space="preserve">
+    <value>Не удалось прочитать состояние без звука</value>
+  </data>
+  <data name="MuteStatus.Text" xml:space="preserve">
+    <value>Проверяем состояние без звука…</value>
+  </data>
+  <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Отключает или включает звук устройства по умолчанию и проверяет считанное состояние</value>
+  </data>
+  <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Отключить звук системы</value>
+  </data>
+  <data name="PowerAc" xml:space="preserve">
+    <value>От сети</value>
+  </data>
+  <data name="PowerBattery" xml:space="preserve">
+    <value>От батареи</value>
+  </data>
+  <data name="ReadingDriverMissing" xml:space="preserve">
+    <value>Нет драйвера датчиков</value>
+  </data>
+  <data name="ReadingElevation" xml:space="preserve">
+    <value>Нужны права администратора</value>
+  </data>
+  <data name="ReadingFault" xml:space="preserve">
+    <value>Ошибка чтения</value>
+  </data>
+  <data name="ReadingNoData" xml:space="preserve">
+    <value>Нет данных</value>
+  </data>
+  <data name="ReadingPermission" xml:space="preserve">
+    <value>Нужно разрешение</value>
+  </data>
+  <data name="ReadingServiceNotRunning" xml:space="preserve">
+    <value>Служба Panel de Control не запущена</value>
+  </data>
+  <data name="ReadingServiceUnavailable" xml:space="preserve">
+    <value>Служба Panel de Control не отвечает</value>
+  </data>
+  <data name="RefreshButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Обновить телеметрию, питание, яркость и громкость</value>
+  </data>
+  <data name="RivalNotRunning" xml:space="preserve">
+    <value>Не запущено</value>
+  </data>
+  <data name="RivalRunning" xml:space="preserve">
+    <value>Запущено</value>
+  </data>
+  <data name="StatusApplying" xml:space="preserve">
+    <value>Применяем и проверяем…</value>
+  </data>
+  <data name="StatusNotVerified" xml:space="preserve">
+    <value>Не удалось подтвердить изменение</value>
+  </data>
+  <data name="StatusRejected" xml:space="preserve">
+    <value>Windows отклонила изменение</value>
+  </data>
+  <data name="StatusVerified" xml:space="preserve">
+    <value>Изменение применено и подтверждено</value>
+  </data>
+  <data name="VolumeAvailable" xml:space="preserve">
+    <value>Аудиоустройство по умолчанию доступно</value>
+  </data>
+  <data name="VolumeLabel.Text" xml:space="preserve">
+    <value>Громкость</value>
+  </data>
+  <data name="VolumePermission" xml:space="preserve">
+    <value>Windows требует разрешение на управление звуком</value>
+  </data>
+  <data name="VolumeSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Задаёт громкость аудиоустройства по умолчанию</value>
+  </data>
+  <data name="VolumeSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Громкость системы</value>
+  </data>
+  <data name="VolumeStatus.Text" xml:space="preserve">
+    <value>Проверяем аудиоустройство по умолчанию…</value>
+  </data>
+  <data name="ExperimentalTdpLabel.Text" xml:space="preserve">
+    <value>Экспериментальное управление</value>
+  </data>
+  <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Явно включает экспериментальную запись TDP для этой сессии службы</value>
+  </data>
+  <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Согласие на экспериментальную запись TDP</value>
+  </data>
+  <data name="ManufacturerRecoveryHint.Text" xml:space="preserve">
+    <value>Возврат управления производителем не подтверждён: перезапусти Windows или открой Armoury Crate заново, чтобы вернуть управление.</value>
+  </data>
+  <data name="PowerApplied" xml:space="preserve">
+    <value>Применено и подтверждено</value>
+  </data>
+  <data name="PowerArmouryConflict" xml:space="preserve">
+    <value>Закрой Armoury Crate перед изменением лимита мощности</value>
+  </data>
+  <data name="PowerAvailable" xml:space="preserve">
+    <value>Экспериментальная запись готова</value>
+  </data>
+  <data name="PowerChecking" xml:space="preserve">
+    <value>Проверяем экспериментальное управление мощностью…</value>
+  </data>
+  <data name="PowerLabel.Text" xml:space="preserve">
+    <value>Лимит мощности</value>
+  </data>
+  <data name="PowerLimits.Text" xml:space="preserve">
+    <value>—</value>
+  </data>
+  <data name="PowerLimitsFormat" xml:space="preserve">
+    <value>{0}–{1} Вт</value>
+  </data>
+  <data name="PowerOptInDisabled" xml:space="preserve">
+    <value>Экспериментальная запись выключена</value>
+  </data>
+  <data name="PowerPresetAutomation" xml:space="preserve">
+    <value>Задать экспериментальный TDP {0} Вт</value>
+  </data>
+  <data name="PowerReadbackHint.Text" xml:space="preserve">
+    <value>Подтверждение лимита на этом устройстве ещё не проверено.</value>
+  </data>
+  <data name="PowerRejected" xml:space="preserve">
+    <value>Прошивка отклонила изменение мощности</value>
+  </data>
+  <data name="PowerServiceUnavailable" xml:space="preserve">
+    <value>Экспериментальное управление мощностью недоступно</value>
+  </data>
+  <data name="PowerSourceUnknown" xml:space="preserve">
+    <value>Не удалось прочитать текущее состояние сети или батареи</value>
+  </data>
+  <data name="PowerStatus.Text" xml:space="preserve">
+    <value>Проверяем экспериментальное управление мощностью…</value>
+  </data>
+  <data name="PowerUnsupported" xml:space="preserve">
+    <value>Доступно только в профиле ROG Xbox Ally X</value>
+  </data>
+  <data name="PowerUnverifiable" xml:space="preserve">
+    <value>Отправлено, но устройство не подтвердило</value>
+  </data>
+  <data name="AccentLabel.Text" xml:space="preserve">
+    <value>Акцентный цвет</value>
+  </data>
+  <data name="AccentSwatchAutomation" xml:space="preserve">
+    <value>Акцентный цвет {0} из {1}</value>
+  </data>
+  <data name="PowerZoneSave" xml:space="preserve">
+    <value>Экономия</value>
+  </data>
+  <data name="PowerZoneEco" xml:space="preserve">
+    <value>Эко</value>
+  </data>
+  <data name="PowerZoneBalanced" xml:space="preserve">
+    <value>Баланс</value>
+  </data>
+  <data name="PowerZoneHot" xml:space="preserve">
+    <value>Высокий</value>
+  </data>
+  <data name="PowerZoneTurbo" xml:space="preserve">
+    <value>Турбо</value>
+  </data>
+  <data name="PowerDrawOnAc" xml:space="preserve">
+    <value>От зарядки: потребление измеряется только от батареи</value>
+  </data>
+  <data name="PowerDrawPending" xml:space="preserve">
+    <value>Ждём показания батареи</value>
+  </data>
+  <data name="PowerDrawOnBattery" xml:space="preserve">
+    <value>От батареи</value>
+  </data>
+  <data name="PowerDrawRemainingFormat" xml:space="preserve">
+    <value>От батареи · осталось {0} ч {1:00} мин</value>
+  </data>
+  <data name="PowerModeBestEfficiency" xml:space="preserve">
+    <value>Лучшая энергоэффективность</value>
+  </data>
+  <data name="PowerModeBalanced" xml:space="preserve">
+    <value>Баланс</value>
+  </data>
+  <data name="PowerModeBetterPerformance" xml:space="preserve">
+    <value>Больше производительности</value>
+  </data>
+  <data name="PowerModeBestPerformance" xml:space="preserve">
+    <value>Максимальная производительность</value>
+  </data>
+  <data name="PowerModeEffectiveFormat" xml:space="preserve">
+    <value>Сейчас работает {0}</value>
+  </data>
+  <data name="HeroBattery" xml:space="preserve"><value>Батарея</value></data>
+  <data name="NavPower" xml:space="preserve"><value>Мощность</value></data>
+  <data name="NavPowerDesc" xml:space="preserve"><value>Производительность и потребление устройства.</value></data>
+  <data name="NavSystem" xml:space="preserve"><value>Система</value></data>
+  <data name="NavSystemDesc" xml:space="preserve"><value>Общие системные настройки и состояние.</value></data>
+  <data name="NavDisplay" xml:space="preserve"><value>Экран</value></data>
+  <data name="NavDisplayDesc" xml:space="preserve"><value>Доступные настройки изображения и экрана.</value></data>
+  <data name="NavFans" xml:space="preserve"><value>Вентиляторы</value></data>
+  <data name="NavFansDesc" xml:space="preserve"><value>Температура и доступные настройки вентиляторов.</value></data>
+  <data name="NavAudio" xml:space="preserve"><value>Звук</value></data>
+  <data name="NavAudioDesc" xml:space="preserve"><value>Доступные настройки звука.</value></data>
+  <data name="NavControllers" xml:space="preserve"><value>Контроллеры</value></data>
+  <data name="NavControllersDesc" xml:space="preserve"><value>Состояние контроллера и доступные настройки.</value></data>
+  <data name="NavHud" xml:space="preserve"><value>HUD</value></data>
+  <data name="NavHudDesc" xml:space="preserve"><value>Информация и компоновка интерфейса в игре.</value></data>
+  <data name="NavLaunch" xml:space="preserve"><value>Параметры</value></data>
+  <data name="NavLaunchDesc" xml:space="preserve"><value>Запуск и совместимость игр.</value></data>
+  <data name="NavCleaner" xml:space="preserve"><value>Очистка</value></data>
+  <data name="NavCleanerDesc" xml:space="preserve"><value>Проверяй и освобождай место, занятое Steam.</value></data>
+  <data name="NavThemes" xml:space="preserve"><value>Темы</value></data>
+  <data name="NavThemesDesc" xml:space="preserve"><value>Внешний вид Panel de Control.</value></data>
+  <data name="NavSettings" xml:space="preserve"><value>Настройки</value></data>
+  <data name="NavSettingsDesc" xml:space="preserve"><value>Персонализация, обновления и информация.</value></data>
+  <data name="BlockTdpTitle" xml:space="preserve"><value>Лимит мощности</value></data>
+  <data name="BlockTdpDesc" xml:space="preserve"><value>Задаёт ватты процессора.</value></data>
+  <data name="BlockEnergyTitle" xml:space="preserve"><value>Энергия</value></data>
+  <data name="BlockEnergyDesc" xml:space="preserve"><value>Потребление, заряд и активность устройства.</value></data>
+  <data name="BlockSteamPerformanceTitle" xml:space="preserve"><value>Производительность игры</value></data>
+  <data name="BlockSteamPerformanceDesc" xml:space="preserve"><value>Лимит FPS, частота экрана и настройки по играм.</value></data>
+  <data name="BlockAutoTdpTitle" xml:space="preserve"><value>Автоматический TDP</value></data>
+  <data name="BlockAutoTdpDesc" xml:space="preserve"><value>Сам подстраивает мощность по FPS игры.</value></data>
+  <data name="BlockEcoTitle" xml:space="preserve"><value>Эко-режим</value></data>
+  <data name="BlockEcoDesc" xml:space="preserve"><value>Снижает мощность и шум, когда производительность не нужна.</value></data>
+  <data name="BlockBatteryTitle" xml:space="preserve"><value>Батарея</value></data>
+  <data name="BlockBatteryDesc" xml:space="preserve"><value>Уровень, здоровье и лимит заряда.</value></data>
+  <data name="BlockCpuTitle" xml:space="preserve"><value>CPU</value></data>
+  <data name="BlockCpuDesc" xml:space="preserve"><value>Ядра процессора, SMT и boost.</value></data>
+  <data name="BlockGpuTitle" xml:space="preserve"><value>Частота GPU</value></data>
+  <data name="BlockGpuDesc" xml:space="preserve"><value>Фиксирует или ограничивает частоту графики.</value></data>
+  <data name="BlockBrightnessTitle" xml:space="preserve"><value>Яркость</value></data>
+  <data name="BlockBrightnessDesc" xml:space="preserve"><value>Яркость встроенной панели.</value></data>
+  <data name="BlockVolumeTitle" xml:space="preserve"><value>Громкость</value></data>
+  <data name="BlockVolumeDesc" xml:space="preserve"><value>Громкость системы и режим без звука.</value></data>
+  <data name="BlockRgbTitle" xml:space="preserve"><value>RGB-подсветка</value></data>
+  <data name="BlockRgbDesc" xml:space="preserve"><value>Цвет и эффекты подсветки контроллера.</value></data>
+  <data name="BlockOledTitle" xml:space="preserve"><value>Вид как у OLED</value></data>
+  <data name="BlockOledDesc" xml:space="preserve"><value>Глубже чёрный и ярче цвета.</value></data>
+  <data name="BlockColorTitle" xml:space="preserve"><value>Цвет</value></data>
+  <data name="BlockColorDesc" xml:space="preserve"><value>Калибровка и цветовые настроения.</value></data>
+  <data name="BlockHdrTitle" xml:space="preserve"><value>HDR</value></data>
+  <data name="BlockHdrDesc" xml:space="preserve"><value>Включает и настраивает HDR.</value></data>
+  <data name="BlockNightTitle" xml:space="preserve"><value>Ночной режим</value></data>
+  <data name="BlockNightDesc" xml:space="preserve"><value>Тёплый свет, чтобы глаза отдыхали.</value></data>
+  <data name="BlockFanRpmTitle" xml:space="preserve"><value>Вентиляторы</value></data>
+  <data name="BlockFanRpmDesc" xml:space="preserve"><value>Скорость каждого вентилятора.</value></data>
+  <data name="BlockTempsTitle" xml:space="preserve"><value>Температуры</value></data>
+  <data name="BlockTempsDesc" xml:space="preserve"><value>Температура и нагрузка CPU и GPU.</value></data>
+  <data name="BlockFanCurveTitle" xml:space="preserve"><value>Кривая вентилятора</value></data>
+  <data name="BlockFanCurveDesc" xml:space="preserve"><value>Задаёт, как вентилятор разгоняется с температурой.</value></data>
+  <data name="BlockEqualizerTitle" xml:space="preserve"><value>Эквалайзер</value></data>
+  <data name="BlockEqualizerDesc" xml:space="preserve"><value>Настраивает басы, середину и высокие.</value></data>
+  <data name="BlockControllerManagerTitle" xml:space="preserve"><value>Менеджер контроллера</value></data>
+  <data name="BlockControllerManagerDesc" xml:space="preserve"><value>Кто управляет контроллером и в каком режиме.</value></data>
+  <data name="BlockRemapTitle" xml:space="preserve"><value>Переназначение</value></data>
+  <data name="BlockRemapDesc" xml:space="preserve"><value>Меняет назначение каждой кнопки.</value></data>
+  <data name="BlockControllerSettingsTitle" xml:space="preserve"><value>Настройки контроллера</value></data>
+  <data name="BlockControllerSettingsDesc" xml:space="preserve"><value>Чувствительность, мёртвые зоны и вибрация.</value></data>
+  <data name="BlockMagicModulesTitle" xml:space="preserve"><value>Magic Modules</value></data>
+  <data name="BlockMagicModulesDesc" xml:space="preserve"><value>Сменные модули AYANEO.</value></data>
+  <data name="BlockHudOverlayTitle" xml:space="preserve"><value>HUD в игре</value></data>
+  <data name="BlockHudOverlayDesc" xml:space="preserve"><value>FPS, температуры и потребление поверх игры.</value></data>
+  <data name="BlockLaunchOptionsTitle" xml:space="preserve"><value>Параметры запуска</value></data>
+  <data name="BlockLaunchOptionsDesc" xml:space="preserve"><value>Параметры запуска по играм.</value></data>
+  <data name="BlockSteamCacheTitle" xml:space="preserve"><value>Кэш Steam</value></data>
+  <data name="BlockSteamCacheDesc" xml:space="preserve"><value>Проверяй и освобождай Shader Cache.</value></data>
+  <data name="BlockAccentTitle" xml:space="preserve"><value>Акцентный цвет</value></data>
+  <data name="BlockAccentDesc" xml:space="preserve"><value>Цвет, который проходит через весь интерфейс.</value></data>
+  <data name="BlockDiagnosticsTitle" xml:space="preserve"><value>Диагностика</value></data>
+  <data name="BlockDiagnosticsDesc" xml:space="preserve"><value>Что служба обнаруживает на этом устройстве.</value></data>
+  <data name="BlockReportsTitle" xml:space="preserve"><value>Отчёты</value></data>
+  <data name="BlockReportsDesc" xml:space="preserve"><value>Отправь отчёт, когда что-то не работает.</value></data>
+  <data name="BlockUpdatesTitle" xml:space="preserve"><value>Обновления</value></data>
+  <data name="BlockUpdatesDesc" xml:space="preserve"><value>Находит и устанавливает новые версии.</value></data>
+  <data name="BlockPending" xml:space="preserve"><value>Скоро в Windows</value></data>
+  <data name="TdpUnconfirmed" xml:space="preserve"><value>Не подтверждено</value></data>
+  <data name="PowerDrawNowFormat" xml:space="preserve"><value>Сейчас потребляет {0:0.0} Вт</value></data>
+  <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Экспериментальный лимит мощности</value></data>
+  <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Выбирает ватты и применяет после подтверждения устройством</value></data>
+  <data name="RefreshRateLabel" xml:space="preserve"><value>Частота экрана</value></data>
+  <data name="RefreshRateUnavailable" xml:space="preserve"><value>Не удалось прочитать частоту экрана</value></data>
+  <data name="RefreshRateAutomation" xml:space="preserve"><value>Переключить экран на {0} Гц</value></data>
+  <data name="FanOne" xml:space="preserve"><value>Вентилятор 1</value></data>
+  <data name="FanTwo" xml:space="preserve"><value>Вентилятор 2</value></data>
+  <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Boost процессора</value></data>
+  <data name="CpuBoostToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Boost процессора</value></data>
+  <data name="CpuMaximumStateLabel.Text" xml:space="preserve"><value>Максимальная производительность</value></data>
+  <data name="CpuMaximumStateSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Максимальное состояние процессора</value></data>
+  <data name="CpuWindowsNote" xml:space="preserve"><value>SMT и активные ядра в Windows можно менять только из BIOS.</value></data>
+  <data name="CpuPermissionRequired" xml:space="preserve"><value>Windows не разрешает менять план питания</value></data>
+  <data name="CpuUnavailable" xml:space="preserve"><value>Не удалось прочитать план питания</value></data>
+  <data name="BatteryHealthLabel" xml:space="preserve"><value>Здоровье</value></data>
+  <data name="BatteryCapacityLabel" xml:space="preserve"><value>Ёмкость</value></data>
+  <data name="BatteryCyclesLabel" xml:space="preserve"><value>Циклы</value></data>
+  <data name="BatteryCapacityFormat" xml:space="preserve"><value>{0:0.0} / {1:0.0} Вт·ч</value></data>
+  <data name="BlockThemeLibraryTitle" xml:space="preserve"><value>Темы Steam</value></data>
+  <data name="BlockThemeLibraryDesc" xml:space="preserve"><value>Темы Panel de Control для Steam в режиме Big Picture.</value></data>
+  <data name="ThemesCompanionTitle" xml:space="preserve"><value>Служба тем не отвечает</value></data>
+  <data name="ThemesCompanionDetail" xml:space="preserve"><value>Повторит через несколько секунд.</value></data>
+  <data name="ThemesSteamMissingTitle" xml:space="preserve"><value>Steam не установлен</value></data>
+  <data name="ThemesSteamMissingDetail" xml:space="preserve"><value>Темы применяются к Steam в режиме Big Picture.</value></data>
+  <data name="ThemesRestartTitle" xml:space="preserve"><value>Steam нужен перезапуск</value></data>
+  <data name="ThemesRestartDetail" xml:space="preserve"><value>Чтобы применять темы, Steam должен запуститься с включённой удалённой отладкой. Она включится, и Steam перезапустится в Big Picture; это нужно только один раз.</value></data>
+  <data name="ThemesRestartAction" xml:space="preserve"><value>Включить и перезапустить Steam</value></data>
+  <data name="ThemesSteamClosedTitle" xml:space="preserve"><value>Steam закрыт</value></data>
+  <data name="ThemesSteamClosedDetail" xml:space="preserve"><value>Активная тема применится, как только Steam откроется в Big Picture.</value></data>
+  <data name="ThemesWaitingTitle" xml:space="preserve"><value>Ждём Big Picture</value></data>
+  <data name="ThemesWaitingDetail" xml:space="preserve"><value>Steam открыт в настольном режиме. Тема применится при переключении в Big Picture.</value></data>
+  <data name="ThemesConnectedTitle" xml:space="preserve"><value>Подключено к Steam</value></data>
+  <data name="ThemesConnectedDetail" xml:space="preserve"><value>Изменения появляются в Big Picture сразу.</value></data>
+  <data name="ThemesOperationFailed" xml:space="preserve"><value>Не удалось завершить: {0}</value></data>
+  <data name="ThemesCatalogLoading" xml:space="preserve"><value>Загружаем каталог тем…</value></data>
+  <data name="ThemesCatalogUnavailable" xml:space="preserve"><value>Не удалось загрузить каталог. Нужно подключение к интернету.</value></data>
+  <data name="ThemesInstallAction" xml:space="preserve"><value>Установить · {0}</value></data>
+  <data name="ThemesUpdateAction" xml:space="preserve"><value>Обновить до {0}</value></data>
+  <data name="ThemesInstalling" xml:space="preserve"><value>Устанавливаем…</value></data>
+  <data name="ThemesOptions" xml:space="preserve"><value>Параметры</value></data>
+  <data name="ThemesStateBroken" xml:space="preserve"><value>Установленная копия повреждена, её нужно установить заново.</value></data>
+  <data name="ThemesStateNotInstalled" xml:space="preserve"><value>Не установлена</value></data>
+  <data name="ThemesVersion" xml:space="preserve"><value>Версия {0}</value></data>
+  <data name="ThemesStateApplied" xml:space="preserve"><value>применена на {0} экранах</value></data>
+  <data name="ThemesStatePending" xml:space="preserve"><value>применится при открытии Big Picture</value></data>
+  <data name="ThemesStatePartial" xml:space="preserve"><value>применена на {0} из {1} экранов</value></data>
+  <data name="ThemesStateRuntimeMissing" xml:space="preserve"><value>стиль включён, но анимации отсутствуют</value></data>
+  <data name="ThemesErrorPackage" xml:space="preserve"><value>скачанный пакет не прошёл проверку</value></data>
+  <data name="ThemesErrorCatalog" xml:space="preserve"><value>каталог недоступен или изменился</value></data>
+  <data name="ThemesErrorTimeout" xml:space="preserve"><value>Steam слишком долго не отвечал</value></data>
+  <data name="ThemesErrorGeneric" xml:space="preserve"><value>непредвиденная ошибка; она записана в лог</value></data>
+  <data name="ThemesEarlyTag" xml:space="preserve"><value>Early</value></data>
+  <data name="ThemesInstallFromFile" xml:space="preserve"><value>Установить из файла</value></data>
+  <data name="ThemesEarlyAvailable" xml:space="preserve"><value>Early {0}</value></data>
+  <data name="ThemesPickerUnavailable" xml:space="preserve"><value>не удалось открыть выбор файла; он также открывается из Panel de Control в меню Пуск</value></data>
+  <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>с другой включённой темой анимаций нет; одну нужно выключить</value></data>
+  <data name="ThemesKeyboardsHeading" xml:space="preserve"><value>Клавиатуры</value></data>
+  <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>этот zip не опубликованная early-версия этой темы</value></data>
+  <data name="ThemesGroup_appearance" xml:space="preserve"><value>Внешний вид</value></data>
+  <data name="ThemesGroup_grid" xml:space="preserve"><value>Сетка</value></data>
+  <data name="ThemesGroup_animations" xml:space="preserve"><value>Анимации</value></data>
+  <data name="ThemesGroup_performance" xml:space="preserve"><value>Производительность</value></data>
+  <data name="ThemesGroup_compatibility" xml:space="preserve"><value>Совместимость</value></data>
+  <data name="ThemesGroup_sections" xml:space="preserve"><value>Разделы темы</value></data>
+  <data name="ThemesGroup_extra" xml:space="preserve"><value>Дополнительно</value></data>
+  <data name="ThemesGroup_sections_Desc" xml:space="preserve"><value>Выбери, какие части Steam используют тему.</value></data>
+  <data name="ThemesGroup_extra_Desc" xml:space="preserve"><value>Настройки за рамками исходного дизайна темы.</value></data>
+  <data name="ReportTitle" xml:space="preserve"><value>Отправить отчёт</value></data>
+  <data name="ReportIntro" xml:space="preserve"><value>Расскажи, что видел. Техническую информацию я соберу автоматически.</value></data>
+  <data name="ReportIntroFeature" xml:space="preserve"><value>Это не отчёт об ошибке. Расскажи, что хочешь добавить или улучшить; я также соберу технический контекст твоего устройства.</value></data>
+  <data name="ReportKindLabel" xml:space="preserve"><value>Что хочешь отправить?</value></data>
+  <data name="ReportKindBug" xml:space="preserve"><value>Проблему</value></data>
+  <data name="ReportKindFeature" xml:space="preserve"><value>Просьбу или идею</value></data>
+  <data name="ReportAreaLabel" xml:space="preserve"><value>О какой части речь?</value></data>
+  <data name="ReportDescribe" xml:space="preserve"><value>Расскажи, что случилось (обязательно)</value></data>
+  <data name="ReportDescribeFeature" xml:space="preserve"><value>Расскажи, что хочешь (обязательно)</value></data>
+  <data name="ReportDescribeHint" xml:space="preserve"><value>Скажи, чего ты ждал и что случилось.</value></data>
+  <data name="ReportDescribeHintFeature" xml:space="preserve"><value>Объясни, чего хочешь добиться, и по возможности приведи пример.</value></data>
+  <data name="ReportPrivacyPublic" xml:space="preserve"><value>Публично: в отчёте только сводка (модель, версия, категории и твой текст).</value></data>
+  <data name="ReportPrivacyPrivate" xml:space="preserve"><value>Приватно: полные логи и состояние НЕ публичны; они шифруются, и читать их может только Hooandee.</value></data>
+  <data name="ReportSend" xml:space="preserve"><value>Создать и отправить отчёт</value></data>
+  <data name="ReportSending" xml:space="preserve"><value>Отправляем…</value></data>
+  <data name="ReportSent" xml:space="preserve"><value>Отчёт отправлен! Код твоего отчёта: {0}</value></data>
+  <data name="ReportSaved" xml:space="preserve"><value>Не удалось отправить (нет сети?). Я сохранил отчёт в {0}. Можешь прислать его вручную.</value></data>
+  <data name="ReportFailed" xml:space="preserve"><value>Не удалось отправить (нет сети?).</value></data>
+  <data name="ReportCopy" xml:space="preserve"><value>Скопировать код</value></data>
+  <data name="ReportCopied" xml:space="preserve"><value>Скопировано!</value></data>
+  <data name="EarlyBadge" xml:space="preserve"><value>Early</value></data>
+  <data name="ThemesRemove" xml:space="preserve"><value>Удалить тему</value></data>
+  <data name="ThemesRemoving" xml:space="preserve"><value>Удаляем…</value></data>
+  <data name="ThemesRemoveTitle" xml:space="preserve"><value>Удалить {0}?</value></data>
+  <data name="ThemesRemoveDescription" xml:space="preserve"><value>Её файлы и настройки удалятся. Позже её можно установить снова.</value></data>
+  <data name="ThemesRemoveConfirm" xml:space="preserve"><value>Удалить</value></data>
+  <data name="ThemesRemoveCancel" xml:space="preserve"><value>Отмена</value></data>
+  <data name="SteamHomeButtonText.Text" xml:space="preserve">
+    <value>На главную Steam</value>
+  </data>
+  <data name="SteamHomeButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>На главную Steam</value>
+  </data>
+</root>

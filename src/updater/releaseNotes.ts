@@ -7,6 +7,7 @@ const LANGUAGE_HEADINGS: Record<string, Lang> = {
   Neuigkeiten: "de",
   "Novidades em português (Brasil)": "pt-BR",
   Nouveautés: "fr",
+  "Что нового": "ru",
 };
 
 const VERSION_HEADING = /^##\s+v\d+\.\d+\.\d+\s*$/m;
