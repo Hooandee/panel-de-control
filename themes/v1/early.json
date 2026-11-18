@@ -61,8 +61,13 @@
         "panel": "0.80.0"
       },
       "early": {
-        "version": "0.5.0",
+        "version": "0.5.2",
         "artifacts": [
+          {
+            "version": "0.5.2",
+            "size": 441461,
+            "sha256": "bd0037ad185c4ba3cf97dc2fec40462e06145fb2ea463b590b5a77fd08d0a66d"
+          },
           {
             "version": "0.5.0",
             "size": 441771,
@@ -97,11 +102,6 @@
             "version": "0.1.7",
             "size": 311966,
             "sha256": "7651d4acbfdda712dc0d0e10c3877b6a1a8ad1aa306b17f4cac1741887e87e15"
-          },
-          {
-            "version": "0.1.6",
-            "size": 270112,
-            "sha256": "e63d2a4e548fdff326c0f21e9a6c66ef629d7212b6ae9709dedbb4c3c3854fe6"
           }
         ]
       }
