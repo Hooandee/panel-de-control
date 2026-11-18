@@ -264,7 +264,7 @@ class UpscalerService:
             for key, profile in (self.mako.status().get("profiles") or {}).items():
                 if isinstance(profile, dict):
                     summaries.setdefault(str(key), {})["mako"] = {
-                        "spatial": bool(profile.get("scaling_enabled")), "fg": bool(profile.get("enabled")),
+                        "spatial": bool(profile.get("scaling_enabled")), "fg": bool(profile.get("enabled")), "engine": 5 if profile.get("engine") == 5 else 4,
                         "multiplier": profile.get("multiplier") if type(profile.get("multiplier")) is int else None}
         except Exception as error:  # noqa: BLE001 — the list still shows every scaler install without it
             if self.logger:
