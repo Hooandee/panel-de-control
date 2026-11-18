@@ -55,6 +55,8 @@ class Recipe:
     reframework_upscaler: bool = False
     optiscaler_fg: bool = True
     game_settings: tuple[tuple[str, str], ...] = ()
+    # What the game's own menu needs so its DLSS Frame Generation reaches ANR.
+    anr_settings: tuple[tuple[str, str], ...] = ()
 
 
 RECIPES: dict[str, Recipe] = {
@@ -71,6 +73,19 @@ RECIPES: dict[str, Recipe] = {
         # Monster Hunter Wilds wiki entry: on AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing
         # on top crashes it. REFramework comes from the RE Engine rule.
         Recipe("2246340", ini={"Spoofing.Dxgi": "false"}, needs=("reframework",)),
+        # Hogwarts Legacy lists DLSS Frame Generation only while its upscaler is DLSS; both apply on restart.
+        Recipe("990080", anr_settings=(("Upscale Type (Tipo de escalado)", "NVIDIA DLSS"),
+                                       ("Frame Generation (Generación de fotogramas)", "NVIDIA DLSS Frame Generation x2"))),
+        # Cyberpunk 2077 waits on REDlauncher under Proton.
+        Recipe("1091500", args=("--launcher-skip",),
+               anr_settings=(("Resolution Scaling (Escalado de resolución)", "DLSS Super Resolution"),
+                             ("Frame Generation (Generación de fotogramas)", "DLSS Frame Generation"))),
+        Recipe("2124490", anr_settings=(("Supersampling (Supermuestreo)", "DLSS"),
+                                        ("Frame Generation (Generación de fotogramas)", "On (Activada)"))),
+        Recipe("1182900", anr_settings=(("NVIDIA DLSS Frame Generation", "On (Sí)"),)),
+        # Deep Rock Galactic asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.
+        Recipe("548430", args=("-dx12",), anr_settings=(("Frame Generation", "On"),)),
+        Recipe("2322010", anr_settings=(("Frame Generation (Generación de fotogramas)", "Nvidia DLSS-FG"),)),
     )
 }
 

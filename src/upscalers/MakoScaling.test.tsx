@@ -22,14 +22,14 @@ it("downloads the engine and activates spatial scaling without enabling FG", asy
   await waitFor(() => expect((screen.getByRole("button", { name: "up.activate" }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.change(screen.getByRole("slider", { name: "up.image.sharpness" }), { target: { value: "30" } });
   fireEvent.click(screen.getByRole("button", { name: "up.activate" }));
-  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ appid: "123", liveAppid: 123, isNonSteam: false }, { scaling_enabled: true, scaling_factor: 1.5, scaling_sharpness: 0.3 }));
+  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ appid: "123", liveAppid: 123, isNonSteam: false }, { scaling_enabled: true, scaling_factor: 1.5, scaling_sharpness: 0.3 }, true));
   expect(mocks.install).toHaveBeenCalledOnce();
 });
 it("disables only spatial scaling and leaves FG to the shared merge", async () => {
   status.profiles[123] = { enabled: true, scaling_enabled: true, scaling_factor: 1.7, scaling_sharpness: 0.2 };
   render(<MakoScaling {...props} />);
   fireEvent.click(await screen.findByRole("button", { name: "up.deactivate" }));
-  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ appid: "123", liveAppid: 123, isNonSteam: false }, { scaling_enabled: false, scaling_factor: 1.7, scaling_sharpness: 0.2 }));
+  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ appid: "123", liveAppid: 123, isNonSteam: false }, { scaling_enabled: false, scaling_factor: 1.7, scaling_sharpness: 0.2 }, false));
 });
 it("blocks edits during play and warns about an installed scaler", async () => {
   render(<MakoScaling {...props} gameRunning mixed />);
@@ -48,7 +48,7 @@ it.each([
   render(<MakoScaling {...props} />);
   await waitFor(() => expect((screen.getByRole("button", { name: "up.activate" }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(screen.getByRole("button", { name: "up.activate" }));
-  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ appid: "123", liveAppid: 123, isNonSteam: false }, expect.objectContaining({ scaling_enabled: true })));
+  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ appid: "123", liveAppid: 123, isNonSteam: false }, expect.objectContaining({ scaling_enabled: true }), true));
   expect(await screen.findByText(notice)).toBeTruthy();
   expect(screen.queryByText("up.error.generic")).toBeNull();
 });

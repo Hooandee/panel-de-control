@@ -10,24 +10,24 @@ from pathlib import Path
 
 from steam_cleaner import vdf
 
-from . import games, helixsr, ini, logread, pe
+from . import catalog, games, helixsr, ini, logread, pe
 from .assets import sha256
 
 INI_KEYS = (
     "Upscalers.Dx11Upscaler", "Upscalers.Dx12Upscaler", "Upscalers.VulkanUpscaler",
     "FSR.Fsr4GpuSupport", "FSR.Fsr4Model", "FSR.Fsr4Update", "FSR.Fsr4ForceEnableInt8", "FSR.Fsr4ForceModel", "FSR.UpscalerIndex",
-    "FrameGen.Enabled", "FrameGen.FGInput", "FrameGen.FGOutput", "OptiFG.HUDFix",
+    "FrameGen.Enabled", "FrameGen.FGInput", "FrameGen.FGOutput", "FrameGen.FGNvngxReplacement", "FrameGen.DisableHudless", "OptiFG.HUDFix",
     *(f"QualityOverrides.QualityRatio{mode}" for mode in ("DLAA", "UltraQuality", "Quality", "Balanced", "Performance", "UltraPerformance")),
     "QualityOverrides.QualityRatioOverrideEnabled", "Sharpness.OverrideSharpness", "Sharpness.Sharpness", "CAS.Enabled", "CAS.MotionSharpnessEnabled", "HelixSR.Int8",
     "Plugins.LoadAsiPlugins", "Plugins.LoadCustomAmdxc64OnRdna2", "Spoofing.Dxgi", "Log.LogLevel",
 )
-_NOTEWORTHY = re.compile(r"\[(?:W|E|C)\]|Creating new|FSR4|Fsr4|FrameGen|FG |XeFG|Nukem|OptiFG|working as|Adapter Desc", re.I)
+_NOTEWORTHY = re.compile(r"\[(?:W|E|C)\]|Creating new|FSR4|Fsr4|FrameGen|FG |XeFG|Nukem|OptiFG|working as|Adapter Desc|custom|dlssg", re.I)
 _SKIP = re.compile(r"VulkanSpoofing|freely downloadable|GitHub :|Nexus  :|paid for these|MULTIPLAYER|-{10}")
 LOG_LINES = 60
 LINE_CHARS = 220
 
 
-REQUEST_KEYS = ("build", "model", "quality", "fg", "fg_route", "proxy", "sharpness", "hud_fix", "confirm_anti_cheat", "key", "value", "key_action", "value_omitted", "multiplier", "flow", "flow_scale", "performance", "enabled", "mode", "target_fps", "max_multiplier", "int8", "scaling_enabled", "scaling_factor", "scaling_sharpness")
+REQUEST_KEYS = ("build", "model", "quality", "fg", "fg_route", "proxy", "sharpness", "hud_fix", "confirm_anti_cheat", "key", "value", "key_action", "value_omitted", "multiplier", "flow", "flow_scale", "performance", "enabled", "mode", "target_fps", "max_multiplier", "int8", "scaling_enabled", "scaling_factor", "scaling_sharpness", "engine", "fg_mode")
 
 
 def fields(value, keys, limit=160):
@@ -200,17 +200,17 @@ def solution(plan) -> dict | None:
     def fg_route(value):
         if not isinstance(value, dict):
             return None
-        return {"input": enum(value.get("input"), {"upscaler", "dlssg", "nukems", "fsrfg", "xefg"}),
-                "output": enum(value.get("output"), {"fsrfg", "xefg", "nukems"}),
-                "source": enum(value.get("source"), {"game", "optiscaler"}),
+        return {"input": enum(value.get("input"), {"upscaler", "dlssg", "nukems", "fsrfg", "xefg", "nvngxfg"}),
+                "output": enum(value.get("output"), {"fsrfg", "xefg", "nukems", "auto"}),
+                "source": enum(value.get("source"), {"game", "optiscaler", "anr"}),
                 "follows_game": value.get("follows_game") is True,
                 "experimental": value.get("experimental") is True}
     for key in ("fg_plan", "offered_fg_plan"):
         fg = plan.get(key)
         if isinstance(fg, dict):
             routes = fg.get("routes") if isinstance(fg.get("routes"), dict) else {}
-            result[key] = {**fg_route(fg), "route": enum(fg.get("route"), {"game", "optiscaler"}),
-                           "routes": {name: fg_route(routes[name]) for name in ("game", "optiscaler")
+            result[key] = {**fg_route(fg), "route": enum(fg.get("route"), {"game", "optiscaler", "anr"}),
+                           "routes": {name: fg_route(routes[name]) for name in ("game", "optiscaler", "anr")
                                       if isinstance(routes.get(name), dict)}}
     return result
 
@@ -543,7 +543,21 @@ def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
             "log_facts": facts,
             "log_excerpt": _log_excerpt(target),
         })
+        if install.get("anr"):
+            report["anr_log"] = _anr_log(target)
     return report
+
+
+def _anr_log(target: Path) -> dict:
+    """ANR FG writes its own log per launch beside its provider; the newest is the one support asks for."""
+    folder = target / "OptiScaler" / "custom" / catalog.ANR_PROVIDER / "dlssg"
+    try:
+        logs = sorted(((path.stat().st_mtime, path) for path in folder.glob("nr_fg-*.log")), key=lambda item: item[0])
+    except OSError:
+        logs = []
+    provider = folder / "nvngx_dlssg.dll"
+    return {"provider": provider.is_file() and not provider.is_symlink(), "logs": len(logs),
+            "newest_at": logs[-1][0] if logs else None, "tail": _tail(logs[-1][1]) if logs else []}
 
 
 # Files that load code into a game besides the game itself: whose they are is the first support question.

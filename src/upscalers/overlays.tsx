@@ -59,6 +59,8 @@ function emit(): void {
 }
 
 /** Publishes what Escaladores knows so covers and the in-game pill follow it without polling. */
+let makoEngines: Record<string, 4 | 5> = {};
+
 export function publishOverview(overview: UpscalersOverview): void {
   const next: Record<string, Badge> = {};
   for (const [appid, install] of Object.entries(overview.installs)) {
@@ -72,11 +74,13 @@ export function publishOverview(overview: UpscalersOverview): void {
     next[appid] = { ...cover, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null, fallback };
   }
   installs = next;
+  makoEngines = Object.fromEntries(Object.entries(overview.engines ?? {}).flatMap(([appid, engines]) => engines.mako?.engine ? [[appid, engines.mako.engine]] : []));
   const covers: Record<string, Badge> = {};
   for (const [appid, engines] of Object.entries(overview.engines ?? {})) {
     if (next[appid]) continue;
-    const label = engines.mako?.spatial ? "Mako"
-      : engines.mako?.fg ? `Mako${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
+    const mako = engines.mako ? `Mako ${engines.mako.engine === 5 ? 5 : 4}` : "Mako";
+    const label = engines.mako?.spatial ? mako
+      : engines.mako?.fg ? `${mako}${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
       : engines.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
     if (label) covers[appid] = { label, short: label, state: "pending", build: label.toLowerCase(), engine: null, provider: null, fg: false, fgRoute: null, fallback: null };
   }
@@ -398,7 +402,10 @@ export const InGameBadge: FC = () => {
   useEffect(() => subscribeQamSurface(setSurface), []);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const badge = running ? map[String(running.liveAppid)] : undefined;
-  const { live, lossless, makoResolutionWarning, makoMultiplier, makoSpatial } = useOverlayLive(running ? String(running.liveAppid) : null, !!badge);
+  const live_ = useOverlayLive(running ? String(running.liveAppid) : null, !!badge);
+  const { live, lossless, makoResolutionWarning, makoMultiplier, makoSpatial } = live_;
+  // A spatial-only or idle runtime may not say which model it loaded; the profile's version still does.
+  const makoName = running && makoEngines[String(running.liveAppid)] === 5 ? "Mako 5" : live_.makoName;
   const resolution = live?.resolution ? [live.resolution.render[1], live.resolution.output[1]] : null;
   const installedDll = badge?.engine === "dll" && badge.state === "not_run";
   const hasContent = installedDll || !!live || !!lossless || makoResolutionWarning || makoMultiplier !== null || !!makoSpatial;
@@ -498,13 +505,13 @@ export const InGameBadge: FC = () => {
             {resolution && <span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{resolution[0]}p → {resolution[1]}p</span>}
           </div>}
           {makoSpatial && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
-            <span>Mako</span><span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{`${makoSpatial.render.join("×")} → ${makoSpatial.output.join("×")}`}</span>
+            <span>{makoName}</span><span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{`${makoSpatial.render.join("×")} → ${makoSpatial.output.join("×")}`}</span>
           </div>}
           {makoResolutionWarning && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", color: "#ffbe63" }}>
             {t("up.overlay.makoResolution")}
           </div>}
           {makoMultiplier !== null && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
-            <span>{`Mako ×${makoMultiplier}`}</span><span style={{ color: "#9aa3ae" }}>{t("up.overlay.generating")}</span>
+            <span>{`${makoName} ×${makoMultiplier}`}</span><span style={{ color: "#9aa3ae" }}>{t("up.overlay.generating")}</span>
           </div>}
           {fgLabel && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
             <span>{fgLabel}</span><span style={{ color: "#9aa3ae" }}>{fgState}</span>

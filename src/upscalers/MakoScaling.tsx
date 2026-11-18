@@ -9,10 +9,10 @@ import { ActionButton, ListCard, Note, Notice, Row, Spinner } from "./parts";
 import { upscalerErrorCode } from "./errorCode";
 
 /** Brings the installed engine up to date when it can; the installed version keeps working when it cannot. */
-async function refreshEngine(): Promise<EngineUpdate["state"]> {
+async function refreshEngine(engine: "mako" | "mako5"): Promise<EngineUpdate["state"]> {
   try {
-    const update = await refreshFrameGenEngine("mako", false);
-    return update.state === "available" ? (await refreshFrameGenEngine("mako", true)).state : update.state;
+    const update = await refreshFrameGenEngine(engine, false);
+    return update.state === "available" ? (await refreshFrameGenEngine(engine, true)).state : update.state;
   } catch {
     return "failed";
   }
@@ -63,14 +63,16 @@ export function MakoScaling({ appid, liveAppid, isNonSteam, disabled, gameRunnin
     setBusy(true); setError(null); setSaved(false); setEngineNotice(null);
     try {
       if (enabled) {
-        if (!status.installed) await installMako();
-        const update = await refreshEngine();
+        // Spatial scaling rides on the game's Mako version; a game without one stays on Mako 4.
+        const mako5 = profile?.engine === 5;
+        if (!(mako5 ? status.v5?.installed : status.installed)) await installMako(mako5 ? 5 : 4);
+        const update = await refreshEngine(mako5 ? "mako5" : "mako");
         if (alive.current) setEngineNotice(update === "deferred" ? t("up.engine.deferred") : update === "failed" ? t("up.engine.failed") : null);
       }
       await saveExclusiveMakoProfile({ appid, liveAppid, isNonSteam }, {
         scaling_enabled: enabled,
         scaling_factor: factor, scaling_sharpness: sharpness / 100,
-      });
+      }, enabled);
       onChanged?.();
       await load();
       if (alive.current) setSaved(true);

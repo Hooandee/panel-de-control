@@ -296,8 +296,10 @@ export const GameView: FC<{
   const installedOptiscaler = !!install && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton" && installedBuild?.engine !== "dll";
   const installedRoute = install?.options.fg_route ?? detail?.fg_plan?.route ?? detail?.fg_plan?.source ?? null;
   const scalerChoice = { ...choice, fg: install?.options.fg ?? "off" as const, fg_route: install?.options.fg_route ?? null };
+  // ANR FG only runs on OptiScaler 10: another version goes in without it.
+  const dropsAnr = scalerChoice.fg_route === "anr" && !selected?.anr;
   const installSelected = () => startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
-    ...scalerChoice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
+    ...scalerChoice, ...(replacesFsr || dropsAnr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
   });
   const reinstall = () => start(installSelected);
@@ -335,7 +337,7 @@ export const GameView: FC<{
     if (gameRunning && install && !spatialInstalled && (!sameBuild || modelChanged || (qualityChanged && !!detail?.recipe_info?.quality_on_exit))) {
       // The running game holds OptiScaler's files (and REFramework rewrites its quality on exit): it goes in as soon as it closes.
       queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
-        ...scalerChoice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
+        ...scalerChoice, ...(replacesFsr || dropsAnr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
         ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
       });
       setMessage(null);
@@ -364,6 +366,7 @@ export const GameView: FC<{
   const applyFrameGeneration = async (fg: "on" | "off", fg_route: UpscalerChoice["fg_route"]) => {
     trace("frame_generation", { ...choice, fg, fg_route });
     if (blocked || running) throw new Error("blocked");
+    if (fg === "on" && fg_route === "anr") return applyAnr();
     const configureInstalled = !!install && (sameBuild || fg === "off");
     const fgSolution = detail?.solutions?.[configureInstalled ? install!.build : choice.build];
     const next = { ...(configureInstalled ? restoredChoice(install!.build, install!.options, builds, preferred) : choice), fg, fg_route };
@@ -383,6 +386,32 @@ export const GameView: FC<{
       setJob(started);
       await waitForJobCompletion(started.id);
     }
+  };
+
+  /** ANR FG: Panel picks the OptiScaler 10 build it runs with (FSR 4.1.2) and installs its provider beside it. */
+  const applyAnr = async () => {
+    const target = installedBuild?.anr ? installedBuild.id : overview.anr_build;
+    if (!target) throw new Error("anr_build");
+    const keep = install?.build === target;
+    const base = keep ? restoredChoice(install!.build, install!.options, builds, preferred) : { ...choice, build: target, model: null };
+    const next = { ...base, fg: "on" as const, fg_route: "anr" as const };
+    keepDraft.current = true;
+    changeChoice(next);
+    if (keep && install?.options.fg_route === "anr") {
+      try {
+        const result = await configureUpscaler(appid, next);
+        if (gameRunning) setApplied(result.live ? "now" : "restart");
+        await load();
+        onChanged();
+        return;
+      } catch (error) {
+        // A reinstall with frame generation off took ANR's files out: they go back in with a new install.
+        if (upscalerErrorCode(error) !== "anr_reinstall") throw error;
+      }
+    }
+    const started = await startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
+    setJob(started);
+    await waitForJobCompletion(started.id);
   };
 
   const saveAll = async () => {
@@ -753,6 +782,7 @@ export const GameView: FC<{
           optiscaler={{ fg: choice.fg ?? "off", route }}
           installedRoute={install?.options.fg === "on" ? install.options.fg_route ?? detail.fg_plan?.route ?? detail.fg_plan?.source ?? "game" : null}
           gpu={overview.gpu}
+          anrSettings={detail.recipe_info?.anr_settings}
           onOptiscaler={(fg, fg_route) => changeChoice({ ...choice, fg, fg_route: fg_route ?? choice.fg_route ?? null })}
           renderAdvanced={(restore) => detail.native ? restore && (
             <>

@@ -41,6 +41,7 @@ TRACKS: dict[str, Track] = {
     "luma-ff7-800": Track("Filoppi/Luma-Framework", r"Luma-Final_Fantasy_VII_Remake\.zip"),
     "luma-p5r-825": Track("Filoppi/Luma-Framework", r"Luma-Persona_5_Royal\.zip"),
     "helixsr-3.2.0": Track("lonewolf0622/HelixSR", r"HelixSR-3\.\d+\.\d+\.zip"),
+    "anr-fg-addon": Track("apex-compute/ANR", r"anr-fg-V\.B\d+-addon\.zip"),
 }
 
 

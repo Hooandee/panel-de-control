@@ -13,6 +13,9 @@ OPTISCALER_BETA = "optiscaler-10-nightly"
 LSFG_ARCHIVE = "lsfg-vk-2.0.0"
 HELIXSR_ARCHIVE = "helixsr-3.2.0"
 OPTIPATCHER = "optipatcher-0.42"
+ANR_FG = "anr-fg-addon"
+# OptiScaler 10 loads an nvngx_dlssg replacement from `custom/<name>/dlssg/`; ANR FG takes the game's DLSS-FG calls.
+ANR_PROVIDER = "Apex Neural Rendering FG"
 
 
 @dataclass(frozen=True)
@@ -93,6 +96,14 @@ ASSETS: dict[str, Asset] = {
              "OptiScaler_v10.0.0-pre1_20261102.7z",),
             archive=True,
             generation=10,
+        ),
+        # Apex Compute's official add-on, unmodified (no licence published, so never redistributed: fetched from
+        # their release). Only its `Apex Neural Rendering FG/` folder goes in; its shell installer never runs.
+        Asset(
+            ANR_FG, "anr-fg-V.B19-addon.zip",
+            "70107373e0f9744875fcbb7f46133432202ce7f132fdfff14259b8a85fba3f13", 3418118,
+            ("https://github.com/apex-compute/ANR/releases/download/FG-V.B19/anr-fg-V.B19-addon.zip",),
+            archive=True, generation=10,
         ),
         Asset(
             "reframework-nightly",
@@ -296,6 +307,21 @@ PREFERRED = {
     "intel": "xess",
 }
 
+# ANR FG needs OptiScaler 10; on these GPUs Panel pairs it with FSR 4.1.2 on OptiScaler 10.
+ANR_BUILDS = {"rdna2": "fsr-4.1.2-beta", "rdna3": "fsr-4.1.2-beta", "rdna35": "fsr-4.1.2-beta"}
+
+
+def anr_capable(build: Build | None, gpu: str) -> bool:
+    return bool(build and build.engine == "optiscaler" and build.available and gpu in ANR_BUILDS
+                and gpu in build.gpus and ASSETS[build.archive].generation >= 10)
+
+
+def anr_build(gpu: str) -> str | None:
+    """The build ANR FG goes in with when the game isn't already on OptiScaler 10."""
+    name = ANR_BUILDS.get(gpu)
+    return name if anr_capable(BUILDS.get(str(name)), gpu) else None
+
+
 QUALITY_RATIOS = {"native": 1.0, "quality": 1.5, "balanced": 1.7, "performance": 2.0, "ultra": 3.0}
 EASY_MODES = {"image": "quality", "balanced": "balanced", "fps": "performance"}
 SHARPNESS = {"off": None, "soft": 0.3, "high": 0.6}
@@ -396,6 +422,7 @@ def describe(gpu: str, device: str = "") -> list[dict]:
             "engine": build.engine,
             "way": build.way or None,
             "may_fallback": may_fallback(build, gpu),
+            "anr": anr_capable(build, gpu),
         }
         for build in BUILDS.values()
     ]
@@ -435,6 +462,10 @@ def fg_routes(gpu: str, inputs: dict, apis: list | tuple = (), streamline: int |
     if dx12:
         routes["optiscaler"] = {"input": "upscaler", "output": output, "follows_game": False,
                                 "source": "optiscaler", "experimental": True}
+    # Offered whatever the build: choosing it moves the game to OptiScaler 10 (`anr_build`).
+    if "dlssg" in inputs and dx12 and anr_build(gpu):
+        routes["anr"] = {"input": "nvngxfg", "output": "auto", "follows_game": True, "source": "anr",
+                         "experimental": True, "provider": ANR_PROVIDER}
     return routes
 
 
@@ -457,11 +488,17 @@ def fg_route_plan(plan: dict | None, route: str | None) -> dict | None:
     return {**plan["routes"][route], "route": route, "routes": plan["routes"]}
 
 
-def fg_overrides(plan: dict | None, enabled: bool) -> dict[str, str]:
+def fg_overrides(plan: dict | None, enabled: bool, anr_files: bool = False) -> dict[str, str]:
+    provider = plan.get("provider") if enabled and plan else None
+    # Only where ANR is or was: leaving it hands DLSSG back to OptiScaler's default. ANR draws the HUD over the
+    # HUD-less colour itself, so OptiScaler must not strip it.
+    replacement = ({"FrameGen.FGNvngxReplacement": provider or "auto",
+                    "FrameGen.DisableHudless": "false" if provider else "auto"} if provider or anr_files else {})
     if not enabled or not plan:
-        return {"FrameGen.Enabled": "false", "FrameGen.FGInput": "nofg", "FrameGen.FGOutput": "nofg"}
+        return {"FrameGen.Enabled": "false", "FrameGen.FGInput": "nofg", "FrameGen.FGOutput": "nofg", **replacement}
     enabled = "auto" if plan.get("follows_game") else "true"
-    overrides = {"FrameGen.Enabled": enabled, "FrameGen.FGInput": plan["input"], "FrameGen.FGOutput": plan["output"]}
+    overrides = {"FrameGen.Enabled": enabled, "FrameGen.FGInput": plan["input"], "FrameGen.FGOutput": plan["output"],
+                 **replacement}
     if plan["input"] == "upscaler":
         overrides["OptiFG.HUDFix"] = "true"
     return overrides

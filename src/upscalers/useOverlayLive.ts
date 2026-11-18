@@ -27,6 +27,7 @@ export function useOverlayLive(appid: string | null, optiscaler: boolean) {
   const [makoSpatial, setMakoSpatial] = useState<NonNullable<Awaited<ReturnType<typeof getMakoRuntime>>["spatial_resolution"]> | null>(null);
   const [makoMultiplier, setMakoMultiplier] = useState<number | null>(null);
   const [makoResolutionWarning, setMakoResolutionWarning] = useState(false);
+  const [makoName, setMakoName] = useState("Mako");
   useEffect(() => {
     setMakoResolutionWarning(false);
     setMakoMultiplier(null);
@@ -56,6 +57,8 @@ export function useOverlayLive(appid: string | null, optiscaler: boolean) {
         && spatial && spatial.render?.length === 2 && spatial.output?.length === 2
         && [...spatial.render, ...spatial.output].every(value => Number.isInteger(value) && value > 0 && value <= 32768)
         ? spatial : null);
+      // Only MAKO 5 reports which model it loaded; MAKO 4 always runs Lossless Scaling's.
+      setMakoName(mako?.applied?.frame_generation_model === "mako-fg" ? "Mako 5" : mako?.observed === true ? "Mako 4" : "Mako");
       const multiplier = mako?.applied?.multiplier;
       setMakoMultiplier(mako?.observed === true && mako.active === true
         && mako.role === "frame-generation" && mako.applied?.frame_generation_enabled === true
@@ -70,5 +73,5 @@ export function useOverlayLive(appid: string | null, optiscaler: boolean) {
     void read();
     return () => { alive = false; clearTimeout(timer); clearTimeout(expiry); };
   }, [appid]);
-  return { ...state, makoResolutionWarning, makoMultiplier, makoSpatial };
+  return { ...state, makoResolutionWarning, makoMultiplier, makoSpatial, makoName };
 }

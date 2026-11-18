@@ -1392,7 +1392,7 @@ class Plugin(AmbientRpc):
         service = await loop.run_in_executor(None, self._upscalers)
         actions = {"configure", "set_identity", "set_exe", "record_added_args", "refresh_wiki", "set_ini",
                    "verify", "capture_frame", "lsfg_install", "lsfg_adopt_foreign", "lsfg_restore_foreign",
-                   "adopt_foreign", "restore_foreign", "lsfg_uninstall", "lsfg_game", "mako_install", "mako_game", "press_key", "set_image_settings", "restore_image_settings", "begin_scaler_transition", "finish_scaler_transition"}
+                   "adopt_foreign", "restore_foreign", "lsfg_uninstall", "lsfg_game", "mako_install", "mako5_install", "mako_game", "press_key", "set_image_settings", "restore_image_settings", "begin_scaler_transition", "finish_scaler_transition"}
         tracked = method in actions
         appid = str(args[0]) if args and args[0] is not None else "global"
         requested = upscaler_diagnostics.fields(args[1] if len(args) > 1 else None, upscaler_diagnostics.REQUEST_KEYS)
@@ -1601,8 +1601,11 @@ class Plugin(AmbientRpc):
     async def get_mako_status(self, appid: str | None = None) -> dict:
         return await self._upscalers_call("mako_status", str(appid) if appid is not None else None)
 
-    async def install_mako(self) -> dict:
-        return await self._upscalers_call("mako_install")
+    async def install_mako(self, line: int = 4) -> dict:
+        return await self._upscalers_call("mako5_install" if line == 5 else "mako_install")
+
+    async def dismiss_mako_notice(self) -> dict:
+        return await self._upscalers_call("mako_dismiss_notice")
 
     async def set_mako_game(self, appid: str, config: dict | None = None) -> dict:
         return await self._upscalers_call("mako_game", str(appid), config)

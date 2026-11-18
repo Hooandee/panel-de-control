@@ -18,6 +18,8 @@ export interface BuildInfo {
   engine?: "optiscaler" | "helixsr" | "proton" | "dll";
   way?: "fsr" | "scaler" | null;
   may_fallback?: string | null;
+  /** Runs OptiScaler 10, so ANR FG can go in with it. */
+  anr?: boolean;
 }
 
 export interface UpscalerJob {
@@ -42,19 +44,21 @@ export interface UpscalersOverview {
   device?: string;
   display: [number, number] | null;
   preferred: string;
+  /** The build ANR FG goes in with on this GPU; null where it is not offered. */
+  anr_build?: string | null;
   builds: BuildInfo[];
   cached: string[];
   installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice>; fallback?: ScalerFallback | null }>;
   /** Mako and Lossless Scaling per game: they never show up as an install. */
   engines?: Record<string, {
-    mako?: { spatial: boolean; fg: boolean; multiplier: number | null };
+    mako?: { spatial: boolean; fg: boolean; multiplier: number | null; engine?: 4 | 5 };
     lossless?: { multiplier: number | null };
   }>;
   job: UpscalerJob | null;
   helixsr?: { downloaded: boolean };
 }
 
-export type FgRoute = "game" | "optiscaler";
+export type FgRoute = "game" | "optiscaler" | "anr";
 
 export interface FgPlan {
   input: string;
@@ -189,6 +193,7 @@ export interface UserFileCandidate {
 export interface RecipeInfo {
   user_files?: UserFile[];
   game_settings?: { setting: string; value: string }[];
+  anr_settings?: { setting: string; value: string }[];
   fps_counter?: boolean;
   quality_on_exit?: boolean;
   recommended_input?: "dlss" | "fsr31" | "fsr2" | "xess" | null;

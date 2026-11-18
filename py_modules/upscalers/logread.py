@@ -146,3 +146,33 @@ def fallback(install: dict, facts: dict) -> dict | None:
         return None
     observed = f"FSR {old[1] or old[3]}.{old[2] or old[4]}" if old else None
     return {"requested": "FSR 4", "observed": observed, "reason": "vulkan_textures" if texture else "backend_changed"}
+
+
+# ANR FG logs a pacing summary every 10 s while it evaluates; End stops the evaluations and the summaries.
+_ANR_PACING = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\.\d+\] \[info\] pacing: \d+ real frames .*?evaluates ours (\d+)", re.M)
+_ANR_LINE = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\.\d+\]", re.M)
+ANR_FRESH_S = 25
+
+
+def _clock_s(hours: str, minutes: str, seconds: str) -> int:
+    return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
+
+
+def anr_generating(folder: Path, now: float) -> bool | None:
+    """Whether ANR FG generated in the last summaries of its newest log; None before it wrote one."""
+    try:
+        newest = max(folder.glob("nr_fg-*.log"), key=lambda path: path.stat().st_mtime)
+        modified = newest.stat().st_mtime
+        with open(newest, "rb") as handle:
+            handle.seek(0, 2)
+            handle.seek(max(0, handle.tell() - 64 * 1024))
+            tail = handle.read().decode("utf-8", "replace")
+    except (OSError, ValueError):
+        return None
+    summaries = _ANR_PACING.findall(tail)
+    if not summaries:
+        return None
+    *clock, ours = summaries[-1]
+    # Other lines may keep the file fresh after End: the summary itself must be among the newest.
+    since_summary = (_clock_s(*_ANR_LINE.findall(tail)[-1]) - _clock_s(*clock)) % 86400
+    return int(ours) > 0 and now - modified <= ANR_FRESH_S and since_summary <= ANR_FRESH_S
