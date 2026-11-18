@@ -20,7 +20,9 @@ MANIFEST_DIR = ".pdc-upscaler"
 
 _SKIP_EXE = re.compile(
     r"crash|unins|redist|setup|prereq|dotnet|helper|easyanticheat|battleye|eac_|"
-    r"ace-(?:service|setup|base)|d3dconfig|compiler|7za|reporter|webhelper|cefprocess|vc_?redist|dxsetup|launcherpatcher",
+    r"ace-(?:service|setup|base)|d3dconfig|compiler|7za|reporter|webhelper|cefprocess|vc_?redist|dxsetup|launcherpatcher|"
+    # Nixxes crash reporter (crs-handler, crs-uploader, crs-video): small, imports d3d11, beats packed game exes.
+    r"^crs-",
     re.I,
 )
 _SKIP_DIRS = {"__installer", "_commonredist", "redist", "redistributables", "directx", "support", "extras", "optiscaler"}

@@ -189,3 +189,14 @@ def test_cyberpunk_skips_its_launcher_and_validated_games_tell_their_anr_setting
     cyberpunk = recipes.recipe_for("1091500")
     assert "--launcher-skip" in cyberpunk.args and cyberpunk.anr_settings
     assert recipes.recipe_for("2124490").anr_settings and recipes.recipe_for("1182900").anr_settings
+
+
+def test_nixxes_crash_reporter_is_never_taken_for_the_game(tmp_path):
+    from upscalers import games
+    _write(tmp_path / "Spider-Man2.exe", b"MZ" + b"\0" * (64 * 1024 * 1024))
+    _write(tmp_path / "crs-video.exe", b"MZ" + b"\0" * 4096)
+    _write(tmp_path / "crs-handler.exe", b"MZ" + b"\0" * 4096)
+    assert games.analyze(tmp_path)["exe"] == "Spider-Man2.exe"
+    # The real crs-video.exe imports d3d11 and would win over a packed game exe that imports none.
+    assert all(games._SKIP_EXE.search(name) for name in ("crs-video.exe", "crs-handler.exe", "crs-uploader.exe"))
+    assert not games._SKIP_EXE.search("cyberpunk2077.exe")
