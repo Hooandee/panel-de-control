@@ -233,9 +233,18 @@ class Mako:
         asset = asset or (ASSET if line == 4 else ASSET5)
         progress = progress or (lambda size: None)
         cancelled = cancelled or (lambda: False)
+        if platform.machine().lower() not in ('x86_64', 'amd64'):
+            raise MakoError('mako_arch')
         with self._lock:
-            if platform.machine().lower() not in ('x86_64', 'amd64'):
-                raise MakoError('mako_arch')
+            state = self._state()
+            record, _, _, default_version = self._line(state, line)
+            if self._installed(state, line) and record.get('version', default_version) == (version or default_version):
+                return self.status()
+        # Downloading outside the lock keeps status reads (the UI, support snapshots) answering meanwhile.
+        archive = cache.ensure(asset, progress, cancelled)
+        if sha256(archive) != asset.sha256:
+            raise MakoError('mako_checksum')
+        with self._lock:
             state = self._state()
             record, prefix, payload, default_version = self._line(state, line)
             version = version or default_version
@@ -247,9 +256,6 @@ class Mako:
             self._safe(prefix)
             if prefix.exists() and not upgrading:
                 raise MakoError('mako_conflict')
-            archive = cache.ensure(asset, progress, cancelled)
-            if sha256(archive) != asset.sha256:
-                raise MakoError('mako_checksum')
             self.prefix.parent.mkdir(parents=True, exist_ok=True)
             prefix.parent.mkdir(parents=True, exist_ok=True)
             staging = Path(tempfile.mkdtemp(prefix='.mako-', dir=prefix.parent))
