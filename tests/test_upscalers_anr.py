@@ -31,6 +31,9 @@ def test_anr_is_a_route_only_for_dx12_dlss_fg_games_on_amd_handheld_gpus():
     assert "anr" not in ((vulkan["offered_fg_plan"] or {}).get("routes") or {})
     both = solution_plan.resolve("rdna3", {"inputs": DLSSG, "apis": ["d3d11", "d3d12"], "streamline": 2}, generation=10)
     assert "anr" in both["offered_fg_plan"]["routes"]
+    # Where Winds Meet imports only d3d11 and loads D3D12 from its Agility SDK folder.
+    d3d11 = solution_plan.resolve("rdna3", {"inputs": DLSSG, "apis": ["d3d11"], "streamline": 2}, generation=10)
+    assert "anr" in d3d11["offered_fg_plan"]["routes"]
 
 
 def test_overrides_hand_dlssg_back_whenever_anr_is_not_the_route():
