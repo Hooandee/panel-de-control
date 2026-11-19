@@ -3,7 +3,9 @@
 import json
 import os
 import re
+import stat
 import threading
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -71,28 +73,60 @@ def steam_roots(home: str) -> list[Path]:
         path = Path(home) / candidate
         try:
             resolved = path.resolve(strict=True)
-        except OSError:
+        except (OSError, RuntimeError):
             continue
         if resolved not in roots:
             roots.append(resolved)
     return roots
 
 
-def library_paths(home: str) -> list[Path]:
-    libraries: list[Path] = []
+def library_paths(home: str, counts: Counter | None = None) -> list[Path]:
+    if counts is None:
+        counts = Counter()
+    libraries: dict[Path, None] = {}
     for root in steam_roots(home):
         candidates = [root]
         try:
-            folders = vdf.read_text(root / "steamapps/libraryfolders.vdf").get("libraryfolders") or {}
-        except (OSError, ValueError):
+            folders = vdf.read_text(root / "steamapps/libraryfolders.vdf").get("libraryfolders")
+            if not isinstance(folders, dict):
+                raise ValueError("malformed_vdf")
+        except FileNotFoundError:
+            counts["missing_index"] += 1
             folders = {}
-        for entry in folders.values() if isinstance(folders, dict) else ():
-            if isinstance(entry, dict) and isinstance(entry.get("path"), str):
-                candidates.append(Path(entry["path"]))
-        for path in candidates:
-            if (path / "steamapps").is_dir() and path not in libraries:
-                libraries.append(path)
-    return libraries
+        except OSError:
+            counts["unreadable_index"] += 1
+            folders = {}
+        except ValueError:
+            counts["invalid_index"] += 1
+            folders = {}
+        else:
+            counts["read_index"] += 1
+        for key, entry in folders.items():
+            if not key.isdecimal():
+                continue
+            raw = entry.get("path") if isinstance(entry, dict) else entry
+            if not isinstance(raw, str) or not os.path.isabs(raw) or "\0" in raw:
+                counts["invalid_entry"] += 1
+                continue
+            counts["path_object" if isinstance(entry, dict) else "direct_path"] += 1
+            candidates.append(Path(raw))
+        for path in dict.fromkeys(candidates):
+            try:
+                available = (path / "steamapps").is_dir()
+            except OSError:
+                available = False
+            if available:
+                libraries[path] = None
+            else:
+                counts["unavailable_library"] += 1
+    counts["available"] = len(libraries)
+    return list(libraries)
+
+
+def library_summary(home: str) -> dict:
+    counts = Counter()
+    library_paths(home, counts)
+    return dict(counts)
 
 
 def update_state(flags: int) -> str | None:
@@ -238,27 +272,47 @@ def linux_build(root: Path, build_id: str | None = None) -> bool:
     return result
 
 
-def find_installed(home: str, appid: str) -> Installed | None:
+def _manifest_game(library: Path, appid: str) -> tuple[str, Installed | None]:
+    apps = library / "steamapps"
+    try:
+        state = vdf.read_text(apps / f"appmanifest_{appid}.acf").get("appstate")
+    except FileNotFoundError:
+        return "manifest_missing", None
+    except OSError:
+        return "manifest_unreadable", None
+    except ValueError:
+        return "manifest_invalid", None
+    if not isinstance(state, dict) or state.get("appid", appid) != appid:
+        return "manifest_invalid", None
+    installdir = state.get("installdir")
+    if not isinstance(installdir, str) or installdir in ("", ".", "..") or "/" in installdir or "\0" in installdir:
+        return "manifest_invalid", None
+    root = apps / "common" / installdir
+    try:
+        if not stat.S_ISDIR(root.stat().st_mode):
+            return "folder_missing", None
+    except (FileNotFoundError, NotADirectoryError):
+        return "folder_missing", None
+    except OSError:
+        return "folder_unreadable", None
+    try:
+        flags = int(state.get("stateflags", 0))
+    except (TypeError, ValueError):
+        flags = 0
+    build_id = str(state["buildid"]) if str(state.get("buildid", "")).isdecimal() else None
+    return "found", Installed(appid, str(state.get("name") or appid), root, flags,
+                              native=linux_build(root, build_id), build_id=build_id)
+
+
+def find_installed(home: str, appid: str, lookup: Counter | None = None) -> Installed | None:
     if not appid.isdecimal():
         return None
-    for library in library_paths(home):
-        manifest = library / "steamapps" / f"appmanifest_{appid}.acf"
-        try:
-            state = vdf.read_text(manifest).get("appstate") or {}
-        except (OSError, ValueError):
-            continue
-        installdir = state.get("installdir")
-        if not isinstance(installdir, str) or not installdir or "/" in installdir:
-            continue
-        root = library / "steamapps" / "common" / installdir
-        if root.is_dir():
-            try:
-                flags = int(state.get("stateflags", 0))
-            except (TypeError, ValueError):
-                flags = 0
-            build_id = str(state["buildid"]) if str(state.get("buildid", "")).isdecimal() else None
-            return Installed(appid, str(state.get("name") or appid), root, flags,
-                             native=linux_build(root, build_id), build_id=build_id)
+    for library in library_paths(home, lookup):
+        outcome, installed = _manifest_game(library, appid)
+        if lookup is not None:
+            lookup[outcome] += 1
+        if installed is not None:
+            return installed
     return find_shortcut(home, appid)
 
 

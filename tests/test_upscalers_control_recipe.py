@@ -15,7 +15,7 @@ def control(tmp_path, fake_catalog, monkeypatch):
     (root / "amd_fidelityfx_upscaler_dx12.dll").write_bytes(b"original fsr")
     installed = games.Installed("870780", "Control Ultimate Edition", root, 4, "Control_DX12.exe")
     service = UpscalerService(str(tmp_path), str(fake_catalog), "rdna2", proc=str(tmp_path / "proc"))
-    monkeypatch.setattr(service, "_find", lambda appid: installed if appid == installed.appid else None)
+    monkeypatch.setattr(service, "_find", lambda appid, lookup=None: installed if appid == installed.appid else None)
     return service, root
 
 
