@@ -10,12 +10,14 @@ export interface GlossaryTerm {
   termDe: string;
   termPtBR: string;
   termFr: string;
+  termZhCN?: string;
   es: string;
   en: string;
   it: string;
   de: string;
   ptBR: string;
   fr: string;
+  zhCN?: string;
 }
 
 export interface GlossaryCategory {
@@ -26,12 +28,18 @@ export interface GlossaryCategory {
   de: string;
   ptBR: string;
   fr: string;
+  zhCN: string;
   terms: GlossaryTerm[];
 }
 
 /** Pick the text for the active language. Accepts a term or a category. */
-export function pick(entry: { es: string; en: string; it: string; de: string; ptBR: string; fr: string }, lang: Lang): string {
-  return lang === "pt-BR" ? entry.ptBR : entry[lang];
+export function pick(
+  entry: { es: string; en: string; it: string; de: string; ptBR: string; fr: string; zhCN?: string },
+  lang: Lang
+): string {
+  if (lang === "pt-BR") return entry.ptBR;
+  if (lang === "zh-CN") return entry.zhCN ?? entry.en;
+  return entry[lang];
 }
 
 export function pickTerm(entry: GlossaryTerm, lang: Lang): string {
@@ -39,6 +47,7 @@ export function pickTerm(entry: GlossaryTerm, lang: Lang): string {
   if (lang === "de") return entry.termDe;
   if (lang === "pt-BR") return entry.termPtBR;
   if (lang === "fr") return entry.termFr;
+  if (lang === "zh-CN") return entry.termZhCN ?? entry.term;
   return entry.term;
 }
 
@@ -51,6 +60,7 @@ export const CATEGORIES: GlossaryCategory[] = [
     de: "Leistung und Akku",
     ptBR: "Potência e bateria",
     fr: "Puissance et batterie",
+    zhCN: "功耗与电池",
     terms: [
       {
         id: "tdp",
@@ -59,12 +69,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "TDP",
         termPtBR: "TDP",
         termFr: "TDP",
+        termZhCN: "TDP",
         es: "Es cuánta energía dejas que gaste el chip mientras juegas, medida en vatios. Si le das más, los juegos van más finos pero la consola calienta y la batería vuela. Si le das menos, aguantas más rato de partida y todo va más fresquito aunque pierdas algo de rendimiento. Es la palanca que más vas a tocar en este panel.",
         en: "It's how much energy you let the chip spend while you play, measured in watts. Give it more and games run smoother, but the console heats up and the battery flies. Give it less and you get more play time with everything cooler, even if you lose a bit of performance. It's the lever you'll reach for most in this panel.",
         it: "Indica quanta energia permetti al chip di consumare mentre giochi, misurata in watt. Se lo aumenti, i giochi girano meglio, ma il dispositivo si scalda e la batteria si scarica rapidamente. Se lo riduci, puoi giocare più a lungo e mantenere temperature più basse, rinunciando a un po' di prestazioni. È il controllo che userai più spesso in questo pannello.",
         de: "Gibt an, wie viel Energie der Chip beim Spielen verbrauchen darf, gemessen in Watt. Mit mehr TDP laufen Spiele flüssiger, das Gerät wird aber wärmer und der Akku leert sich schneller. Mit weniger TDP kannst du länger und kühler spielen, verlierst jedoch etwas Leistung. Diese Einstellung wirst du im Panel am häufigsten verwenden.",
         ptBR: "É a potência que o chip pode consumir enquanto você joga, medida em watts. Com um TDP maior, os jogos podem rodar melhor, mas o dispositivo esquenta e gasta mais bateria. Com um TDP menor, você ganha autonomia e reduz a temperatura, mesmo que perca um pouco de desempenho. É um dos controles que você mais usará neste painel.",
         fr: "C'est la quantité d'énergie que vous laissez la puce consommer pendant que vous jouez, mesurée en watts. Plus vous lui en donnez, plus les jeux tournent bien, mais la console chauffe et la batterie fond à vue d'œil. Moins vous lui en donnez, plus vos sessions durent et plus tout reste au frais, au prix d'un peu de performances. C'est le réglage que vous toucherez le plus dans le Centre de contrôle.",
+        zhCN: "就是玩游戏时你让芯片用多少电,单位是瓦。给得多游戏就更流畅,但机器会变热、电池掉得快。给得少续航就更长、也更凉快,只是性能会差一点。这个是这个面板里你最常调的开关。",
       },
       {
         id: "watts",
@@ -73,12 +85,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Watt (W)",
         termPtBR: "Watts (W)",
         termFr: "Watts (W)",
+        termZhCN: "瓦特 (W)",
         es: "Es la unidad con la que se mide la potencia. Cuando ves un «17 W» es la energía que está tragando el chip en ese momento de la partida. Cuantos más vatios, más chicha y más calor.",
         en: "It's the unit power is measured in. When you see \"17 W\", that's the energy the chip is gulping down right then in your session. The more watts, the more muscle and the more heat.",
         it: "È l'unità con cui si misura la potenza. Quando leggi «17 W», indica quanta energia sta consumando il chip in quel momento. In generale, più watt significano più potenza e più calore.",
         de: "Watt ist die Einheit für Leistung. Wenn du 17 W siehst, verbraucht der Chip in diesem Moment so viel Energie. Mehr Watt bedeuten in der Regel mehr Leistung, aber auch mehr Wärme.",
         ptBR: "É a unidade usada para medir potência. Quando aparece 17 W, essa é a potência consumida pelo chip naquele momento. Em geral, mais watts significam mais desempenho e também mais calor.",
         fr: "C'est l'unité qui sert à mesurer la puissance. Quand vous voyez « 17 W », c'est l'énergie que la puce engloutit à ce moment précis de la partie. Plus il y a de watts, plus ça envoie, et plus ça chauffe.",
+        zhCN: "衡量功率的单位。看到「17 W」就是芯片在那一刻正消耗的电量。瓦数越高,性能越猛,发热也越大。",
       },
       {
         id: "auto-tdp",
@@ -87,12 +101,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Auto-TDP",
         termPtBR: "Auto-TDP",
         termFr: "Auto-TDP",
+        termZhCN: "Auto-TDP",
         es: "En vez de fijar tú los vatios, la consola los sube y baja sola según lo que pida cada juego. En una pelea intensa te da caña y en un menú tranquilo afloja, para que no gastes batería de más sin enterarte.",
         en: "Instead of setting the watts yourself, the console raises and lowers them on its own based on what each game asks for. It pushes hard in a hectic fight and eases off in a quiet menu, so you don't burn extra battery without realising.",
         it: "Invece di impostare un valore fisso, il dispositivo aumenta e riduce da solo i watt in base alle richieste del gioco. Offre più potenza durante uno scontro intenso e la riduce in un menu tranquillo, evitando consumi inutili.",
         de: "Statt einen festen Wattwert einzustellen, erhöht oder senkt das Gerät die Leistung passend zum Bedarf des Spiels. In einem intensiven Kampf gibt es mehr Leistung, in einem ruhigen Menü weniger. So wird der Akku nicht unnötig belastet.",
         ptBR: "Em vez de usar um valor fixo, o dispositivo aumenta ou reduz os watts conforme a necessidade do jogo. Ele entrega mais potência em uma batalha intensa e economiza em um menu parado, evitando gastar bateria sem necessidade.",
         fr: "Au lieu de fixer les watts vous-même, vous laissez la console les augmenter et les baisser toute seule selon ce que demande chaque jeu. En plein combat, elle met le paquet ; dans un menu calme, elle lève le pied. Résultat : pas de batterie gaspillée sans que vous le remarquiez.",
+        zhCN: "不用你自己设定瓦数,机器会根据每个游戏的需要自己调高调低。激烈战斗时给你拉满,安静菜单里就松口气,这样就不会不知不觉多耗电。",
       },
       {
         id: "boost",
@@ -101,12 +117,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Boost",
         termPtBR: "Boost",
         termFr: "Boost",
+        termZhCN: "Boost",
         es: "Un chute de potencia de unos segundos cuando el juego lo pide de golpe, como al entrar a una zona nueva o cargar una partida. Te da ese empujón puntual sin dejar el consumo alto todo el rato.",
         en: "A few-second shot of power when the game suddenly needs it, like walking into a new area or loading a save. It gives you that quick push without keeping your power draw high the whole time.",
         it: "Un breve aumento di potenza quando il gioco ne ha improvvisamente bisogno, ad esempio entrando in una nuova area o caricando una partita. Offre una spinta momentanea senza mantenere sempre elevato il consumo.",
         de: "Ein kurzer Leistungsschub, wenn ein Spiel plötzlich mehr benötigt, etwa beim Betreten eines neuen Gebiets oder beim Laden eines Spielstands. So steht vorübergehend mehr Leistung bereit, ohne den Verbrauch dauerhaft hoch zu halten.",
         ptBR: "É um aumento de potência por alguns segundos quando o jogo precisa de mais desempenho de repente, como ao entrar em uma nova área ou carregar uma partida. Assim, você ganha um impulso rápido sem manter o consumo alto o tempo todo.",
         fr: "Un coup de fouet de quelques secondes quand le jeu a soudain besoin de puissance, par exemple en arrivant dans une nouvelle zone ou en chargeant une partie. Vous profitez de ce petit surplus au bon moment, sans que la consommation reste élevée en permanence.",
+        zhCN: "游戏突然需要更多性能时,给你几秒钟的额外功率,比如进入新区域或者读档的时候。它需要时能顶一下,但不会一直保持高功耗。",
       },
       {
         id: "charge-limit",
@@ -115,12 +133,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Ladelimit",
         termPtBR: "Limite de carga",
         termFr: "Limite de charge",
+        termZhCN: "充电上限",
         es: "Le dices a la consola que no llene la batería hasta arriba y se quede en un tope, por ejemplo el 80%. A las baterías les sienta mal vivir siempre llenas, así que si sueles jugar enchufado esto hace que te dure sana muchos más años.",
         en: "You tell the console to stop short of a full battery and hold at a cap, say 80%. Batteries hate sitting full all the time, so if you usually play plugged in this keeps yours healthy for many more years.",
         it: "Impedisce alla batteria di caricarsi completamente e la mantiene a una soglia, ad esempio l'80%. Restare sempre al 100% accelera l'usura, quindi questa opzione aiuta a conservarla più a lungo se giochi spesso con il caricatore collegato.",
         de: "Begrenzt den Akkustand auf einen Wert wie 80 Prozent, statt den Akku vollständig zu laden. Ein dauerhaft voller Akku altert schneller. Wenn du häufig am Netzteil spielst, kann ein Ladelimit seine Lebensdauer verlängern.",
         ptBR: "Faz a bateria parar de carregar antes de chegar a 100%, por exemplo em 80%. Manter a bateria sempre totalmente carregada acelera o desgaste, então esse limite ajuda a preservá-la se você costuma jogar com o carregador conectado.",
         fr: "Vous demandez à la console de ne pas charger la batterie à fond et de s'arrêter à un seuil, par exemple 80 %. Les batteries n'aiment pas rester pleines en permanence : si vous jouez souvent branché, la vôtre restera en forme bien plus longtemps.",
+        zhCN: "让机器不要把电池充满,而是停在一个上限,比如 80%。电池一直满着其实很伤,所以如果你经常插着电玩,这样能让电池多健康好几年。",
       },
       {
         id: "battery-health",
@@ -129,12 +149,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Akkuzustand",
         termPtBR: "Saúde da bateria",
         termFr: "Santé de la batterie",
+        termZhCN: "电池健康度",
         es: "Es cuánta batería le queda a tu consola comparada con el día que la estrenaste. Con el uso todas se van gastando, así que si marca 90% quiere decir que ahora aguanta un 90% de las partidas que aguantaba nueva.",
         en: "It's how much battery your console has left compared to the day it was new. They all wear down with use, so if it reads 90% it means it now lasts for 90% of the play it managed when new.",
         it: "Indica quanta capacità conserva la batteria rispetto a quando era nuova. Tutte le batterie si usurano nel tempo: un valore del 90% significa che oggi offre circa il 90% dell'autonomia iniziale.",
         de: "Zeigt, wie viel Kapazität der Akku im Vergleich zum Neuzustand noch besitzt. Jeder Akku nutzt sich mit der Zeit ab. Ein Wert von 90 Prozent bedeutet, dass heute noch ungefähr 90 Prozent der ursprünglichen Laufzeit verfügbar sind.",
         ptBR: "Mostra quanta capacidade a bateria ainda conserva em comparação com quando era nova. Toda bateria se desgasta com o uso: se a saúde estiver em 90%, ela armazena cerca de 90% da energia que armazenava originalmente.",
         fr: "C'est ce qu'il reste de la capacité de votre batterie par rapport au jour où vous avez déballé la console. Toutes les batteries s'usent avec le temps : si elle affiche 90 %, elle tient aujourd'hui 90 % de ce qu'elle tenait neuve.",
+        zhCN: "就是相比刚买来那天,电池还剩多少容量。所有电池用久了都会损耗,所以如果显示 90%,意思就是现在只能撑起新机时 90% 的游戏时间。",
       },
     ],
   },
@@ -146,6 +168,7 @@ export const CATEGORIES: GlossaryCategory[] = [
     de: "Bild und flüssige Darstellung",
     ptBR: "Imagem e fluidez",
     fr: "Image et fluidité",
+    zhCN: "画面与流畅度",
     terms: [
       {
         id: "fps",
@@ -154,12 +177,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "FPS",
         termPtBR: "FPS",
         termFr: "FPS",
+        termZhCN: "FPS",
         es: "Son los fotogramas por segundo, o sea cuántas imágenes te dibuja el juego cada segundo. Cuantos más, más suave se mueve todo. A 60 se siente mantequilla y por debajo de 30 empieza a dar tirones molestos.",
         en: "Frames per second, meaning how many images the game draws you each second. The more, the smoother everything moves. At 60 it feels like butter, and below 30 it starts to stutter and get annoying.",
         it: "Sono i fotogrammi al secondo, cioè quante immagini il gioco disegna ogni secondo. Più sono, più il movimento appare fluido. A 60 FPS l'immagine è molto scorrevole, mentre sotto i 30 gli scatti iniziano a farsi notare.",
         de: "Frames pro Sekunde, also die Anzahl der Bilder, die ein Spiel pro Sekunde zeichnet. Je höher der Wert, desto flüssiger wirken Bewegungen. 60 FPS fühlen sich sehr geschmeidig an, unter 30 werden Ruckler deutlich spürbar.",
         ptBR: "São os quadros por segundo, ou seja, quantas imagens o jogo desenha a cada segundo. Quanto maior o número, mais fluido fica o movimento. A 60 FPS tudo costuma parecer bem suave; abaixo de 30, as travadas começam a incomodar.",
         fr: "Ce sont les images par seconde, autrement dit le nombre d'images que le jeu affiche chaque seconde. Plus il y en a, plus tout est fluide. À 60, ça glisse tout seul ; en dessous de 30, les saccades commencent à devenir pénibles.",
+        zhCN: "就是每秒帧数,也就是游戏每秒给你画多少张画面。数字越高,画面越流畅。60 帧顺滑得像黄油,掉到 30 帧以下就开始卡顿、看着闹心。",
       },
       {
         id: "fsr",
@@ -168,12 +193,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "FSR",
         termPtBR: "FSR",
         termFr: "FSR",
+        termZhCN: "FSR",
         es: "Un truco de AMD que hace que el juego se vea casi igual de bien pero pidiéndole menos a la consola, así ganas fluidez y batería sin apenas notar la diferencia. Se activa dentro del juego o en Steam, no desde aquí.",
         en: "An AMD trick that keeps a game looking nearly as good while asking less of the console, so you gain smoothness and battery with barely any difference. You switch it on inside the game or in Steam, not from here.",
         it: "Una tecnologia AMD che riduce il lavoro richiesto al dispositivo mantenendo una buona qualità dell'immagine. In questo modo puoi guadagnare fluidità e autonomia con differenze visive minime. Si attiva nel gioco o in Steam, non da questo pannello.",
         de: "Eine AMD-Technik, die ein Spiel mit weniger Rechenaufwand fast genauso gut aussehen lässt. Dadurch gewinnst du Leistung und Akkulaufzeit bei meist kleinen sichtbaren Unterschieden. Aktiviert wird sie im Spiel oder in Steam, nicht in diesem Panel.",
         ptBR: "É uma tecnologia da AMD que reduz o trabalho exigido do dispositivo sem perder muita qualidade de imagem. Assim, você pode ganhar fluidez e autonomia com pouca diferença visual. A ativação é feita no jogo ou no Steam, não neste painel.",
         fr: "Une astuce d'AMD qui garde une image presque aussi belle tout en demandant moins d'effort à la console : vous gagnez en fluidité et en autonomie sans vraiment voir la différence. Ça s'active dans le jeu ou dans Steam, pas ici.",
+        zhCN: "AMD 的一个小技巧,让游戏看起来几乎一样好,但机器干的活更少,这样你就更流畅、更省电,还几乎看不出差别。要在游戏里或者 Steam 里开,不是在这里。",
       },
       {
         id: "dlss",
@@ -182,12 +209,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "DLSS",
         termPtBR: "DLSS",
         termFr: "DLSS",
+        termZhCN: "DLSS",
         es: "La misma idea que FSR pero de NVIDIA. Sube la fluidez y la imagen queda casi igual de nítida, aunque solo va en equipos con gráfica NVIDIA, que no suelen ser las portátiles (casi todas montan AMD).",
         en: "The same idea as FSR but from NVIDIA. It bumps up smoothness and the image stays nearly as sharp, though it only runs on machines with NVIDIA graphics, which handhelds usually aren't (nearly all use AMD).",
         it: "La tecnologia NVIDIA basata sulla stessa idea di FSR. Aumenta la fluidità mantenendo l'immagine quasi altrettanto nitida, ma funziona solo con GPU NVIDIA, poco comuni sui dispositivi portatili che usano quasi tutti AMD.",
         de: "NVIDIAs Variante derselben Grundidee wie FSR. Sie verbessert die Leistung, während das Bild fast genauso scharf bleibt. DLSS funktioniert jedoch nur mit NVIDIA-GPUs, die in Handhelds selten sind, weil dort meistens AMD-Hardware steckt.",
         ptBR: "É a tecnologia da NVIDIA baseada na mesma ideia do FSR. Ela melhora a fluidez e mantém a imagem quase tão nítida, mas só funciona em equipamentos com GPU NVIDIA, algo pouco comum em consoles portáteis.",
         fr: "Le même principe que le FSR, mais chez NVIDIA. La fluidité grimpe et l'image reste presque aussi nette, mais ça ne fonctionne qu'avec une carte graphique NVIDIA, ce qui est rare sur les consoles portables (presque toutes tournent sur de l'AMD).",
+        zhCN: "跟 FSR 一个思路,不过是 NVIDIA 家的。流畅度提升,画面也几乎一样清晰,但它只能在 NVIDIA 显卡上跑,而掌机一般没有(几乎都用 AMD)。",
       },
       {
         id: "xess",
@@ -196,12 +225,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "XeSS",
         termPtBR: "XeSS",
         termFr: "XeSS",
+        termZhCN: "XeSS",
         es: "La versión de Intel del mismo truco que FSR y DLSS. Sirve para que el juego corra más suave sin que pierdas una nitidez que se note.",
         en: "Intel's take on the same trick as FSR and DLSS. It helps a game run smoother without a drop in sharpness you'd actually notice.",
         it: "La versione Intel della stessa tecnologia usata da FSR e DLSS. Aiuta il gioco a essere più fluido senza una perdita di nitidezza evidente.",
         de: "Intels Variante derselben Technik wie FSR und DLSS. Sie lässt ein Spiel flüssiger laufen, ohne dass die Bildschärfe sichtbar stark nachlässt.",
         ptBR: "É a versão da Intel da mesma ideia usada pelo FSR e pelo DLSS. Ajuda o jogo a rodar com mais fluidez sem uma perda de nitidez fácil de perceber.",
         fr: "La version d'Intel de la même astuce que le FSR et le DLSS. Le jeu gagne en fluidité, sans perte de netteté visible.",
+        zhCN: "Intel 版的 FSR 和 DLSS,同一个思路。让游戏更流畅,又不会有你注意得到的清晰度损失。",
       },
       {
         id: "frame-gen",
@@ -210,12 +241,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Frame-Generierung",
         termPtBR: "Geração de quadros",
         termFr: "Génération d'images",
+        termZhCN: "帧生成",
         es: "La consola calcula fotogramas de relleno y los cuela entre los reales para que el movimiento se vea más suave. Ayuda a que todo fluya, pero tiene truco: gasta algo de gráfica y a veces los controles responden un pelín más tarde.",
         en: "The console works out filler frames and slips them between the real ones so motion looks smoother. It helps everything flow, but there's a catch: it uses some graphics power and the controls can feel a touch slower to respond.",
         it: "Il dispositivo calcola fotogrammi aggiuntivi e li inserisce tra quelli reali per rendere il movimento più fluido. Il risultato può essere ottimo, ma richiede parte della potenza grafica e può aggiungere un lieve ritardo ai comandi.",
         de: "Das Gerät berechnet zusätzliche Bilder und fügt sie zwischen den echten Frames ein, damit Bewegungen flüssiger wirken. Das Ergebnis kann sehr gut aussehen, benötigt aber einen Teil der Grafikleistung und kann die Eingabeverzögerung leicht erhöhen.",
         ptBR: "O dispositivo calcula quadros extras e os insere entre os quadros reais para deixar o movimento mais fluido. O resultado pode ficar excelente, mas usa parte do desempenho gráfico e pode aumentar um pouco a latência dos controles.",
         fr: "La console calcule des images intermédiaires et les glisse entre les vraies pour rendre le mouvement plus fluide. Ça aide bien, mais il y a un hic : ça mobilise un peu de puissance graphique et les commandes répondent parfois un poil plus tard.",
+        zhCN: "机器会算出一些补充帧,插在真实帧之间,让画面动起来更顺。确实有好处,但也有代价:会占掉一些图形性能,而且操作响应有时候会慢一点点。",
       },
       {
         id: "optiscaler",
@@ -224,12 +257,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "OptiScaler",
         termPtBR: "OptiScaler",
         termFr: "OptiScaler",
+        termZhCN: "OptiScaler",
         es: "Una herramienta de la comunidad que te deja meter estos trucos de fluidez, como FSR, en juegos que no los traían de fábrica. Es un extra que instalas aparte y no tiene que ver con este panel.",
         en: "A community tool that lets you drop these smoothness tricks, like FSR, into games that didn't ship with them. It's an extra you install separately and has nothing to do with this panel.",
         it: "Uno strumento della community che permette di aggiungere tecnologie come FSR ai giochi che non le includevano. Si installa separatamente e non fa parte di questo pannello.",
         de: "Ein Community-Werkzeug, das Techniken wie FSR in Spiele einbindet, die sie ursprünglich nicht unterstützen. Es wird separat installiert und gehört nicht zu diesem Panel.",
         ptBR: "É uma ferramenta da comunidade que permite adicionar tecnologias como o FSR a jogos que não ofereciam esse recurso. Ela é instalada separadamente e não faz parte deste painel.",
         fr: "Un outil de la communauté qui permet d'ajouter ces astuces de fluidité, comme le FSR, à des jeux qui ne les proposent pas d'origine. C'est un bonus à installer à part, sans rapport avec le Centre de contrôle.",
+        zhCN: "一个社区工具,能把这些流畅度技巧(比如 FSR)塞进本来不支持的游戏里。它是另外装的扩展,跟这个面板没关系。",
       },
       {
         id: "vrr",
@@ -238,12 +273,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "VRR",
         termPtBR: "VRR",
         termFr: "VRR",
+        termZhCN: "VRR",
         es: "La pantalla acompasa su ritmo al del juego para que no veas cortes raros en la imagen cuando los FPS bailan arriba y abajo. No sube los FPS, pero deja el movimiento más limpio y agradable.",
         en: "The screen paces itself to the game so you don't get those ugly torn frames when the FPS bounces up and down. It won't raise your FPS, but it keeps the motion cleaner and nicer to play on.",
         it: "Sincronizza la frequenza dello schermo con il ritmo del gioco per evitare tagli nell'immagine quando gli FPS cambiano. Non aumenta gli FPS, ma rende il movimento più pulito e piacevole.",
         de: "Passt die Bildwiederholrate des Displays an die Bildrate des Spiels an. So entstehen bei schwankenden FPS keine störenden Bildrisse. VRR erhöht die FPS nicht, lässt Bewegungen aber sauberer und angenehmer wirken.",
         ptBR: "Sincroniza a taxa de atualização da tela com o ritmo do jogo para evitar cortes na imagem quando o FPS varia. O VRR não aumenta o FPS, mas deixa o movimento mais limpo e agradável.",
         fr: "L'écran cale son rythme sur celui du jeu pour vous éviter les déchirures dans l'image quand les FPS font le yoyo. Ça n'augmente pas les FPS, mais le mouvement est plus propre et plus agréable.",
+        zhCN: "屏幕会跟着游戏的节奏走,这样 FPS 忽高忽低时你就不会看到难看的画面撕裂。它不会提高 FPS,但会让动作更干净、玩起来更舒服。",
       },
       {
         id: "refresh",
@@ -252,12 +289,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Bildwiederholrate (Hz)",
         termPtBR: "Taxa de atualização (Hz)",
         termFr: "Fréquence de rafraîchissement (Hz)",
+        termZhCN: "刷新率 (Hz)",
         es: "Cuántas veces por segundo se refresca la pantalla. Una de 90 Hz puede enseñarte hasta 90 imágenes por segundo, y cuanto más alta sea, más fluido puedes llegar a ver el juego.",
         en: "How many times per second the screen refreshes. A 90 Hz one can show you up to 90 images per second, and the higher it goes, the smoother the game can look.",
         it: "Indica quante volte al secondo si aggiorna lo schermo. Un pannello a 90 Hz può mostrare fino a 90 immagini al secondo e, in generale, una frequenza più alta permette un movimento più fluido.",
         de: "Gibt an, wie oft sich das Display pro Sekunde aktualisiert. Ein 90-Hz-Display kann bis zu 90 Bilder pro Sekunde zeigen. Je höher die Bildwiederholrate, desto flüssiger können Bewegungen aussehen.",
         ptBR: "Indica quantas vezes a tela se atualiza por segundo. Uma tela de 90 Hz pode mostrar até 90 quadros por segundo. Quanto maior a taxa, mais fluido o jogo pode parecer.",
         fr: "Le nombre de fois par seconde où l'écran se met à jour. Un écran à 90 Hz peut afficher jusqu'à 90 images par seconde : plus la fréquence est élevée, plus le jeu peut paraître fluide.",
+        zhCN: "屏幕每秒刷新多少次。90 Hz 的屏幕每秒最多能显示 90 张画面,数字越高,游戏看起来就越流畅。",
       },
     ],
   },
@@ -269,6 +308,7 @@ export const CATEGORIES: GlossaryCategory[] = [
     de: "Im Inneren des Chips",
     ptBR: "Por dentro do chip",
     fr: "Sous le capot",
+    zhCN: "芯片内部",
     terms: [
       {
         id: "apu",
@@ -277,12 +317,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "APU",
         termPtBR: "APU",
         termFr: "APU",
+        termZhCN: "APU",
         es: "Es el chip principal de la consola. Tiene la gracia de juntar en una sola pieza el cerebro (el procesador) y la parte que dibuja los gráficos, lo que ahorra sitio y batería, algo que le viene de perlas a una portátil.",
         en: "It's the console's main chip. Its neat trick is packing the brain (the processor) and the graphics into one piece, which saves space and battery, something a handheld really appreciates.",
         it: "È il chip principale del dispositivo. Riunisce in un solo componente il processore e la parte grafica, risparmiando spazio ed energia, due vantaggi importanti per un dispositivo portatile.",
         de: "Der Hauptchip des Geräts. Er vereint Prozessor und Grafik in einem einzigen Bauteil. Das spart Platz und Energie, was bei einem Handheld besonders wichtig ist.",
         ptBR: "É o chip principal do dispositivo. Ele reúne o processador e a parte gráfica em um único componente, economizando espaço e energia, duas vantagens importantes em um console portátil.",
         fr: "C'est la puce principale de la console. Son atout : elle réunit en une seule pièce le cerveau (le processeur) et la partie qui dessine les graphismes, ce qui économise de la place et de la batterie. Parfait pour une console portable.",
+        zhCN: "机器的主芯片。它厉害的地方是把大脑(处理器)和负责图形的部分做在同一块里,省空间又省电,这对掌机来说再合适不过。",
       },
       {
         id: "cpu",
@@ -291,12 +333,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "CPU (Prozessor)",
         termPtBR: "CPU (processador)",
         termFr: "CPU (processeur)",
+        termZhCN: "CPU(处理器)",
         es: "El cerebro de la consola. Se encarga de la lógica del juego, la física, lo que hacen los enemigos y todo lo que no sea pintar la imagen en pantalla.",
         en: "The console's brain. It handles the game logic, the physics, what the enemies do and everything that isn't painting the picture on screen.",
         it: "È il cervello del dispositivo. Gestisce la logica del gioco, la fisica, il comportamento dei nemici e tutto ciò che non riguarda direttamente la creazione dell'immagine sullo schermo.",
         de: "Das Gehirn des Geräts. Die CPU verarbeitet Spiellogik, Physik, das Verhalten von Gegnern und alles, was nicht direkt das Bild auf dem Bildschirm zeichnet.",
         ptBR: "É o cérebro do dispositivo. Cuida da lógica do jogo, da física, do comportamento dos inimigos e de tudo o que não seja desenhar a imagem na tela.",
         fr: "Le cerveau de la console. Il gère la logique du jeu, la physique, le comportement des ennemis et tout ce qui ne sert pas à dessiner l'image à l'écran.",
+        zhCN: "机器的大脑。负责游戏逻辑、物理计算、敌人的行为,总之除了把画面画到屏幕上以外的事都归它管。",
       },
       {
         id: "gpu",
@@ -305,12 +349,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "GPU (Grafik)",
         termPtBR: "GPU (processador gráfico)",
         termFr: "GPU (processeur graphique)",
+        termZhCN: "GPU(显卡)",
         es: "La parte del chip que dibuja todo lo que ves en pantalla. En los juegos suele ser la que más suda, y por eso el panel se fija sobre todo en ella para saber cuánta potencia hace falta.",
         en: "The part of the chip that draws everything you see. In games it's usually the one sweating hardest, which is why the panel watches it most to gauge how much power you need.",
         it: "È la parte del chip che disegna tutto ciò che vedi sullo schermo. Nei giochi è spesso il componente più impegnato, quindi il pannello la osserva soprattutto per capire quanta potenza serve.",
         de: "Der Teil des Chips, der alles auf dem Bildschirm zeichnet. In Spielen ist die GPU meist am stärksten ausgelastet. Deshalb beobachtet das Panel vor allem sie, um den benötigten Leistungswert zu bestimmen.",
         ptBR: "É a parte do chip que desenha tudo o que aparece na tela. Nos jogos, costuma ser o componente mais exigido, por isso o painel observa principalmente a GPU para calcular quanta potência é necessária.",
         fr: "La partie de la puce qui dessine tout ce que vous voyez à l'écran. En jeu, c'est souvent elle qui transpire le plus, et c'est surtout elle que le Centre de contrôle surveille pour estimer la puissance nécessaire.",
+        zhCN: "芯片里负责画屏幕上一切的部分。玩游戏时它往往最吃力,所以面板主要盯着它来判断需要多少功率。",
       },
       {
         id: "cores-threads",
@@ -319,12 +365,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Kerne und Threads",
         termPtBR: "Núcleos e threads",
         termFr: "Cœurs et threads",
+        termZhCN: "核心与线程",
         es: "Los núcleos son como las manos del procesador: cuantas más tenga, más cosas puede hacer a la vez. Los hilos son los carriles de trabajo de cada mano, y algunos chips le dan dos carriles a cada núcleo para exprimirlo mejor.",
         en: "Cores are like the processor's hands: the more it has, the more it can do at once. Threads are each hand's work lanes, and some chips give every core two lanes to squeeze more out of it.",
         it: "I core sono come le mani del processore: più ne ha, più attività può svolgere contemporaneamente. I thread sono i flussi di lavoro di ogni core e alcuni chip ne assegnano due a ciascun core per sfruttarlo meglio.",
         de: "Kerne sind wie die Hände des Prozessors: Je mehr er besitzt, desto mehr Aufgaben kann er gleichzeitig erledigen. Threads sind die Arbeitsbahnen jedes Kerns. Manche Chips geben jedem Kern zwei davon, um ihn besser auszulasten.",
         ptBR: "Os núcleos são como as mãos do processador: quanto mais ele tem, mais tarefas pode executar ao mesmo tempo. As threads são as linhas de trabalho de cada núcleo, e alguns chips oferecem duas por núcleo para aproveitar melhor o processador.",
         fr: "Les cœurs, ce sont un peu les mains du processeur : plus il en a, plus il peut faire de choses en même temps. Les threads sont les files de travail de chaque main, et certaines puces donnent deux files à chaque cœur pour en tirer le maximum.",
+        zhCN: "核心就像处理器的手:手越多,能同时干的事就越多。线程是每只手的工作通道,有些芯片给每个核心两条通道,好把它压榨得更狠。",
       },
       {
         id: "smt",
@@ -333,12 +381,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Simultanes Multithreading (SMT)",
         termPtBR: "Multithreading (SMT)",
         termFr: "Multithreading (SMT)",
+        termZhCN: "超线程 (SMT)",
         es: "Deja que cada núcleo del procesador lleve dos tareas a la vez en lugar de una. Encendido rinde algo más y apagado gasta y calienta un poco menos. Jugando la diferencia es mínima.",
         en: "Lets each processor core juggle two tasks at once instead of one. On, it performs a bit more; off, it uses and heats a little less. While gaming the difference is tiny.",
         it: "Permette a ogni core del processore di gestire due attività alla volta invece di una. Quando è attivo offre un po' più di prestazioni, mentre da disattivato riduce leggermente consumi e calore. Nei giochi la differenza è minima.",
         de: "Erlaubt jedem Prozessorkern, zwei Aufgaben gleichzeitig statt nur einer zu bearbeiten. Aktiviert bringt SMT etwas mehr Leistung, deaktiviert etwas weniger Verbrauch und Wärme. Beim Spielen ist der Unterschied meist gering.",
         ptBR: "Permite que cada núcleo do processador cuide de duas tarefas ao mesmo tempo em vez de uma. Ativado, oferece um pouco mais de desempenho; desativado, reduz um pouco o consumo e o calor. Nos jogos, a diferença costuma ser pequena.",
         fr: "Permet à chaque cœur du processeur de mener deux tâches de front au lieu d'une. Activé, il offre un peu plus de performances ; désactivé, le processeur consomme et chauffe un peu moins. En jeu, la différence est minime.",
+        zhCN: "让处理器的每个核心能同时干两件事,而不是一件。开着性能稍强,关掉则更省电、发热也小一点。不过打游戏的时候差别很小。",
       },
       {
         id: "rdna",
@@ -347,12 +397,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "RDNA",
         termPtBR: "RDNA",
         termFr: "RDNA",
+        termZhCN: "RDNA",
         es: "Es el nombre de la tecnología gráfica de AMD que llevan casi todas estas consolas. Cada generación (RDNA 2, RDNA 3 y demás) es más nueva y potente. Vamos, que es el apellido de la parte que mueve los gráficos.",
         en: "It's the name of AMD's graphics tech inside almost all these consoles. Each generation (RDNA 2, RDNA 3 and so on) is newer and stronger. In short, it's the surname of the bit that pushes the graphics.",
         it: "È il nome della tecnologia grafica AMD usata da quasi tutti questi dispositivi. Ogni generazione, come RDNA 2 o RDNA 3, è più recente e potente. In pratica identifica l'architettura della parte che gestisce la grafica.",
         de: "Der Name der AMD-Grafikarchitektur, die in fast allen diesen Geräten steckt. Jede Generation, etwa RDNA 2 oder RDNA 3, ist neuer und leistungsfähiger. RDNA bezeichnet also die technische Familie der integrierten Grafik.",
         ptBR: "É o nome da arquitetura gráfica da AMD usada em quase todos esses dispositivos. Cada geração, como RDNA 2 ou RDNA 3, é mais nova e potente. Em resumo, é a família tecnológica da parte que cuida dos gráficos.",
         fr: "C'est le nom de la technologie graphique d'AMD présente dans presque toutes ces consoles. Chaque génération (RDNA 2, RDNA 3, etc.) est plus récente et plus puissante que la précédente. En gros, c'est le nom de famille de la partie qui fait tourner les graphismes.",
+        zhCN: "这是 AMD 图形技术的名字,几乎所有这类掌机都用它。每一代(RDNA 2、RDNA 3 等等)都更新、更强。说白了,它就是负责图形那部分的「姓」。",
       },
     ],
   },
@@ -364,6 +416,7 @@ export const CATEGORIES: GlossaryCategory[] = [
     de: "Lüfter und Temperatur",
     ptBR: "Ventoinhas e temperatura",
     fr: "Ventilateurs et température",
+    zhCN: "风扇与温度",
     terms: [
       {
         id: "fan-curve",
@@ -372,12 +425,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Lüfterkurve",
         termPtBR: "Curva da ventoinha",
         termFr: "Courbe de ventilation",
+        termZhCN: "风扇曲线",
         es: "Es la norma que decide a qué velocidad giran los ventiladores según lo caliente que vaya la consola. Puedes ponerla más silenciosa para no oír ruido o más marchosa para jugar fresco, y el panel también puede aprenderla por ti a base de ver cómo juegas.",
         en: "It's the rule that decides how fast the fans spin based on how hot the console runs. You can set it quieter to keep the noise down or more aggressive to play cool, and the panel can also learn it for you by watching how you play.",
         it: "È la regola che decide la velocità delle ventole in base alla temperatura del dispositivo. Puoi renderla più silenziosa per ridurre il rumore o più aggressiva per mantenere temperature basse. Il pannello può anche imparare una curva adatta osservando come giochi.",
         de: "Legt fest, wie schnell sich die Lüfter bei einer bestimmten Gerätetemperatur drehen. Du kannst sie leiser einstellen oder für niedrigere Temperaturen stärker kühlen lassen. Das Panel kann auch aus deiner Nutzung eine passende Kurve lernen.",
         ptBR: "É a regra que define a velocidade das ventoinhas de acordo com a temperatura do dispositivo. Você pode deixá-la mais silenciosa para reduzir o ruído ou mais agressiva para manter tudo mais frio. O painel também pode aprender uma curva adequada conforme você joga.",
         fr: "C'est la règle qui décide à quelle vitesse tournent les ventilateurs selon la chaleur de la console. Vous pouvez la rendre plus discrète pour limiter le bruit, ou plus musclée pour jouer au frais, et le Centre de contrôle peut aussi l'ajuster pour vous en observant votre façon de jouer.",
+        zhCN: "这是一条规则,根据机器的温度决定风扇转多快。你可以调得更安静,少听点噪音,也可以更激进、玩得更凉快,面板还能看着你的玩法自己学会调。",
       },
       {
         id: "rpm",
@@ -386,12 +441,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "RPM",
         termPtBR: "RPM",
         termFr: "RPM",
+        termZhCN: "RPM",
         es: "Son las vueltas por minuto del ventilador, o sea lo rápido que está girando. A más RPM, mejor enfría pero más se le oye.",
         en: "The fan's revolutions per minute, meaning how fast it's spinning. Higher RPM cools better but you hear it more.",
         it: "Sono i giri al minuto della ventola e indicano quanto velocemente sta ruotando. Più RPM migliorano il raffreddamento, ma aumentano anche il rumore.",
         de: "Die Umdrehungen des Lüfters pro Minute, also seine Drehzahl. Mehr RPM sorgen für bessere Kühlung, sind aber auch deutlicher hörbar.",
         ptBR: "São as rotações por minuto da ventoinha, ou seja, a velocidade com que ela gira. Quanto maior o RPM, melhor a refrigeração e maior o ruído.",
         fr: "Ce sont les tours par minute du ventilateur, autrement dit sa vitesse de rotation. Plus les RPM grimpent, mieux il refroidit, mais plus il se fait entendre.",
+        zhCN: "风扇每分钟转多少圈,也就是它转得有多快。RPM 越高散热越好,但声音也越大。",
       },
       {
         id: "temp",
@@ -400,12 +457,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Temperatur",
         termPtBR: "Temperatura",
         termFr: "Température",
+        termZhCN: "温度",
         es: "Lo caliente que va el chip, en grados. Que suba mientras juegas es de lo más normal, y para eso están los ventiladores y el TDP, para mantenerla a raya y que la consola no sufra.",
         en: "How hot the chip runs, in degrees. It's perfectly normal for it to climb while you play, and that's what the fans and TDP are for, keeping it in check so the console doesn't suffer.",
         it: "Indica in gradi quanto è caldo il chip. È del tutto normale che aumenti mentre giochi: ventole e TDP servono proprio a tenerla sotto controllo e proteggere il dispositivo.",
         de: "Zeigt in Grad an, wie warm der Chip ist. Dass die Temperatur beim Spielen steigt, ist völlig normal. Lüfter und TDP halten sie im sicheren Bereich und schützen das Gerät.",
         ptBR: "Indica a temperatura do chip em graus. É normal ela subir durante o jogo. As ventoinhas e o TDP ajudam a mantê-la sob controle e a proteger o dispositivo.",
         fr: "La chaleur de la puce, en degrés. Qu'elle grimpe pendant que vous jouez, c'est tout à fait normal : les ventilateurs et le TDP sont là pour la garder sous contrôle et ménager la console.",
+        zhCN: "芯片有多热,按度数算。玩游戏时温度升高很正常,风扇和 TDP 就是用来把它压住、别让机器受不了的。",
       },
     ],
   },
@@ -417,6 +476,7 @@ export const CATEGORIES: GlossaryCategory[] = [
     de: "Die Welt der Handhelds",
     ptBR: "O mundo dos consoles portáteis",
     fr: "L'univers des consoles portables",
+    zhCN: "掌机世界",
     terms: [
       {
         id: "handheld",
@@ -425,12 +485,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Handheld-Gaming-PC",
         termPtBR: "Console portátil (handheld)",
         termFr: "Console portable",
+        termZhCN: "掌上游戏机 (handheld)",
         es: "Un PC con pinta de consola que juegas con las manos, como la Steam Deck, la ROG Ally o la Legion Go. Mueven juegos de PC de verdad pero con batería y allá donde te los lleves.",
         en: "A PC shaped like a console that you play holding in your hands, like the Steam Deck, ROG Ally or Legion Go. They run real PC games but on battery and wherever you take them.",
         it: "Un PC con la forma e i comandi di una console, come Steam Deck, ROG Ally o Legion Go. Esegue veri giochi per PC, ma funziona anche a batteria e puoi portarlo ovunque.",
         de: "Ein PC im Format einer tragbaren Konsole, den du in den Händen hältst, etwa Steam Deck, ROG Ally oder Legion Go. Er führt echte PC-Spiele aus, besitzt aber einen Akku und lässt sich überallhin mitnehmen.",
         ptBR: "É um PC com formato e controles de console que você segura nas mãos, como o Steam Deck, o ROG Ally ou o Legion Go. Ele roda jogos de PC, funciona com bateria e pode acompanhar você a qualquer lugar.",
         fr: "Un PC déguisé en console, que vous tenez à deux mains, comme le Steam Deck, la ROG Ally ou la Legion Go. Il fait tourner de vrais jeux PC, mais sur batterie et partout où vous l'emmenez.",
+        zhCN: "一台长得像游戏机的 PC,拿在手里玩,比如 Steam Deck、ROG Ally 或 Legion Go。它跑的是真正的 PC 游戏,但靠电池供电,你带到哪都能玩。",
       },
       {
         id: "decky",
@@ -439,12 +501,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Decky Loader",
         termPtBR: "Decky Loader",
         termFr: "Decky Loader",
+        termZhCN: "Decky Loader",
         es: "Es el programa que te permite instalar complementos como este panel en la consola. Piénsalo como una tienda de apps que le añade funciones nuevas al menú de Steam.",
         en: "It's the program that lets you install add-ons like this panel on your console. Think of it as an app store that adds new features to the Steam menu.",
         it: "È il programma che permette di installare plugin come questo pannello sul dispositivo. Puoi considerarlo uno store di app che aggiunge nuove funzioni al menu di Steam.",
         de: "Das Programm, mit dem du Plugins wie dieses Panel auf deinem Gerät installierst. Du kannst es dir wie einen App-Store vorstellen, der dem Steam-Menü neue Funktionen hinzufügt.",
         ptBR: "É o programa que permite instalar plugins como este painel no dispositivo. Pense nele como uma loja de aplicativos que adiciona novas funções ao menu do Steam.",
         fr: "C'est le programme qui vous permet d'installer sur la console des plugins comme le Centre de contrôle. Voyez-le comme une boutique d'applis qui ajoute de nouvelles fonctions au menu de Steam.",
+        zhCN: "就是让你能在机器上装插件的程序,这个面板也是这么装的。可以把它想成一个应用商店,给 Steam 菜单加新功能。",
       },
       {
         id: "qam",
@@ -453,12 +517,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Schnellzugriffsmenü (QAM)",
         termPtBR: "Menu de acesso rápido (QAM)",
         termFr: "Menu d'accès rapide (QAM)",
+        termZhCN: "快速访问菜单 (QAM)",
         es: "Es ese menú lateral que abres con un botón sin salir del juego, donde tocas brillo, volumen y complementos como este. Es la casa de este panel.",
         en: "It's that side menu you pop open with a button without leaving the game, where you tweak brightness, volume and add-ons like this one. It's this panel's home.",
         it: "È il menu laterale che apri con un pulsante senza uscire dal gioco. Da qui regoli luminosità, volume e plugin come questo. È la schermata in cui vive il pannello.",
         de: "Das Seitenmenü, das du per Taste öffnest, ohne das Spiel zu verlassen. Dort stellst du Helligkeit und Lautstärke ein und erreichst Plugins wie dieses. Hier ist das Kontrollzentrum zu Hause.",
         ptBR: "É o menu lateral que você abre com um botão sem sair do jogo. Nele, você ajusta brilho, volume e plugins como este. É onde o Painel de Controle fica.",
         fr: "C'est le menu latéral que vous ouvrez d'un bouton sans quitter le jeu, pour régler la luminosité, le volume ou des plugins comme celui-ci. C'est là que vit le Centre de contrôle.",
+        zhCN: "就是不用退出游戏、按一下键就能打开的侧边菜单,你可以调亮度、音量,还有像这样的插件。这个面板就住在这儿。",
       },
       {
         id: "telemetry",
@@ -467,12 +533,14 @@ export const CATEGORIES: GlossaryCategory[] = [
         termDe: "Lernen / Telemetrie",
         termPtBR: "Aprendizado / telemetria",
         termFr: "Apprentissage / télémétrie",
+        termZhCN: "学习 / 数据记录",
         es: "El panel va apuntando cómo se porta cada juego (temperatura, potencia, ventilador) para poder recomendarte los mejores ajustes. Todo se queda dentro de tu consola y no sale de ahí jamás, y lo puedes apagar cuando te apetezca.",
         en: "The panel keeps notes on how each game behaves (temperature, power, fan) so it can recommend the best settings for you. It all stays inside your console and never leaves, and you can turn it off whenever you like.",
         it: "Il pannello registra come si comporta ogni gioco, ad esempio temperatura, potenza e ventola, per consigliarti le impostazioni più adatte. Tutti i dati restano sul dispositivo e non vengono mai inviati altrove. Puoi disattivare questa funzione in qualsiasi momento.",
         de: "Das Panel merkt sich, wie sich einzelne Spiele bei Temperatur, Leistung und Lüfter verhalten, um passende Einstellungen vorzuschlagen. Alle Daten bleiben auf deinem Gerät und werden niemals übertragen. Du kannst die Funktion jederzeit deaktivieren.",
         ptBR: "O painel registra como cada jogo se comporta, incluindo temperatura, potência e ventoinha, para recomendar os melhores ajustes. Todos os dados ficam no seu dispositivo e nunca são enviados. Você pode desativar esse recurso quando quiser.",
         fr: "Le Centre de contrôle note comment se comporte chaque jeu (température, puissance, ventilateur) pour vous recommander les meilleurs réglages. Tout reste sur votre console, rien n'en sort jamais, et vous pouvez désactiver cette fonction quand vous voulez.",
+        zhCN: "面板会记下每个游戏的表现(温度、功率、风扇),好给你推荐最合适的设置。所有数据都留在你的机器里,绝不会传出去,而且你随时可以关掉这个功能。",
       },
     ],
   },
