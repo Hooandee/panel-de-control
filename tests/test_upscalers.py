@@ -2116,7 +2116,8 @@ def test_a_recipe_prepares_the_mod_it_needs_without_the_user(steam, fake_catalog
     _write(target / "ERSS2/ERSS-FG.toml", b'OverlayToggleKey = "Home"\n\n[Renderer]\nScalingMode = "None"\nIsHDR = true\n')
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(
         APPID, mod_launch_exe=("start_protected_game.exe", "eldenring.exe"),
-        mod_settings={"ERSS2/ERSS-FG.toml": {"Renderer.ScalingMode": '"FSR3U"', "FrameGeneration.FrameGenMode": "1"}}))
+        mod_settings={"ERSS2/ERSS-FG.toml": {"Renderer.ScalingMode": '"FSR3U"', "FrameGeneration.FrameGenMode": "1"}},
+        mod_frame_generation="ERSS-FG"))
     monkeypatch.setattr(user_mods.pe, "imported_dlls", lambda path: {"msvcp140.dll", "kernel32.dll"} if path.endswith("ERSS-FG.dll") else set())
     prepared = []
     monkeypatch.setattr(prefix_dependencies, "prepare", lambda home, installed, verbs, *a, **k: prepared.append(tuple(verbs)))
@@ -2131,9 +2132,11 @@ def test_a_recipe_prepares_the_mod_it_needs_without_the_user(steam, fake_catalog
     assert '"${@/$from/$to}"' in script.read_text() and script.stat().st_mode & 0o111
     settings = (target / "ERSS2/ERSS-FG.toml").read_text()
     assert 'ScalingMode="FSR3U"' in settings and "FrameGenMode=1" in settings and "IsHDR = true" in settings
+    assert service.overview()["installs"][APPID]["mod_fg"] == "ERSS-FG"
 
     (target / "ERSS2/ERSS-FG.toml").write_text("rewritten by the mod while playing")
     service.uninstall(APPID)
+    assert APPID not in service.overview()["installs"]
     assert (target / "ERSS2/ERSS-FG.toml").read_bytes() == b'OverlayToggleKey = "Home"\n\n[Renderer]\nScalingMode = "None"\nIsHDR = true\n'
     assert not (target / "ERSS-FG.dll").exists()
     assert service_module._launch_result({}) == {}
