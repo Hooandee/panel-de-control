@@ -24,7 +24,7 @@ vi.mock("./jobRunner", () => ({
   },
 }));
 import { hydratePrefs } from "../system/pdcStorage";
-import { InGameBadge, startUpscalerOverlays, upscalerCoverLabels, writeCoverBadges, writeInGameMode } from "./overlays";
+import { InGameBadge, refreshUpscalersOverview, startUpscalerOverlays, upscalerCoverLabels, writeCoverBadges, writeInGameMode } from "./overlays";
 
 const builds = [
   { id: "fsr-4.1.2-beta", engine: "optiscaler", family: "fsr", version: "4.1.2", models: ["lite", "full"] },
@@ -88,6 +88,43 @@ it("feeds theme covers from startup and finished jobs and honors the restored co
     expect(seen).toHaveBeenCalledTimes(count);
   } finally {
     off();
+    stop();
+  }
+});
+
+it("keeps the finished job's cover labels when the slower startup overview arrives", async () => {
+  let resolveStartup!: (data: ReturnType<typeof overview>) => void;
+  hoisted.overview
+    .mockReturnValueOnce(new Promise((resolve) => { resolveStartup = resolve; }))
+    .mockResolvedValueOnce(overview("hlx-fsr4"));
+  writeCoverBadges(true);
+
+  const stop = startUpscalerOverlays();
+  try {
+    await act(async () => {
+      for (const listener of hoisted.listeners) listener({ job: { appid: "3564860" }, finished: true });
+    });
+    expect(upscalerCoverLabels.read()["3564860"].short).toBe("HLX 3");
+
+    await act(async () => { resolveStartup(overview("fsr-4.1.2-beta")); });
+    expect(upscalerCoverLabels.read()["3564860"].short).toBe("HLX 3");
+  } finally {
+    stop();
+  }
+});
+
+it("still publishes the startup overview if a newer request fails", async () => {
+  let resolveStartup!: (data: ReturnType<typeof overview>) => void;
+  hoisted.overview
+    .mockReturnValueOnce(new Promise((resolve) => { resolveStartup = resolve; }))
+    .mockRejectedValueOnce(new Error("backend unavailable"));
+
+  const stop = startUpscalerOverlays();
+  try {
+    await expect(refreshUpscalersOverview()).rejects.toThrow("backend unavailable");
+    await act(async () => { resolveStartup(overview("fsr-4.1.2-beta")); });
+    expect(upscalerCoverLabels.read()["3564860"].short).toBe("FSR 4 Lite");
+  } finally {
     stop();
   }
 });

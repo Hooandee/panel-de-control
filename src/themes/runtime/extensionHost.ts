@@ -818,10 +818,10 @@ export class ThemeExtensionRuntimeHost {
         ...(options ? { options: options.access } : {}),
       };
       if (scoped) scope.track(() => scoped.release());
-      let stop: () => void;
+      let themeStop: () => void;
       if (extension.abiVersion === 1) {
         const navigation = this.navigation;
-        stop = extension.mount(Object.freeze({
+        themeStop = extension.mount(Object.freeze({
           ...sharedContext,
           ...(navigation ? { navigation: Object.freeze({ focus: navigation.focus }) } : {}),
         }));
@@ -843,29 +843,25 @@ export class ThemeExtensionRuntimeHost {
             }),
           } : {}),
         });
-        const themeStop = extension.mount(context);
-        if (typeof themeStop !== "function") throw new Error("Theme extension disposer is invalid");
-        stop = () => {
-          try {
-            themeStop();
-          } finally {
-            scope.releaseAll();
-          }
-        };
+        themeStop = extension.mount(context);
       }
-      if (typeof stop !== "function") throw new Error("Theme extension disposer is invalid");
+      if (typeof themeStop !== "function") throw new Error("Theme extension disposer is invalid");
+      const stop = () => {
+        try {
+          themeStop();
+        } finally {
+          scope.releaseAll();
+        }
+      };
       if (!this.isCurrent(selection.fingerprint, generation)) {
         try {
           stop();
         } catch {
           this.log("extension_dispose_failed");
         }
-        scoped?.release();
         this.abandon(selection.fingerprint, generation);
         return;
       }
-      const release = stop;
-      stop = () => { try { release(); } finally { scope.releaseAll(); } };
       this.active.set(selection.fingerprint, {
         stop,
         key: selection.key,

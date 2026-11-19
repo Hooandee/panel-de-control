@@ -1295,6 +1295,33 @@ describe("theme storage", () => {
     host.dispose();
     expect(stop).toHaveBeenCalledOnce();
   });
+
+  it("drops cover subscriptions when an ABI-1 mount is overtaken by another reconcile", async () => {
+    const stop = vi.fn();
+    const themeStop = vi.fn(() => { throw new Error("dispose failed"); });
+    const coverLabels = { read: () => ({}), subscribe: vi.fn(() => stop) };
+    const games = { pause: vi.fn(), resume: vi.fn(), howLongToBeat: vi.fn(), protonDb: vi.fn(), coverLabels };
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(), doc: document, games, log: vi.fn(),
+      evaluate: () => Object.freeze({
+        abiVersion: 1,
+        mount: (context: ThemeExtensionMountContext) => {
+          context.games?.coverLabels?.subscribe(() => {});
+          host.reconcile(snapshot([]));
+          return themeStop;
+        },
+      }),
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+
+    expect(themeStop).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledOnce();
+    host.dispose();
+    expect(stop).toHaveBeenCalledOnce();
+  });
 });
 
 describe("shared groups", () => {

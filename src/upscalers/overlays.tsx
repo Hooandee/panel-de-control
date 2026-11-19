@@ -55,8 +55,9 @@ const coverListeners = new Set<() => void>();
 export const upscalerCoverLabels: Readonly<ThemeGameCoverLabelsAccess> = Object.freeze({
   read: () => readCoverBadges() ? coverLabels : NO_COVERS,
   subscribe(listener: () => void) {
-    coverListeners.add(listener);
-    return () => { coverListeners.delete(listener); };
+    const registered = () => listener();
+    coverListeners.add(registered);
+    return () => { coverListeners.delete(registered); };
   },
 });
 
@@ -64,7 +65,8 @@ function emitCoverLabels(): void {
   const visible = upscalerCoverLabels.read();
   if (visible === lastVisibleCovers) return;
   lastVisibleCovers = visible;
-  for (const listener of coverListeners) {
+  for (const listener of [...coverListeners]) {
+    if (!coverListeners.has(listener)) continue;
     try { listener(); } catch {}
   }
 }
@@ -111,7 +113,22 @@ export function publishOverview(overview: UpscalersOverview): void {
 
 /** Games with a Panel upscaler or engine profile, for a report to describe. */
 export function reportedAppids(): string[] {
-  return Object.keys(coverLabels);
+  const installed = Object.keys(installs);
+  const engineOnly = Object.keys(coverLabels).filter((appid) => !(appid in installs));
+  return [...installed, ...engineOnly];
+}
+
+let overviewRequest = 0;
+let publishedOverviewRequest = 0;
+
+export async function refreshUpscalersOverview(signal?: AbortSignal): Promise<UpscalersOverview> {
+  const request = ++overviewRequest;
+  const overview = await getUpscalersOverview();
+  if (!signal?.aborted && request > publishedOverviewRequest) {
+    publishedOverviewRequest = request;
+    publishOverview(overview);
+  }
+  return overview;
 }
 
 export function useInstalls(): Record<string, Badge> {
@@ -536,12 +553,12 @@ export function startUpscalerOverlays(): () => void {
   const stopPrefsHealed = onPrefsHealed(emitCoverLabels);
   const covers = registerGlobal("PanelDeControlUpscalerCovers", CoverBadges);
   const inGame = registerGlobal("PanelDeControlUpscalerInGame", InGameBadge);
-  let stopped = false;
+  const controller = new AbortController();
   let retry = 0;
   const load = (attempt: number) => {
-    getUpscalersOverview().then((overview) => { if (!stopped) publishOverview(overview); }).catch(() => {
+    refreshUpscalersOverview(controller.signal).catch(() => {
       // Right after Steam starts the backend may not answer yet; covers would stay blank until Escaladores opened.
-      if (stopped) return;
+      if (controller.signal.aborted) return;
       retry = window.setTimeout(() => load(attempt + 1), OVERVIEW_RETRY_MS[Math.min(attempt, OVERVIEW_RETRY_MS.length - 1)]);
     });
   };
@@ -549,7 +566,7 @@ export function startUpscalerOverlays(): () => void {
   // A job tracked after the Quick Access Menu closed finishes without Escaladores open to republish the overview.
   const stopJobs = onJobUpdate((update) => { if (update.finished) load(0); });
   return () => {
-    stopped = true;
+    controller.abort();
     stopJobs();
     stopCounterSession();
     stopPrefsHealed();

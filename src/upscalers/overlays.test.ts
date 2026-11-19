@@ -5,7 +5,7 @@ vi.mock("@decky/ui", () => ({ findSP: () => null }));
 vi.mock("@decky/api", () => ({ routerHook: {}, callable: () => vi.fn(() => Promise.resolve()) }));
 
 import { renderHook } from "@testing-library/react";
-import { hostOf, isCollection, isHidden, publishOverview, tileOf, useInstalls } from "./overlays";
+import { hostOf, isCollection, isHidden, publishOverview, reportedAppids, tileOf, upscalerCoverLabels, useInstalls, writeCoverBadges } from "./overlays";
 import type { UpscalersOverview } from "./types";
 
 function box(el: Element, width: number, height: number): void {
@@ -168,6 +168,74 @@ describe("cover badges switch", () => {
     expect(readCoverBadges()).toBe(false);
     writeCoverBadges(true);
     expect(readCoverBadges()).toBe(true);
+  });
+});
+
+describe("the cover labels shared with themes", () => {
+  const engineOnlyOverview: UpscalersOverview = {
+    gpu: "rdna2", display: null, preferred: "fsr", builds: [], cached: [], installs: {}, job: null,
+    engines: { "570": { lossless: { multiplier: 2 } } },
+  };
+
+  it("treats repeated callbacks as independent subscriptions", () => {
+    publishOverview(engineOnlyOverview);
+    const listener = vi.fn();
+    const offFirst = upscalerCoverLabels.subscribe(listener);
+    const offSecond = upscalerCoverLabels.subscribe(listener);
+    try {
+      writeCoverBadges(false);
+      expect(listener).toHaveBeenCalledTimes(2);
+
+      offFirst();
+      offFirst();
+      writeCoverBadges(true);
+      expect(listener).toHaveBeenCalledTimes(3);
+    } finally {
+      offFirst();
+      offSecond();
+      writeCoverBadges(true);
+    }
+  });
+
+  it("notifies only registrations still active from the start of a publication", () => {
+    publishOverview(engineOnlyOverview);
+    const removed = vi.fn();
+    const added = vi.fn();
+    let offRemoved: () => void;
+    let offAdded: (() => void) | undefined;
+    const offFirst = upscalerCoverLabels.subscribe(() => {
+      offRemoved();
+      offAdded ??= upscalerCoverLabels.subscribe(added);
+    });
+    offRemoved = upscalerCoverLabels.subscribe(removed);
+    try {
+      writeCoverBadges(false);
+      expect(removed).not.toHaveBeenCalled();
+      expect(added).not.toHaveBeenCalled();
+
+      writeCoverBadges(true);
+      expect(added).toHaveBeenCalledOnce();
+    } finally {
+      offFirst();
+      offRemoved();
+      offAdded?.();
+      writeCoverBadges(true);
+    }
+  });
+
+  it("reports installed games before engine-only labels even when cover labels are off", () => {
+    publishOverview({
+      ...engineOnlyOverview,
+      installs: { "4732690": { build: "fsr-4.1.2-beta", proxy: "d3d12.dll", status: "active" } },
+      engines: { ...engineOnlyOverview.engines, "4732690": { lossless: { multiplier: 2 } } },
+    });
+    writeCoverBadges(false);
+    try {
+      expect(upscalerCoverLabels.read()).toEqual({});
+      expect(reportedAppids()).toEqual(["4732690", "570"]);
+    } finally {
+      writeCoverBadges(true);
+    }
   });
 });
 
