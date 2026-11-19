@@ -105,6 +105,20 @@ def panel_resolution(drm: str = "/sys/class/drm") -> list[int] | None:
     return sorted(connected)[0][1] if connected else None
 
 
+LAUNCH_SWAP_SCRIPT = """#!/usr/bin/env bash
+# Panel de Control: start the game's exe instead of its anti-cheat launcher (PDC_LAUNCH_EXE=launcher.exe:game.exe).
+from="${PDC_LAUNCH_EXE%%:*}"
+to="${PDC_LAUNCH_EXE#*:}"
+if [ -z "$from" ] || [ -z "$to" ] || [ "$from" = "$PDC_LAUNCH_EXE" ]; then exec "$@"; fi
+exec "${@/$from/$to}"
+"""
+
+
+def _launch_result(install: dict) -> dict:
+    launch = install.get("launch") if isinstance(install.get("launch"), dict) else None
+    return {"env": dict(launch["env"]), "wrappers": list(launch["wrappers"])} if launch else {}
+
+
 def _overrides(install: dict) -> list[str]:
     """WINEDLLOVERRIDES entries Panel owns for an install: the proxy plus any recipe DLLs."""
     proxy = install.get("proxy", "dxgi.dll")
@@ -894,18 +908,26 @@ class UpscalerService:
             overrides.update(image_overrides)
         else:
             entry.pop("image_settings", None)
-        # Only recipes with Proton prerequisites (Luma's runtimes) touch the prefix; game files alone don't.
+        # Only recipes with Proton prerequisites (Luma's runtimes) and mods built against a recent Visual C++ runtime
+        # touch the prefix; game files alone don't.
         components_error = None
-        if automatic and auto_recipes.verbs(automatic):
+        windows_verbs = tuple(dict.fromkeys((*(auto_recipes.verbs(automatic) if automatic else ()),
+                                             *((mod or {}).get("verbs", []) if mod_sources else ()))))
+        if windows_verbs:
             self._update_job(phase="dependencies")
             try:
+                # A recipe's install always runs in a scaler transition; a user's mod may not, and then there is no
+                # checkpoint to roll the prefix back with.
                 checkpoint = self.scaler_transitions.pending(appid)
+                transitional = checkpoint is not None
+                save = self.scaler_transitions._save if transitional else (lambda _checkpoint: None)
+                checkpoint = checkpoint if transitional else {}
                 checkpoint["recipe_dependencies"] = True
-                self.scaler_transitions._save(checkpoint)
+                save(checkpoint)
                 attempts: list[dict] = []
                 try:
                     try:
-                        receipt = prefix_dependencies.prepare(self.home, installed, auto_recipes.verbs(automatic), self.logger, self.proc, attempts,
+                        receipt = prefix_dependencies.prepare(self.home, installed, windows_verbs, self.logger, self.proc, attempts,
                                                               cancelled=self._cancel.is_set)
                     finally:
                         entry["windows_components"] = {"at": time.time(), "attempts": attempts[-8:]}
@@ -918,11 +940,13 @@ class UpscalerService:
                     receipt = None
                     prefix_dependencies.abandon(self.home, installed, self.proc)
                     checkpoint["recipe_dependencies"] = False
-                    self.scaler_transitions._save(checkpoint)
+                    save(checkpoint)
                 if receipt:
                     checkpoint["recipe_prefix"] = receipt
-                    self.scaler_transitions._save(checkpoint)
+                    save(checkpoint)
                     prefix_dependencies.publish(receipt, installed.root, self.proc)
+                    if not transitional:
+                        prefix_dependencies.finish(receipt, self.proc)
             except prefix_dependencies.DependencyError as error:
                 raise UpscalerError(error.code) from None
         self._update_job(phase="copy")
@@ -943,8 +967,22 @@ class UpscalerService:
                 seed.write_text(_with_keys(current, {**REFRAMEWORK_CLOSED, **(
                     _reframework_upscaler_keys(choice) if recipe.reframework_upscaler else {})}), encoding="utf-8")
                 sources[REFRAMEWORK_CONFIG] = seed
+            owned = set(mod_sources)
+            for relative, changes in (recipe.mod_settings.items() if mod_sources and recipe else ()):
+                # The mod's own options a recipe turns on, kept over what the user already chose there.
+                current = target / relative
+                try:
+                    text = current.read_text(encoding="utf-8", errors="replace") \
+                        if current.is_file() and not current.is_symlink() and current.stat().st_size < 1024 * 1024 else ""
+                except OSError:
+                    text = ""
+                seed = Path(prepared) / "mod-settings" / relative
+                seed.parent.mkdir(parents=True, exist_ok=True)
+                seed.write_text(ini.apply(text, changes), encoding="utf-8")
+                sources[relative] = seed
+                owned.add(relative)
             manifest = self._apply(target, sources, ini.apply(base_ini, overrides),
-                                   getattr(automatic, "configuration", {}) if automatic else {}, owned=mod_sources)
+                                   getattr(automatic, "configuration", {}) if automatic else {}, owned=owned)
 
         now = time.time()
         entry["install"] = {
@@ -952,6 +990,7 @@ class UpscalerService:
             "installed_at": now, "options": _clean_options(choice), "solution": solution,
             "native_dlls": sorted({*(recipe.native_dlls if recipe else ()), *user_mods.native_dlls(mod_sources)}),
             "mod": {"filename": mod.get("filename"), "id": mod.get("id")} if mod and mod_sources else None,
+            "launch": self._launch_swap(recipe.mod_launch_exe) if mod_sources and recipe and recipe.mod_launch_exe else None,
             "anti_cheat_accepted": bool(analysis.get("anti_cheat") and choice.get("confirm_anti_cheat")),
             "game_build": installed.build_id,
             "recipe_revision": automatic.revision if automatic else None,
@@ -995,7 +1034,16 @@ class UpscalerService:
                                     "launcher": installed.launcher[0]}, left)
         self._save()
         return _with_leftovers({"files": len(manifest["files"]), "overrides": _overrides(entry["install"]),
-                                "args": entry["install"]["args"]}, left)
+                                "args": entry["install"]["args"], **_launch_result(entry["install"])}, left)
+
+    def _launch_swap(self, swap: tuple[str, str]) -> dict:
+        """Panel's launcher that starts the game's exe instead of its anti-cheat launcher, as the mod's author does."""
+        script = Path(self.home) / ".local/share/panel-de-control/bin/pdc-launch-exe"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text(LAUNCH_SWAP_SCRIPT, encoding="utf-8")
+        script.chmod(0o755)
+        ownership.own_like(Path(self.home), [script.parent.parent.parent, script.parent.parent, script.parent, script])
+        return {"env": {"PDC_LAUNCH_EXE": f"{swap[0]}:{swap[1]}"}, "wrappers": [str(script)]}
 
     def _fetch_assets(self, assets: list[catalog.Asset], pinned_only=frozenset()) -> tuple[dict[str, Path], dict[str, catalog.Asset]]:
         """Each asset at its newest verified release, falling back to the catalog's own when that one fails."""

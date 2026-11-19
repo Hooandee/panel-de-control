@@ -7,13 +7,14 @@ import json
 import os
 import shutil
 import stat
+from struct import error as struct_error
 import subprocess
 import tempfile
 import time
 import zipfile
 from pathlib import Path, PurePosixPath
 
-from . import user_deps
+from . import pe, user_deps
 
 MAX_FILES = 400
 MAX_TOTAL = 2 * 1024 * 1024 * 1024
@@ -76,6 +77,25 @@ def layout(members: list[str], target: str, existing: set[str] | None = None, ro
         seen.add(destination.casefold())
         result[destination] = member
     return result
+
+
+# DLLs from the Visual C++ runtime: a mod built against a recent one (ERSS-FG 4.14 dropped its static copy) hangs on
+# Proton's older msvcp140 until the prefix gets vcrun2022.
+_VC_RUNTIME = ("msvcp140", "vcruntime140", "concrt140")
+
+
+def prefix_verbs(folder: Path, destinations) -> list[str]:
+    """Windows components the mod's DLLs need in the game's Proton prefix."""
+    for name in destinations:
+        if not name.lower().endswith((".dll", ".asi")):
+            continue
+        try:
+            imported = pe.imported_dlls(str(folder / name))
+        except (OSError, ValueError, struct_error):
+            continue
+        if any(dll.startswith(_VC_RUNTIME) for dll in imported):
+            return ["vcrun2022"]
+    return []
 
 
 def replaces_optiscaler(destinations) -> bool:
@@ -264,7 +284,8 @@ class Store:
         if not files or not all((self._folder(appid) / "files" / f).is_file() for f in files):
             return None
         return {"filename": meta.get("filename"), "id": meta.get("id"), "target": meta.get("target"), "count": len(files),
-                "files": files[:PREVIEW], "native_dlls": native_dlls(files)}
+                "files": files[:PREVIEW], "native_dlls": native_dlls(files),
+                "verbs": [v for v in meta.get("verbs", []) if v == "vcrun2022"]}
 
     def sources(self, appid: str) -> dict[str, Path]:
         if self.status(appid) is None:
@@ -286,6 +307,7 @@ class Store:
             _extract_all(path, wanted, staging / "files", password)
             (staging / "meta.json").write_text(json.dumps({
                 "filename": path.name, "files": sorted(wanted), "target": target, "id": f"{path.name}@{time.time_ns()}",
+                "verbs": prefix_verbs(staging / "files", wanted),
             }))
             old = self._folder(appid)
             trash = None

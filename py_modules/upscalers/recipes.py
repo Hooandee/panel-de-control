@@ -57,11 +57,19 @@ class Recipe:
     game_settings: tuple[tuple[str, str], ...] = ()
     # What the game's own menu needs so its DLSS Frame Generation reaches ANR.
     anr_settings: tuple[tuple[str, str], ...] = ()
+    # With a user's mod in: the launcher Steam starts and the exe to start instead (anti-cheat off, offline play),
+    # and the mod's own settings Panel turns on (file beside the exe -> `Section.Key` -> value).
+    mod_launch_exe: tuple[str, str] | None = None
+    mod_settings: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 RECIPES: dict[str, Recipe] = {
     recipe.appid: recipe
     for recipe in (
+        # ERSS-FG (the mod the wiki asks for) needs Easy Anti-Cheat off, which its author does by starting eldenring.exe
+        # instead of start_protected_game.exe, and its FSR upscaler (OptiScaler's input) and FSR Frame Generation chosen.
+        Recipe("1245620", mod_launch_exe=("start_protected_game.exe", "eldenring.exe"),
+               mod_settings={"ERSS2/ERSS-FG.toml": {"Renderer.ScalingMode": '"FSR3U"', "FrameGeneration.FrameGenMode": "1"}}),
         # REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers.
         # graphics.xml: FSR Frame Generation is disabled while Reflex is on.
         Recipe("292030", exe="bin/x64_dx12/witcher3.exe", args=("--launcher-skip", "-dx12"), fg_note="reflexOff"),
