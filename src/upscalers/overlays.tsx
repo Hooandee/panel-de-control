@@ -421,7 +421,8 @@ export const InGameBadge: FC = () => {
   const fgLabel = lossless
     ? `Lossless Scaling ×${lossless.multiplier} · ${t("up.lsfg.flowScale")} ${Math.round(lossless.flow_scale * 100)} %`
     : badge?.fg ? t(`up.fg.pick.${badge.fgRoute ?? "optiscaler"}`) : badge?.modFg ?? null;
-  const fgState = lossless || live?.fg == null ? t("up.overlay.configured") : live.fg ? t("up.overlay.generating") : t("up.overlay.paused");
+  // OptiScaler's own FG reading says nothing about the frame generation a mod runs.
+  const fgState = lossless || live?.fg == null || (!badge?.fg && !!badge?.modFg) ? t("up.overlay.configured") : live.fg ? t("up.overlay.generating") : t("up.overlay.paused");
 
   useEffect(() => {
     const update = () => {

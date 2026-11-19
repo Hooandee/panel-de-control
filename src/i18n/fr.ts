@@ -659,7 +659,7 @@ export const fr: Record<string, string> = {
   "up.userFile.remove": "Retirer",
   "up.userFile.avoid": "La {version} ne se charge pas ; la bonne est la {recommended}",
   "up.userFile.recommended": "Recommandée : {version}",
-  "up.mod.add": "Ajouter un mod (.zip)",
+  "up.mod.add": "Ajouter un mod",
   "up.mod.title": "Mod du jeu",
   "up.mod.named": "Mod {name}",
   "up.mod.required": "Indispensable pour la mise à l’échelle",

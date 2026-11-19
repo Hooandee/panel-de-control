@@ -659,7 +659,7 @@ export const ptBR: Record<string, string> = {
   "up.userFile.remove": "Remover",
   "up.userFile.avoid": "A {version} não carrega; a que funciona é a {recommended}",
   "up.userFile.recommended": "Recomendada: {version}",
-  "up.mod.add": "Adicionar um mod (.zip)",
+  "up.mod.add": "Adicionar um mod",
   "up.mod.title": "Mod do jogo",
   "up.mod.named": "Mod {name}",
   "up.mod.required": "Obrigatório para escalonar",

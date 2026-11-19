@@ -29,7 +29,7 @@ vi.mock("./parts", () => ({
 }));
 
 import { ModFile, modDownload, wikiModName } from "./ModFile";
-import { cancelUserFileWatch } from "./userFileWatch";
+import { cancelUserFileWatch, MOD_WATCH, watchingFor } from "./userFileWatch";
 
 afterEach(() => { cancelUserFileWatch(); cleanup(); vi.useRealTimers(); });
 
@@ -131,4 +131,29 @@ it("keeps the game page open across the file picker and Steam's browser", async 
   expect(hold).toHaveBeenCalledTimes(1);
   await act(async () => { fireEvent.click(screen.getByText("up.userFile.download")); });
   expect(hold).toHaveBeenCalledTimes(2);
+});
+
+it("keeps a download's password error for when the card comes back", async () => {
+  vi.useFakeTimers();
+  const { addUpscalerMod, getUpscalerModCandidates } = await import("../api");
+  vi.mocked(getUpscalerModCandidates).mockImplementation(async () => ({ folder: "/home/deck/Downloads", candidates: api.candidates }));
+  api.candidates = [];
+  const first = render(<ModFile appid="1245620" mod={null} needed name="ERSS-FG" download={PATREON} onDetail={vi.fn()} />);
+  await act(async () => { fireEvent.click(screen.getByText("up.userFile.download")); });
+  first.unmount();
+  vi.mocked(addUpscalerMod).mockRejectedValueOnce(Object.assign(new Error("mod_password"), { pythonTraceback: "RuntimeError: mod_password" }));
+  api.candidates = [{ path: "/home/deck/Downloads/ERSS-FG.7z", filename: "ERSS-FG.7z", size: 1000 }];
+  await act(async () => { await vi.advanceTimersByTimeAsync(7000); });
+  await act(async () => { render(<ModFile appid="1245620" mod={null} needed name="ERSS-FG" download={PATREON} onDetail={vi.fn()} />); });
+  expect(screen.getByText("up.error.mod_password")).toBeTruthy();
+  expect(screen.getByLabelText("password")).toBeTruthy();
+});
+
+it("stops waiting for the download once the user picks a file", async () => {
+  const { openFilePicker } = await import("@decky/api");
+  vi.mocked(openFilePicker).mockResolvedValueOnce({ realpath: "/home/deck/Downloads/mine.zip" } as never);
+  await act(async () => { render(<ModFile appid="1245620" mod={null} needed name="ERSS-FG" download={PATREON} onDetail={vi.fn()} />); });
+  await act(async () => { fireEvent.click(screen.getByText("up.userFile.download")); });
+  await act(async () => { fireEvent.click(screen.getByText("up.userFile.choose")); });
+  expect(watchingFor("1245620", MOD_WATCH)).toBe(false);
 });

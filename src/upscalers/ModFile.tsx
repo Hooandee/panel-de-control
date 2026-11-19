@@ -13,9 +13,9 @@ import { cancelUserFileWatch, downloadMod, MOD_WATCH, onUserFileWatch, watchingF
 
 const EXTENSIONS = ["zip", "7z", "rar"];
 const PROGRESS_MS = 2000;
-// The file picker closes the QAM and the panel mounts again: an error from adding the picked file has to outlive it.
+// The picker and Steam's browser close the QAM and unmount this card: the last error and a password-protected archive
+// have to outlive it, so the download watch's outcome is recorded here even with no card on screen.
 const lastError = new Map<string, string>();
-// An archive that turned out to need a password, kept for the same reason.
 const lockedArchive = new Map<string, string>();
 const WIKI_PAGE = "https://github.com/optiscaler/OptiScaler/wiki/";
 
@@ -28,6 +28,17 @@ export const wikiModName = (page: string | null | undefined): string | null => {
 const shortName = (name: string) => (name.length > 30 ? `${name.slice(0, 17)}…${name.slice(-12)}` : name);
 
 const needsPassword = (code: string) => code === "mod_password" || code === "mod_password_wrong";
+
+onUserFileWatch((event) => {
+  if (event.dependency !== MOD_WATCH) return;
+  if (event.type === "failed") {
+    lastError.set(event.appid, event.code);
+    if (needsPassword(event.code) && event.path) lockedArchive.set(event.appid, event.path);
+  } else if (event.type === "watching" || event.type === "adopted") {
+    lastError.delete(event.appid);
+    lockedArchive.delete(event.appid);
+  }
+});
 
 const errorKey = (code: string) => code === "busy" ? "up.error.busy"
   : code === "mod_password" ? "up.error.mod_password"
@@ -55,10 +66,10 @@ export const ModFile: FC<{
   const [folder, setFolder] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setErrorState] = useState<string | null>(() => lastError.get(appid) ?? null);
-  const setError = (text: string | null) => {
-    if (text) lastError.set(appid, text);
+  const setError = (code: string | null) => {
+    if (code) lastError.set(appid, code);
     else lastError.delete(appid);
-    setErrorState(text);
+    setErrorState(code);
   };
   const [waiting, setWaiting] = useState(() => watchingFor(appid, MOD_WATCH));
   const [locked, setLockedState] = useState<string | null>(() => lockedArchive.get(appid) ?? null);
@@ -74,11 +85,9 @@ export const ModFile: FC<{
     if (event.appid !== appid || event.dependency !== MOD_WATCH) return;
     setWaiting(event.type === "watching");
     if (event.type === "adopted") onDetail(event.detail);
-    if (event.type === "failed") {
-      if (needsPassword(event.code) && event.path) setLocked(event.path);
-      setError(t(errorKey(event.code)));
-    }
-  }), [appid, onDetail, t]);
+    setErrorState(lastError.get(appid) ?? null);
+    setLockedState(lockedArchive.get(appid) ?? null);
+  }), [appid, onDetail]);
 
   useEffect(() => {
     let live = true;
@@ -92,12 +101,13 @@ export const ModFile: FC<{
       setReceived(null);
       return undefined;
     }
+    let live = true;
     const timer = setInterval(() => {
       getUpscalerModCandidates(appid)
-        .then((result) => setReceived(result.downloading?.size ?? null))
+        .then((result) => { if (live) setReceived(result.downloading?.size ?? null); })
         .catch(() => undefined);
     }, PROGRESS_MS);
-    return () => clearInterval(timer);
+    return () => { live = false; clearInterval(timer); };
   }, [appid, waiting]);
 
   const run = async (action: () => Promise<GameDetail>, path?: string) => {
@@ -110,14 +120,15 @@ export const ModFile: FC<{
     } catch (failure) {
       const code = upscalerErrorCode(failure);
       if (path && needsPassword(code)) setLocked(path);
-      setError(t(errorKey(code)));
+      setError(code);
     } finally {
       setBusy(false);
     }
   };
   const adopt = (path: string, secret?: string) => run(() => addUpscalerMod(appid, path, secret), path);
   const pick = async () => {
-    // The picker opens in Steam's main window and closes the QAM: the game page comes back with the panel.
+    // A download still being watched would replace the archive picked here once it lands.
+    if (watchingFor(appid, MOD_WATCH)) cancelUserFileWatch();
     holdPage();
     const picked = await openFilePicker(0 as never, folder ?? "/home", true, true, undefined, EXTENSIONS).catch(() => null);
     if (picked?.realpath) {
@@ -132,12 +143,11 @@ export const ModFile: FC<{
     return (
       <>
         <ListRow label={t("up.mod.add")} chevron disabled={off} busy={busy} onPress={() => void pick()} />
-        {error && <Note tone="warn">{error}</Note>}
+        {error && <Note tone="warn">{t(errorKey(error))}</Note>}
       </>
     );
   }
 
-  // One word on the right, the archive's name under the title: a long file name never squeezes the title.
   const state = mod?.removed ? t("up.mod.state.removing")
     : !present ? t("up.userFile.missing")
     : present.applied ? t("up.mod.state.active")
@@ -157,7 +167,7 @@ export const ModFile: FC<{
         {locked && !present && (
           <>
             <div style={{ padding: `${theme.space.xs}px ${theme.space.md}px` }}>
-              <TextField label={t("up.mod.password")} value={password} onChange={(event) => setPassword(event.target.value)}
+              <TextField label={t("up.mod.password")} bIsPassword value={password} onChange={(event) => setPassword(event.target.value)}
                 style={{ background: theme.color.surfaceRaised, color: theme.color.textPrimary, caretColor: theme.color.textPrimary }} />
             </div>
             <ListRow label={t("up.mod.usePassword")} disabled={off || !password} onPress={() => void adopt(locked, password)} />
@@ -166,7 +176,7 @@ export const ModFile: FC<{
         <ListRow label={t(present ? "up.userFile.change" : "up.userFile.choose")} chevron disabled={off} onPress={() => void pick()} />
         {present && <ListRow danger label={t("up.userFile.remove")} disabled={off} onPress={() => void run(() => removeUpscalerMod(appid))} />}
       </ListCard>
-      {error && <Note tone="warn">{error}</Note>}
+      {error && <Note tone="warn">{t(errorKey(error))}</Note>}
     </>
   );
 };
