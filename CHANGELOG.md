@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.93.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.92.0...panel-de-control-v0.93.0) (2026-11-19)
+
+
+### Features
+
+* **ambient:** blur, darken and vignette filters for the wallpaper ([#1420](https://github.com/Hooandee/panel-de-control/issues/1420)) ([d6de99a](https://github.com/Hooandee/panel-de-control/commit/d6de99a4817206645ab307adbe0a255bd0650a3a))
+* **upscalers:** add a mod from the game page ([#1424](https://github.com/Hooandee/panel-de-control/issues/1424)) ([c16bb22](https://github.com/Hooandee/panel-de-control/commit/c16bb2238c982da5f2bead7ff6dac29a1c902327))
+* **upscalers:** install Luma automatically for every game the OptiScaler wiki pairs with it ([#1426](https://github.com/Hooandee/panel-de-control/issues/1426)) ([1915e32](https://github.com/Hooandee/panel-de-control/commit/1915e325dd4d33ffd3043dcb73fd47464332f6fd))
+* **upscalers:** let users bring a mod archive for any game ([#1423](https://github.com/Hooandee/panel-de-control/issues/1423)) ([1000f92](https://github.com/Hooandee/panel-de-control/commit/1000f9213fe43a4664bfc727d8693d960e92442b))
+
+
+### Bug Fixes
+
+* **upscalers:** keep Panel responsive during exe scans and fix five upscaler issues ([#1421](https://github.com/Hooandee/panel-de-control/issues/1421)) ([a7e4d4e](https://github.com/Hooandee/panel-de-control/commit/a7e4d4e692762c1088a9bee409afaf83ccb90af0))
+
 ## [0.92.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.91.1...panel-de-control-v0.92.0) (2026-11-18)
 
 
