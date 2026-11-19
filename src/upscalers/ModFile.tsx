@@ -25,6 +25,8 @@ export const wikiModName = (page: string | null | undefined): string | null => {
   return named ? named.replace(/[‐‑–]/g, "-") : null;
 };
 
+const shortName = (name: string) => (name.length > 30 ? `${name.slice(0, 17)}…${name.slice(-12)}` : name);
+
 const needsPassword = (code: string) => code === "mod_password" || code === "mod_password_wrong";
 
 const errorKey = (code: string) => code === "busy" ? "up.error.busy"
@@ -135,16 +137,19 @@ export const ModFile: FC<{
     );
   }
 
-  const caption = mod?.removed ? t("up.mod.removing")
-    : present && !present.applied ? t("up.mod.pending")
-    : !present && needed ? t("up.mod.required")
-    : undefined;
+  // One word on the right, the archive's name under the title: a long file name never squeezes the title.
+  const state = mod?.removed ? t("up.mod.state.removing")
+    : !present ? t("up.userFile.missing")
+    : present.applied ? t("up.mod.state.active")
+    : onApply ? t("up.mod.state.pending")
+    : t("up.mod.state.ready");
+  const caption = present?.filename ? shortName(present.filename) : mod?.removed ? undefined : needed ? t("up.mod.required") : undefined;
 
   return (
     <>
       <ListCard>
         <ListRow first label={name ? t("up.mod.named", { name }) : t("up.mod.title")}
-          detail={present?.filename ?? t("up.userFile.missing")} caption={caption} busy={busy} />
+          detail={state} caption={caption} busy={busy} />
         {mod && !mod.applied && onApply && <ListRow label={t("up.mod.apply")} disabled={off} onPress={onApply} />}
         {!present && (waiting
           ? <ListRow label={t("up.userFile.waiting")} caption={received !== null ? t("up.mod.downloading", { size: (received / 1048576).toFixed(1) }) : t("up.mod.waitingCaption")} spinner detail={t("up.cancel")} onPress={cancelUserFileWatch} />
@@ -152,7 +157,8 @@ export const ModFile: FC<{
         {locked && !present && (
           <>
             <div style={{ padding: `${theme.space.xs}px ${theme.space.md}px` }}>
-              <TextField bIsPassword label={t("up.mod.password")} value={password} onChange={(event) => setPassword(event.target.value)} />
+              <TextField label={t("up.mod.password")} value={password} onChange={(event) => setPassword(event.target.value)}
+                style={{ background: theme.color.surfaceRaised, color: theme.color.textPrimary, caretColor: theme.color.textPrimary }} />
             </div>
             <ListRow label={t("up.mod.usePassword")} disabled={off || !password} onPress={() => void adopt(locked, password)} />
           </>

@@ -69,7 +69,7 @@ it("says a mod waits for the upscaler to reinstall and offers to do it", async (
   const mod = { filename: "ERSS-FG free v4.zip", count: 12, files: [], native_dlls: ["d3d12"], applied: false };
   const onApply = vi.fn();
   await act(async () => { render(<ModFile appid="1245620" mod={mod} needed name="ERSS-FG" download={PATREON} onDetail={vi.fn()} onApply={onApply} />); });
-  expect(screen.getByText(/ERSS-FG free v4.zip \| up.mod.pending/)).toBeTruthy();
+  expect(screen.getByText("up.mod.named ERSS-FG | up.mod.state.pending | ERSS-FG free v4.zip")).toBeTruthy();
   expect(screen.queryByText("up.userFile.download")).toBeNull();
   fireEvent.click(screen.getByText("up.mod.apply"));
   expect(onApply).toHaveBeenCalled();
