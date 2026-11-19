@@ -14,7 +14,6 @@ export interface LayerOptions {
   nativeArt: NativeArt;
   motion: MotionState;
   visible: boolean;
-  /** Missing means no filter. */
   filters?: WallpaperFilters;
 }
 
@@ -22,10 +21,7 @@ const BLUR_MAX_PX = 24;
 const DIM_MAX = 0.8;
 const VIGNETTE_MAX = 1;
 
-/**
- * Filters run on the GPU: `filter: blur` on the media and two plain overlays. Blur eats the picture's
- * edges, so the slot is scaled up by the same amount to keep them out of view.
- */
+/** Blur eats the picture's edges: the slot scales up with it to keep them out of view. */
 export function filterVars(filters: WallpaperFilters | undefined): Record<string, string> {
   const level = (value: number | undefined) => Math.min(100, Math.max(0, Number.isFinite(value) ? (value as number) : 0)) / 100;
   const blur = level(filters?.blur) * BLUR_MAX_PX;
@@ -99,6 +95,7 @@ function layerCss(nativeArtClass: string | null, nativeArtBoxClass: string | nul
 #${ROOT_ID}[data-vignette]::after{background:radial-gradient(ellipse at center,transparent 25%,#000 100%);opacity:var(--pdc-bg-vignette)}
 #${ROOT_ID} [data-media]{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 #${ROOT_ID}[data-transition=kenburns] [data-active] [data-media]{animation:pdc-ambient-kb 24s ease-in-out infinite alternate}
+#${ROOT_ID}[data-blur][data-transition=kenburns] [data-active] [data-media]{animation:none}
 #${ROOT_ID}[data-motion=pause] [data-media],#${ROOT_ID}[data-motion=freeze] [data-media]{animation-play-state:paused}
 ${nativeArt.join(",")}{transition:opacity 400ms ease}
 ${forRoot("hide")}{opacity:0!important}

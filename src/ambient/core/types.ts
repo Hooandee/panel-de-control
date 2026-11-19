@@ -41,7 +41,7 @@ export interface AmbientSettings {
     lowBatteryPercent: number;
     optimizeVideos: boolean;
     videoQuality: VideoQuality;
-    /** Wallpaper filters, 0 (off) to 100; they make what sits in front easier to read. */
+    /** Wallpaper filters, 0 (off) to 100. */
     filters: WallpaperFilters;
   };
   music: {
