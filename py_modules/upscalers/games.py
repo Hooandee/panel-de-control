@@ -471,8 +471,7 @@ _embedded_lock = threading.Lock()
 
 
 def embedded_upscalers(exe: Path) -> set[str]:
-    # One pass in plain reads: mmap.find keeps the GIL while it faults the whole exe in from a slow SD card,
-    # which froze every other Panel call for seconds while a game was being analysed.
+    # Plain reads, not mmap: mmap.find holds the GIL while it pages the exe in from a slow SD card.
     try:
         info = os.stat(exe)
     except OSError:
