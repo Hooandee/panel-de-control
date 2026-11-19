@@ -69,6 +69,7 @@ def test_pinned_metaphor_and_granblue_use_luma_dlss_through_optiscaler():
     game = catalog.match('881020', 'optiscaler', 'linux', 'x86_64')
     assert game.exe == 'granblue_fantasy_relink.exe'
     assert catalog.dependencies['luma-gbfr'].files['ReShade64.dll'] == 'dxgi.dll'
+    assert 'luma' in recipes.recipe_for('881020', platform='linux', arch='x86_64').needs, "not on the wiki, still needs Luma"
 
 
 def test_unreal_games_share_the_generic_luma_package_and_let_panel_pick_the_exe():
