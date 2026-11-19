@@ -2106,3 +2106,34 @@ def test_a_password_protected_mod_asks_for_its_password(tmp_path, monkeypatch):
         store.adopt("1245620", archive, "Game", set(), {"Game"}, "nope")
     assert store.adopt("1245620", archive, "Game", set(), {"Game"}, "free")["count"] == 2
     assert all(command[0] == "7z" for command in commands)
+
+
+def test_a_recipe_prepares_the_mod_it_needs_without_the_user(steam, fake_catalog, proc, monkeypatch):
+    # Elden Ring + ERSS-FG: VC++ runtime in the prefix, anti-cheat launcher swapped, FSR and FSR-FG on in its settings.
+    from upscalers import prefix_dependencies, recipes, service as service_module, user_mods
+    home, game = steam
+    target = game / "bin/x64_dx12"
+    _write(target / "ERSS2/ERSS-FG.toml", b'OverlayToggleKey = "Home"\n\n[Renderer]\nScalingMode = "None"\nIsHDR = true\n')
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(
+        APPID, mod_launch_exe=("start_protected_game.exe", "eldenring.exe"),
+        mod_settings={"ERSS2/ERSS-FG.toml": {"Renderer.ScalingMode": '"FSR3U"', "FrameGeneration.FrameGenMode": "1"}}))
+    monkeypatch.setattr(user_mods.pe, "imported_dlls", lambda path: {"msvcp140.dll", "kernel32.dll"} if path.endswith("ERSS-FG.dll") else set())
+    prepared = []
+    monkeypatch.setattr(prefix_dependencies, "prepare", lambda home, installed, verbs, *a, **k: prepared.append(tuple(verbs)))
+    archive = _mod_zip(home / "Downloads/ERSS-FG.zip", {"D3D12.dll": b"MZ", "ERSS-FG.dll": b"MZ"})
+    service = _service(steam, fake_catalog, proc)
+    assert service.add_mod(APPID, str(archive))["mod"]["applied"] is False
+
+    result = service.install(APPID, {"build": "fsr-test"})
+    assert prepared == [("vcrun2022",)]
+    script = home / ".local/share/panel-de-control/bin/pdc-launch-exe"
+    assert result["wrappers"] == [str(script)] and result["env"] == {"PDC_LAUNCH_EXE": "start_protected_game.exe:eldenring.exe"}
+    assert '"${@/$from/$to}"' in script.read_text() and script.stat().st_mode & 0o111
+    settings = (target / "ERSS2/ERSS-FG.toml").read_text()
+    assert 'ScalingMode="FSR3U"' in settings and "FrameGenMode=1" in settings and "IsHDR = true" in settings
+
+    (target / "ERSS2/ERSS-FG.toml").write_text("rewritten by the mod while playing")
+    service.uninstall(APPID)
+    assert (target / "ERSS2/ERSS-FG.toml").read_bytes() == b'OverlayToggleKey = "Home"\n\n[Renderer]\nScalingMode = "None"\nIsHDR = true\n'
+    assert not (target / "ERSS-FG.dll").exists()
+    assert service_module._launch_result({}) == {}
