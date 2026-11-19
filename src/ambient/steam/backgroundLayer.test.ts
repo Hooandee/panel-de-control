@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./steamClasses", () => ({ steamClass: (key: string) => ({ BasicHome: "hashedHome", RecentGamesBackground: "hashedHeroArt", RecentGamesBackgroundImages: "hashedHeroBox" })[key] ?? null }));
 
-import { BackgroundLayer } from "./backgroundLayer";
+import { BackgroundLayer, filterVars } from "./backgroundLayer";
 
 const options = { transition: "fade" as const, nativeArt: "show" as const, motion: "play" as const, visible: true };
 
@@ -145,8 +145,26 @@ describe("BackgroundLayer", () => {
     expect(root.style.outline).not.toBe("");
     await vi.waitFor(() => expect(root.style.outline).toBe(""));
   });
-});
+  it("applies wallpaper filters as variables and flags, and clears them when off", () => {
+    const layer = new BackgroundLayer(() => document);
+    const media = { url: "http://127.0.0.1/a.jpg", kind: "image" as const };
+    layer.apply(media, options);
+    const root = host.firstElementChild as HTMLElement;
+    expect(root.hasAttribute("data-blur") || root.hasAttribute("data-dim") || root.hasAttribute("data-vignette")).toBe(false);
+    layer.apply(media, { ...options, filters: { blur: 50, dim: 100, vignette: 0 } });
+    expect(root.hasAttribute("data-blur")).toBe(true);
+    expect(root.hasAttribute("data-dim")).toBe(true);
+    expect(root.hasAttribute("data-vignette")).toBe(false);
+    expect(root.style.getPropertyValue("--pdc-bg-blur")).toBe("12.0px");
+    expect(root.style.getPropertyValue("--pdc-bg-dim")).toBe("0.800");
+    layer.apply(media, { ...options, filters: { blur: 0, dim: 0, vignette: 0 } });
+    expect(root.hasAttribute("data-blur")).toBe(false);
+  });
 
+  it("clamps filter levels", () => {
+    expect(filterVars({ blur: 500, dim: -3, vignette: Number.NaN })).toMatchObject({ "--pdc-bg-blur": "24.0px", "--pdc-bg-dim": "0.000", "--pdc-bg-vignette": "0.000" });
+  });
+});
 
 describe("BackgroundLayer failed loads", () => {
   let layer: BackgroundLayer;

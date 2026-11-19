@@ -1,5 +1,6 @@
 import { BLEND_GAME_ART_OPACITY, type NativeArt } from "../core/gameArtBlend";
 import type { MotionState } from "../core/powerPolicy";
+import type { WallpaperFilters } from "../core/types";
 import { steamClass } from "./steamClasses";
 
 export interface LayerMedia {
@@ -13,6 +14,27 @@ export interface LayerOptions {
   nativeArt: NativeArt;
   motion: MotionState;
   visible: boolean;
+  /** Missing means no filter. */
+  filters?: WallpaperFilters;
+}
+
+const BLUR_MAX_PX = 24;
+const DIM_MAX = 0.8;
+const VIGNETTE_MAX = 0.9;
+
+/**
+ * Filters run on the GPU: `filter: blur` on the media and two plain overlays. Blur eats the picture's
+ * edges, so the slot is scaled up by the same amount to keep them out of view.
+ */
+export function filterVars(filters: WallpaperFilters | undefined): Record<string, string> {
+  const level = (value: number | undefined) => Math.min(100, Math.max(0, Number.isFinite(value) ? (value as number) : 0)) / 100;
+  const blur = level(filters?.blur) * BLUR_MAX_PX;
+  return {
+    "--pdc-bg-blur": `${blur.toFixed(1)}px`,
+    "--pdc-bg-scale": (1 + (blur * 2.5) / 1000 + (blur > 0 ? 0.02 : 0)).toFixed(3),
+    "--pdc-bg-dim": (level(filters?.dim) * DIM_MAX).toFixed(3),
+    "--pdc-bg-vignette": (level(filters?.vignette) * VIGNETTE_MAX).toFixed(3),
+  };
 }
 
 const ROOT_ID = "pdc-ambient-layer";
@@ -70,6 +92,11 @@ function layerCss(nativeArtClass: string | null, nativeArtBoxClass: string | nul
 #${ROOT_ID}{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;contain:strict}
 #${ROOT_ID}>[data-slot]{position:absolute;inset:0;opacity:0;transition:opacity ${FADE_MS}ms ease}
 #${ROOT_ID}>[data-slot][data-active]{opacity:1}
+#${ROOT_ID}[data-blur]>[data-slot]{transform:scale(var(--pdc-bg-scale))}
+#${ROOT_ID}[data-blur] [data-media]{filter:blur(var(--pdc-bg-blur))}
+#${ROOT_ID}[data-dim]::before,#${ROOT_ID}[data-vignette]::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none}
+#${ROOT_ID}[data-dim]::before{background:#000;opacity:var(--pdc-bg-dim)}
+#${ROOT_ID}[data-vignette]::after{background:radial-gradient(ellipse at center,transparent 40%,#000 140%);opacity:var(--pdc-bg-vignette)}
 #${ROOT_ID} [data-media]{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 #${ROOT_ID}[data-transition=kenburns] [data-active] [data-media]{animation:pdc-ambient-kb 24s ease-in-out infinite alternate}
 #${ROOT_ID}[data-motion=pause] [data-media],#${ROOT_ID}[data-motion=freeze] [data-media]{animation-play-state:paused}
@@ -256,12 +283,23 @@ export class BackgroundLayer {
     const root = this.root;
     root.dataset.transition = options.transition;
     root.dataset.motion = options.motion;
+    this.syncFilters(root, options.filters);
     this.syncNativeArt();
     root.style.display = options.visible ? "" : "none";
     if (!this.current || this.current.url !== media.url || this.current.kind !== media.kind) void this.swap(media);
     else if (resumed && this.failed && this.retryTimer === null && !this.load) void this.swap(this.failed.media, this.failed.attempt);
     this.syncVideos();
     return true;
+  }
+
+  private syncFilters(root: HTMLElement, filters: WallpaperFilters | undefined): void {
+    for (const [name, value] of Object.entries(filterVars(filters))) {
+      if (root.style.getPropertyValue(name) !== value) root.style.setProperty(name, value);
+    }
+    for (const key of ["blur", "dim", "vignette"] as const) {
+      const on = (filters?.[key] ?? 0) > 0;
+      if (root.hasAttribute(`data-${key}`) !== on) root.toggleAttribute(`data-${key}`, on);
+    }
   }
 
   private syncNativeArt(): void {

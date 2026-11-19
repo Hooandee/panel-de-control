@@ -58,6 +58,29 @@
     }
   },
   {
+    "name": "wallpaper filter levels are clamped to 0-100",
+    "input": {
+      "version": 1,
+      "background": {
+        "filters": {
+          "blur": 250,
+          "dim": -5,
+          "vignette": 40.4,
+          "sepia": 10
+        }
+      }
+    },
+    "patch": {
+      "background": {
+        "filters": {
+          "blur": 100,
+          "dim": 0,
+          "vignette": 40
+        }
+      }
+    }
+  },
+  {
     "name": "invalid enums fall back to defaults",
     "input": {
       "version": 1,

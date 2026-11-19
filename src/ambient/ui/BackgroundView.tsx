@@ -7,7 +7,7 @@ import { theme } from "../../theme";
 import type { AmbientSettings } from "../core/types";
 import type { CollectionEntry } from "../steam/rpc";
 import { gameName, type AmbientRuntime, type AmbientSnapshot } from "../steam/runtime";
-import { Button, Caption, ChoiceRow, ToggleRow, MoreSettings, Tile, TileStrip, ValueRow, cardStyle } from "./primitives";
+import { Button, Caption, ChoiceRow, ToggleRow, SliderRow, MoreSettings, Tile, TileStrip, ValueRow, cardStyle } from "./primitives";
 import { RoundButton } from "./NowPlaying";
 import { openBackgroundLibrary } from "./BackgroundLibrary";
 import { visualSources } from "./libraryModel";
@@ -156,6 +156,21 @@ export const BackgroundView: FC<{ snapshot: AmbientSnapshot; runtime: AmbientRun
           />
           <Hint>{t(`ambient.bg.gameArt.desc.${bg.gameArt}`)}</Hint>
           <ToggleRow label={t("ambient.game.trailers")} description={t("ambient.game.trailers.desc")} checked={bg.gameTrailers} onChange={(gameTrailers) => update((b) => ({ ...b, gameTrailers }))} />
+
+          <Caption>{t("ambient.filters.title")}</Caption>
+          <Hint>{t("ambient.filters.desc")}</Hint>
+          {(["blur", "dim", "vignette"] as const).map((key) => (
+            <SliderRow
+              key={key}
+              label={t(`ambient.filters.${key}`)}
+              value={bg.filters?.[key] ?? 0}
+              min={0}
+              max={100}
+              step={5}
+              format={(value) => (value === 0 ? t("ambient.filters.off") : `${value}%`)}
+              onChange={(level) => update((b) => ({ ...b, filters: { ...b.filters, [key]: level } }))}
+            />
+          ))}
 
           <MoreSettings id="ambient-bg-more" label={t("ambient.more")}>
             {!fixed && <>
