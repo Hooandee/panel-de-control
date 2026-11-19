@@ -22,8 +22,3 @@ it("keeps an actionable suggested setting for an installed game", () => {
   render(<WikiFacts appid="1" info={{ status: "works", suggestions: { Foo: "true" } } as unknown as RecipeInfo} installed onApplied={() => {}} />);
   expect(screen.getByRole("button", { name: "Foo=true" })).toBeTruthy();
 });
-it("links the wiki entry that names the mod a game needs, before anything is installed", () => {
-  const info = { needs: ["mod"], status: "works", page: "Elden-Ring-(ERSS‐FG)" } as unknown as RecipeInfo;
-  render(<WikiFacts appid="1245620" info={info} installed={false} onApplied={() => {}} />);
-  expect(screen.getByRole("button", { name: "up.wiki.open" })).toBeTruthy();
-});

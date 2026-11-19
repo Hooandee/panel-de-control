@@ -17,8 +17,7 @@ export const WikiFacts: FC<{ appid: string; info: RecipeInfo; installed: boolean
   const [applied, setApplied] = useState<Record<string, "busy" | "done" | "failed">>({});
   const suggestions = Object.entries(info.suggestions ?? {});
   const warning = info.status === "partial" || info.status === "broken";
-  const needsMod = !!info.page && !!info.needs?.includes("mod");
-  if (!warning && !needsMod && (!installed || suggestions.length === 0)) return null;
+  if (!warning && (!installed || suggestions.length === 0)) return null;
 
   const apply = async (key: string, value: string) => {
     setApplied((s) => ({ ...s, [key]: "busy" }));
