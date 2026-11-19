@@ -346,6 +346,10 @@ def _graphics_apis(exe: Path) -> list[str]:
     return sorted(apis)
 
 
+def _creates_device(apis: list[str]) -> bool:
+    return any(api in apis for api in ("d3d12", "d3d11", "vulkan"))
+
+
 def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = None) -> dict:
     """Candidates for the device-creating executable plus what the game ships.
 
@@ -384,7 +388,7 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
     candidates = []
     for index, (score, path, size) in enumerate(exes[:MAX_PE_SCANS]):
         apis = _graphics_apis(path)
-        if any(api in apis for api in ("d3d12", "d3d11", "vulkan")):
+        if _creates_device(apis):
             score += 30
         candidates.append({
             "exe": path.relative_to(root).as_posix(),
@@ -392,7 +396,9 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
             "size": size,
             "score": score,
         })
-    candidates.sort(key=lambda item: (-item["score"], item["exe"]))
+    # On a tie the exe that imports a graphics API wins: Unity extras (a guide, an artbook) score
+    # as much as the game through their _Data folder.
+    candidates.sort(key=lambda item: (-item["score"], not _creates_device(item["apis"]), item["exe"]))
 
     manual = False
     selected = candidates[0] if candidates else None

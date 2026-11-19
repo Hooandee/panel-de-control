@@ -286,6 +286,20 @@ def test_analyze_picks_the_unity_player_over_anti_cheat_and_helper_exes(tmp_path
     assert "AntiCheatExpert/ACE-Service64.exe" not in [c["exe"] for c in result["candidates"]]
 
 
+def test_analyze_breaks_a_tie_for_the_exe_that_creates_the_device(tmp_path, monkeypatch):
+    # Elden Ring ships Unity extras (guide, artbook) whose _Data folder scores as much as the game exe.
+    for extra in ("AdvGuide/ELDEN RING Adventure Guide", "ArtbookOST/ELDEN RING Digital Artbook & Soundtrack"):
+        _write(tmp_path / f"{extra}.exe", "x")
+        (tmp_path / f"{extra}_Data").mkdir()
+    _write(tmp_path / "Game/start_protected_game.exe", "x")
+    with open(tmp_path / "Game/eldenring.exe", "wb") as handle:
+        handle.truncate(86_973_008)
+    monkeypatch.setattr(games.pe, "graphics_apis", lambda path: ["d3d12", "dxgi"] if path.endswith("eldenring.exe") else [])
+    result = games.analyze(tmp_path)
+    assert result["exe"] == "Game/eldenring.exe"
+    assert result["target"] == str(tmp_path / "Game")
+
+
 def test_agility_sdk_beside_the_exe_means_d3d12(steam, monkeypatch):
     # RE Engine games (RE4, Requiem, Onimusha) import only d3d11/dxgi and load D3D12 at runtime.
     from upscalers import solution_plan
