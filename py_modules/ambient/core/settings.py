@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import math
 import re
 from typing import Any
 
@@ -28,6 +29,7 @@ _MEDIA_REF = re.compile(r"^(local|url|opt|steam|remote):[A-Za-z0-9._:/?&=%+~@#!$
 _SELECTED_REF = re.compile(r"(?:local|steam|remote):[A-Za-z0-9._:/?&=%+~@#!$'()*,;-]{1,2048}")
 _ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _CLAIM_KEY = re.compile(r"^(css:[A-Za-z]{1,48}(::before|::after)?|[A-Za-z0-9._-]{1,64})$")
+FILTER_KEYS = ("blur", "dim", "vignette")
 _MAX_ITEMS = 200
 _MAX_TRACK_ID = 2100
 _MAX_PLAYLISTS = 20
@@ -51,6 +53,7 @@ DEFAULTS: dict[str, Any] = {
         "lowBatteryPercent": 20,
         "optimizeVideos": True,
         "videoQuality": "fluid",
+        "filters": {"blur": 0, "dim": 0, "vignette": 0},
     },
     "music": {
         "enabled": False,
@@ -124,6 +127,11 @@ def _normalize_background(out: dict[str, Any], raw: dict[str, Any]) -> None:
     threshold = raw.get("lowBatteryPercent")
     if _number(threshold):
         out["lowBatteryPercent"] = int(min(50, max(5, threshold)))
+    filters = _dict(raw.get("filters"))
+    for key in FILTER_KEYS:
+        level = filters.get(key)
+        if _number(level) and math.isfinite(level):
+            out["filters"][key] = int(min(100, max(0, round(level))))
     out["perGame"] = {
         key: value
         for key, value in _dict(raw.get("perGame")).items()

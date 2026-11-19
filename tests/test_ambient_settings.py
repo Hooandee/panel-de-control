@@ -103,3 +103,8 @@ def test_queue_and_play_modes_are_kept_only_when_valid():
     assert len(music["queue"]) == 200
     defaults = normalize_settings({"version": 1, "music": {"repeat": "sometimes", "queue": "x"}})["music"]
     assert defaults["repeat"] == "all" and defaults["shuffle"] is False and defaults["queue"] == []
+
+
+def test_non_finite_filter_levels_are_ignored():
+    out = normalize_settings({"version": 1, "background": {"filters": {"blur": float("inf"), "dim": float("-inf"), "vignette": 30}}})
+    assert out["background"]["filters"] == {"blur": 0, "dim": 0, "vignette": 30}

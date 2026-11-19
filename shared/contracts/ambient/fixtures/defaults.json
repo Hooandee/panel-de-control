@@ -18,7 +18,12 @@
     "gameThemes": false,
     "lowBatteryPercent": 20,
     "optimizeVideos": true,
-    "videoQuality": "fluid"
+    "videoQuality": "fluid",
+    "filters": {
+      "blur": 0,
+      "dim": 0,
+      "vignette": 0
+    }
   },
   "music": {
     "enabled": false,

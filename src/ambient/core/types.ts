@@ -4,6 +4,12 @@ export type GameArtMode = "mine" | "blend" | "game";
 export type MediaKind = "image" | "video" | "audio";
 export type RepeatMode = "all" | "one" | "off";
 
+export interface WallpaperFilters {
+  blur: number;
+  dim: number;
+  vignette: number;
+}
+
 export interface QueuedTrack {
   id: string;
   url: string;
@@ -35,6 +41,8 @@ export interface AmbientSettings {
     lowBatteryPercent: number;
     optimizeVideos: boolean;
     videoQuality: VideoQuality;
+    /** Wallpaper filters, 0 (off) to 100. */
+    filters: WallpaperFilters;
   };
   music: {
     enabled: boolean;

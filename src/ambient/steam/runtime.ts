@@ -879,7 +879,7 @@ export class AmbientRuntime {
     if (trailer && owns) {
       const page = await this.trailerPage(trailer.url, trailerSound ? Math.round(settings.music.volume * 100) : 0);
       if (this.stopped || generation !== this.renderGeneration) return;
-      if (page && this.layer.apply({ url: page, kind: "page" }, { transition: "fade", nativeArt: "hide", motion, visible: true })) {
+      if (page && this.layer.apply({ url: page, kind: "page" }, { transition: "fade", nativeArt: "hide", motion, visible: true, filters: settings.background.filters })) {
         doc?.documentElement.setAttribute("data-pdc-ambient-background", "panel");
         return;
       }
@@ -929,6 +929,7 @@ export class AmbientRuntime {
       nativeArt: choice.nativeArt,
       motion: motion === "play" && this.optimizingRef === mediaRef ? "pause" : motion,
       visible: surfaceAllowed,
+      filters: settings.background.filters,
     });
     if (shown) {
       doc?.documentElement.setAttribute("data-pdc-ambient-background", "panel");
