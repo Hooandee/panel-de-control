@@ -53,13 +53,18 @@ def test_check_accepts_separate_blocks_for_every_supported_language(tmp_path):
 * Ouvrez le panneau depuis le QAM.
 * Redémarrez Decky pour appliquer la modification.
 
+### Русский
+
+* Открой панель из QAM.
+* Перезапусти Decky, чтобы применить изменение.
+
 ## [0.36.0](https://example.test/0.36.0)
 """
 
     result = _run(tmp_path, "--check", changelog)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "six languages" in result.stdout
+    assert "seven languages" in result.stdout
 
 
 def test_check_requires_and_renders_brazilian_portuguese(tmp_path):
@@ -90,13 +95,17 @@ def test_check_requires_and_renders_brazilian_portuguese(tmp_path):
 ### Français
 
 * Ouvrez le panneau depuis le QAM.
+
+### Русский
+
+* Открой панель из QAM.
 """
 
     checked = _run(tmp_path, "--check", changelog)
     rendered = _run(tmp_path, "--release-body", changelog)
 
     assert checked.returncode == 0, checked.stdout + checked.stderr
-    assert "six languages" in checked.stdout
+    assert "seven languages" in checked.stdout
     assert rendered.returncode == 0, rendered.stdout + rendered.stderr
     assert "### Novidades em português (Brasil)\n\n- Abra o painel pelo QAM.\n" in rendered.stdout
 
@@ -147,6 +156,10 @@ def test_release_body_groups_and_strips_all_language_labels(tmp_path):
 
 * Ouvrez le panneau depuis le QAM. ([#415](https://example.test/415))
 
+### Русский
+
+* Открой панель из QAM. ([#415](https://example.test/415))
+
 ## [0.36.0](https://example.test/0.36.0)
 """
 
@@ -176,6 +189,10 @@ def test_release_body_groups_and_strips_all_language_labels(tmp_path):
 ### Nouveautés
 
 - Ouvrez le panneau depuis le QAM.
+
+### Что нового
+
+- Открой панель из QAM.
 """
 
 
@@ -223,12 +240,16 @@ def test_check_accepts_complete_german_translation(tmp_path):
 ### Français
 
 * Ouvrez le panneau depuis le QAM.
+
+### Русский
+
+* Открой панель из QAM.
 """
 
     result = _run(tmp_path, "--check", changelog)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "six languages" in result.stdout
+    assert "seven languages" in result.stdout
 
 
 def test_release_body_includes_german_notes(tmp_path):
@@ -242,6 +263,7 @@ def test_release_body_includes_german_notes(tmp_path):
 * **DE:** Öffne das Panel über das QAM.
 * **PT-BR:** Abra o painel pelo QAM.
 * **FR:** Ouvrez le panneau depuis le QAM.
+* **RU:** Открой панель из QAM.
 """
 
     result = _run(tmp_path, "--release-body", changelog)
@@ -336,12 +358,13 @@ def test_check_keeps_release_please_english_bullets_compatible(tmp_path):
 * **DE:** Öffne das Panel über das QAM.
 * **PT-BR:** Abra o painel pelo QAM.
 * **FR:** Ouvrez le panneau depuis le QAM.
+* **RU:** Открой панель из QAM.
 """
 
     result = _run(tmp_path, "--check", changelog)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "six languages" in result.stdout
+    assert "seven languages" in result.stdout
 
 
 def test_check_keeps_explicit_language_labels_compatible(tmp_path):
@@ -355,12 +378,13 @@ def test_check_keeps_explicit_language_labels_compatible(tmp_path):
 * **DE:** Öffne das Panel über das QAM.
 * **PT-BR:** Abra o painel pelo QAM.
 * **FR:** Ouvrez le panneau depuis le QAM.
+* **RU:** Открой панель из QAM.
 """
 
     result = _run(tmp_path, "--check", changelog)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "six languages" in result.stdout
+    assert "seven languages" in result.stdout
 
 
 def test_check_rejects_unknown_language_labels(tmp_path):
@@ -396,7 +420,36 @@ def test_check_requires_and_renders_french(tmp_path):
     assert missing.returncode == 1
     assert "French (**FR:**)" in missing.stdout
 
-    rendered = _run(tmp_path, "--release-body", changelog + "* **FR:** Ouvrez le panneau depuis le QAM.\n")
+    rendered = _run(
+        tmp_path,
+        "--release-body",
+        changelog + "* **FR:** Ouvrez le panneau depuis le QAM.\n* **RU:** Открой панель из QAM.\n",
+    )
 
     assert rendered.returncode == 0, rendered.stdout + rendered.stderr
-    assert rendered.stdout.endswith("### Nouveautés\n\n- Ouvrez le panneau depuis le QAM.\n")
+    assert "### Nouveautés\n\n- Ouvrez le panneau depuis le QAM.\n" in rendered.stdout
+    assert rendered.stdout.endswith("### Что нового\n\n- Открой панель из QAM.\n")
+
+
+def test_check_requires_and_renders_russian(tmp_path):
+    changelog = """# Changelog
+
+## [0.92.0](https://example.test/0.92.0)
+
+* **ES:** Abre el panel desde el QAM.
+* **EN:** Open the panel from the QAM.
+* **IT:** Apri il pannello dal QAM.
+* **DE:** Öffne das Panel über das QAM.
+* **PT-BR:** Abra o painel pelo QAM.
+* **FR:** Ouvrez le panneau depuis le QAM.
+"""
+
+    missing = _run(tmp_path, "--check", changelog)
+
+    assert missing.returncode == 1
+    assert "Russian (**RU:**)" in missing.stdout
+
+    rendered = _run(tmp_path, "--release-body", changelog + "* **RU:** Открой панель из QAM.\n")
+
+    assert rendered.returncode == 0, rendered.stdout + rendered.stderr
+    assert rendered.stdout.endswith("### Что нового\n\n- Открой панель из QAM.\n")

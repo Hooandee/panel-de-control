@@ -84,6 +84,20 @@ describe("releaseNotesForLanguage", () => {
     );
   });
 
+  it("selects Russian notes without falling back to English", () => {
+    const notes = [
+      "## v0.92.0",
+      "### What's new",
+      "- English change",
+      "### Что нового",
+      "- Изменение на русском",
+    ].join("\n");
+
+    expect(releaseNotesForLanguage(notes, "ru")).toBe(
+      "## v0.92.0\n- Изменение на русском",
+    );
+  });
+
   it("stops at the next heading even when its language is unknown", () => {
     const notes = [
       "## v0.36.0",

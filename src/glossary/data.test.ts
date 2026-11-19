@@ -38,6 +38,10 @@ describe("glossary data", () => {
     const frenchNames = terms.map((t) => t.termFr);
     expect(frenchNames.every(Boolean)).toBe(true);
     expect(new Set(frenchNames).size).toBe(frenchNames.length);
+
+    const russianNames = terms.map((t) => t.termRu);
+    expect(russianNames.every(Boolean)).toBe(true);
+    expect(new Set(russianNames).size).toBe(russianNames.length);
   });
 
   it("has non-empty text in every language for each category title", () => {
@@ -48,6 +52,7 @@ describe("glossary data", () => {
       expect(c.de.trim()).not.toBe("");
       expect(c.ptBR.trim()).not.toBe("");
       expect(c.fr.trim()).not.toBe("");
+      expect(c.ru.trim()).not.toBe("");
     }
   });
 
@@ -60,6 +65,7 @@ describe("glossary data", () => {
       expect(t.de.trim()).not.toBe("");
       expect(t.ptBR.trim()).not.toBe("");
       expect(t.fr.trim()).not.toBe("");
+      expect(t.ru.trim()).not.toBe("");
     }
   });
 
@@ -132,17 +138,33 @@ describe("glossary data", () => {
     expect(terms.find((term) => term.id === "battery-health")?.termFr).toBe("Santé de la batterie");
     expect(terms.find((term) => term.id === "fan-curve")?.termFr).toBe("Courbe de ventilation");
   });
+
+  it("does not use em dashes in Russian text", () => {
+    const russian = CATEGORIES.flatMap((category) => [
+      category.ru,
+      ...category.terms.flatMap((term) => [term.termRu, term.ru]),
+    ]);
+
+    expect(russian.some((value) => value.includes("—"))).toBe(false);
+  });
+
+  it("uses natural Russian terminology for generated frames and battery health", () => {
+    expect(terms.find((term) => term.id === "frame-gen")?.termRu).toBe("Генерация кадров");
+    expect(terms.find((term) => term.id === "battery-health")?.termRu).toBe("Здоровье батареи");
+    expect(terms.find((term) => term.id === "fan-curve")?.termRu).toBe("Кривая вентилятора");
+  });
 });
 
 describe("pick", () => {
   it("returns the matching language", () => {
-    const entry = { es: "hola", en: "hi", it: "ciao", de: "hallo", ptBR: "olá", fr: "salut" };
+    const entry = { es: "hola", en: "hi", it: "ciao", de: "hallo", ptBR: "olá", fr: "salut", ru: "привет" };
     expect(pick(entry, "es")).toBe("hola");
     expect(pick(entry, "en")).toBe("hi");
     expect(pick(entry, "it")).toBe("ciao");
     expect(pick(entry, "de")).toBe("hallo");
     expect(pick(entry, "pt-BR")).toBe("olá");
     expect(pick(entry, "fr")).toBe("salut");
+    expect(pick(entry, "ru")).toBe("привет");
   });
 
   it("uses the Italian display term without changing Spanish or English", () => {
@@ -153,12 +175,14 @@ describe("pick", () => {
       termDe: "Akkuzustand",
       termPtBR: "Saúde da bateria",
       termFr: "Santé de la batterie",
+      termRu: "Здоровье батареи",
       es: "estado",
       en: "health",
       it: "stato",
       de: "Zustand",
       ptBR: "saúde",
       fr: "santé",
+      ru: "здоровье",
     };
 
     expect(pickTerm(entry, "es")).toBe("Salud de la batería");
@@ -167,5 +191,6 @@ describe("pick", () => {
     expect(pickTerm(entry, "de")).toBe("Akkuzustand");
     expect(pickTerm(entry, "pt-BR")).toBe("Saúde da bateria");
     expect(pickTerm(entry, "fr")).toBe("Santé de la batterie");
+    expect(pickTerm(entry, "ru")).toBe("Здоровье батареи");
   });
 });

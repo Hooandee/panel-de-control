@@ -23,6 +23,7 @@ import { it } from "./it";
 import { de } from "./de";
 import { ptBR } from "./ptBR";
 import { fr } from "./fr";
+import { ru } from "./ru";
 import { SUPPORTED_LANGUAGES, type Lang } from "./languages";
 
 export { SUPPORTED_LANGUAGES, type Lang } from "./languages";
@@ -4108,6 +4109,7 @@ export const DICTS: Record<Lang, Record<string, string>> = {
   de,
   "pt-BR": ptBR,
   fr,
+  ru,
 };
 
 /** Lets a domain ship its own strings; English stays the fallback for any missing key. */

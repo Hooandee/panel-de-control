@@ -43,6 +43,13 @@ describe("steamLangToLang (seed the default from Steam's UI language)", () => {
     expect(steamLangToLang("fr")).toBe("fr");
   });
 
+  it("maps Russian and its language code to ru", () => {
+    expect(steamLangToLang("russian")).toBe("ru");
+    expect(steamLangToLang("Russian")).toBe("ru");
+    expect(steamLangToLang("  RUSSIAN  ")).toBe("ru");
+    expect(steamLangToLang("ru")).toBe("ru");
+  });
+
   it("maps any other language to es (our default)", () => {
     expect(steamLangToLang("schinese")).toBe("es");
   });
