@@ -44,6 +44,7 @@ jobs:
               - "scripts/**/*.py"
               - "tests/*.py"
               - "tests/**/*.py"
+              - "tests/fixtures/upscalers_corpus/**"
               - "conftest.py"
               - "requirements-dev.txt"
               - "ruff.toml"
