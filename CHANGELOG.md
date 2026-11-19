@@ -3,9 +3,29 @@
 ## [0.94.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.0...panel-de-control-v0.94.1) (2026-11-19)
 
 
-### Bug Fixes
+### Español
 
-* **upscalers:** find Steam games when the library index misleads ([#1439](https://github.com/Hooandee/panel-de-control/issues/1439)) ([a04cdb4](https://github.com/Hooandee/panel-de-control/commit/a04cdb4709d73b4e277f6ae8630f90dc77223501))
+* **Escaladores encuentra tus juegos aunque estén en otra biblioteca:** En algunos equipos, Escaladores decía que un juego no estaba instalado aunque Steam lo abría sin problema, sobre todo con juegos en la tarjeta SD o en otro disco. Ahora busca los juegos en las mismas bibliotecas que usa Steam y, si hace falta, también en los discos conectados.
+
+### English
+
+* **Upscalers finds your games even in another library:** On some devices, Upscalers said a game wasn't installed even though Steam launched it fine, mostly with games on the SD card or another drive. It now looks for games in the same libraries Steam uses and, when needed, on the connected drives too.
+
+### Italiano
+
+* **Upscaler trova i tuoi giochi anche in un'altra libreria:** Su alcuni dispositivi, Upscaler diceva che un gioco non era installato anche se Steam lo avviava senza problemi, soprattutto con giochi sulla scheda SD o su un altro disco. Ora cerca i giochi nelle stesse librerie che usa Steam e, se serve, anche nei dischi collegati.
+
+### Deutsch
+
+* **Upscaler findet deine Spiele auch in einer anderen Bibliothek:** Auf manchen Geräten meldete Upscaler, ein Spiel sei nicht installiert, obwohl Steam es problemlos startete, vor allem bei Spielen auf der SD-Karte oder einem anderen Laufwerk. Jetzt sucht es die Spiele in denselben Bibliotheken wie Steam und bei Bedarf auch auf den angeschlossenen Laufwerken.
+
+### Português (Brasil)
+
+* **Upscalers encontra seus jogos mesmo em outra biblioteca:** Em alguns aparelhos, Upscalers dizia que um jogo não estava instalado mesmo com o Steam abrindo o jogo normalmente, principalmente com jogos no cartão SD ou em outro disco. Agora ele procura os jogos nas mesmas bibliotecas que o Steam usa e, se precisar, também nos discos conectados.
+
+### Français
+
+* **Upscalers trouve vos jeux même dans une autre bibliothèque :** Sur certains appareils, Upscalers indiquait qu'un jeu n'était pas installé alors que Steam le lançait sans souci, surtout pour les jeux sur la carte SD ou sur un autre disque. Il cherche maintenant les jeux dans les mêmes bibliothèques que Steam et, si besoin, aussi sur les disques branchés.
 
 ## [0.94.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.93.0...panel-de-control-v0.94.0) (2026-11-19)
 
