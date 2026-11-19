@@ -19,7 +19,7 @@ vi.mock("../api", () => ({
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string, params?: Record<string, unknown>) => (params?.name ? `${key} ${params.name}` : key) }) }));
 vi.mock("./parts", () => ({
   ListCard: ({ children }: any) => <div>{children}</div>,
-  ListRow: ({ label, detail, caption, onPress }: any) => <button onClick={onPress}>{[label, detail, caption].filter(Boolean).join(" | ")}</button>,
+  ListRow: ({ label, detail, caption, onPress, busy, disabled }: any) => <button onClick={() => { if (!busy && !disabled) onPress?.(); }}>{[label, detail, caption].filter(Boolean).join(" | ")}</button>,
   Note: ({ children }: any) => <p>{children}</p>,
 }));
 
@@ -73,4 +73,11 @@ it("says a mod waits for the upscaler to reinstall and offers to do it", async (
 it("keeps to one row on games that need no mod", async () => {
   await act(async () => { render(<ModFile appid="1627720" mod={null} needed={false} name={null} download={null} onDetail={vi.fn()} />); });
   expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["up.mod.add"]);
+});
+
+it("lets the download wait be cancelled", async () => {
+  await act(async () => { render(<ModFile appid="1245620" mod={null} needed name="ERSS-FG" download={PATREON} onDetail={vi.fn()} />); });
+  await act(async () => { fireEvent.click(screen.getByText("up.userFile.download")); });
+  await act(async () => { fireEvent.click(screen.getByText(/up.userFile.waiting/)); });
+  expect(screen.getByText("up.userFile.download")).toBeTruthy();
 });

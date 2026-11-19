@@ -95,7 +95,7 @@ export const ModFile: FC<{
           detail={present?.filename ?? t("up.userFile.missing")} caption={caption} busy={busy} />
         {mod && !mod.applied && onApply && <ListRow label={t("up.mod.apply")} disabled={off} onPress={onApply} />}
         {!present && (waiting
-          ? <ListRow label={t("up.userFile.waiting")} caption={t("up.mod.waitingCaption")} busy detail={t("up.cancel")} onPress={cancelUserFileWatch} />
+          ? <ListRow label={t("up.userFile.waiting")} caption={t("up.mod.waitingCaption")} spinner detail={t("up.cancel")} onPress={cancelUserFileWatch} />
           : download && <ListRow label={t("up.userFile.download")} chevron disabled={off} onPress={() => void downloadMod(appid, download)} />)}
         <ListRow label={t(present ? "up.userFile.change" : "up.userFile.choose")} chevron disabled={off} onPress={() => void pick()} />
         {present && <ListRow danger label={t("up.userFile.remove")} disabled={off} onPress={() => void run(() => removeUpscalerMod(appid))} />}

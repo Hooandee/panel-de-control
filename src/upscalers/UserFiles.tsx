@@ -83,7 +83,7 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
             caption={candidate.version ?? undefined} disabled={disabled || busy} onPress={() => void adopt(candidate.path)} />
         ))}
         {waiting
-          ? <ListRow label={t("up.userFile.waiting")} caption={t("up.userFile.waitingCaption")} busy detail={t("up.cancel")} onPress={cancelUserFileWatch} />
+          ? <ListRow label={t("up.userFile.waiting")} caption={t("up.userFile.waitingCaption")} spinner detail={t("up.cancel")} onPress={cancelUserFileWatch} />
           : file.state !== "ready" && <ListRow label={t("up.userFile.download")} chevron disabled={disabled || busy} onPress={() => void downloadUserFile(appid, file)} />}
         <ListRow label={t(missing ? "up.userFile.choose" : "up.userFile.change")} chevron disabled={disabled || busy} onPress={() => void pick()} />
         {!missing && (
