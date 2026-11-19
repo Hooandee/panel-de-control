@@ -334,7 +334,7 @@ export const GameView: FC<{
 
   const apply = async () => {
     trace("apply");
-    if (gameRunning && install && !spatialInstalled && (!sameBuild || modelChanged || (qualityChanged && !!detail?.recipe_info?.quality_on_exit))) {
+    if (gameRunning && !spatialInstalled && (!install || !sameBuild || modelChanged || (qualityChanged && !!detail?.recipe_info?.quality_on_exit))) {
       // The running game holds OptiScaler's files (and REFramework rewrites its quality on exit): it goes in as soon as it closes.
       queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
         ...scalerChoice, ...(replacesFsr || dropsAnr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
@@ -382,6 +382,12 @@ export const GameView: FC<{
       await load();
       onChanged();
     } else if (fg === "on") {
+      if (gameRunning) {
+        keepDraft.current = true;
+        changeChoice(next);
+        queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
+        return;
+      }
       const started = await startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
       setJob(started);
       await waitForJobCompletion(started.id);
@@ -408,6 +414,10 @@ export const GameView: FC<{
         // A reinstall with frame generation off took ANR's files out: they go back in with a new install.
         if (upscalerErrorCode(error) !== "anr_reinstall") throw error;
       }
+    }
+    if (gameRunning) {
+      queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
+      return;
     }
     const started = await startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
     setJob(started);
