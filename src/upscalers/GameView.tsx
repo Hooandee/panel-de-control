@@ -15,6 +15,7 @@ import { useRunningGame } from "../tdp/useRunningGame";
 import { CompareView, isComparing } from "./CompareView";
 import { openIdentityModal } from "./IdentityModal";
 import { readShortcutHint } from "./shortcutHint";
+import { steamLibraryOf } from "./steamLibraries";
 import { useI18n } from "../i18n";
 import type { GameEntry } from "../launch/steamApi";
 import { readAppDetails } from "../launch/steamApi";
@@ -203,7 +204,8 @@ export const GameView: FC<{
 
   const load = useCallback(async () => {
     try {
-      const hint = game.isNonSteam ? await readShortcutHint(game.liveAppid, game.name) : null;
+      const library = game.isNonSteam ? null : steamLibraryOf(game.liveAppid);
+      const hint = game.isNonSteam ? await readShortcutHint(game.liveAppid, game.name) : library ? { library } : null;
       const next = await getUpscalersGame(appid, hint);
       if (!mounted.current) return;
       setDetail(next);

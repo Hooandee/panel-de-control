@@ -83,6 +83,7 @@ class UpscalerError(Exception):
         super().__init__(code)
         self.code = code
         self.detail = detail
+        self.lookup: dict | None = None
 
 
 def panel_resolution(drm: str = "/sys/class/drm") -> list[int] | None:
@@ -329,8 +330,10 @@ class UpscalerService:
         history = entry.get("history") or []
         return history[-1].get("result", "pending") if history else "pending"
 
-    def compatibility(self, appids: list[str]) -> dict[str, dict]:
+    def compatibility(self, appids: list[str], libraries: list | None = None) -> dict[str, dict]:
         """What each game ships (or that it runs natively on Linux), cached by install folder mtime."""
+        if libraries is not None:
+            games.set_steam_libraries(libraries)
         result = {}
         for appid in appids[:400]:
             installed = self._locate(str(appid))
@@ -356,8 +359,9 @@ class UpscalerService:
         return result
 
     def _locate(self, appid: str, lookup: Counter | None = None) -> games.Installed | None:
-        hint = (self.state["games"].get(appid) or {}).get("shortcut_hint")
-        return games.find_installed(self.home, appid, lookup) or games.from_hint(appid, hint, self.home)
+        entry = self.state["games"].get(appid) or {}
+        library = entry.get("steam_library") if isinstance(entry.get("steam_library"), str) else None
+        return games.find_installed(self.home, appid, lookup, library) or games.from_hint(appid, entry.get("shortcut_hint"), self.home)
 
     def _find(self, appid: str, lookup: Counter | None = None) -> games.Installed | None:
         installed = self._locate(appid, lookup)
@@ -407,6 +411,12 @@ class UpscalerService:
         return self.game(appid)
 
     def game(self, appid: str, hint: dict | None = None) -> dict:
+        library = hint.get("library") if isinstance(hint, dict) else None
+        if isinstance(library, str) and os.path.isabs(library) and "\0" not in library:
+            entry = self._game_state(appid)
+            if entry.get("steam_library") != library[:1024]:
+                entry["steam_library"] = library[:1024]
+                self._save()
         if isinstance(hint, dict) and hint.get("exe"):
             entry = self._game_state(appid)
             clean = {k: str(hint.get(k) or "")[:1024] for k in ("exe", "dir", "name", "opts")}
@@ -418,7 +428,9 @@ class UpscalerService:
         if self.logger and appid.isdecimal():
             self.logger.info("Steam library lookup: appid=%s counts=%s", appid, dict(lookup))
         if installed is None:
-            raise UpscalerError("not_installed")
+            error = UpscalerError("not_installed")
+            error.lookup = dict(lookup)
+            raise error
         entry = self._game_state(appid)
         identity = self._identity(installed, entry)
         recipe = self._recipe(appid, identity, installed)

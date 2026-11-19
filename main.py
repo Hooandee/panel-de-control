@@ -1423,7 +1423,9 @@ class Plugin(AmbientRpc):
             code = error.code if isinstance(error, UpscalerError) else type(error).__name__
             if tracked:
                 await loop.run_in_executor(None, lambda: service.record_action(appid, method, "error", requested, code))
-            _upscalers_journal("WARNING", "refused", action=method, appid=appid, code=code)
+            lookup = getattr(error, "lookup", None)
+            _upscalers_journal("WARNING", "refused", action=method, appid=appid, code=code,
+                               **({"lookup": lookup} if lookup else {}))
             if isinstance(error, UpscalerError):
                 raise RuntimeError(error.code) from None
             raise
@@ -1458,8 +1460,9 @@ class Plugin(AmbientRpc):
     async def get_upscalers_overview(self) -> dict:
         return await self._upscalers_call("overview")
 
-    async def get_upscalers_compat(self, appids: list[str]) -> dict:
-        return await self._upscalers_call("compatibility", [str(a) for a in (appids or [])])
+    async def get_upscalers_compat(self, appids: list[str], libraries: list | None = None) -> dict:
+        folders = [str(path)[:1024] for path in (libraries or [])[:32] if isinstance(path, str)]
+        return await self._upscalers_call("compatibility", [str(a) for a in (appids or [])], folders)
 
     async def search_upscaler_games(self, term: str) -> list:
         return await self._upscalers_call("search_games", str(term)[:120])

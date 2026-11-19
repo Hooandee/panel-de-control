@@ -1403,10 +1403,10 @@ export const setThemeArtwork = callable<[store: import("./themes/artwork").Theme
 
 export const getUpscalersOverview = callable<[], UpscalersOverview>("get_upscalers_overview");
 export interface GameCompat { native: boolean; inputs: string[]; preferred?: string; unavailable?: string }
-export const getUpscalersCompat = callable<[appids: string[]], Record<string, GameCompat>>("get_upscalers_compat");
+export const getUpscalersCompat = callable<[appids: string[], libraries?: string[]], Record<string, GameCompat>>("get_upscalers_compat");
 export const searchUpscalerGames = callable<[term: string], { id: number; name: string }[]>("search_upscaler_games");
 export const setUpscalerIdentity = callable<[appid: string, steamAppid: number | null, name: string | null], GameDetail>("set_upscaler_identity");
-export const getUpscalersGame = callable<[appid: string, hint?: import("./upscalers/shortcutHint").ShortcutHint | null], GameDetail>("get_upscalers_game");
+export const getUpscalersGame = callable<[appid: string, hint?: import("./upscalers/shortcutHint").ShortcutHint | { library: string } | null], GameDetail>("get_upscalers_game");
 export const getUpscalerUserFileCandidates = callable<[dependencyId: string], { folder: string; candidates: import("./upscalers/types").UserFileCandidate[] }>("get_upscaler_user_file_candidates");
 export const addUpscalerUserFile = callable<[appid: string, dependencyId: string, path: string], GameDetail>("add_upscaler_user_file");
 export const removeUpscalerUserFile = callable<[appid: string, dependencyId: string], GameDetail>("remove_upscaler_user_file");

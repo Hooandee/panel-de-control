@@ -132,3 +132,127 @@ def test_uninstalled_game_records_steam_lookup_failures_without_paths(tmp_path, 
         assert private not in caplog.text
         assert private not in json.dumps(lookup)
         assert private not in json.dumps(libraries)
+
+
+@pytest.mark.parametrize("index", [
+    '"libraryfolders" {{ "1" {{ "path" "{lib}" "apps" {{ "870780" "1" "870780" "1" }} }} }}',
+    '"libraryfolders" {{ "1" {{ "path" "{lib}" "label" "SD\udce9" }} }}',
+])
+def test_index_the_strict_reader_refuses_still_yields_its_libraries(tmp_path, steam_install, index):
+    service, steamapps = steam_install
+    secondary = tmp_path / "private-secondary"
+    _install(secondary / "steamapps")
+    (steamapps / "libraryfolders.vdf").write_bytes(index.format(lib=secondary).encode("utf-8", "surrogateescape"))
+
+    assert service.game(APPID)["name"] == GAME_NAME
+    lookup = service.diagnose(APPID)["steam_lookup"]
+    assert lookup["invalid_index"] == 1
+    assert lookup["found_lenient_index"] == 1
+
+
+def test_library_steam_reports_is_used_when_the_index_omits_it(tmp_path, steam_install):
+    service, steamapps = steam_install
+    secondary = tmp_path / "private-secondary"
+    _install(secondary / "steamapps")
+    _write_index(steamapps, f'"0" {{ "path" "{steamapps.parent}" }}')
+
+    with pytest.raises(UpscalerError):
+        service.game(APPID)
+    assert service.game(APPID, {"library": str(secondary)})["name"] == GAME_NAME
+    lookup = service.diagnose(APPID)["steam_lookup"]
+    assert lookup["steam_unindexed"] == 1
+    assert lookup["found_steam"] == 1
+
+
+def test_compatibility_learns_the_libraries_steam_lists(tmp_path, steam_install):
+    service, steamapps = steam_install
+    secondary = tmp_path / "private-secondary"
+    _install(secondary / "steamapps")
+
+    assert APPID not in service.compatibility([APPID])
+    assert APPID in service.compatibility([APPID], [str(secondary), "relative/path", 7])
+
+
+def test_unlisted_library_on_a_mounted_drive_is_discovered(tmp_path, steam_install, monkeypatch):
+    from upscalers import games
+
+    service, steamapps = steam_install
+    media = tmp_path / "private-media"
+    _install(media / "deck" / "SD card" / "steamapps")
+    monkeypatch.setattr(games, "MOUNT_ROOTS", (str(media),))
+
+    assert service.game(APPID)["name"] == GAME_NAME
+    lookup = service.diagnose(APPID)["steam_lookup"]
+    assert lookup["discovered"] == 1
+    assert lookup["found_discovery"] == 1
+    assert "private-media" not in json.dumps(service.report()["steam_libraries"])
+
+
+def test_refused_game_carries_the_lookup_for_the_diary(steam_install):
+    service, _steamapps = steam_install
+
+    with pytest.raises(UpscalerError) as refused:
+        service.game(APPID)
+
+    assert refused.value.lookup["available"] == 1
+    assert refused.value.lookup["manifest_missing"] == 1
+
+
+def test_stale_copy_on_a_drive_never_beats_the_install_steam_knows(tmp_path, steam_install, monkeypatch):
+    from upscalers import games
+
+    service, steamapps = steam_install
+    _write_manifest(steamapps)  # Steam's own record, its folder gone while the game moves
+    backup = tmp_path / "private-media"
+    _install(backup / "backup" / "SteamLibrary" / "steamapps")
+    monkeypatch.setattr(games, "MOUNT_ROOTS", (str(backup),))
+
+    with pytest.raises(UpscalerError) as refused:
+        service.game(APPID)
+    assert refused.value.lookup["folder_missing"] == 1
+    assert "found_discovery" not in refused.value.lookup
+
+
+def test_one_library_reached_through_two_paths_counts_once(tmp_path, steam_install, monkeypatch):
+    from upscalers import games
+
+    service, steamapps = steam_install
+    media = tmp_path / "private-media"
+    card = media / "deck" / "SD"
+    (card / "steamapps").mkdir(parents=True)
+    alias = tmp_path / "private-mmcblk0p1"
+    alias.symlink_to(card)
+    _write_index(steamapps, f'"1" {{ "path" "{alias}" }}')
+    games.set_steam_libraries([str(card), f"{card}/../SD"])
+    monkeypatch.setattr(games, "MOUNT_ROOTS", (str(media),))
+
+    assert games.library_paths(service.home) == [steamapps.parent, card.resolve()]
+
+
+def test_steam_library_list_is_replaced_not_accumulated(tmp_path, steam_install):
+    from upscalers import games
+
+    service, _steamapps = steam_install
+    first, second = tmp_path / "private-a", tmp_path / "private-b"
+    for library in (first, second):
+        (library / "steamapps").mkdir(parents=True)
+    service.compatibility([], [str(first)])
+    service.compatibility([], [str(second)])
+
+    assert first.resolve() not in games.library_paths(service.home)
+    assert second.resolve() in games.library_paths(service.home)
+
+
+def test_discovery_skips_network_shares(tmp_path, monkeypatch):
+    from upscalers import games
+
+    share, local = tmp_path / "private-nfs", tmp_path / "private-disk"
+    for library in (share, local):
+        (library / "Games" / "steamapps").mkdir(parents=True)
+    mountinfo = tmp_path / "mountinfo"
+    mountinfo.write_text(f"36 25 0:52 / {share} rw - nfs4 server:/export rw\n37 25 8:1 / {local} rw - ext4 /dev/sda1 rw\n")
+    read = games._network_mounts
+    monkeypatch.setattr(games, "_network_mounts", lambda: read(str(mountinfo)))
+    monkeypatch.setattr(games, "MOUNT_ROOTS", (str(share), str(local)))
+
+    assert games._discover(str(tmp_path / "private-home")) == [(local / "Games").resolve()]
