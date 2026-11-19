@@ -38,12 +38,35 @@ def _run_systemctl(*args: str) -> bool:
     return result.returncode == 0
 
 
+def _loaded_command():
+    try:
+        result = subprocess.run(
+            [resolve_bin("systemctl"), "show", UNIT_NAME, "-p", "LoadState", "-p", "ExecStart"],
+            check=False, capture_output=True, text=True, timeout=_TIMEOUT_S, env=clean_env(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    fields = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+    if fields.get("LoadState") == "not-found":
+        return ""
+    if result.returncode == 0 and fields.get("LoadState") == "loaded":
+        return fields.get("ExecStart")
+    return None
+
+
 class SleepCoreGuard:
-    def __init__(self, root: str = "/", systemctl=_run_systemctl):
+    def __init__(self, root: str = "/", systemctl=_run_systemctl, *, gpd_win5=False, loaded_command=_loaded_command):
         self._dir = os.path.join(root, "run/systemd/system")
         self._unit = os.path.join(self._dir, UNIT_NAME)
         self._link = os.path.join(self._dir, "sleep.target.wants", UNIT_NAME)
         self._systemctl = systemctl
+        self._gpd_win5 = gpd_win5
+        self._loaded_command = loaded_command
+        self._unit_text = UNIT_TEXT
+        if gpd_win5:
+            script = os.path.join(os.path.dirname(os.path.realpath(__file__)), "gpd_sleep.py")
+            quoted = script.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%").replace("$", "$$")
+            self._unit_text = UNIT_TEXT.split("ExecStart=", 1)[0] + f'ExecStart=/usr/bin/python3 -I "{quoted}"\n'
         self._loaded = False
         self.last_error: str | None = None
 
@@ -54,7 +77,7 @@ class SleepCoreGuard:
                 current = f.read()
         except OSError:
             return False
-        return current == UNIT_TEXT and os.path.islink(self._link)
+        return current == self._unit_text and os.path.islink(self._link)
 
     @property
     def ready(self) -> bool:
@@ -66,10 +89,24 @@ class SleepCoreGuard:
         succeeds, so a failed reload is retried on the next call."""
         if self.ready:
             return True
+        if self._gpd_win5:
+            command = self._loaded_command()
+            if command is None:
+                self.last_error = "loaded_unit_unknown"
+                return False
+            # Disable removes the sleep.target dependency and --now stops a
+            # running legacy oneshot before the replacement becomes eligible.
+            if command and "gpd_sleep.py" not in command:
+                if not self._systemctl("disable", "--runtime", "--now", UNIT_NAME):
+                    self.last_error = "legacy_guard_disable_failed"
+                    return False
         if not self.installed and not self._write():
             return False
         if not self._systemctl("daemon-reload"):
             self.last_error = "daemon_reload_failed"
+            return False
+        if self._gpd_win5 and "gpd_sleep.py" not in (self._loaded_command() or ""):
+            self.last_error = "scoped_guard_not_loaded"
             return False
         self._loaded = True
         self.last_error = None
@@ -80,7 +117,7 @@ class SleepCoreGuard:
             os.makedirs(os.path.dirname(self._link), exist_ok=True)
             tmp = f"{self._unit}.tmp"
             with open(tmp, "w") as f:
-                f.write(UNIT_TEXT)
+                f.write(self._unit_text)
             os.replace(tmp, self._unit)
             if os.path.lexists(self._link):
                 os.unlink(self._link)

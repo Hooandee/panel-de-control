@@ -157,7 +157,8 @@ from audio import presets as audio_presets
 from audio import safe as audio_safe
 from audio import tone as audio_tone
 from cpu.info import read_cpu_info, read_cpu_model
-from cpu.controls import CoreControl, SmtControl, select_boost
+from cpu.controls import SmtControl, select_boost
+from cpu.gpd_win5 import GpdWin5Cores, GpdWin5Coordinator, select_core_control
 from cpu.coordinator import CpuCoordinator, CpuCoordinatorResult
 from cpu.frequency import NullCpuFrequency, select_cpu_frequency
 from cpu.profiles import CpuProfileStore
@@ -982,11 +983,9 @@ class Plugin(AmbientRpc):
         }
         self._smt = SmtControl()
         self._boost = select_boost()
-        self._cores = CoreControl()
+        self._cores = select_core_control()
         self._cpu_frequency = self._build_cpu_frequency_control()
-        self._cpu_coordinator = CpuCoordinator(
-            self._cores, self._smt, self._boost, self._cpu_frequency
-        )
+        self._cpu_coordinator = self._make_cpu_coordinator()
         self._cpu_generation = 0
         self._cpu_last_result = None
         self._cpu_history = deque(maxlen=32)
@@ -1020,10 +1019,8 @@ class Plugin(AmbientRpc):
         self._reapply_generation = 0
         self._last_reapply_trigger = None
         # Topology + freq range are static — read once (only SMT/boost state is live).
-        # ORDER-CRITICAL: read AFTER CoreControl() above, which onlines all CPUs. The
-        # kernel drops an offline CPU's topology/core_id, so counting cores here before
-        # every core is online undercounts (e.g. 2 cores on an 8-core chip). Keep this
-        # after self._cores.
+        # Read after topology discovery: Linux hides the core_id of offline CPUs.
+        # The Win 5 retains its passively observed map for the current boot.
         self._cpu_info = read_cpu_info()
         # Real silicon name (static) shown in the DeviceHeader instead of the hardcoded
         # table chip; read once here like _cpu_info. None on generic or when unreadable.
@@ -10512,6 +10509,13 @@ class Plugin(AmbientRpc):
             "frequency": {"manual": False, "min_khz": None, "max_khz": None},
         }
 
+    def _make_cpu_coordinator(self):
+        factory = GpdWin5Coordinator if isinstance(self._cores, GpdWin5Cores) else CpuCoordinator
+        controls = (self._cores, self._smt, self._boost, self._cpu_frequency)
+        coordinator = factory(*controls)
+        coordinator._controls_identity = tuple(id(control) for control in controls)
+        return coordinator
+
     def _ensure_cpu_coordinator(self):
         if not hasattr(self, "_cpu_frequency"):
             self._cpu_frequency = NullCpuFrequency()
@@ -10528,8 +10532,7 @@ class Plugin(AmbientRpc):
         if coordinator is None or getattr(coordinator, "_controls_identity", None) != tuple(
             id(control) for control in controls
         ):
-            coordinator = CpuCoordinator(*controls)
-            coordinator._controls_identity = tuple(id(control) for control in controls)
+            coordinator = self._make_cpu_coordinator()
             self._cpu_coordinator = coordinator
         return coordinator
 
@@ -10605,15 +10608,29 @@ class Plugin(AmbientRpc):
             enabled = self._module_enabled("system")
         coordinator = self._ensure_cpu_coordinator()
         self._cpu_recovery_reapply_pending = False
+        scoped_args = {}
+        if isinstance(coordinator, GpdWin5Coordinator):
+            scoped_args["is_current"] = lambda: generation == self._cpu_generation
+            if not self._ensure_gpd_sleep_guard() and enabled:
+                return CpuCoordinatorResult(False, "failed", generation,
+                                            {"attempted": False, "ok": None}, "sleep_guard_unavailable")
         result = coordinator.apply(
             intent,
             generation,
             enabled=bool(enabled),
             eco=bool(self._settings.get("eco_enabled", False)),
             preserve_frequency_ownership=preserve_frequency_ownership,
+            **scoped_args,
         )
-        self._guard_sleep_with_cores_off()
+        if not isinstance(coordinator, GpdWin5Coordinator):
+            self._guard_sleep_with_cores_off()
         return result
+
+    def _ensure_gpd_sleep_guard(self):
+        guard = getattr(self, "_sleep_core_guard", None)
+        if guard is None:
+            guard = self._sleep_core_guard = SleepCoreGuard(gpd_win5=True)
+        return guard.ready or guard.ensure()
 
     def _guard_sleep_with_cores_off(self) -> None:
         """Keep offline physical cores or SMT siblings safe before sleep."""
@@ -10647,6 +10664,8 @@ class Plugin(AmbientRpc):
         selected = self._hold_cores_after_resume(
             selected, allow_cores=trigger == "set_cores", allow_smt=trigger == "set_smt",
         )
+        if isinstance(self._cores, GpdWin5Cores) and trigger in ("set_cores", "set_smt"):
+            selected = {**selected, "_manual_topology": trigger.removeprefix("set_")}
         result = await self._offload_call(
             lambda: self._run_cpu_apply(selected, generation, enabled)
         )
@@ -11769,7 +11788,7 @@ class Plugin(AmbientRpc):
             # Real silicon name (same source as get_device) so the CpuCard and the
             # DeviceHeader never show two different CPU names on the same screen.
             "chip": self._chip or self._device.chip,
-            "cores": info["cores"],
+            "cores": self._cores.max_cores if isinstance(self._cores, GpdWin5Cores) else info["cores"],
             "threads": info["threads"],
             "base_khz": info["base_khz"],
             "max_khz": info["max_khz"],
@@ -11900,6 +11919,23 @@ class Plugin(AmbientRpc):
         )
         self._record_cpu_result(failure, trigger)
 
+    async def _set_gpd_topology(self, field, value, scope, appid):
+        intent = self._cpu_profile_candidate(scope, appid)
+        previous_data = copy.deepcopy(self._cpu_profiles._data)
+
+        def persist():
+            setter = self._cpu_profiles.set_cores if field == "cores" else self._cpu_profiles.set_smt
+            try:
+                setter(scope, value, appid=appid)
+            except Exception:
+                self._cpu_profiles._data = previous_data
+                raise
+
+        self._exit_eco_for_cpu()
+        await self._apply_cpu_awaited(
+            {**intent, field: value, "_persist_topology": persist}, trigger=f"set_{field}"
+        )
+
     async def set_active_cores(
         self, count: int, scope: str = "global", appid=None,
         context_appid=_RPC_CONTEXT_UNSET,
@@ -11909,6 +11945,9 @@ class Plugin(AmbientRpc):
             return self._cpu_state()
         async with self._cpu_mutation_lock:
             if not self._cpu_scope_is_current(scope, appid, context_appid):
+                return self._cpu_state()
+            if isinstance(self._cores, GpdWin5Cores):
+                await self._set_gpd_topology("cores", int(count), scope, appid)
                 return self._cpu_state()
             self._cpu_profiles.set_cores(scope, int(count), appid=appid)
             intent = self._cpu_profile_candidate(scope, appid)
@@ -12988,6 +13027,9 @@ class Plugin(AmbientRpc):
             return self._cpu_state()
         async with self._cpu_mutation_lock:
             if not self._cpu_scope_is_current(scope, appid, context_appid):
+                return self._cpu_state()
+            if isinstance(self._cores, GpdWin5Cores):
+                await self._set_gpd_topology("smt", bool(enabled), scope, appid)
                 return self._cpu_state()
             self._cpu_profiles.set_smt(scope, bool(enabled), appid=appid)
             intent = self._cpu_profile_candidate(scope, appid)
@@ -15711,6 +15753,9 @@ class Plugin(AmbientRpc):
         # systemctl / ryzenadj) → keeps them off the event loop AND serialised.
         # Created here (not _init) so unit tests that never call _main run inline.
         self._ensure_apply_executor()
+        if isinstance(getattr(self, "_cores", None), GpdWin5Cores):
+            if not await self._offload_call(self._ensure_gpd_sleep_guard):
+                decky.logger.warning("GPD sleep guard migration pending")
         await self._offload_call(self._recover_recognised_desktop_migration)
         await self._recover_tdp_startup_state()
         await self._probe_tdp_backend(force=True)
