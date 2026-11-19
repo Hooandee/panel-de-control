@@ -437,6 +437,7 @@ class UpscalerService:
             "fg_note": recipe.fg_note if recipe else None,
             "fg_plan": None if installed.native else selected["fg_plan"],
             "mod": self._mod_status(appid, install),
+            "mod_download": user_mods.DOWNLOADS.get(str(appid)),
         }
 
     # ---- a mod the user brings for one game --------------------------------
@@ -450,8 +451,7 @@ class UpscalerService:
                         "applied": False, "removed": True}
             return None
         applied = isinstance(installed_mod, dict) and installed_mod.get("id") == status.get("id")
-        return {**{k: v for k, v in status.items() if k not in ("id", "target")}, "applied": applied,
-                "download": user_mods.DOWNLOADS.get(str(appid))}
+        return {**{k: v for k, v in status.items() if k not in ("id", "target")}, "applied": applied}
 
     def _mod_target(self, appid: str) -> tuple[games.Installed, str, set[str], set[str]]:
         installed = self._find(appid)
