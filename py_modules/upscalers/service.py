@@ -9,6 +9,7 @@ import threading
 import tempfile
 import time
 import uuid
+from collections import Counter
 from pathlib import Path
 
 from json_store import atomic_json_save
@@ -82,6 +83,7 @@ class UpscalerError(Exception):
         super().__init__(code)
         self.code = code
         self.detail = detail
+        self.lookup: dict | None = None
 
 
 def panel_resolution(drm: str = "/sys/class/drm") -> list[int] | None:
@@ -328,8 +330,10 @@ class UpscalerService:
         history = entry.get("history") or []
         return history[-1].get("result", "pending") if history else "pending"
 
-    def compatibility(self, appids: list[str]) -> dict[str, dict]:
+    def compatibility(self, appids: list[str], libraries: list | None = None) -> dict[str, dict]:
         """What each game ships (or that it runs natively on Linux), cached by install folder mtime."""
+        if libraries is not None:
+            games.set_steam_libraries(libraries)
         result = {}
         for appid in appids[:400]:
             installed = self._locate(str(appid))
@@ -354,12 +358,12 @@ class UpscalerService:
             result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, automatic)}
         return result
 
-    def _locate(self, appid: str) -> games.Installed | None:
+    def _locate(self, appid: str, lookup: Counter | None = None) -> games.Installed | None:
         hint = (self.state["games"].get(appid) or {}).get("shortcut_hint")
-        return games.find_installed(self.home, appid) or games.from_hint(appid, hint, self.home)
+        return games.find_installed(self.home, appid, lookup) or games.from_hint(appid, hint, self.home)
 
-    def _find(self, appid: str) -> games.Installed | None:
-        installed = self._locate(appid)
+    def _find(self, appid: str, lookup: Counter | None = None) -> games.Installed | None:
+        installed = self._locate(appid, lookup)
         return None if installed is None or installed.unavailable else installed
 
     def _identity(self, installed: games.Installed, entry: dict) -> dict | None:
@@ -412,9 +416,14 @@ class UpscalerService:
             if entry.get("shortcut_hint") != clean:
                 entry["shortcut_hint"] = clean
                 self._save()
-        installed = self._find(appid)
+        lookup = Counter()
+        installed = self._find(appid, lookup)
+        if self.logger and appid.isdecimal():
+            self.logger.info("Steam library lookup: appid=%s counts=%s", appid, dict(lookup))
         if installed is None:
-            raise UpscalerError("not_installed")
+            error = UpscalerError("not_installed")
+            error.lookup = dict(lookup)
+            raise error
         entry = self._game_state(appid)
         identity = self._identity(installed, entry)
         recipe = self._recipe(appid, identity, installed)
@@ -2237,8 +2246,10 @@ class UpscalerService:
     def diagnose(self, appid: str) -> dict:
         appid = str(appid)
         entry = self.state["games"].get(appid, {})
-        installed = self._find(appid)
+        lookup = Counter()
+        installed = self._find(appid, lookup)
         report = diagnostics.game_report(self.home, appid, entry, installed)
+        report["steam_lookup"] = dict(lookup)
         report["image_settings"] = self.image_settings(appid)
         report["solution"] = diagnostics.solution((entry.get("install") or {}).get("solution"))
         try:
@@ -2317,6 +2328,7 @@ class UpscalerService:
             "global_actions": diagnostics.report_actions(self.state.get("global_actions")),
             "games": [],
         })
+        result["steam_libraries"] = games.library_summary(self.home)
         touched = [(appid, entry) for appid, entry in self.state["games"].items()
                    if isinstance(entry.get("install"), dict) or entry.get("history") or entry.get("exe")
                    or entry.get("actions") or entry.get("identity")]

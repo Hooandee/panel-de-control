@@ -1403,7 +1403,7 @@ export const setThemeArtwork = callable<[store: import("./themes/artwork").Theme
 
 export const getUpscalersOverview = callable<[], UpscalersOverview>("get_upscalers_overview");
 export interface GameCompat { native: boolean; inputs: string[]; preferred?: string; unavailable?: string }
-export const getUpscalersCompat = callable<[appids: string[]], Record<string, GameCompat>>("get_upscalers_compat");
+export const getUpscalersCompat = callable<[appids: string[], libraries?: string[]], Record<string, GameCompat>>("get_upscalers_compat");
 export const searchUpscalerGames = callable<[term: string], { id: number; name: string }[]>("search_upscaler_games");
 export const setUpscalerIdentity = callable<[appid: string, steamAppid: number | null, name: string | null], GameDetail>("set_upscaler_identity");
 export const getUpscalersGame = callable<[appid: string, hint?: import("./upscalers/shortcutHint").ShortcutHint | null], GameDetail>("get_upscalers_game");

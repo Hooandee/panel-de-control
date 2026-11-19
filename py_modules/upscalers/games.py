@@ -3,7 +3,10 @@
 import json
 import os
 import re
+import stat
 import threading
+import time
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -71,28 +74,175 @@ def steam_roots(home: str) -> list[Path]:
         path = Path(home) / candidate
         try:
             resolved = path.resolve(strict=True)
-        except OSError:
+        except (OSError, RuntimeError):
             continue
         if resolved not in roots:
             roots.append(resolved)
     return roots
 
 
-def library_paths(home: str) -> list[Path]:
-    libraries: list[Path] = []
+# Where removable drives and extra disks get mounted; a Steam library sits at most a few folders below.
+MOUNT_ROOTS = ("/run/media", "/media", "/mnt")
+DISCOVERY_DEPTH = 3
+DISCOVERY_TTL_S = 60.0
+# A share that stops answering hangs whoever lists it; discovery never walks into one.
+NETWORK_FS = ("nfs", "nfs4", "cifs", "smb3", "smbfs", "9p", "davfs", "fuse.sshfs", "fuse.rclone", "afs", "ceph", "glusterfs", "autofs")
+_steam_reported: dict[Path, None] = {}
+_discovered: tuple[float, str, list[Path]] | None = None
+_libraries_lock = threading.Lock()
+_discovery_lock = threading.Lock()
+
+
+def _library_path(raw: object) -> Path | None:
+    if not isinstance(raw, str) or not os.path.isabs(raw) or "\0" in raw:
+        return None
+    return Path(os.path.normpath(raw))
+
+
+def _real(path: Path) -> Path:
+    try:
+        return Path(os.path.realpath(path))
+    except (OSError, ValueError):
+        return path
+
+
+def _has_steamapps(path: Path) -> bool:
+    try:
+        return (path / "steamapps").is_dir()
+    except OSError:
+        return False
+
+
+def set_steam_libraries(paths) -> None:
+    """The mounted library folders Steam itself lists (InstallFolder store), replacing the last list."""
+    folders = [path for path in (_library_path(raw) for raw in list(paths or ())[:32]) if path is not None]
+    with _libraries_lock:
+        _steam_reported.clear()
+        _steam_reported.update(dict.fromkeys(folders))
+
+
+def _lenient_index(index: Path) -> list[str]:
+    """Paths from an index the strict reader refused (repeated keys, stray bytes): Steam itself still loads it."""
+    with open(index, "rb") as source:
+        text = source.read(vdf.MAX_BYTES).decode("utf-8", errors="replace")
+    found = re.findall(r'"path"\s+"((?:\\.|[^"\\])*)"', text, re.I)
+    found += re.findall(r'"\d+"\s+"(/(?:\\.|[^"\\])*)"', text)
+    return [re.sub(r'\\([\\"])', r"\1", value) for value in found]
+
+
+def _network_mounts(mountinfo: str = "/proc/self/mountinfo") -> set[str]:
+    mounts = set()
+    try:
+        with open(mountinfo, encoding="utf-8", errors="replace") as source:
+            for line in source:
+                fields, _sep, rest = line.partition(" - ")
+                parts, kind = fields.split(), rest.split()[:1]
+                if len(parts) > 4 and kind and kind[0] in NETWORK_FS:
+                    mounts.add(re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), parts[4]))
+    except OSError:
+        pass
+    return mounts
+
+
+def _discover(home: str) -> list[Path]:
+    """Steam libraries on local mounted drives and in the home folder, found by looking: the last resort."""
+    global _discovered
+    with _discovery_lock:
+        now = time.monotonic()
+        if _discovered and _discovered[1] == home and now - _discovered[0] < DISCOVERY_TTL_S:
+            return list(_discovered[2])
+        network = _network_mounts()
+        found: list[Path] = []
+        for base in (*MOUNT_ROOTS, home):
+            pending = [(_real(Path(base)), 0)]
+            while pending:
+                folder, depth = pending.pop()
+                if str(folder) in network:
+                    continue
+                try:
+                    with os.scandir(folder) as entries:
+                        children = [Path(e.path) for e in entries if e.is_dir(follow_symlinks=False) and not e.name.startswith(".")]
+                except OSError:
+                    continue
+                for child in children:
+                    if child.name == "steamapps":
+                        real = _real(folder)
+                        if real not in found:
+                            found.append(real)
+                    elif depth + 1 < DISCOVERY_DEPTH and child.name not in ("compatdata", "shadercache", "common"):
+                        pending.append((child, depth + 1))
+        _discovered = (now, home, found)
+        return list(found)
+
+
+def _libraries(home: str, counts: Counter) -> dict[Path, str]:
+    """Each library Steam vouches for, with where it came from: the Steam folder itself, its index (read leniently
+    when the strict reader refuses it) and the folders Steam lists live. One entry per real folder."""
+    sources: dict[Path, str] = {}
+
+    def add(path: Path | None, source: str) -> None:
+        if path is None:
+            return
+        real = _real(path)
+        if real in sources:
+            return
+        if _has_steamapps(real):
+            sources[real] = source
+        else:
+            counts["unavailable_library"] += 1
+
     for root in steam_roots(home):
-        candidates = [root]
+        add(root, "root")
+        index = root / "steamapps/libraryfolders.vdf"
         try:
-            folders = vdf.read_text(root / "steamapps/libraryfolders.vdf").get("libraryfolders") or {}
-        except (OSError, ValueError):
+            folders = vdf.read_text(index).get("libraryfolders")
+            if not isinstance(folders, dict):
+                raise ValueError("malformed_vdf")
+        except FileNotFoundError:
+            counts["missing_index"] += 1
             folders = {}
-        for entry in folders.values() if isinstance(folders, dict) else ():
-            if isinstance(entry, dict) and isinstance(entry.get("path"), str):
-                candidates.append(Path(entry["path"]))
-        for path in candidates:
-            if (path / "steamapps").is_dir() and path not in libraries:
-                libraries.append(path)
-    return libraries
+        except OSError:
+            counts["unreadable_index"] += 1
+            folders = {}
+        except ValueError:
+            counts["invalid_index"] += 1
+            folders = {}
+            try:
+                lenient = _lenient_index(index)
+            except OSError:
+                lenient = []
+            counts["lenient_path"] += len(lenient)
+            for raw in lenient:
+                add(_library_path(raw), "lenient_index")
+        else:
+            counts["read_index"] += 1
+        for key, entry in folders.items():
+            if not key.isdecimal():
+                continue
+            path = _library_path(entry.get("path") if isinstance(entry, dict) else entry)
+            if path is None:
+                counts["invalid_entry"] += 1
+                continue
+            counts["path_object" if isinstance(entry, dict) else "direct_path"] += 1
+            add(path, "index")
+    with _libraries_lock:
+        reported = list(_steam_reported)
+    for path in reported:
+        if _real(path) not in sources:
+            counts["steam_unindexed"] += 1
+        add(path, "steam")
+    counts["available"] = len(sources)
+    return sources
+
+
+def library_paths(home: str, counts: Counter | None = None) -> list[Path]:
+    return list(_libraries(home, Counter() if counts is None else counts))
+
+
+def library_summary(home: str) -> dict:
+    counts = Counter()
+    sources = _libraries(home, counts)
+    return {**counts, "sources": dict(Counter(sources.values()))}
 
 
 def update_state(flags: int) -> str | None:
@@ -238,27 +388,85 @@ def linux_build(root: Path, build_id: str | None = None) -> bool:
     return result
 
 
-def find_installed(home: str, appid: str) -> Installed | None:
+def _lenient_manifest(manifest: Path) -> dict:
+    """The few top-level fields Panel needs from a manifest the strict reader refused; Steam still loads it."""
+    with open(manifest, "rb") as source:
+        text = source.read(vdf.MAX_BYTES).decode("utf-8", errors="replace")
+    opening = text.find("{")
+    nested = text.find("{", opening + 1)
+    top = text[opening + 1:nested if nested > opening else len(text)]
+    state = {}
+    for key in ("appid", "name", "installdir", "stateflags", "buildid"):
+        match = re.search(rf'"{key}"\s+"((?:\\.|[^"\\])*)"', top, re.I)
+        if match:
+            state[key] = re.sub(r'\\([\\"])', r"\1", match.group(1))
+    return state
+
+
+def _manifest_game(library: Path, appid: str, contained: bool = False) -> tuple[str, Installed | None]:
+    apps = library / "steamapps"
+    manifest = apps / f"appmanifest_{appid}.acf"
+    try:
+        state = vdf.read_text(manifest).get("appstate")
+    except FileNotFoundError:
+        return "manifest_missing", None
+    except OSError:
+        return "manifest_unreadable", None
+    except ValueError:
+        try:
+            state = _lenient_manifest(manifest)
+        except OSError:
+            return "manifest_unreadable", None
+    if not isinstance(state, dict) or state.get("appid", appid) != appid:
+        return "manifest_invalid", None
+    installdir = state.get("installdir")
+    if not isinstance(installdir, str) or installdir in ("", ".", "..") or "/" in installdir or "\0" in installdir:
+        return "manifest_invalid", None
+    root = apps / "common" / installdir
+    if contained and (root.is_symlink() or not _real(root).is_relative_to(_real(apps / "common"))):
+        return "folder_outside", None
+    try:
+        if not stat.S_ISDIR(root.stat().st_mode):
+            return "folder_missing", None
+    except (FileNotFoundError, NotADirectoryError):
+        return "folder_missing", None
+    except OSError:
+        return "folder_unreadable", None
+    try:
+        flags = int(state.get("stateflags", 0))
+    except (TypeError, ValueError):
+        flags = 0
+    build_id = str(state["buildid"]) if str(state.get("buildid", "")).isdecimal() else None
+    return "found", Installed(appid, str(state.get("name") or appid), root, flags,
+                              native=linux_build(root, build_id), build_id=build_id)
+
+
+def find_installed(home: str, appid: str, lookup: Counter | None = None) -> Installed | None:
+    """The game in a library Steam vouches for; only when none of them even has its manifest, a library found
+    on a mounted drive, so a stale copy never wins over the install Steam knows."""
     if not appid.isdecimal():
         return None
-    for library in library_paths(home):
-        manifest = library / "steamapps" / f"appmanifest_{appid}.acf"
-        try:
-            state = vdf.read_text(manifest).get("appstate") or {}
-        except (OSError, ValueError):
-            continue
-        installdir = state.get("installdir")
-        if not isinstance(installdir, str) or not installdir or "/" in installdir:
-            continue
-        root = library / "steamapps" / "common" / installdir
-        if root.is_dir():
-            try:
-                flags = int(state.get("stateflags", 0))
-            except (TypeError, ValueError):
-                flags = 0
-            build_id = str(state["buildid"]) if str(state.get("buildid", "")).isdecimal() else None
-            return Installed(appid, str(state.get("name") or appid), root, flags,
-                             native=linux_build(root, build_id), build_id=build_id)
+    counts = Counter() if lookup is None else lookup
+    trusted = _libraries(home, counts)
+    known = False
+    for library, source in trusted.items():
+        outcome, installed = _manifest_game(library, appid)
+        counts[outcome] += 1
+        known = known or outcome != "manifest_missing"
+        if installed is not None:
+            counts[f"found_{source}"] += 1
+            return installed
+    if not known:
+        for library in _discover(home):
+            if library in trusted:
+                continue
+            counts["discovered"] += 1
+            outcome, installed = _manifest_game(library, appid, contained=True)
+            if outcome != "manifest_missing":
+                counts[f"discovery_{outcome}"] += 1
+            if installed is not None:
+                counts["found_discovery"] += 1
+                return installed
     return find_shortcut(home, appid)
 
 

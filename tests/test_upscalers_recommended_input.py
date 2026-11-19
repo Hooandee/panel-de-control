@@ -17,7 +17,7 @@ def test_game_input_recommendation_requires_detected_input(steam, fake_catalog, 
         _write(steam[1] / 'bin/x64_dx12/libxess.dll')
     if native:
         installed = replace(service._find('292030'), native=True)
-        monkeypatch.setattr(service, '_find', lambda appid: installed)
+        monkeypatch.setattr(service, '_find', lambda appid, lookup=None: installed)
     detail = service.game('292030')
     assert detail['recipe_info']['recommended_input'] == expected
     assert detail['fg_note'] == 'reflexOff'

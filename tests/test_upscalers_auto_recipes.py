@@ -85,7 +85,7 @@ def test_report_distinguishes_applied_and_current_game_build(steam, fake_catalog
     service = _service(steam, fake_catalog, proc)
     original = service._find(APPID)
     current = replace(original, build_id='100')
-    monkeypatch.setattr(service, '_find', lambda appid: current)
+    monkeypatch.setattr(service, '_find', lambda appid, lookup=None: current)
     service.install(APPID, {'build': 'fsr-test'})
     current = replace(original, build_id='200')
     report = service.diagnose(APPID)

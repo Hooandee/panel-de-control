@@ -145,7 +145,7 @@ def test_a_unifideck_linux_build_stays_native(home):
 def test_unavailable_shortcuts_are_flagged_and_never_patched(steam, fake_catalog, proc, monkeypatch, tmp_path):
     service = _service(steam, fake_catalog, proc)
     missing = games.Installed("99", "Library only", tmp_path, 4, None, True, True, unavailable="unifideck_not_installed")
-    monkeypatch.setattr(games, "find_installed", lambda home, appid: missing if appid == "99" else None)
+    monkeypatch.setattr(games, "find_installed", lambda home, appid, lookup=None, steam_library=None: missing if appid == "99" else None)
     assert service.compatibility(["99"]) == {"99": {"native": False, "inputs": [], "unavailable": "unifideck_not_installed"}}
     assert service._find("99") is None
 

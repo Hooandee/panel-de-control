@@ -15,6 +15,7 @@ import { IN_GAME_MODES, publishOverview, readCoverBadges, readInGameMode, setUps
 import { Fold, Label, SegmentRow } from "../upscalers/parts";
 import { badgeLabel, fallbackLine } from "../upscalers/model";
 import { MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
+import { steamLibraryFolders } from "../upscalers/steamLibraries";
 import { showGame, takeHeldPage, type PageDraft } from "../upscalers/pageMemory";
 import type { UpscalerChoice, UpscalersOverview } from "../upscalers/types";
 
@@ -79,7 +80,8 @@ export const EscaladoresSection: FC = () => {
     const ids = appids.split(",");
     // The backend answers at most 400 games per call; a whole store library can be longer.
     const batches = Array.from({ length: Math.ceil(ids.length / 400) }, (_, index) => ids.slice(index * 400, index * 400 + 400));
-    Promise.all(batches.map((batch) => getUpscalersCompat(batch).catch(() => ({}))))
+    const libraries = steamLibraryFolders();
+    Promise.all(batches.map((batch) => getUpscalersCompat(batch, libraries).catch(() => ({}))))
       .then((parts) => { if (alive) setCompat(Object.assign({}, ...parts)); })
       .finally(() => { if (alive) setCompatRead(true); });
     return () => { alive = false; };
