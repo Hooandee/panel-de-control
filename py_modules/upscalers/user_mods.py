@@ -101,7 +101,7 @@ def _entries(path: Path) -> list[tuple[str, int]]:
                 entries.append((info.filename, info.file_size))
             return entries
     if user_deps._archiver() == "7z":
-        result = subprocess.run(["7z", "l", "-slt", "-ba", str(path.resolve())], capture_output=True, timeout=60, check=False)
+        result = user_deps.run_archiver(["7z", "l", "-slt", "-ba", str(path.resolve())], 60)
         if result.returncode != 0:
             raise ModError("unreadable")
         entries = []
@@ -114,7 +114,7 @@ def _entries(path: Path) -> list[tuple[str, int]]:
                 raise ModError("unsafe_archive")
             entries.append((fields["Path"], int(fields.get("Size") or 0)))
         return entries
-    result = subprocess.run(["bsdtar", "-tvf", str(path.resolve())], capture_output=True, timeout=60, check=False)
+    result = user_deps.run_archiver(["bsdtar", "-tvf", str(path.resolve())], 60)
     if result.returncode != 0:
         raise ModError("unreadable")
     entries = []
@@ -166,7 +166,7 @@ def _extract_all(path: Path, wanted: dict[str, str], destination: Path) -> None:
         else:
             command = ["bsdtar", "-xf", str(path.resolve()), "-C", str(staging)]
         try:
-            done = subprocess.run(command, capture_output=True, timeout=600, check=False)
+            done = user_deps.run_archiver(command, 600)
         except subprocess.TimeoutExpired:
             raise ModError("unreadable") from None
         if done.returncode != 0:
