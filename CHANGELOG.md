@@ -1,5 +1,68 @@
 # Changelog
 
+## [0.93.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.92.0...panel-de-control-v0.93.0) (2026-11-19)
+
+
+### Español
+
+* **Luma se instala solo en 30 juegos más:** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 y 24 juegos de Unreal Engine como Stray, Psychonauts 2 o STAR WARS Jedi: Fallen Order. Al activar el escalador, Panel de Control instala Luma y lo que necesita, igual que ya hacía en Final Fantasy VII Remake y Persona 5 Royal. En estos juegos ya no te pide elegir DLSS en el menú, porque de eso se encarga Luma.
+* **Mods para los juegos que los necesitan:** Si un juego necesita un mod para escalar, su ficha muestra una tarjeta con Descargar y Elegir archivo. Descargar abre la página del mod en el navegador de Steam y lo recoge en cuanto termina de bajar, sin salir del modo de juego. Sirven archivos .zip, .7z y .rar, también con contraseña. En cualquier otro juego tienes Añadir un mod.
+* **Elden Ring con ERSS-FG, sin tocar nada:** Con el mod ERSS-FG, Panel de Control deja Elden Ring listo para jugar: FSR 4.1.2 y la generación de frames del mod activadas, lo que el mod necesita instalado y el juego arrancando sin el anticheat, así que se juega sin conexión. La píldora del juego muestra ERSS-FG debajo del escalador. Además, el escalador se instala junto al juego y no junto a la guía o el libro de arte.
+* **Panel de Control ya no se queda parado al abrir Escaladores:** Con muchos juegos instalados, sobre todo en la tarjeta SD, Panel de Control podía dejar de responder varios segundos mientras revisaba los juegos. Ahora sigue respondiendo.
+* **Activar con el juego abierto:** Si activas un escalador por primera vez con el juego abierto, Panel de Control espera a que lo cierres en vez de pedirte una y otra vez que lo cierres antes.
+* **Avisos que dicen qué falta:** Si el juego carga OptiScaler pero no escala porque le falta un mod, la ficha te dice qué mod es. Y si tienes una versión de un complemento que no funciona, como pasa en Resident Evil 4, te dice qué versión poner.
+* **Filtros del fondo en Ambiente:** En Fondo tienes Difuminado, Oscurecer y Viñeta, para que se lea mejor lo que hay encima. Funcionan con imágenes, vídeos y tráileres. Con el fondo difuminado, la imagen deja de moverse.
+
+### English
+
+* **Luma installs on its own in 30 more games:** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 and 24 Unreal Engine games such as Stray, Psychonauts 2 and STAR WARS Jedi: Fallen Order. When you turn on the upscaler, Panel de Control installs Luma and what it needs, as it already did for Final Fantasy VII Remake and Persona 5 Royal. These games no longer ask you to pick DLSS in their menu, because Luma takes care of it.
+* **Mods for the games that need them:** If a game needs a mod to upscale, its page shows a card with Download and Choose file. Download opens the mod's page in Steam's browser and picks the file up as soon as it finishes, without leaving Game Mode. .zip, .7z and .rar files work, including password-protected ones. Any other game has Add a mod.
+* **Elden Ring with ERSS-FG, nothing to set up:** With the ERSS-FG mod, Panel de Control gets Elden Ring ready to play: FSR 4.1.2 and the mod's frame generation turned on, what the mod needs installed, and the game starting without the anti-cheat, so it plays offline. The in-game pill shows ERSS-FG under the upscaler. The upscaler also goes next to the game instead of next to the guide or the artbook.
+* **Panel de Control no longer freezes when you open Upscalers:** With many games installed, especially on the SD card, Panel de Control could stop responding for several seconds while it checked them. It now keeps responding.
+* **Turning it on with the game open:** If you turn on an upscaler for the first time with the game open, Panel de Control waits for you to close it instead of asking you over and over to close it first.
+* **Messages that say what is missing:** If the game loads OptiScaler but doesn't upscale because a mod is missing, the page tells you which mod. And if you have a version of an add-on that doesn't work, as happens in Resident Evil 4, it tells you which version to use.
+* **Background filters in Ambient:** In Background you now have Blur, Darken and Vignette, so what sits on top is easier to read. They work with images, videos and trailers. While the background is blurred, the picture stops moving.
+
+### Italiano
+
+* **Luma si installa da solo in altri 30 giochi:** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 e 24 giochi Unreal Engine come Stray, Psychonauts 2 o STAR WARS Jedi: Fallen Order. Quando attivi l'upscaler, Panel de Control installa Luma e quello che gli serve, come già faceva con Final Fantasy VII Remake e Persona 5 Royal. In questi giochi non ti chiede più di scegliere DLSS nel menu, perché ci pensa Luma.
+* **Mod per i giochi che ne hanno bisogno:** Se un gioco ha bisogno di una mod per l'upscaling, la sua scheda mostra una scheda con Scarica e Scegli file. Scarica apre la pagina della mod nel browser di Steam e prende il file appena finisce di scaricarsi, senza uscire dalla Modalità gioco. Vanno bene file .zip, .7z e .rar, anche protetti da password. In qualsiasi altro gioco hai Aggiungi una mod.
+* **Elden Ring con ERSS-FG, senza toccare niente:** Con la mod ERSS-FG, Panel de Control prepara Elden Ring per giocare: FSR 4.1.2 e la generazione di frame della mod attive, quello che serve alla mod installato e il gioco che parte senza anticheat, quindi si gioca offline. La pillola del gioco mostra ERSS-FG sotto l'upscaler. Inoltre l'upscaler si installa accanto al gioco e non accanto alla guida o all'artbook.
+* **Panel de Control non si blocca più aprendo Upscaler:** Con molti giochi installati, soprattutto sulla scheda SD, Panel de Control poteva smettere di rispondere per qualche secondo mentre li controllava. Ora continua a rispondere.
+* **Attivarlo con il gioco aperto:** Se attivi un upscaler per la prima volta con il gioco aperto, Panel de Control aspetta che tu lo chiuda invece di chiederti ogni volta di chiuderlo prima.
+* **Avvisi che dicono cosa manca:** Se il gioco carica OptiScaler ma non fa l'upscaling perché manca una mod, la scheda ti dice quale. E se hai una versione di un componente aggiuntivo che non funziona, come succede in Resident Evil 4, ti dice quale versione usare.
+* **Filtri dello sfondo in Atmosfera:** In Sfondo ora hai Sfocatura, Scurisci e Vignettatura, così quello che c'è sopra si legge meglio. Funzionano con immagini, video e trailer. Con lo sfondo sfocato, l'immagine smette di muoversi.
+
+### Deutsch
+
+* **Luma wird in 30 weiteren Spielen von selbst installiert:** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 und 24 Unreal-Engine-Spiele wie Stray, Psychonauts 2 oder STAR WARS Jedi: Fallen Order. Wenn du den Upscaler einschaltest, installiert Panel de Control Luma und alles, was es braucht, wie schon bei Final Fantasy VII Remake und Persona 5 Royal. Diese Spiele verlangen nicht mehr, dass du im Menü DLSS wählst, denn darum kümmert sich Luma.
+* **Mods für Spiele, die eine brauchen:** Braucht ein Spiel eine Mod zum Hochskalieren, zeigt seine Seite eine Karte mit Herunterladen und Datei wählen. Herunterladen öffnet die Seite der Mod im Steam-Browser und übernimmt die Datei, sobald der Download fertig ist, ohne den Spielmodus zu verlassen. .zip-, .7z- und .rar-Dateien gehen, auch mit Passwort. Bei jedem anderen Spiel gibt es Mod hinzufügen.
+* **Elden Ring mit ERSS-FG, ohne etwas einzustellen:** Mit der Mod ERSS-FG macht Panel de Control Elden Ring spielbereit: FSR 4.1.2 und die Frame-Generierung der Mod sind an, was die Mod braucht, ist installiert, und das Spiel startet ohne Anti-Cheat, also offline. Die Pille im Spiel zeigt ERSS-FG unter dem Upscaler. Außerdem landet der Upscaler neben dem Spiel und nicht neben dem Guide oder dem Artbook.
+* **Panel de Control hängt beim Öffnen von Upscaler nicht mehr:** Mit vielen installierten Spielen, vor allem auf der SD-Karte, konnte Panel de Control einige Sekunden nicht reagieren, während es sie prüfte. Jetzt reagiert es weiter.
+* **Einschalten bei offenem Spiel:** Schaltest du einen Upscaler zum ersten Mal bei offenem Spiel ein, wartet Panel de Control, bis du es schließt, statt dich immer wieder aufzufordern, es vorher zu schließen.
+* **Hinweise, die sagen, was fehlt:** Lädt das Spiel OptiScaler, skaliert aber nicht hoch, weil eine Mod fehlt, sagt dir die Seite, welche. Und wenn du eine Version einer Erweiterung hast, die nicht funktioniert, wie bei Resident Evil 4, sagt sie dir, welche Version du brauchst.
+* **Hintergrundfilter in Ambiente:** Unter Hintergrund gibt es jetzt Weichzeichnen, Abdunkeln und Vignette, damit sich lesen lässt, was darüber liegt. Sie funktionieren mit Bildern, Videos und Trailern. Ist der Hintergrund weichgezeichnet, bewegt sich das Bild nicht mehr.
+
+### Português (Brasil)
+
+* **O Luma se instala sozinho em mais 30 jogos:** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 e 24 jogos de Unreal Engine como Stray, Psychonauts 2 e STAR WARS Jedi: Fallen Order. Quando você ativa o upscaler, o Panel de Control instala o Luma e o que ele precisa, como já fazia em Final Fantasy VII Remake e Persona 5 Royal. Esses jogos não pedem mais que você escolha DLSS no menu, porque o Luma cuida disso.
+* **Mods para os jogos que precisam:** Se um jogo precisa de um mod para fazer upscaling, a página dele mostra um cartão com Baixar e Escolher arquivo. Baixar abre a página do mod no navegador do Steam e pega o arquivo assim que o download termina, sem sair do Modo Jogo. Funcionam arquivos .zip, .7z e .rar, inclusive com senha. Em qualquer outro jogo você tem Adicionar um mod.
+* **Elden Ring com ERSS-FG, sem mexer em nada:** Com o mod ERSS-FG, o Panel de Control deixa Elden Ring pronto para jogar: FSR 4.1.2 e a geração de quadros do mod ativadas, o que o mod precisa instalado e o jogo abrindo sem o anticheat, então ele roda offline. A pílula do jogo mostra ERSS-FG embaixo do upscaler. Além disso, o upscaler é instalado junto do jogo e não junto do guia ou do artbook.
+* **O Panel de Control não trava mais ao abrir Upscalers:** Com muitos jogos instalados, principalmente no cartão SD, o Panel de Control podia parar de responder por alguns segundos enquanto verificava os jogos. Agora ele continua respondendo.
+* **Ativar com o jogo aberto:** Se você ativar um upscaler pela primeira vez com o jogo aberto, o Panel de Control espera você fechar o jogo, em vez de pedir toda hora para fechar antes.
+* **Avisos que dizem o que falta:** Se o jogo carrega o OptiScaler mas não faz upscaling porque falta um mod, a página diz qual mod é. E se você tiver uma versão de um complemento que não funciona, como acontece em Resident Evil 4, ela diz qual versão usar.
+* **Filtros do fundo no Ambiente:** Em Fundo agora você tem Desfoque, Escurecer e Vinheta, para ficar mais fácil ler o que está por cima. Funcionam com imagens, vídeos e trailers. Com o fundo desfocado, a imagem para de se mexer.
+
+### Français
+
+* **Luma s'installe tout seul dans 30 jeux de plus :** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 et 24 jeux Unreal Engine comme Stray, Psychonauts 2 ou STAR WARS Jedi: Fallen Order. Quand vous activez l'upscaler, Panel de Control installe Luma et ce dont il a besoin, comme il le faisait déjà pour Final Fantasy VII Remake et Persona 5 Royal. Ces jeux ne vous demandent plus de choisir DLSS dans leur menu, car Luma s'en charge.
+* **Des mods pour les jeux qui en ont besoin :** Si un jeu a besoin d'un mod pour l'upscaling, sa page affiche une carte avec Télécharger et Choisir un fichier. Télécharger ouvre la page du mod dans le navigateur de Steam et récupère le fichier dès la fin du téléchargement, sans quitter le mode Jeu. Les fichiers .zip, .7z et .rar fonctionnent, y compris avec mot de passe. Dans tous les autres jeux, vous avez Ajouter un mod.
+* **Elden Ring avec ERSS-FG, sans rien régler :** Avec le mod ERSS-FG, Panel de Control prépare Elden Ring : FSR 4.1.2 et la génération d'images du mod activés, ce dont le mod a besoin installé, et le jeu qui démarre sans l'anti-triche, donc il se joue hors ligne. La pastille du jeu affiche ERSS-FG sous l'upscaler. En plus, l'upscaler s'installe à côté du jeu et non à côté du guide ou de l'artbook.
+* **Panel de Control ne se fige plus à l'ouverture d'Upscalers :** Avec beaucoup de jeux installés, surtout sur la carte SD, Panel de Control pouvait ne plus répondre pendant quelques secondes le temps de les vérifier. Il continue maintenant de répondre.
+* **Activer avec le jeu ouvert :** Si vous activez un upscaler pour la première fois avec le jeu ouvert, Panel de Control attend que vous le fermiez au lieu de vous demander sans arrêt de le fermer d'abord.
+* **Des messages qui disent ce qui manque :** Si le jeu charge OptiScaler mais ne fait pas d'upscaling parce qu'il manque un mod, la page vous dit lequel. Et si vous avez une version d'un module qui ne fonctionne pas, comme dans Resident Evil 4, elle vous dit quelle version utiliser.
+* **Filtres du fond dans Ambiance :** Dans Fond, vous avez maintenant Flou, Assombrir et Vignette, pour mieux lire ce qui est au premier plan. Ils fonctionnent avec les images, les vidéos et les bandes-annonces. Quand le fond est flou, l'image ne bouge plus.
+
 ## [0.92.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.91.1...panel-de-control-v0.92.0) (2026-11-18)
 
 
