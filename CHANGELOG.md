@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.94.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.93.0...panel-de-control-v0.94.0) (2026-11-19)
+
+
+### Español
+
+* **Los filtros del fondo también funcionan con temas que pintan su propio fondo:** Si usas un tema que dibuja el fondo de Ambiente a su manera, Difuminado, Oscurecer y Viñeta antes no hacían nada. Ahora se aplican igual que con el fondo normal, siempre que el tema esté actualizado.
+
+### English
+
+* **Background filters also work with themes that paint their own background:** If you use a theme that draws Ambient's background its own way, Blur, Darken and Vignette used to do nothing. They now apply just like on the regular background, as long as the theme is up to date.
+
+### Italiano
+
+* **I filtri dello sfondo funzionano anche con i temi che disegnano il proprio sfondo:** Se usi un tema che disegna lo sfondo di Atmosfera a modo suo, Sfocatura, Scurisci e Vignettatura prima non facevano niente. Ora si applicano come con lo sfondo normale, purché il tema sia aggiornato.
+
+### Deutsch
+
+* **Die Hintergrundfilter gehen jetzt auch mit Themes, die ihren eigenen Hintergrund zeichnen:** Wenn du ein Theme nutzt, das den Hintergrund von Ambiente selbst zeichnet, haben Weichzeichnen, Abdunkeln und Vignette bisher nichts bewirkt. Jetzt wirken sie wie beim normalen Hintergrund, solange das Theme aktuell ist.
+
+### Português (Brasil)
+
+* **Os filtros do fundo também funcionam com temas que desenham o próprio fundo:** Se você usa um tema que desenha o fundo do Ambiente do jeito dele, Desfoque, Escurecer e Vinheta antes não faziam nada. Agora eles funcionam igual ao fundo normal, desde que o tema esteja atualizado.
+
+### Français
+
+* **Les filtres du fond marchent aussi avec les thèmes qui dessinent leur propre fond :** Si vous utilisez un thème qui dessine le fond d'Ambiance à sa façon, Flou, Assombrir et Vignette n'avaient aucun effet. Ils s'appliquent maintenant comme sur le fond normal, tant que le thème est à jour.
+
 ## [0.93.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.92.0...panel-de-control-v0.93.0) (2026-11-19)
 
 
