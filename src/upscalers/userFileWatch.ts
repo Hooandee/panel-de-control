@@ -11,7 +11,7 @@ export type UserFileWatchEvent =
   | { type: "watching"; appid: string; dependency: string }
   | { type: "stopped"; appid: string; dependency: string }
   | { type: "adopted"; appid: string; dependency: string; detail: GameDetail }
-  | { type: "failed"; appid: string; dependency: string; code: string };
+  | { type: "failed"; appid: string; dependency: string; code: string; path?: string };
 
 /** Mods have no fixed content to check: a new archive counts once its size holds still between two looks. */
 export const MOD_WATCH = "mod";
@@ -98,7 +98,7 @@ async function tick(): Promise<void> {
       // An install is running: the next tick tries again.
       if (code === "busy") return;
       if (watch === current) stop();
-      emit({ type: "failed", appid: current.appid, dependency: current.dependency, code });
+      emit({ type: "failed", appid: current.appid, dependency: current.dependency, code, path: fresh.path });
       return;
     }
     if (watch === current) stop();

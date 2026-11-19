@@ -8,7 +8,10 @@ const api = vi.hoisted(() => ({
   opened: null as unknown,
 }));
 vi.mock("@decky/api", () => ({ openFilePicker: vi.fn() }));
-vi.mock("@decky/ui", () => ({ Navigation: { NavigateToExternalWeb: (url: string) => { api.opened = url; } } }));
+vi.mock("@decky/ui", () => ({
+  Navigation: { NavigateToExternalWeb: (url: string) => { api.opened = url; } },
+  TextField: ({ value, onChange }: any) => <input aria-label="password" value={value} onChange={onChange} />,
+}));
 vi.mock("../api", () => ({
   getUpscalerModCandidates: vi.fn(async () => ({ folder: "/home/deck/Downloads", candidates: api.candidates })),
   addUpscalerMod: vi.fn(async (_appid: string, path: string) => { api.added = path; return { appid: "1245620", mod: { applied: false } }; }),
@@ -102,4 +105,17 @@ it("shows how much of the mod has downloaded while waiting", async () => {
   vi.mocked(getUpscalerModCandidates).mockResolvedValue({ folder: "/home/deck/Downloads", candidates: [], downloading: { filename: "x.7z.crdownload", size: 47185920 } });
   await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
   expect(screen.getByText(/up.mod.downloading/)).toBeTruthy();
+});
+
+it("asks for the password of a protected archive and uses it", async () => {
+  const { openFilePicker } = await import("@decky/api");
+  const { addUpscalerMod } = await import("../api");
+  vi.mocked(openFilePicker).mockResolvedValueOnce({ realpath: "/home/deck/Downloads/ERSS-FG-v4.14.1-Release.7z" } as never);
+  vi.mocked(addUpscalerMod).mockRejectedValueOnce(Object.assign(new Error("mod_password"), { pythonTraceback: "RuntimeError: mod_password" }));
+  await act(async () => { render(<ModFile appid="1245620" mod={null} needed name="ERSS-FG" download={PATREON} onDetail={vi.fn()} />); });
+  await act(async () => { fireEvent.click(screen.getByText("up.userFile.choose")); });
+  expect(screen.getByText("up.error.mod_password")).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("password"), { target: { value: "free" } });
+  await act(async () => { fireEvent.click(screen.getByText("up.mod.usePassword")); });
+  expect(addUpscalerMod).toHaveBeenLastCalledWith("1245620", "/home/deck/Downloads/ERSS-FG-v4.14.1-Release.7z", "free");
 });
