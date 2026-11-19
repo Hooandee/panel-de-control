@@ -21,6 +21,7 @@ vi.mock("../api", () => ({
   }),
   refreshUpscalerWiki: vi.fn(async () => ({ updated: false })),
   recordUpscalerArgs: vi.fn(async () => ({})),
+  getUpscalerUserFileCandidates: vi.fn(async () => ({ folder: null, candidates: [] })),
 }));
 vi.mock("@decky/api", () => ({ openFilePicker: vi.fn() }));
 vi.mock("@decky/ui", () => ({ Focusable: ({ children }: any) => <div>{children}</div>, Navigation: {}, ConfirmModal: () => null }));
@@ -194,4 +195,35 @@ it("asks REFramework games to run full screen at the display's resolution", asyn
   await act(async () => { render(<GameView {...props} overview={{ ...overview, display: [800, 1280] } as unknown as UpscalersOverview} />); });
   expect(screen.getByText("up.recipe.fullResolution 1280x800")).toBeTruthy();
   state.t = plain;
+});
+
+it("queues a first install chosen while the game is running instead of refusing it", async () => {
+  state.running = { liveAppid: 777 };
+  state.detail = { analysis: { target: "/game", inputs: { fsr31: ["LiesofP/Binaries/Win64/amd_fidelityfx_dx12.dll"] }, candidates: [] }, history: [],
+    recipe_info: null, install: null } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  await act(async () => { fireEvent.click(screen.getByText("up.activate")); });
+  const { installUpscaler } = await import("../api");
+  expect(installUpscaler).not.toHaveBeenCalled();
+  expect(screen.getByText("up.live.appliedOnExit")).toBeTruthy();
+  await act(async () => { fireEvent.click(screen.getAllByText("up.discard")[0]); });
+  state.running = null;
+});
+
+it("tells a game that needs a separate mod why OptiScaler loaded without upscaling", async () => {
+  const detail = installed("loaded");
+  state.detail = { ...detail, analysis: { ...detail.analysis, inputs: {} },
+    recipe_info: { recommended_input: null, needs: ["mod"], page: "Elden-Ring-(ERSS‐FG)", status: "works" } } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.getByText("up.status.loadedNeedsMod")).toBeTruthy();
+  expect(screen.queryByText("up.status.loaded")).toBeNull();
+});
+
+it("blames the user file version known not to load when OptiScaler loads without upscaling", async () => {
+  const detail = installed("loaded");
+  state.detail = { ...detail, recipe_info: { recommended_input: null, needs: ["reframework"], user_files: [{ id: "puredark-upscaler-base",
+    name: "UpscalerBasePlugin", page_url: "", version: "1.1.2", installed_version: "1.2.0", filename: "UpscalerBasePlugin-502-1-2-0-1734538315.zip", state: "avoid" }] } } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.getAllByText("up.userFile.avoid").length).toBeGreaterThan(0);
+  expect(screen.queryByText("up.status.loaded")).toBeNull();
 });

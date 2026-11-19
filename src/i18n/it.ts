@@ -514,6 +514,7 @@ export const it: Record<string, string> = {
   "up.status.active": "Il gioco l'ha attivato",
   "up.status.pending": "Gioca un po' per verificarlo",
   "up.status.loaded": "Attiva l’upscaling nelle impostazioni grafiche del gioco",
+  "up.status.loadedNeedsMod": "OptiScaler si è caricato, ma senza la mod richiesta da questo gioco non ha nulla da scalare. La voce della wiki indica quale",
   "up.input.recommended": "Nel gioco, scegli {input}. Panel de Control applicherà {name}",
   "up.status.not_run": "Gioca un po' per verificarlo",
   "up.status.dll_not_run": "Controlla la versione nelle impostazioni del gioco",

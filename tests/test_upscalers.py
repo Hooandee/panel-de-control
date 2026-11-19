@@ -286,6 +286,20 @@ def test_analyze_picks_the_unity_player_over_anti_cheat_and_helper_exes(tmp_path
     assert "AntiCheatExpert/ACE-Service64.exe" not in [c["exe"] for c in result["candidates"]]
 
 
+def test_analyze_breaks_a_tie_for_the_exe_that_creates_the_device(tmp_path, monkeypatch):
+    # Elden Ring ships Unity extras (guide, artbook) whose _Data folder scores as much as the game exe.
+    for extra in ("AdvGuide/ELDEN RING Adventure Guide", "ArtbookOST/ELDEN RING Digital Artbook & Soundtrack"):
+        _write(tmp_path / f"{extra}.exe", "x")
+        (tmp_path / f"{extra}_Data").mkdir()
+    _write(tmp_path / "Game/start_protected_game.exe", "x")
+    with open(tmp_path / "Game/eldenring.exe", "wb") as handle:
+        handle.truncate(86_973_008)
+    monkeypatch.setattr(games.pe, "graphics_apis", lambda path: ["d3d12", "dxgi"] if path.endswith("eldenring.exe") else [])
+    result = games.analyze(tmp_path)
+    assert result["exe"] == "Game/eldenring.exe"
+    assert result["target"] == str(tmp_path / "Game")
+
+
 def test_agility_sdk_beside_the_exe_means_d3d12(steam, monkeypatch):
     # RE Engine games (RE4, Requiem, Onimusha) import only d3d11/dxgi and load D3D12 at runtime.
     from upscalers import solution_plan
@@ -1480,6 +1494,21 @@ def test_the_exe_is_only_searched_when_no_library_was_found(tmp_path, monkeypatc
     _write(root / "nvngx_dlss.dll")
     monkeypatch.setattr(games, "embedded_upscalers", lambda exe: pytest.fail("must not scan"))
     assert games.shipped_upscalers(root) == ["DLSS"]
+
+
+def test_the_exe_scan_finds_entry_points_across_read_boundaries_and_caches(tmp_path, monkeypatch):
+    exe = tmp_path / "Game.exe"
+    needle = b"ffxFsr3UpscalerContextCreate"
+    monkeypatch.setattr(games, "_EMBEDDED_CHUNK", 64)
+    exe.write_bytes(b"MZ" + b"\0" * 50 + needle + b"\0" * 100 + b"xessD3D12CreateContext")
+    assert games.embedded_upscalers(exe) == {"fsr31", "xess"}
+    opened = []
+    real_open = open
+    monkeypatch.setattr("builtins.open", lambda *a, **k: opened.append(a[0]) or real_open(*a, **k))
+    assert games.embedded_upscalers(exe) == {"fsr31", "xess"}
+    assert opened == []
+    exe.write_bytes(b"MZ" + b"\0" * 300)
+    assert games.embedded_upscalers(exe) == set()
 
 
 def test_files_panel_leaves_in_a_game_belong_to_the_games_owner(steam, fake_catalog, proc, monkeypatch):
