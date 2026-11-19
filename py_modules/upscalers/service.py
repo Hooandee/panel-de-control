@@ -2141,6 +2141,10 @@ class UpscalerService:
                     automatic = auto_recipes.plan(recipe, installed)
                     analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe or installed.exe)
                     report["recipe"]["blocked"] = auto_recipes.unresolved(recipe, analysis, automatic)
+                    report["recipe"]["user_files"] = [
+                        diagnostics.fields(item, ("id", "version", "installed_version", "filename", "state"))
+                        for item in auto_recipes.user_files(automatic, self.user_files)
+                    ]
                     if automatic:
                         report["recipe"]["prefix"] = prefix_dependencies.status(self.home, installed, auto_recipes.verbs(automatic))
                         report["recipe"]["prefix"]["last_install"] = diagnostics.windows_components(entry.get("windows_components"))
