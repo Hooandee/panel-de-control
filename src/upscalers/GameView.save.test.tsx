@@ -21,6 +21,7 @@ vi.mock("../api", () => ({
   }),
   refreshUpscalerWiki: vi.fn(async () => ({ updated: false })),
   recordUpscalerArgs: vi.fn(async () => ({})),
+  getUpscalerUserFileCandidates: vi.fn(async () => ({ folder: null, candidates: [] })),
 }));
 vi.mock("@decky/api", () => ({ openFilePicker: vi.fn() }));
 vi.mock("@decky/ui", () => ({ Focusable: ({ children }: any) => <div>{children}</div>, Navigation: {}, ConfirmModal: () => null }));
@@ -228,5 +229,14 @@ it("tells a game that needs a separate mod why OptiScaler loaded without upscali
     recipe_info: { recommended_input: null, needs: ["mod"], page: "Elden-Ring-(ERSS‐FG)", status: "works" } } as unknown as GameDetail;
   await act(async () => { render(<GameView {...props} />); });
   expect(screen.getByText("up.status.loadedNeedsMod")).toBeTruthy();
+  expect(screen.queryByText("up.status.loaded")).toBeNull();
+});
+
+it("blames the user file version known not to load when OptiScaler loads without upscaling", async () => {
+  const detail = installed("loaded");
+  state.detail = { ...detail, recipe_info: { recommended_input: null, needs: ["reframework"], user_files: [{ id: "puredark-upscaler-base",
+    name: "UpscalerBasePlugin", page_url: "", version: "1.1.2", installed_version: "1.2.0", filename: "UpscalerBasePlugin-502-1-2-0-1734538315.zip", state: "avoid" }] } } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.getAllByText("up.userFile.avoid").length).toBeGreaterThan(0);
   expect(screen.queryByText("up.status.loaded")).toBeNull();
 });

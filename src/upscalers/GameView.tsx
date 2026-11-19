@@ -281,6 +281,7 @@ export const GameView: FC<{
   const qualityChanged = qualityMode.mode === "panel" && install?.options.quality !== choice.quality;
   const modelChanged = (install?.options.model ?? builds.find((build) => build.id === install?.build)?.models?.[0] ?? null)
     !== (choice.model ?? builds.find((build) => build.id === choice.build)?.models?.[0] ?? null);
+  const avoidedFile = detail?.recipe_info?.user_files?.find((file) => file.state === "avoid");
   const awaitingExit = !!queued && queued.build === choice.build && (queued.model ?? null) === (choice.model ?? null)
     && (!detail?.recipe_info?.quality_on_exit || (queued.quality ?? null) === (choice.quality ?? null));
   const dirty = !awaitingExit && (spatialInstalled || !install || !sameBuild || qualityChanged || install.options.sharpness !== choice.sharpness || modelChanged);
@@ -609,8 +610,10 @@ export const GameView: FC<{
               sub={fallback ? t(`up.fallback.reason.${fallback.reason}`) : status === "active" && render && output
                 ? t(render < output ? "up.state.checked" : "up.state.checkedNative", { from: render, to: output })
                 : status === "active" ? undefined : installedBuild?.engine === "dll" && status === "not_run"
-                  ? t("up.status.dll_not_run") : status === "loaded" && detail.recipe_info?.needs.includes("mod") && !detail.recipe_info.user_files?.length
-                    ? t("up.status.loadedNeedsMod") : t(`up.status.${status}`)}
+                  ? t("up.status.dll_not_run") : status === "loaded" && avoidedFile
+                    ? t("up.userFile.avoid", { version: avoidedFile.installed_version ?? "", recommended: avoidedFile.version })
+                    : status === "loaded" && detail.recipe_info?.needs.includes("mod") && !detail.recipe_info.user_files?.length
+                      ? t("up.status.loadedNeedsMod") : t(`up.status.${status}`)}
               tone={status === "broken" ? "danger" : status === "loaded" || fallback ? "warn" : undefined}
             />
           ) : detail.analysis.foreign ? (
