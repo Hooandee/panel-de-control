@@ -176,6 +176,7 @@ def test_without_bsdtar_the_archive_is_read_with_7z(tmp_path, monkeypatch):
     archive = tmp_path / "UpscalerBasePlugin-502-1-1-2-1.7z"
     archive.write_bytes(b"7z")
     monkeypatch.setattr(user_deps.shutil, "which", lambda tool: "/usr/bin/7z" if tool == "7z" else None)
+    monkeypatch.setattr(user_deps, "resolve_bin", lambda tool: tool)
     commands = []
 
     def run(command, **kwargs):
@@ -193,3 +194,15 @@ def test_without_bsdtar_the_archive_is_read_with_7z(tmp_path, monkeypatch):
     assert store.adopt(PLUGIN, archive)["state"] == "ready"
     assert store.sources(PLUGIN)["PDPerfPlugin.dll"].read_bytes() == b"MZplugin"
     assert ["7z", "l"] in commands and ["7z", "x"] in commands
+
+
+def test_archive_tools_are_found_with_deckys_minimal_path(monkeypatch):
+    # Decky's backend can run without /usr/bin in PATH: a .7z mod then read as unreadable.
+    monkeypatch.setattr(user_deps.shutil, "which", lambda name: None)
+    monkeypatch.setattr(user_deps, "resolve_bin", lambda name: f"/usr/bin/{name}" if name == "bsdtar" else name)
+    assert user_deps._archiver() == "bsdtar"
+    calls = []
+    monkeypatch.setattr(user_deps.subprocess, "run", lambda command, **kwargs: calls.append((command, kwargs)))
+    user_deps.run_archiver(["bsdtar", "-tf", "/x.7z"], 60)
+    assert calls[0][0][0] == "/usr/bin/bsdtar"
+    assert "LD_LIBRARY_PATH" not in calls[0][1]["env"] or calls[0][1]["env"]["LD_LIBRARY_PATH"] != "/tmp/_MEI"
