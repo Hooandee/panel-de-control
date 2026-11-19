@@ -50,7 +50,9 @@ export interface UpscalersOverview {
   anr_build?: string | null;
   builds: BuildInfo[];
   cached: string[];
-  installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice>; fallback?: ScalerFallback | null }>;
+  installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice>; fallback?: ScalerFallback | null;
+    /** Frame generation the recipe turns on inside the user's mod (ERSS-FG). */
+    mod_fg?: string | null }>;
   /** Mako and Lossless Scaling per game: they never show up as an install. */
   engines?: Record<string, {
     mako?: { spatial: boolean; fg: boolean; multiplier: number | null; engine?: 4 | 5 };
