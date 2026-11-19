@@ -283,6 +283,13 @@ class Store:
         files = [f for f in meta.get("files", []) if isinstance(f, str)]
         if not files or not all((self._folder(appid) / "files" / f).is_file() for f in files):
             return None
+        if "verbs" not in meta:
+            # Kept before Panel looked at what the mod's DLLs import: worked out once and written down.
+            meta["verbs"] = prefix_verbs(self._folder(appid) / "files", files)
+            try:
+                (self._folder(appid) / "meta.json").write_text(json.dumps(meta))
+            except OSError:
+                pass
         return {"filename": meta.get("filename"), "id": meta.get("id"), "target": meta.get("target"), "count": len(files),
                 "files": files[:PREVIEW], "native_dlls": native_dlls(files),
                 "verbs": [v for v in meta.get("verbs", []) if v == "vcrun2022"]}

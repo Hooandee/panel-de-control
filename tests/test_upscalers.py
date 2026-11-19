@@ -2137,3 +2137,14 @@ def test_a_recipe_prepares_the_mod_it_needs_without_the_user(steam, fake_catalog
     assert (target / "ERSS2/ERSS-FG.toml").read_bytes() == b'OverlayToggleKey = "Home"\n\n[Renderer]\nScalingMode = "None"\nIsHDR = true\n'
     assert not (target / "ERSS-FG.dll").exists()
     assert service_module._launch_result({}) == {}
+
+
+def test_a_mod_kept_before_runtime_checks_gets_them_when_read(tmp_path, monkeypatch):
+    import json
+    from upscalers import user_mods
+    folder = tmp_path / "store/1245620"
+    _write(folder / "files/ERSS-FG.dll", b"MZ")
+    (folder / "meta.json").write_text(json.dumps({"filename": "ERSS-FG.7z", "files": ["ERSS-FG.dll"], "target": "Game", "id": "x"}))
+    monkeypatch.setattr(user_mods.pe, "imported_dlls", lambda path: {"vcruntime140_1.dll"})
+    assert user_mods.Store(tmp_path / "store").status("1245620")["verbs"] == ["vcrun2022"]
+    assert json.loads((folder / "meta.json").read_text())["verbs"] == ["vcrun2022"]
