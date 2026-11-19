@@ -1391,7 +1391,7 @@ class Plugin(AmbientRpc):
         loop = asyncio.get_running_loop()
         service = await loop.run_in_executor(None, self._upscalers)
         actions = {"configure", "set_identity", "set_exe", "record_added_args", "refresh_wiki", "set_ini",
-                   "verify", "capture_frame", "lsfg_install", "lsfg_adopt_foreign", "lsfg_restore_foreign",
+                   "verify", "capture_frame", "add_mod", "remove_mod", "lsfg_install", "lsfg_adopt_foreign", "lsfg_restore_foreign",
                    "adopt_foreign", "restore_foreign", "lsfg_uninstall", "lsfg_game", "mako_install", "mako5_install", "mako_game", "press_key", "set_image_settings", "restore_image_settings", "begin_scaler_transition", "finish_scaler_transition"}
         tracked = method in actions
         appid = str(args[0]) if args and args[0] is not None else "global"
@@ -1483,6 +1483,19 @@ class Plugin(AmbientRpc):
     async def remove_upscaler_user_file(self, appid: str, dependency_id: str) -> dict:
         result = await self._upscalers_call("remove_user_file", str(appid), str(dependency_id))
         _upscalers_journal("INFO", "user_file_removed", appid=str(appid), dependency=str(dependency_id))
+        return result
+
+    async def get_upscaler_mod_candidates(self, appid: str) -> dict:
+        return await self._upscalers_call("mod_candidates", str(appid))
+
+    async def add_upscaler_mod(self, appid: str, path: str) -> dict:
+        result = await self._upscalers_call("add_mod", str(appid), str(path))
+        _upscalers_journal("INFO", "mod", appid=str(appid), files=(result.get("mod") or {}).get("count"))
+        return result
+
+    async def remove_upscaler_mod(self, appid: str) -> dict:
+        result = await self._upscalers_call("remove_mod", str(appid))
+        _upscalers_journal("INFO", "mod_removed", appid=str(appid))
         return result
 
     async def set_upscalers_exe(self, appid: str, exe: str | None = None) -> dict:

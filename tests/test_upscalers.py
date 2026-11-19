@@ -1978,3 +1978,67 @@ def test_a_missing_record_still_asks_the_bridge_and_accepts_not_installed(steam,
     service.uninstall(APPID)
     assert service.helix.calls == [("remove",)]
     assert service.game(APPID)["install"] is None
+
+
+def _mod_zip(path, members):
+    import zipfile
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, content in members.items():
+            archive.writestr(name, content)
+    return path
+
+
+def test_mod_layout_follows_the_exe_folder():
+    from upscalers import user_mods
+    assert user_mods.layout(["Game/ERSS-FG.dll", "Game/ERSS2/a.ini"], "Game") == {"ERSS-FG.dll": "Game/ERSS-FG.dll", "ERSS2/a.ini": "Game/ERSS2/a.ini"}
+    assert user_mods.layout(["ERSS-FG v4/D3D12.dll", "ERSS-FG v4/ERSS2/a.ini"], "Game") == {"D3D12.dll": "ERSS-FG v4/D3D12.dll", "ERSS2/a.ini": "ERSS-FG v4/ERSS2/a.ini"}
+    # A folder the game already has is part of where the mod goes, not a wrapper.
+    assert user_mods.layout(["reframework/plugins/x.dll"], "", {"reframework"}) == {"reframework/plugins/x.dll": "reframework/plugins/x.dll"}
+    assert user_mods.native_dlls(["D3D12.dll", "ERSS-FG.dll", "ERSS2/dxgi.dll", "dinput8.dll"]) == ["d3d12", "dinput8"]
+
+
+def test_a_users_mod_goes_in_with_optiscaler_and_leaves_with_it(steam, fake_catalog, proc):
+    home, game = steam
+    target = game / "bin/x64_dx12"
+    _write(target / "D3D12.dll", b"game's own")
+    archive = _mod_zip(home / "Downloads/ERSS-FG free v4.zip",
+                       {"ERSS-FG/D3D12.dll": b"loader", "ERSS-FG/dxgi.dll": b"mod dxgi", "ERSS-FG/ERSS2/ERSS.ini": b"[x]"})
+    service = _service(steam, fake_catalog, proc)
+    assert service.mod_candidates(APPID)["candidates"][0]["filename"] == "ERSS-FG free v4.zip"
+    detail = service.add_mod(APPID, str(archive))
+    assert detail["mod"]["count"] == 3 and detail["mod"]["applied"] is False
+    assert detail["mod"]["native_dlls"] == ["d3d12", "dxgi"]
+
+    result = service.install(APPID, {"build": "fsr-test"})
+    install = service.game(APPID)["install"]
+    assert install["proxy"] != "dxgi.dll", "the mod's dxgi.dll keeps its name; OptiScaler moves aside"
+    assert (target / install["proxy"]).is_file()
+    assert (target / "dxgi.dll").read_bytes() == b"mod dxgi"
+    assert (target / "D3D12.dll").read_bytes() == b"loader"
+    assert (target / "ERSS2/ERSS.ini").is_file()
+    assert {"d3d12", "dxgi"} <= set(install["native_dlls"])
+    assert any("d3d12" in override for override in result["overrides"])
+    assert service.game(APPID)["mod"]["applied"] is True
+
+    service.uninstall(APPID)
+    assert (target / "D3D12.dll").read_bytes() == b"game's own"
+    assert not (target / "dxgi.dll").exists() and not (target / "ERSS2").exists()
+
+
+def test_a_mod_that_overwrites_optiscalers_files_is_refused(steam, fake_catalog, proc):
+    home, _ = steam
+    archive = _mod_zip(home / "Downloads/bad.zip", {"OptiScaler.ini": b"[x]"})
+    service = _service(steam, fake_catalog, proc)
+    service.add_mod(APPID, str(archive))
+    with pytest.raises(UpscalerError, match="mod_conflict"):
+        service.install(APPID, {"build": "fsr-test"})
+
+
+def test_a_mod_archive_escaping_the_game_folder_is_refused(steam, fake_catalog, proc):
+    home, _ = steam
+    archive = _mod_zip(home / "Downloads/evil.zip", {"../../evil.dll": b"x"})
+    service = _service(steam, fake_catalog, proc)
+    with pytest.raises(UpscalerError, match="mod_unsafe_archive"):
+        service.add_mod(APPID, str(archive))
+    assert service.game(APPID)["mod"] is None

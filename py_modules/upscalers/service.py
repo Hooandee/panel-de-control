@@ -13,7 +13,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, recipe_catalog, recipes, scaler_transition, user_deps, wiki
+from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, recipe_catalog, recipes, scaler_transition, user_deps, user_mods, wiki
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -137,6 +137,7 @@ class UpscalerService:
         self.helix = helixsr.HelixSR(home)
         self.wiki = wiki.WikiCache(Path(state_dir))
         self.user_files = user_deps.Store(Path(state_dir) / "user-files")
+        self.user_mods = user_mods.Store(Path(state_dir) / "user-mods")
         self._lock = threading.Lock()
         self._compat: dict[str, tuple[float, bool]] = {}
         self._job: dict | None = None
@@ -435,7 +436,60 @@ class UpscalerService:
             "foreign_backup": {"at": entry["foreign_backup"]["at"]} if isinstance(entry.get("foreign_backup"), dict) else None,
             "fg_note": recipe.fg_note if recipe else None,
             "fg_plan": None if installed.native else selected["fg_plan"],
+            "mod": self._mod_status(appid, install),
         }
+
+    # ---- a mod the user brings for one game --------------------------------
+    def _mod_status(self, appid: str, install) -> dict | None:
+        status = self.user_mods.status(appid)
+        if status is None:
+            return None
+        applied = isinstance(install, dict) and install.get("mod") == status.get("filename")
+        return {**status, "applied": applied}
+
+    def _mod_target(self, appid: str) -> tuple[games.Installed, str, set[str]]:
+        installed = self._find(appid)
+        if installed is None:
+            raise UpscalerError("not_installed")
+        entry = self._game_state(appid)
+        recipe = self._recipe(appid, self._identity(installed, entry), installed)
+        analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
+        if not analysis["target"]:
+            raise UpscalerError("no_exe")
+        target = Path(analysis["target"])
+        try:
+            existing = {child.name for child in target.iterdir()}
+        except OSError:
+            existing = set()
+        return installed, target.relative_to(installed.root).as_posix(), existing
+
+    def mod_candidates(self, appid: str) -> dict:
+        home = Path(self.home)
+        folders = [home / "Downloads", home / "Descargas"]
+        folder = next((f for f in folders if f.is_dir()), home)
+        return {"folder": str(folder), "candidates": user_mods.candidates(folders)}
+
+    def add_mod(self, appid: str, path: str) -> dict:
+        chosen = Path(str(path))
+        allowed = (Path(self.home).resolve(), Path("/run/media"))
+        try:
+            resolved = chosen.resolve(strict=True)
+        except OSError:
+            raise UpscalerError("mod_unreadable") from None
+        if not any(resolved.is_relative_to(root) for root in allowed):
+            raise UpscalerError("mod_unreadable")
+        self._idle()
+        _, target, existing = self._mod_target(appid)
+        try:
+            self.user_mods.adopt(appid, resolved, target, existing)
+        except user_mods.ModError as error:
+            raise UpscalerError(f"mod_{error.code}") from None
+        return self.game(appid)
+
+    def remove_mod(self, appid: str) -> dict:
+        self._idle()
+        self.user_mods.remove(appid)
+        return self.game(appid)
 
     # ---- files only the user can download ---------------------------------
     def _user_dependency(self, dependency_id: str):
@@ -759,6 +813,13 @@ class UpscalerService:
 
         recipe = self._recipe(appid, entry.get("identity"), installed)
         proxy = str(choice.get("proxy") or _recipe_proxy(recipe) or "dxgi.dll")
+        mod_sources = self.user_mods.sources(appid)
+        mod_names = {name.casefold() for name in mod_sources}
+        if proxy.casefold() in mod_names:
+            # The mod brings its own loader under OptiScaler's usual name (ERSS-FG's dxgi.dll): OptiScaler takes another.
+            proxy = next((name for name in games.PROXY_NAMES if name.casefold() not in mod_names and name != "d3d12.dll"), None)
+            if proxy is None:
+                raise UpscalerError("mod_conflict")
         build = catalog.for_game(build, analysis["inputs"], self.gpu, recipe)
         assets = needed(build, recipe)
         if any(asset.id not in paths for asset in assets):
@@ -791,6 +852,10 @@ class UpscalerService:
             sources = {**auto_recipes.sources(automatic, paths, self.user_files), **sources}
         except auto_recipes.RecipeError as error:
             raise UpscalerError(error.code) from None
+        panel_names = {name.casefold() for name in (*sources, "OptiScaler.ini")}
+        if any(name.casefold() in panel_names for name in mod_sources):
+            raise UpscalerError("mod_conflict")
+        sources = {**mod_sources, **sources}
         solution = solution_plan.resolve(self.gpu, analysis, recipe, archive_asset.generation, build.engine, choice.get("fg_route"), dependencies_ready=bool(automatic))
         fg_plan = _requested_fg(solution, choice)
         wiki_ini = wiki.resolve_settings(base_ini, recipe.wiki_settings) if recipe else {}
@@ -870,7 +935,8 @@ class UpscalerService:
         entry["install"] = {
             "build": build.id, "archive": build.archive, "proxy": proxy, "target": str(target), "exe": analysis["exe"],
             "installed_at": now, "options": _clean_options(choice), "solution": solution,
-            "native_dlls": list(recipe.native_dlls) if recipe else [],
+            "native_dlls": sorted({*(recipe.native_dlls if recipe else ()), *user_mods.native_dlls(mod_sources)}),
+            "mod": (self.user_mods.status(appid) or {}).get("filename") if mod_sources else None,
             "game_build": installed.build_id,
             "recipe_revision": automatic.revision if automatic else None,
             "recipe_configuration": dict(getattr(automatic, "configuration", {})) if automatic else {},
@@ -2128,6 +2194,10 @@ class UpscalerService:
                 report["game_crash"] = diagnostics.game_crash(self.home, appid)
         info = _recipe_info(recipe)
         report["recipe"] = diagnostics.fields(info, ("status", "broken", "linux", "optipatcher", "proxy"))
+        mod = self.user_mods.status(appid)
+        if mod:
+            report["mod"] = {"count": mod["count"], "native_dlls": mod["native_dlls"],
+                             "applied": (entry.get("install") or {}).get("mod") == mod.get("filename")}
         if info:
             report["recipe"]["needs"] = [str(item)[:80] for item in info.get("needs", [])[:16]]
             report["recipe"]["inputs"] = [str(item)[:40] for item in info.get("inputs", [])[:16]]
