@@ -31,7 +31,7 @@ export function filterVars(filters: WallpaperFilters | undefined): Record<string
   const blur = level(filters?.blur) * BLUR_MAX_PX;
   return {
     "--pdc-bg-blur": `${blur.toFixed(1)}px`,
-    "--pdc-bg-scale": (1 + (blur * 2.5) / 1000 + (blur > 0 ? 0.02 : 0)).toFixed(3),
+    "--pdc-bg-scale": (1 + blur * 0.005 + (blur > 0 ? 0.02 : 0)).toFixed(3),
     "--pdc-bg-dim": (level(filters?.dim) * DIM_MAX).toFixed(3),
     "--pdc-bg-vignette": (level(filters?.vignette) * VIGNETTE_MAX).toFixed(3),
   };

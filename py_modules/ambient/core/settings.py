@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import math
 import re
 from typing import Any
 
@@ -129,7 +130,7 @@ def _normalize_background(out: dict[str, Any], raw: dict[str, Any]) -> None:
     filters = _dict(raw.get("filters"))
     for key in FILTER_KEYS:
         level = filters.get(key)
-        if _number(level):
+        if _number(level) and math.isfinite(level):
             out["filters"][key] = int(min(100, max(0, round(level))))
     out["perGame"] = {
         key: value
