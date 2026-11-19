@@ -151,6 +151,7 @@ export interface GameDetail {
   native: boolean;
   fg_plan: FgPlan | null;
   identity: { steam_appid: number | null; name: string | null; source: string } | null;
+  mod?: GameMod | null;
 }
 
 export interface VerifyResult {
@@ -182,6 +183,15 @@ export interface UserFile {
   installed_version: string | null;
   filename: string | null;
   state: "missing" | "ready" | "avoid" | "other_version";
+}
+
+/** A mod the user brought for one game, installed beside the exe with OptiScaler. */
+export interface GameMod {
+  filename: string | null;
+  count: number;
+  files: string[];
+  native_dlls: string[];
+  applied: boolean;
 }
 
 export interface UserFileCandidate {

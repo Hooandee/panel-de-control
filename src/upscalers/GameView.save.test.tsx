@@ -7,6 +7,9 @@ import type { GameEntry } from "../launch/steamApi";
 const state = vi.hoisted(() => ({ live: { fps: null, render: null, output: null, generating: null, canPause: false, active: false } as any, imageDirty: null as null | ((dirty: boolean) => void), imageSaves: 0, detail: null as unknown, job: null as unknown, nextId: 0, running: null as any, advancedRows: false, frameProps: null as any, t: (key: string, _params?: Record<string, unknown>) => key }));
 vi.mock("../system/uiEvents", () => ({ recordUiEvent: vi.fn() }));
 vi.mock("../api", () => ({
+  getUpscalerModCandidates: vi.fn(async () => ({ folder: "/home/deck/Downloads", candidates: [] })),
+  addUpscalerMod: vi.fn(),
+  removeUpscalerMod: vi.fn(),
   getMakoStatus: vi.fn(async () => ({ profiles: {} })),
   getUpscalersGame: vi.fn(async () => state.detail),
   getUpscalersJob: vi.fn(async () => state.job),

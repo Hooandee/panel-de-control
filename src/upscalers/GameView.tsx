@@ -45,6 +45,7 @@ import { JobProgress } from "./JobProgress";
 import { FrameGenRow } from "./FrameGenRow";
 import { useThemes } from "../themes/useThemes";
 import { ModelPicker } from "./ModelPicker";
+import { ModFile, wikiModName } from "./ModFile";
 import { UserFiles } from "./UserFiles";
 import { markPendingReinstall, takePendingReinstall } from "./userFileWatch";
 import { replaceForeignInstallation } from "./foreignReplacement";
@@ -281,7 +282,7 @@ export const GameView: FC<{
   const qualityChanged = qualityMode.mode === "panel" && install?.options.quality !== choice.quality;
   const modelChanged = (install?.options.model ?? builds.find((build) => build.id === install?.build)?.models?.[0] ?? null)
     !== (choice.model ?? builds.find((build) => build.id === choice.build)?.models?.[0] ?? null);
-  const missingMod = !!detail?.recipe_info?.page && !!detail.recipe_info.needs.includes("mod") && !detail.recipe_info.user_files?.length
+  const missingMod = !!detail?.recipe_info?.page && !!detail.recipe_info.needs.includes("mod") && !detail.recipe_info.user_files?.length && !detail.mod
     && Object.values(detail.analysis.inputs).every((files) => !files?.length);
   const avoidedFile = detail?.recipe_info?.user_files?.find((file) => file.state === "avoid");
   const awaitingExit = !!queued && queued.build === choice.build && (queued.model ?? null) === (choice.model ?? null)
@@ -622,6 +623,11 @@ export const GameView: FC<{
             <UserFiles appid={appid} files={detail.recipe_info.user_files} disabled={running || foreignBusy}
               onDetail={(next) => { if (next.install) markPendingReinstall(appid); setDetail(next); }} />
           )}
+          {!detail.native && !spatial && selectedEngine === "optiscaler" && !detail.recipe_info?.user_files?.length && (
+            <ModFile appid={appid} mod={detail.mod ?? null} needed={!!detail.recipe_info?.needs.includes("mod")}
+              name={wikiModName(detail.recipe_info?.page)} disabled={running || foreignBusy || gameRunning}
+              onDetail={(next) => { if (next.install && !next.mod?.applied) markPendingReinstall(appid); setDetail(next); }} />
+          )}
           {(detail.native || externalHelix) && <ListRow label="Mako" chevron disabled={running || foreignBusy} onPress={() => selectSpatial(!spatial)} />}
           {wikiUpdating && (
             <span style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
@@ -661,7 +667,7 @@ export const GameView: FC<{
           {detail.updating && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Notice>}
           {detail.analysis.target && uses.length === 0 && !solution?.input_reconciled && !detail.recipe_info?.needs.includes("mod") && !detail.recipe_info?.user_files?.length && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.detect.noinputs")}</Notice>}
           {detail.recipe_info?.broken && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.broken")}</Notice>}
-          {detail.recipe_info?.needs.filter((need) => !(need === "mod" && detail.recipe_info?.user_files?.length)).filter((need) => need !== "luma" || (optiscalerRecipe && !detail.recipe_info?.luma_detected && !automaticLuma)).map((need) => <Notice key={need} icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.recipe.need.${need}`)}</Notice>)}
+          {detail.recipe_info?.needs.filter((need) => !(need === "mod" && (detail.recipe_info?.user_files?.length || detail.mod))).filter((need) => need !== "luma" || (optiscalerRecipe && !detail.recipe_info?.luma_detected && !automaticLuma)).map((need) => <Notice key={need} icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.recipe.need.${need}`)}</Notice>)}
           {!spatial && selectedEngine === "optiscaler" && detail.recipe_info?.game_settings?.map((entry) => (
             <Notice key={entry.setting} icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.gameSetting", entry)}</Notice>
           ))}
