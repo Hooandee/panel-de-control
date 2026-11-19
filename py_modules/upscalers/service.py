@@ -480,7 +480,7 @@ class UpscalerService:
         folder = next((f for f in folders if f.is_dir()), home)
         return {"folder": str(folder), "candidates": user_mods.candidates(folders), "downloading": user_mods.downloading(folders)}
 
-    def add_mod(self, appid: str, path: str) -> dict:
+    def add_mod(self, appid: str, path: str, password: str | None = None) -> dict:
         chosen = Path(str(path))
         allowed = (Path(self.home).resolve(), Path("/run/media"))
         try:
@@ -492,7 +492,7 @@ class UpscalerService:
         self._idle()
         _, target, existing, root_dirs = self._mod_target(appid)
         try:
-            self.user_mods.adopt(appid, resolved, target, existing, root_dirs)
+            self.user_mods.adopt(appid, resolved, target, existing, root_dirs, password)
         except user_mods.ModError as error:
             raise UpscalerError(f"mod_{error.code}") from None
         return self.game(appid)

@@ -2073,3 +2073,36 @@ def test_a_mod_download_in_progress_is_reported(steam, fake_catalog, proc):
     found = service.mod_candidates(APPID)
     assert found["downloading"] == {"filename": "ERSS-FG-v4.14.1-Release.7z.crdownload", "size": 2048}
     assert found["candidates"] == []
+
+
+def test_a_password_protected_mod_asks_for_its_password(tmp_path, monkeypatch):
+    # ERSS-FG ships as a 7z whose files are all encrypted (7zAES); the password is in its Patreon post.
+    import subprocess
+    from upscalers import user_mods
+    archive = tmp_path / "ERSS-FG-v4.14.1-Release.7z"
+    archive.write_bytes(b"7z")
+    listing = ("Path = D3D12.dll\nSize = 4\nAttributes = A_ -rw-r--r--\nEncrypted = +\n\n"
+               "Path = ERSS2/bin/ffx_cas_x64.dll\nSize = 4\nAttributes = A_ -rw-r--r--\nEncrypted = +\n")
+    commands = []
+
+    def run(command, timeout):
+        commands.append(command)
+        if command[1] == "l":
+            return subprocess.CompletedProcess(command, 0, listing.encode(), b"")
+        if "-pfree" not in command:
+            return subprocess.CompletedProcess(command, 2, b"", b"ERROR: Wrong password : D3D12.dll")
+        staging = Path(next(arg for arg in command if arg.startswith("-o"))[2:])
+        (staging / "ERSS2/bin").mkdir(parents=True)
+        (staging / "D3D12.dll").write_bytes(b"MZ")
+        (staging / "ERSS2/bin/ffx_cas_x64.dll").write_bytes(b"MZ")
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    monkeypatch.setattr(user_mods, "_seven_zip", lambda: True)
+    monkeypatch.setattr(user_mods.user_deps, "run_archiver", run)
+    store = user_mods.Store(tmp_path / "store")
+    with pytest.raises(user_mods.ModError, match="^password$"):
+        store.adopt("1245620", archive, "Game", set(), {"Game"})
+    with pytest.raises(user_mods.ModError, match="password_wrong"):
+        store.adopt("1245620", archive, "Game", set(), {"Game"}, "nope")
+    assert store.adopt("1245620", archive, "Game", set(), {"Game"}, "free")["count"] == 2
+    assert all(command[0] == "7z" for command in commands)

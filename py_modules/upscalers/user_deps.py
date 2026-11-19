@@ -60,7 +60,7 @@ def _archiver() -> str:
 def run_archiver(arguments: list[str], timeout: int) -> subprocess.CompletedProcess:
     """The archive tool by its full path, without Decky's bundled libraries."""
     return subprocess.run([resolve_bin(arguments[0]), *arguments[1:]], capture_output=True, timeout=timeout,
-                          check=False, env=clean_env())
+                          check=False, env=clean_env(), stdin=subprocess.DEVNULL)
 
 
 def _members(path: Path) -> list[str]:
