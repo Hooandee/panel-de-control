@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.0...panel-de-control-v0.94.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **upscalers:** find Steam games when the library index misleads ([#1439](https://github.com/Hooandee/panel-de-control/issues/1439)) ([a04cdb4](https://github.com/Hooandee/panel-de-control/commit/a04cdb4709d73b4e277f6ae8630f90dc77223501))
+
 ## [0.94.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.93.0...panel-de-control-v0.94.0) (2026-11-19)
 
 
