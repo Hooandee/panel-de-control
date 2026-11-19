@@ -54,5 +54,13 @@
     "size": 37256003,
     "filename": "Luma-Persona_5_Royal.zip",
     "format": "zip"
+  },
+  "luma-mrf-840": {
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Metaphor_ReFantazio.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "13737994d3fd562e5c326b45da0984ebb5cbb07cf1688c7b9bc6cc4c80fd35b1",
+    "size": 37461871,
+    "filename": "Luma-Metaphor_ReFantazio.zip",
+    "format": "zip"
   }
 }

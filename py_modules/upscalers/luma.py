@@ -22,6 +22,9 @@ _MODS = {
     "1687950": _Mod('Luma-Persona 5 Royal.addon',
                     'Luma/Persona 5 Royal/Luma_DecodeMotionVector.hlsl',
                     (b'Persona 5 Royal Luma mod',)),
+    "2679460": _Mod('Luma-Metaphor ReFantazio.addon',
+                    'Luma/Metaphor ReFantazio/Luma_PrepareMotionVector.hlsl',
+                    (b'Metaphor: ReFantazio Luma mod',)),
 }
 
 

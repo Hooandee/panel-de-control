@@ -57,6 +57,17 @@ def test_pinned_persona_5_royal_uses_luma_dlss_through_optiscaler():
     assert not recipes.recipe_for('1687950', engine='dll', platform='linux', arch='x86_64').dependencies
 
 
+def test_pinned_metaphor_uses_luma_dlss_through_optiscaler():
+    catalog = rc.load()
+    game = catalog.match('2679460', 'optiscaler', 'linux', 'x86_64')
+    assert game.exe == 'METAPHOR.exe'
+    assert [d.id for d in catalog.dependency_order(game.dependencies)] == ['vcrun2022', 'msvcrt40', 'luma-mrf']
+    files = catalog.dependencies['luma-mrf'].files
+    assert files['ReShade64.dll'] == 'dxgi.dll'
+    assert 'dxgi.dll' not in files
+    assert catalog.assets['luma-mrf-840'].size == 37461871
+
+
 def test_conditions_use_actual_host(monkeypatch):
     monkeypatch.setattr(rc.host_platform, 'system', lambda: 'Linux')
     monkeypatch.setattr(rc.host_platform, 'machine', lambda: 'AMD64')
@@ -72,7 +83,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 13
+    assert recipe.catalog_version == 14
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
