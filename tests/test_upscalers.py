@@ -1482,6 +1482,21 @@ def test_the_exe_is_only_searched_when_no_library_was_found(tmp_path, monkeypatc
     assert games.shipped_upscalers(root) == ["DLSS"]
 
 
+def test_the_exe_scan_finds_entry_points_across_read_boundaries_and_caches(tmp_path, monkeypatch):
+    exe = tmp_path / "Game.exe"
+    needle = b"ffxFsr3UpscalerContextCreate"
+    monkeypatch.setattr(games, "_EMBEDDED_CHUNK", 64)
+    exe.write_bytes(b"MZ" + b"\0" * 50 + needle + b"\0" * 100 + b"xessD3D12CreateContext")
+    assert games.embedded_upscalers(exe) == {"fsr31", "xess"}
+    opened = []
+    real_open = open
+    monkeypatch.setattr("builtins.open", lambda *a, **k: opened.append(a[0]) or real_open(*a, **k))
+    assert games.embedded_upscalers(exe) == {"fsr31", "xess"}
+    assert opened == []
+    exe.write_bytes(b"MZ" + b"\0" * 300)
+    assert games.embedded_upscalers(exe) == set()
+
+
 def test_files_panel_leaves_in_a_game_belong_to_the_games_owner(steam, fake_catalog, proc, monkeypatch):
     from upscalers import service as service_module
     _, game = steam

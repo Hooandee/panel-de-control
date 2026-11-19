@@ -1,9 +1,9 @@
 """Where an installed game lives, which executable creates its device and what it ships."""
 
 import json
-import mmap
 import os
 import re
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -458,12 +458,45 @@ def running_under(root: Path, proc: str = "/proc") -> bool:
 EMBEDDED = {"fsr2": (b"ffxFsr2ContextCreate",), "fsr31": (b"ffxFsr3UpscalerContextCreate",), "xess": (b"xessD3D12CreateContext",)}
 
 
+_EMBEDDED_CHUNK = 4 * 1024 * 1024
+_EMBEDDED_OVERLAP = max(len(n) for needles in EMBEDDED.values() for n in needles) - 1
+_embedded_cache: dict[str, tuple[tuple[int, int], frozenset[str]]] = {}
+_embedded_lock = threading.Lock()
+
+
 def embedded_upscalers(exe: Path) -> set[str]:
+    # One pass in plain reads: mmap.find keeps the GIL while it faults the whole exe in from a slow SD card,
+    # which froze every other Panel call for seconds while a game was being analysed.
     try:
-        with open(exe, "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
-            return {kind for kind, needles in EMBEDDED.items() if any(data.find(n) != -1 for n in needles)}
-    except (OSError, ValueError):
+        info = os.stat(exe)
+    except OSError:
         return set()
+    key, stamp = str(exe), (info.st_size, info.st_mtime_ns)
+    with _embedded_lock:
+        cached = _embedded_cache.get(key)
+    if cached and cached[0] == stamp:
+        return set(cached[1])
+    pending = {kind: needles for kind, needles in EMBEDDED.items()}
+    found: set[str] = set()
+    try:
+        with open(exe, "rb") as handle:
+            tail = b""
+            while pending:
+                chunk = handle.read(_EMBEDDED_CHUNK)
+                if not chunk:
+                    break
+                window = tail + chunk
+                for kind in [k for k, needles in pending.items() if any(n in window for n in needles)]:
+                    found.add(kind)
+                    del pending[kind]
+                tail = window[-_EMBEDDED_OVERLAP:]
+    except OSError:
+        return set()
+    with _embedded_lock:
+        if len(_embedded_cache) >= 512:
+            _embedded_cache.clear()
+        _embedded_cache[key] = (stamp, frozenset(found))
+    return found
 
 
 def is_optiscaler(path: Path) -> bool:
