@@ -1,12 +1,15 @@
 import { addEventListener, removeEventListener, toaster } from "@decky/api";
 import { EcoState, getEcoState, setEco, setEcoScreen } from "../api";
+import { callBackend } from "../deckyInternal";
 import { translate } from "../i18n";
 import { subscribeActive } from "./activity";
+import { COLORES_PLUGIN_NAME, isColoresInstalled } from "./colores";
 import { displayBrightness } from "./display";
 import { subscribeDownloadActive } from "./downloads";
 import { hideBlackout, showBlackout } from "./ecoBlackout";
 import { startCountdown } from "./ecoCountdown";
 import { fromPercent, toPercent } from "./logic";
+import { hydratePrefs, readString, removeString, writeString } from "./pdcStorage";
 import { recordUiEvent } from "./uiEvents";
 
 // Download mode's screen, at plugin scope so it works with the QAM closed. Panel mode:
@@ -45,6 +48,59 @@ let maxInputGap = 0;
 let unsubscribe: (() => void)[] = [];
 let sawDownload = false;
 let downloadEnd: ReturnType<typeof setTimeout> | undefined;
+
+// Download mode also dims the joystick RGB through the sibling Colores plugin:
+// lights go out with the screen and come back on wake or when download mode ends.
+// We snapshot Colores' power flag into durable storage so a reboot or a crash
+// cannot leave the lights stuck off. Every degradation path (Colores absent,
+// RPC failure, unknown state) leaves RGB alone. Dim and restore share one queue
+// so a wake in the same tick as a dim cannot finish with the lights off.
+
+const RGB_SNAPSHOT_KEY = "pdc:ecoRgbSnapshot";
+let rgbOff = false; // synchronous intent, set before any await
+let rgbChain: Promise<void> = Promise.resolve();
+
+function coloresCall(method: string, ...args: unknown[]): Promise<unknown> {
+  return callBackend("loader/call_plugin_method", COLORES_PLUGIN_NAME, method, ...args);
+}
+
+function enqueueRgb(task: () => Promise<void>): void {
+  rgbChain = rgbChain.then(task, task).catch(() => {});
+}
+
+function rgbGoDark(): void {
+  // A stored snapshot means the lights are already intentionally off (e.g. a
+  // previous session) — don't overwrite the original value with "off".
+  if (!isColoresInstalled() || rgbOff || readString(RGB_SNAPSHOT_KEY) !== null) return;
+  rgbOff = true; // reserve the intent now, so a wake in the same tick restores
+  enqueueRgb(async () => {
+    try {
+      const state = await coloresCall("get_state");
+      if (!rgbOff) return; // a wake/close superseded us while reading
+      const power = (state as { power?: unknown } | null)?.power;
+      if (typeof power !== "boolean" || !power) {
+        rgbOff = false; // already off / unknown shape: nothing to snapshot or restore
+        return;
+      }
+      writeString(RGB_SNAPSHOT_KEY, "1"); // Colores' power was on; remember that
+      await coloresCall("set_power", false);
+    } catch {
+      if (rgbOff) { rgbOff = false; removeString(RGB_SNAPSHOT_KEY); }
+    }
+  });
+}
+
+function rgbRestore(): void {
+  rgbOff = false;
+  enqueueRgb(async () => {
+    await hydratePrefs(); // pull the durable snapshot if this is a freshly booted session
+    const saved = readString(RGB_SNAPSHOT_KEY);
+    if (saved === null) return; // RGB was never dimmed by us
+    removeString(RGB_SNAPSHOT_KEY);
+    if (!isColoresInstalled()) return;
+    try { await coloresCall("set_power", saved === "1"); } catch {}
+  });
+}
 
 function resetActivity(): void {
   clearTimeout(activityTimer);
@@ -130,6 +186,7 @@ function setBrightness(pct: number): void {
 }
 
 function goDark(): void {
+  rgbGoDark(); // joystick lights go out together with the screen
   // The layer also catches the tap that wakes a sleeping panel, so it never presses anything.
   showBlackout(onRawInput);
   if (!panel) {
@@ -151,6 +208,7 @@ function goDark(): void {
 }
 
 function goLight(): void {
+  rgbRestore(); // joystick lights come back on wake
   hideBlackout();
   if (panel) setEcoScreen(false).catch(() => {});
   else setBrightness(wakePct);
@@ -247,6 +305,7 @@ function disable(): void {
   downloadEnd = undefined;
   relapse = undefined;
   stopCountdown();
+  rgbRestore(); // joystick lights come back when download mode closes
   hideBlackout();
   if (panel) setEcoScreen(false).catch(() => {});
   else setBrightness(wakePct);
@@ -283,7 +342,13 @@ export function startEcoAmbient(): () => void {
   alive = true;
   const e = epoch;
   getEcoState()
-    .then((s) => alive && e === epoch && !exitPending && sync(s))
+    .then((s) => {
+      if (!alive || e !== epoch || exitPending) return;
+      // A crash/reboot while download mode held the lights off leaves a durable
+      // snapshot. If we are not resuming download mode, put the lights back now.
+      if (!s.enabled) rgbRestore();
+      sync(s);
+    })
     .catch(() => {});
   return () => {
     epoch += 1;
