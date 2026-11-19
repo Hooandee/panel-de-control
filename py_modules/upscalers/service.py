@@ -359,9 +359,8 @@ class UpscalerService:
         return result
 
     def _locate(self, appid: str, lookup: Counter | None = None) -> games.Installed | None:
-        entry = self.state["games"].get(appid) or {}
-        library = entry.get("steam_library") if isinstance(entry.get("steam_library"), str) else None
-        return games.find_installed(self.home, appid, lookup, library) or games.from_hint(appid, entry.get("shortcut_hint"), self.home)
+        hint = (self.state["games"].get(appid) or {}).get("shortcut_hint")
+        return games.find_installed(self.home, appid, lookup) or games.from_hint(appid, hint, self.home)
 
     def _find(self, appid: str, lookup: Counter | None = None) -> games.Installed | None:
         installed = self._locate(appid, lookup)
@@ -411,12 +410,6 @@ class UpscalerService:
         return self.game(appid)
 
     def game(self, appid: str, hint: dict | None = None) -> dict:
-        library = hint.get("library") if isinstance(hint, dict) else None
-        if isinstance(library, str) and os.path.isabs(library) and "\0" not in library:
-            entry = self._game_state(appid)
-            if entry.get("steam_library") != library[:1024]:
-                entry["steam_library"] = library[:1024]
-                self._save()
         if isinstance(hint, dict) and hint.get("exe"):
             entry = self._game_state(appid)
             clean = {k: str(hint.get(k) or "")[:1024] for k in ("exe", "dir", "name", "opts")}

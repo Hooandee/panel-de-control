@@ -150,7 +150,7 @@ def test_index_the_strict_reader_refuses_still_yields_its_libraries(tmp_path, st
     assert lookup["found_lenient_index"] == 1
 
 
-def test_library_steam_reports_is_used_when_the_index_omits_it(tmp_path, steam_install):
+def test_library_steam_lists_is_used_when_the_index_omits_it(tmp_path, steam_install):
     service, steamapps = steam_install
     secondary = tmp_path / "private-secondary"
     _install(secondary / "steamapps")
@@ -158,10 +158,22 @@ def test_library_steam_reports_is_used_when_the_index_omits_it(tmp_path, steam_i
 
     with pytest.raises(UpscalerError):
         service.game(APPID)
-    assert service.game(APPID, {"library": str(secondary)})["name"] == GAME_NAME
+    assert APPID in service.compatibility([APPID], [str(secondary)])
+    assert service.game(APPID)["name"] == GAME_NAME
     lookup = service.diagnose(APPID)["steam_lookup"]
     assert lookup["steam_unindexed"] == 1
     assert lookup["found_steam"] == 1
+
+
+def test_manifest_the_strict_reader_refuses_still_resolves(tmp_path, steam_install):
+    service, steamapps = steam_install
+    _install(steamapps)
+    (steamapps / f"appmanifest_{APPID}.acf").write_text(
+        f'"AppState" {{ "appid" "{APPID}" "name" "{GAME_NAME}" "installdir" "{GAME_NAME}" "StateFlags" "4" '
+        '"UserConfig" { "language" "english" "Language" "english" } }'
+    )
+
+    assert service.game(APPID)["name"] == GAME_NAME
 
 
 def test_compatibility_learns_the_libraries_steam_lists(tmp_path, steam_install):
@@ -171,6 +183,7 @@ def test_compatibility_learns_the_libraries_steam_lists(tmp_path, steam_install)
 
     assert APPID not in service.compatibility([APPID])
     assert APPID in service.compatibility([APPID], [str(secondary), "relative/path", 7])
+    assert APPID not in service.compatibility([APPID], [])
 
 
 def test_unlisted_library_on_a_mounted_drive_is_discovered(tmp_path, steam_install, monkeypatch):

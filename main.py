@@ -1461,7 +1461,7 @@ class Plugin(AmbientRpc):
         return await self._upscalers_call("overview")
 
     async def get_upscalers_compat(self, appids: list[str], libraries: list | None = None) -> dict:
-        folders = [str(path)[:1024] for path in (libraries or [])[:32] if isinstance(path, str)]
+        folders = libraries if isinstance(libraries, list) else None
         return await self._upscalers_call("compatibility", [str(a) for a in (appids or [])], folders)
 
     async def search_upscaler_games(self, term: str) -> list:

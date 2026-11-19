@@ -136,8 +136,8 @@ def _network_mounts(mountinfo: str = "/proc/self/mountinfo") -> set[str]:
         with open(mountinfo, encoding="utf-8", errors="replace") as source:
             for line in source:
                 fields, _sep, rest = line.partition(" - ")
-                parts = fields.split()
-                if len(parts) > 4 and rest.split()[:1] and rest.split()[0] in NETWORK_FS:
+                parts, kind = fields.split(), rest.split()[:1]
+                if len(parts) > 4 and kind and kind[0] in NETWORK_FS:
                     mounts.add(parts[4].replace("\\040", " "))
     except OSError:
         pass
@@ -175,7 +175,7 @@ def _discover(home: str) -> list[Path]:
         return list(found)
 
 
-def _libraries(home: str, counts: Counter, extra=()) -> dict[Path, str]:
+def _libraries(home: str, counts: Counter) -> dict[Path, str]:
     """Each library Steam vouches for, with where it came from: the Steam folder itself, its index (read leniently
     when the strict reader refuses it) and the folders Steam lists live. One entry per real folder."""
     sources: dict[Path, str] = {}
@@ -227,7 +227,7 @@ def _libraries(home: str, counts: Counter, extra=()) -> dict[Path, str]:
             add(path, "index")
     with _libraries_lock:
         reported = list(_steam_reported)
-    for path in [*reported, *(p for p in (_library_path(raw) for raw in extra) if p is not None)]:
+    for path in reported:
         if _real(path) not in sources:
             counts["steam_unindexed"] += 1
         add(path, "steam")
@@ -388,16 +388,32 @@ def linux_build(root: Path, build_id: str | None = None) -> bool:
     return result
 
 
+def _lenient_manifest(manifest: Path) -> dict:
+    """The few top-level fields Panel needs from a manifest the strict reader refused; Steam still loads it."""
+    with open(manifest, "rb") as source:
+        text = source.read(vdf.MAX_BYTES).decode("utf-8", errors="replace")
+    state = {}
+    for key in ("appid", "name", "installdir", "stateflags", "buildid"):
+        match = re.search(rf'"{key}"\s+"((?:\\.|[^"\\])*)"', text, re.I)
+        if match:
+            state[key] = re.sub(r'\\([\\"])', r"\1", match.group(1))
+    return state
+
+
 def _manifest_game(library: Path, appid: str) -> tuple[str, Installed | None]:
     apps = library / "steamapps"
+    manifest = apps / f"appmanifest_{appid}.acf"
     try:
-        state = vdf.read_text(apps / f"appmanifest_{appid}.acf").get("appstate")
+        state = vdf.read_text(manifest).get("appstate")
     except FileNotFoundError:
         return "manifest_missing", None
     except OSError:
         return "manifest_unreadable", None
     except ValueError:
-        return "manifest_invalid", None
+        try:
+            state = _lenient_manifest(manifest)
+        except OSError:
+            return "manifest_unreadable", None
     if not isinstance(state, dict) or state.get("appid", appid) != appid:
         return "manifest_invalid", None
     installdir = state.get("installdir")
@@ -420,13 +436,13 @@ def _manifest_game(library: Path, appid: str) -> tuple[str, Installed | None]:
                               native=linux_build(root, build_id), build_id=build_id)
 
 
-def find_installed(home: str, appid: str, lookup: Counter | None = None, steam_library: str | None = None) -> Installed | None:
+def find_installed(home: str, appid: str, lookup: Counter | None = None) -> Installed | None:
     """The game in a library Steam vouches for; only when none of them even has its manifest, a library found
     on a mounted drive, so a stale copy never wins over the install Steam knows."""
     if not appid.isdecimal():
         return None
     counts = Counter() if lookup is None else lookup
-    trusted = _libraries(home, counts, (steam_library,) if steam_library else ())
+    trusted = _libraries(home, counts)
     known = False
     for library, source in trusted.items():
         outcome, installed = _manifest_game(library, appid)
