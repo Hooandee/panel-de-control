@@ -442,12 +442,18 @@ class UpscalerService:
     # ---- a mod the user brings for one game --------------------------------
     def _mod_status(self, appid: str, install) -> dict | None:
         status = self.user_mods.status(appid)
+        installed_mod = install.get("mod") if isinstance(install, dict) else None
         if status is None:
+            # Removed here, still in the game until the upscaler reinstalls.
+            if isinstance(installed_mod, dict):
+                return {"filename": installed_mod.get("filename"), "count": 0, "files": [], "native_dlls": [],
+                        "applied": False, "removed": True}
             return None
-        applied = isinstance(install, dict) and install.get("mod") == status.get("filename")
-        return {**status, "applied": applied}
+        applied = isinstance(installed_mod, dict) and installed_mod.get("id") == status.get("id")
+        return {**{k: v for k, v in status.items() if k not in ("id", "target")}, "applied": applied,
+                "download": user_mods.DOWNLOADS.get(str(appid))}
 
-    def _mod_target(self, appid: str) -> tuple[games.Installed, str, set[str]]:
+    def _mod_target(self, appid: str) -> tuple[games.Installed, str, set[str], set[str]]:
         installed = self._find(appid)
         if installed is None:
             raise UpscalerError("not_installed")
@@ -457,11 +463,16 @@ class UpscalerService:
         if not analysis["target"]:
             raise UpscalerError("no_exe")
         target = Path(analysis["target"])
+        def folders(path: Path) -> set[str]:
+            try:
+                return {child.name for child in path.iterdir() if child.is_dir()}
+            except OSError:
+                return set()
         try:
             existing = {child.name for child in target.iterdir()}
         except OSError:
             existing = set()
-        return installed, target.relative_to(installed.root).as_posix(), existing
+        return installed, target.relative_to(installed.root).as_posix(), existing, folders(installed.root)
 
     def mod_candidates(self, appid: str) -> dict:
         home = Path(self.home)
@@ -479,9 +490,9 @@ class UpscalerService:
         if not any(resolved.is_relative_to(root) for root in allowed):
             raise UpscalerError("mod_unreadable")
         self._idle()
-        _, target, existing = self._mod_target(appid)
+        _, target, existing, root_dirs = self._mod_target(appid)
         try:
-            self.user_mods.adopt(appid, resolved, target, existing)
+            self.user_mods.adopt(appid, resolved, target, existing, root_dirs)
         except user_mods.ModError as error:
             raise UpscalerError(f"mod_{error.code}") from None
         return self.game(appid)
@@ -803,6 +814,10 @@ class UpscalerService:
         except auto_recipes.RecipeError:
             pinned_only |= {asset.id for asset in auto_recipes.assets(automatic)}
             paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
+        mod = self.user_mods.status(appid)
+        # Checked before the old install goes, so a mod that can't go in leaves the game exactly as it was.
+        if mod and mod.get("target") != Path(analysis["target"]).relative_to(installed.root).as_posix():
+            raise UpscalerError("mod_moved")
         left = self._replace(entry, installed)
         # Files the game replaced since (an update) stayed behind with stale backups: those copies go, the game's stay.
         self._recover_orphan(target)
@@ -929,14 +944,15 @@ class UpscalerService:
                     _reframework_upscaler_keys(choice) if recipe.reframework_upscaler else {})}), encoding="utf-8")
                 sources[REFRAMEWORK_CONFIG] = seed
             manifest = self._apply(target, sources, ini.apply(base_ini, overrides),
-                                   getattr(automatic, "configuration", {}) if automatic else {})
+                                   getattr(automatic, "configuration", {}) if automatic else {}, owned=mod_sources)
 
         now = time.time()
         entry["install"] = {
             "build": build.id, "archive": build.archive, "proxy": proxy, "target": str(target), "exe": analysis["exe"],
             "installed_at": now, "options": _clean_options(choice), "solution": solution,
             "native_dlls": sorted({*(recipe.native_dlls if recipe else ()), *user_mods.native_dlls(mod_sources)}),
-            "mod": (self.user_mods.status(appid) or {}).get("filename") if mod_sources else None,
+            "mod": {"filename": mod.get("filename"), "id": mod.get("id")} if mod and mod_sources else None,
+            "anti_cheat_accepted": bool(analysis.get("anti_cheat") and choice.get("confirm_anti_cheat")),
             "game_build": installed.build_id,
             "recipe_revision": automatic.revision if automatic else None,
             "recipe_configuration": dict(getattr(automatic, "configuration", {})) if automatic else {},
@@ -1290,21 +1306,23 @@ class UpscalerService:
         if self.logger:
             self.logger.info(f"HelixSR taken out without its bridge ({reason}); Panel's record of it cleared")
 
-    def _apply(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None) -> dict:
+    def _apply(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None, owned=()) -> dict:
         names = [*sources, *(["OptiScaler.ini", *_GENERATED] if ini_text is not None else [])]
         try:
             with self.scaler_transitions.mutation(target, names):
-                return self._apply_files(target, sources, ini_text, configuration)
+                return self._apply_files(target, sources, ini_text, configuration, owned)
         except scaler_transition.TransitionError as error:
             raise UpscalerError(str(error)) from None
 
-    def _apply_files(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None) -> dict:
+    def _apply_files(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None, owned=()) -> dict:
         meta = target / games.MANIFEST_DIR
         if meta.is_symlink():
             raise UpscalerError("unsafe_folder")
         backup = meta / "backup"
         meta.mkdir(exist_ok=True)
-        manifest: dict = {"files": {}, "backups": [], "dirs": [], "configuration": configuration or {}, "incomplete": True}
+        # A mod's own files go on uninstall even if the mod rewrote them while running (its ini, its logs).
+        manifest: dict = {"files": {}, "backups": [], "dirs": [], "configuration": configuration or {}, "owned": sorted(owned),
+                          "incomplete": True}
         if ini_text is None:
             manifest["engine"] = "dll"
         journal = str(meta / "manifest.json")
@@ -1336,6 +1354,9 @@ class UpscalerService:
     def _place(target: Path, relative: str, manifest: dict, backup: Path, journal: str | None = None) -> None:
         destination = target / relative
         for parent in reversed(Path(relative).parents[:-1]):
+            if (target / parent).is_symlink():
+                # A linked folder in the game would take a mod's file outside it.
+                raise UpscalerError("unsafe_folder")
             if not (target / parent).exists():
                 manifest["dirs"].append(parent.as_posix())
                 if journal:
@@ -1787,13 +1808,14 @@ class UpscalerService:
         configuration = manifest.get("configuration", configuration or {})
         kept = []
         backups = set(manifest.get("backups", []))
+        owned = set(manifest.get("owned", []))
         for relative, digest in manifest.get("files", {}).items():
             path = target / relative
             if not path.is_file():
                 continue
             if digest is None and relative in backups and not (meta / "backup" / relative).exists():
                 continue
-            if digest is None or sha256(path) == digest or (relative in _SEEDED and relative not in backups):
+            if digest is None or relative in owned or sha256(path) == digest or (relative in _SEEDED and relative not in backups):
                 path.unlink()
             elif relative in configuration:
                 auto_recipes.restore_configuration(path, meta / "backup" / relative, configuration[relative])

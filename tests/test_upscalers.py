@@ -1996,6 +1996,12 @@ def test_mod_layout_follows_the_exe_folder():
     # A folder the game already has is part of where the mod goes, not a wrapper.
     assert user_mods.layout(["reframework/plugins/x.dll"], "", {"reframework"}) == {"reframework/plugins/x.dll": "reframework/plugins/x.dll"}
     assert user_mods.native_dlls(["D3D12.dll", "ERSS-FG.dll", "ERSS2/dxgi.dll", "dinput8.dll"]) == ["d3d12", "dinput8"]
+    # A wrapper around the game's own path, and mods that reach elsewhere in the game.
+    assert user_mods.layout(["ELDEN RING/Game/D3D12.dll"], "Game", set(), {"Game", "AdvGuide"}) == {"D3D12.dll": "ELDEN RING/Game/D3D12.dll"}
+    with pytest.raises(user_mods.ModError, match="layout"):
+        user_mods.layout(["bin/x64/version.dll", "r6/scripts/x.reds"], "bin/x64", set(), {"bin", "r6"})
+    with pytest.raises(user_mods.ModError, match="layout"):
+        user_mods.layout(["Game/Binaries/Win64/dxgi.dll", "Game/Content/Paks/~mods/x.pak"], "Game/Binaries/Win64", set(), {"Game", "Engine"})
 
 
 def test_a_users_mod_goes_in_with_optiscaler_and_leaves_with_it(steam, fake_catalog, proc):
@@ -2020,6 +2026,7 @@ def test_a_users_mod_goes_in_with_optiscaler_and_leaves_with_it(steam, fake_cata
     assert {"d3d12", "dxgi"} <= set(install["native_dlls"])
     assert any("d3d12" in override for override in result["overrides"])
     assert service.game(APPID)["mod"]["applied"] is True
+    (target / "ERSS2/ERSS.ini").write_bytes(b"[rewritten by the mod]")
 
     service.uninstall(APPID)
     assert (target / "D3D12.dll").read_bytes() == b"game's own"
@@ -2028,11 +2035,13 @@ def test_a_users_mod_goes_in_with_optiscaler_and_leaves_with_it(steam, fake_cata
 
 def test_a_mod_that_overwrites_optiscalers_files_is_refused(steam, fake_catalog, proc):
     home, _ = steam
-    archive = _mod_zip(home / "Downloads/bad.zip", {"OptiScaler.ini": b"[x]"})
+    archive = _mod_zip(home / "Downloads/bad.zip", {"OptiScaler.ini": b"[x]", "nvngx.dll": b"x"})
     service = _service(steam, fake_catalog, proc)
-    service.add_mod(APPID, str(archive))
+    service.install(APPID, {"build": "fsr-test"})
+    # Refused when added, before an automatic reinstall could take the working upscaler out.
     with pytest.raises(UpscalerError, match="mod_conflict"):
-        service.install(APPID, {"build": "fsr-test"})
+        service.add_mod(APPID, str(archive))
+    assert service.game(APPID)["install"] is not None and service.game(APPID)["mod"] is None
 
 
 def test_a_mod_archive_escaping_the_game_folder_is_refused(steam, fake_catalog, proc):
@@ -2042,3 +2051,16 @@ def test_a_mod_archive_escaping_the_game_folder_is_refused(steam, fake_catalog, 
     with pytest.raises(UpscalerError, match="mod_unsafe_archive"):
         service.add_mod(APPID, str(archive))
     assert service.game(APPID)["mod"] is None
+
+
+def test_a_new_copy_of_the_mod_with_the_same_name_still_needs_a_reinstall(steam, fake_catalog, proc):
+    home, game = steam
+    archive = _mod_zip(home / "Downloads/ERSS-FG.zip", {"D3D12.dll": b"v1"})
+    service = _service(steam, fake_catalog, proc)
+    service.add_mod(APPID, str(archive))
+    service.install(APPID, {"build": "fsr-test"})
+    assert service.game(APPID)["mod"]["applied"] is True
+    _mod_zip(home / "Downloads/ERSS-FG.zip", {"D3D12.dll": b"v2"})
+    assert service.add_mod(APPID, str(archive))["mod"]["applied"] is False
+    removed = service.remove_mod(APPID)["mod"]
+    assert removed["removed"] is True and removed["applied"] is False, "its files stay in the game until the reinstall"

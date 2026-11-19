@@ -2,9 +2,11 @@
 beside the game's exe together with OptiScaler, through the same manifest, so turning the upscaler off takes them out.
 Nothing in the archive is ever run."""
 
+import fnmatch
 import json
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
 import time
@@ -16,11 +18,19 @@ from . import user_deps
 MAX_FILES = 400
 MAX_TOTAL = 2 * 1024 * 1024 * 1024
 PREVIEW = 8
+# Where to get the mod a game's wiki entry asks for, when it is a free download.
+DOWNLOADS = {
+    "1245620": "https://www.patreon.com/huutaiii/posts/erss-fg-free-v4-125972766",  # Elden Ring: ERSS-FG
+}
 # A mod's DLL with one of these names replaces a Windows library, which Proton only loads with a native override.
 SYSTEM_DLLS = frozenset({
     "d3d9", "d3d10", "d3d10_1", "d3d10core", "d3d11", "d3d12", "d3d12core", "dxgi", "dinput8", "dsound", "version",
     "winmm", "winhttp", "wininet", "dbghelp", "xinput1_3", "xinput1_4", "xinput9_1_0", "opengl32",
 })
+# Files Panel's OptiScaler installs: a mod carrying its own would replace them, so it is refused when added.
+OPTISCALER_FILES = ("optiscaler.ini", "optiscaler.dll", "optiscaler.log", "optiscaler/*", "nvngx.dll", "nvngx_dlss.dll",
+                    "libxess*.dll", "amd_fidelityfx_*.dll", "amdxcffx64.dll", "fakenvapi*", "nvapi64.dll",
+                    "dlssg_to_fsr3*", "d3d12_optiscaler/*")
 
 
 class ModError(Exception):
@@ -33,21 +43,30 @@ def _parts(member: str) -> tuple[str, ...]:
     return PurePosixPath(member.replace("\\", "/")).parts
 
 
-def layout(members: list[str], target: str, existing: set[str] | None = None) -> dict[str, str]:
+def _fold(parts) -> tuple[str, ...]:
+    return tuple(part.casefold() for part in parts)
+
+
+def layout(members: list[str], target: str, existing: set[str] | None = None, root_dirs: set[str] | None = None) -> dict[str, str]:
     """Where each archive member goes, relative to the exe's folder (`target`, relative to the game root).
 
-    An archive mirroring the game (`Game/eldenring.exe` → `Game/…`) drops the path down to the exe's folder; a single
-    wrapping folder the game doesn't have (`ERSS-FG 1.2/…`) is dropped too.
+    A single wrapping folder the game doesn't have (`ERSS-FG 1.2/…`) is dropped, then the game's own path down to the
+    exe's folder (`Game/eldenring.exe` → `Game/…`). A mod that also reaches elsewhere in the game (another folder of the
+    game root) can't be laid out beside the exe and is refused.
     """
     existing = {name.casefold() for name in (existing or set())}
+    root_dirs = {name.casefold() for name in (root_dirs or set())}
     paths = [_parts(member) for member in members]
     if not paths:
         raise ModError("empty")
-    prefix = tuple(part for part in PurePosixPath(target).parts if part not in ("", "."))
-    if prefix and all(len(p) > len(prefix) and tuple(x.casefold() for x in p[:len(prefix)]) == tuple(x.casefold() for x in prefix) for p in paths):
-        paths = [p[len(prefix):] for p in paths]
-    elif all(len(p) > 1 for p in paths) and len({p[0].casefold() for p in paths}) == 1 and paths[0][0].casefold() not in existing:
+    prefix = _fold(part for part in PurePosixPath(target).parts if part not in ("", "."))
+    if all(len(p) > 1 for p in paths) and len({p[0].casefold() for p in paths}) == 1 \
+            and paths[0][0].casefold() not in existing and paths[0][0].casefold() not in root_dirs:
         paths = [p[1:] for p in paths]
+    if prefix and all(len(p) > len(prefix) and _fold(p[:len(prefix)]) == prefix for p in paths):
+        paths = [p[len(prefix):] for p in paths]
+    elif any(len(p) > 1 and p[0].casefold() in root_dirs and p[0].casefold() not in existing for p in paths):
+        raise ModError("layout")
     result: dict[str, str] = {}
     seen: set[str] = set()
     for member, parts in zip(members, paths):
@@ -59,10 +78,54 @@ def layout(members: list[str], target: str, existing: set[str] | None = None) ->
     return result
 
 
+def replaces_optiscaler(destinations) -> bool:
+    return any(fnmatch.fnmatch(d.casefold(), pattern) for d in destinations for pattern in OPTISCALER_FILES)
+
+
 def native_dlls(destinations) -> list[str]:
     """System libraries the mod puts beside the exe, which need `name=n,b` in WINEDLLOVERRIDES."""
     return sorted({PurePosixPath(d).stem.lower() for d in destinations
                    if "/" not in d and d.lower().endswith(".dll") and PurePosixPath(d).stem.lower() in SYSTEM_DLLS})
+
+
+def _entries(path: Path) -> list[tuple[str, int]]:
+    """Files in the archive with their sizes, read before anything is extracted; links are refused."""
+    if path.suffix.lower() == ".zip":
+        with zipfile.ZipFile(path) as archive:
+            entries = []
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                if stat.S_ISLNK(info.external_attr >> 16):
+                    raise ModError("unsafe_archive")
+                entries.append((info.filename, info.file_size))
+            return entries
+    if user_deps._archiver() == "7z":
+        result = subprocess.run(["7z", "l", "-slt", "-ba", str(path.resolve())], capture_output=True, timeout=60, check=False)
+        if result.returncode != 0:
+            raise ModError("unreadable")
+        entries = []
+        for block in result.stdout.decode("utf-8", "replace").replace("\r", "").split("\n\n"):
+            fields = dict(line.split(" = ", 1) for line in block.splitlines() if " = " in line)
+            if not fields.get("Path") or fields.get("Folder") == "+" or fields.get("Attributes", "").startswith("D"):
+                continue
+            mode = fields.get("Attributes", "").partition(" ")[2].lstrip("-")
+            if mode.startswith("l") or fields.get("Symbolic Link"):
+                raise ModError("unsafe_archive")
+            entries.append((fields["Path"], int(fields.get("Size") or 0)))
+        return entries
+    result = subprocess.run(["bsdtar", "-tvf", str(path.resolve())], capture_output=True, timeout=60, check=False)
+    if result.returncode != 0:
+        raise ModError("unreadable")
+    entries = []
+    for line in result.stdout.decode("utf-8", "replace").splitlines():
+        fields = line.split(None, 8)
+        if len(fields) < 9 or fields[0].startswith("d"):
+            continue
+        if not fields[0].startswith("-"):
+            raise ModError("unsafe_archive")
+        entries.append((fields[8], int(fields[4])))
+    return entries
 
 
 def _readable(path: Path) -> list[str]:
@@ -71,26 +134,26 @@ def _readable(path: Path) -> list[str]:
     if path.stat().st_size > user_deps.MAX_ARCHIVE:
         raise ModError("too_large")
     try:
-        members = user_deps._members(path)
+        entries = _entries(path)
+    except ModError:
+        raise
     except (OSError, zipfile.BadZipFile, subprocess.SubprocessError, ValueError):
         raise ModError("unreadable") from None
+    members = [name for name, _ in entries]
     if any(user_deps._unsafe(member) for member in members):
         raise ModError("unsafe_archive")
     if len(members) > MAX_FILES:
         raise ModError("too_many_files")
+    if any(size > user_deps.MAX_MEMBER for _, size in entries) or sum(size for _, size in entries) > MAX_TOTAL:
+        raise ModError("too_large")
     return members
 
 
 def _extract_all(path: Path, wanted: dict[str, str], destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
-    total = 0
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:
             for target, member in wanted.items():
-                size = archive.getinfo(member).file_size
-                total += size
-                if size > user_deps.MAX_MEMBER or total > MAX_TOTAL:
-                    raise ModError("too_large")
                 out = destination / target
                 out.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(member) as source, open(out, "wb") as sink:
@@ -102,15 +165,16 @@ def _extract_all(path: Path, wanted: dict[str, str], destination: Path) -> None:
             command = ["7z", "x", "-y", f"-o{staging}", str(path.resolve())]
         else:
             command = ["bsdtar", "-xf", str(path.resolve()), "-C", str(staging)]
-        if subprocess.run(command, capture_output=True, timeout=600, check=False).returncode != 0:
+        try:
+            done = subprocess.run(command, capture_output=True, timeout=600, check=False)
+        except subprocess.TimeoutExpired:
+            raise ModError("unreadable") from None
+        if done.returncode != 0:
             raise ModError("unreadable")
         for target, member in wanted.items():
             source = staging / member
             if source.is_symlink() or not source.is_file() or not source.resolve().is_relative_to(staging.resolve()):
                 raise ModError("unsafe_archive")
-            total += source.stat().st_size
-            if source.stat().st_size > user_deps.MAX_MEMBER or total > MAX_TOTAL:
-                raise ModError("too_large")
             out = destination / target
             out.parent.mkdir(parents=True, exist_ok=True)
             os.replace(source, out)
@@ -119,16 +183,18 @@ def _extract_all(path: Path, wanted: dict[str, str], destination: Path) -> None:
 
 
 def candidates(folders, limit: int = 6) -> list[dict]:
-    """Archives in Downloads, newest first. A mod has no fixed content to check, so the user picks it."""
+    """Archives in Downloads, newest first. A mod has no fixed content to check, so the user picks it; the size lets
+    a download watcher wait until the file stops growing."""
     found = []
     for folder in folders:
         try:
             for entry in os.scandir(folder):
                 if entry.is_file(follow_symlinks=False) and entry.name.lower().endswith(user_deps.ARCHIVES):
-                    found.append((entry.stat().st_mtime, entry.path))
+                    info = entry.stat()
+                    found.append((info.st_mtime, entry.path, info.st_size))
         except OSError:
             continue
-    return [{"path": path, "filename": Path(path).name} for _, path in sorted(found, reverse=True)[:limit]]
+    return [{"path": path, "filename": Path(path).name, "size": size} for _, path, size in sorted(found, reverse=True)[:limit]]
 
 
 class Store:
@@ -154,25 +220,29 @@ class Store:
         files = [f for f in meta.get("files", []) if isinstance(f, str)]
         if not files or not all((self._folder(appid) / "files" / f).is_file() for f in files):
             return None
-        return {"filename": meta.get("filename"), "count": len(files), "files": files[:PREVIEW],
-                "native_dlls": native_dlls(files), "at": meta.get("at")}
+        return {"filename": meta.get("filename"), "id": meta.get("id"), "target": meta.get("target"), "count": len(files),
+                "files": files[:PREVIEW], "native_dlls": native_dlls(files)}
 
     def sources(self, appid: str) -> dict[str, Path]:
-        status = self.status(appid)
-        if status is None:
+        if self.status(appid) is None:
             return {}
         folder = self._folder(appid) / "files"
         return {name: folder / name for name in self._meta(appid)["files"]}
 
-    def adopt(self, appid: str, path: Path, target: str, existing: set[str]) -> dict:
+    def adopt(self, appid: str, path: Path, target: str, existing: set[str], root_dirs: set[str]) -> dict:
         path = Path(path)
+        self._folder(appid)
         members = _readable(path)
-        wanted = layout(members, target, existing)
+        wanted = layout(members, target, existing, root_dirs)
+        if replaces_optiscaler(wanted):
+            raise ModError("conflict")
         self.root.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(dir=self.root, prefix=f".{appid}-"))
         try:
             _extract_all(path, wanted, staging / "files")
-            (staging / "meta.json").write_text(json.dumps({"filename": path.name, "files": sorted(wanted), "at": time.time()}))
+            (staging / "meta.json").write_text(json.dumps({
+                "filename": path.name, "files": sorted(wanted), "target": target, "id": f"{path.name}@{time.time_ns()}",
+            }))
             old = self._folder(appid)
             trash = None
             if old.exists():
