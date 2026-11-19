@@ -2,6 +2,7 @@ import { Navigation } from "@decky/ui";
 
 import { addUpscalerMod, addUpscalerUserFile, getUpscalerModCandidates, getUpscalerUserFileCandidates } from "../api";
 import { upscalerErrorCode } from "./errorCode";
+import { holdPage } from "./pageMemory";
 import type { GameDetail, UserFile } from "./types";
 
 const POLL_MS = 3000;
@@ -125,6 +126,8 @@ async function startWatch(appid: string, dependency: string, url: string, list: 
   if (press !== pressed) return;
   watch = { appid, dependency, known, sizes: new Map(), until: Date.now() + LIMIT_MS, timer: setInterval(() => void tick(), POLL_MS), busy: false, list, adopt };
   emit({ type: "watching", appid, dependency });
+  // Steam's browser closes the QAM: the game page comes back with the panel.
+  holdPage();
   Navigation.NavigateToExternalWeb(url);
 }
 

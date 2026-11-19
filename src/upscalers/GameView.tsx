@@ -491,6 +491,7 @@ export const GameView: FC<{
   };
 
   const pickExe = async () => {
+    holdPage();
     const picked = await openFilePicker(0 as never, detail?.analysis.target ?? "/home", true, true, undefined, ["exe"]).catch(() => null);
     if (!picked?.realpath) return;
     try {

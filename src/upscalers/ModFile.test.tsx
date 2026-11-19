@@ -19,6 +19,8 @@ vi.mock("../api", () => ({
   addUpscalerUserFile: vi.fn(),
   getUpscalerUserFileCandidates: vi.fn(),
 }));
+const hold = vi.hoisted(() => vi.fn());
+vi.mock("./pageMemory", () => ({ holdPage: hold }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string, params?: Record<string, unknown>) => (params?.name ? `${key} ${params.name}` : key) }) }));
 vi.mock("./parts", () => ({
   ListCard: ({ children }: any) => <div>{children}</div>,
@@ -118,4 +120,15 @@ it("asks for the password of a protected archive and uses it", async () => {
   fireEvent.change(screen.getByLabelText("password"), { target: { value: "free" } });
   await act(async () => { fireEvent.click(screen.getByText("up.mod.usePassword")); });
   expect(addUpscalerMod).toHaveBeenLastCalledWith("1245620", "/home/deck/Downloads/ERSS-FG-v4.14.1-Release.7z", "free");
+});
+
+it("keeps the game page open across the file picker and Steam's browser", async () => {
+  const { openFilePicker } = await import("@decky/api");
+  vi.mocked(openFilePicker).mockResolvedValueOnce(null as never);
+  hold.mockClear();
+  await act(async () => { render(<ModFile appid="1245620" mod={null} needed name="ERSS-FG" download={PATREON} onDetail={vi.fn()} />); });
+  await act(async () => { fireEvent.click(screen.getByText("up.userFile.choose")); });
+  expect(hold).toHaveBeenCalledTimes(1);
+  await act(async () => { fireEvent.click(screen.getByText("up.userFile.download")); });
+  expect(hold).toHaveBeenCalledTimes(2);
 });

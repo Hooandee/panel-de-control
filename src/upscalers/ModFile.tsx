@@ -6,6 +6,7 @@ import { addUpscalerMod, getUpscalerModCandidates, removeUpscalerMod } from "../
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { upscalerErrorCode } from "./errorCode";
+import { holdPage } from "./pageMemory";
 import { ListCard, ListRow, Note } from "./parts";
 import type { GameDetail, GameMod } from "./types";
 import { cancelUserFileWatch, downloadMod, MOD_WATCH, onUserFileWatch, watchingFor } from "./userFileWatch";
@@ -114,6 +115,8 @@ export const ModFile: FC<{
   };
   const adopt = (path: string, secret?: string) => run(() => addUpscalerMod(appid, path, secret), path);
   const pick = async () => {
+    // The picker opens in Steam's main window and closes the QAM: the game page comes back with the panel.
+    holdPage();
     const picked = await openFilePicker(0 as never, folder ?? "/home", true, true, undefined, EXTENSIONS).catch(() => null);
     if (picked?.realpath) {
       setLocked(null);
