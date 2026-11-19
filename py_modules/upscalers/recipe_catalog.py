@@ -62,7 +62,8 @@ class GameRecipe:
     name: str
     revision: int
     conditions: dict[str, tuple[str, ...]]
-    exe: str
+    # None: Panel's own analysis picks the executable (Unreal games ship a small launcher next to the real one).
+    exe: str | None
     args: tuple[str, ...]
     ini: dict[str, str]
     dependencies: tuple[str, ...]
@@ -293,7 +294,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
     for appid, item in raw['games'].items():
         if not isinstance(appid, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', appid):
             raise CatalogError('invalid_appid')
-        item = _object(item, ('name', 'revision', 'conditions', 'exe', 'args', 'ini', 'dependencies', 'source_urls'), ('tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings'))
+        item = _object(item, ('name', 'revision', 'conditions', 'args', 'ini', 'dependencies', 'source_urls'), ('exe', 'tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings'))
         conditions = _object(item['conditions'], ('engine', 'platform', 'arch'), ('game_builds',))
         allowed = {'engine': _ENGINES, 'platform': _PLATFORMS, 'arch': _ARCHES}
         parsed_conditions = {}
@@ -366,7 +367,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
             except ValueError:
                 raise CatalogError('invalid_test_date') from None
         entries[appid] = GameRecipe(appid, _text(item['name'], 160), _integer(item['revision'], 2**31 - 1),
-                                   parsed_conditions, _path(item['exe']), args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
+                                   parsed_conditions, _path(item['exe']) if 'exe' in item else None, args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
                                    flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings))
     catalog = Catalog(1, version, assets, dependencies, entries)
     catalog.dependency_order(dependencies)

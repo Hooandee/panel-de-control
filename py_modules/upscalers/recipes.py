@@ -178,7 +178,7 @@ def recipe_for(appid: str, live: Recipe | None = None, *, engine: str = "optisca
     entry = catalog.match(appid, engine, platform, arch, game_build=game_build)
     hand = RECIPES.get(str(appid))
     if entry:
-        hand = replace(hand or Recipe(entry.appid), exe=entry.exe, args=entry.args, ini=dict(entry.ini),
+        hand = replace(hand or Recipe(entry.appid), exe=entry.exe or (hand.exe if hand else None), args=entry.args, ini=dict(entry.ini),
                       dependencies=entry.dependencies, catalog_revision=entry.revision,
                       catalog_version=catalog.catalog_version, source="game-recipes",
                       recommended_input=entry.recommended_input, effective_api=entry.effective_api, quality_owner=entry.quality_owner, recommended_build=entry.recommended_build, optiscaler_root_files=entry.optiscaler_root_files,

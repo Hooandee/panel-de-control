@@ -70,5 +70,45 @@
     "size": 131761937,
     "filename": "Luma-Granblue_Fantasy_Relink.zip",
     "format": "zip"
+  },
+  "luma-qb-840": {
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Quantum_Break.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "9cabd90b2ea4a956a28792bb848bcf43afab341ba75b195928366d399b2d1a6a",
+    "size": 37290336,
+    "filename": "Luma-Quantum_Break.zip",
+    "format": "zip"
+  },
+  "luma-prey-840": {
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Prey.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "e736869eb22280c5288ce30589f8c43f1dddf2c2241494e475cb108a521c3c65",
+    "size": 37614831,
+    "filename": "Luma-Prey.zip",
+    "format": "zip"
+  },
+  "luma-dh2-840": {
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Dishonored_2.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "1b5cc9ba363d376803e3e00ea27a2ec8abd36f9a196d0108875cdfa6fc257a31",
+    "size": 37305020,
+    "filename": "Luma-Dishonored_2.zip",
+    "format": "zip"
+  },
+  "luma-wd2-840": {
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Watch_Dogs_2.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "d876be72637d0ae70fa348a23b7ae1f82cd41c1ad21acd5b64888f3a5a95b19f",
+    "size": 37452768,
+    "filename": "Luma-Watch_Dogs_2.zip",
+    "format": "zip"
+  },
+  "luma-ue-840": {
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Unreal_Engine.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "3a0770d9240733db749a47d5f110b23b1858b25786e4e5fa3e6aa7da227e6d78",
+    "size": 131735667,
+    "filename": "Luma-Unreal_Engine.zip",
+    "format": "zip"
   }
 }

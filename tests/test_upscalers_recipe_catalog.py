@@ -71,6 +71,16 @@ def test_pinned_metaphor_and_granblue_use_luma_dlss_through_optiscaler():
     assert catalog.dependencies['luma-gbfr'].files['ReShade64.dll'] == 'dxgi.dll'
 
 
+def test_unreal_games_share_the_generic_luma_package_and_let_panel_pick_the_exe():
+    catalog = rc.load()
+    stray = catalog.match('1332010', 'optiscaler', 'linux', 'x86_64')
+    assert stray.exe is None and stray.args == ('-dx11',)
+    assert [d.id for d in catalog.dependency_order(stray.dependencies)] == ['vcrun2022', 'msvcrt40', 'luma-ue']
+    assert catalog.dependencies['luma-ue'].files['ReShade64.dll'] == 'dxgi.dll'
+    assert recipes.recipe_for('1332010', platform='linux', arch='x86_64').exe is None
+    assert catalog.match('552520', 'optiscaler', 'linux', 'x86_64') is None, "Far Cry 5's package is Luma's template"
+
+
 def test_conditions_use_actual_host(monkeypatch):
     monkeypatch.setattr(rc.host_platform, 'system', lambda: 'Linux')
     monkeypatch.setattr(rc.host_platform, 'machine', lambda: 'AMD64')
@@ -86,7 +96,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 15
+    assert recipe.catalog_version == 16
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
