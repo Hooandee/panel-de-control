@@ -286,6 +286,21 @@ def test_analyze_picks_the_unity_player_over_anti_cheat_and_helper_exes(tmp_path
     assert "AntiCheatExpert/ACE-Service64.exe" not in [c["exe"] for c in result["candidates"]]
 
 
+def test_zenless_detects_the_game_and_its_protected_fsr_provider(tmp_path):
+    player = tmp_path / "games" / "ZenlessZoneZero Game"
+    _write(tmp_path / "HYP.exe")
+    _write(player / "ZenlessZoneZero.exe")
+    (player / "ZenlessZoneZero_Data").mkdir()
+    _write(player / "HoYoKProtect.sys")
+    provider = player / "amd_fidelityfx_upscaler_dx12.dll"
+    _write(provider)
+
+    analysis = games.analyze(tmp_path)
+    assert analysis["target"] == str(player)
+    assert analysis["anti_cheat"] is True
+    assert analysis["dll_targets"] == [provider.relative_to(tmp_path).as_posix()]
+
+
 def test_analyze_breaks_a_tie_for_the_exe_that_creates_the_device(tmp_path, monkeypatch):
     # Elden Ring ships Unity extras (guide, artbook) whose _Data folder scores as much as the game exe.
     for extra in ("AdvGuide/ELDEN RING Adventure Guide", "ArtbookOST/ELDEN RING Digital Artbook & Soundtrack"):

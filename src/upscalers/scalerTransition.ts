@@ -24,7 +24,7 @@ export async function prepareScalerTransition(game: JobGame, direction: "mako" |
     const restore = await finishScalerTransition(game.appid, token!, true);
     if (restore) {
       const env = Object.fromEntries(Object.entries(restore.env ?? {}).filter((pair): pair is [string, string] => pair[1] !== null));
-      const launch = await applyManagedLaunch(game.appid, game.liveAppid, "upscaler", { env }, {
+      const launch = await applyManagedLaunch(game.appid, game.liveAppid, "upscaler", { env, wrappers: restore.wrappers }, {
         isNonSteam: game.isNonSteam, requireComplete: true,
         transform: value => launchAfterJob(value, { ...restore, env: undefined }, "install")?.value ?? null,
       });

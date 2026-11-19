@@ -32,11 +32,13 @@ it("leaves Mako FG alone untouched when installing an upscaler", async () => {
   expect(saveMakoProfile).not.toHaveBeenCalled();
 });
 it("restores files, owned launch changes and the complete Mako profile on failure", async () => {
-  api.finishScalerTransition.mockResolvedValueOnce({ overrides: ["dxgi=n,b"], args: ["-dx11"], removed_overrides: ["version=n,b"], removed_args: ["-new"], env: {} });
+  const wrappers = ["'/home/player home/pdc-steam-launch'"];
+  api.finishScalerTransition.mockResolvedValueOnce({ overrides: ["dxgi=n,b"], args: ["-dx11"], removed_overrides: ["version=n,b"], removed_args: ["-new"], env: {}, wrappers });
   const change = await prepareScalerTransition(game, "installed");
   await change!.finish(false);
-  const options = vi.mocked(applyManagedLaunch).mock.calls[0][4]!;
-  const restored = options.transform!('MANGOHUD=1 WINEDLLOVERRIDES="version=n,b" %command% -new -user');
+  const [, , , desired, options] = vi.mocked(applyManagedLaunch).mock.calls[0];
+  expect(desired.wrappers).toEqual(wrappers);
+  const restored = options!.transform!('MANGOHUD=1 WINEDLLOVERRIDES="version=n,b" %command% -new -user');
   expect(restored).toContain("MANGOHUD=1");
   expect(restored).toContain("-user");
   expect(restored).toContain("-dx11");

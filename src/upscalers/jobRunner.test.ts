@@ -231,3 +231,31 @@ it("keeps a closing launch notice for a page opened later, once, until the game'
   await vi.advanceTimersByTimeAsync(300);
   vi.useRealTimers();
 });
+
+it("requires the Steam launcher details and removes only Panel's settings on uninstall", async () => {
+  vi.useFakeTimers();
+  const target = { appid: "4162040", liveAppid: 4162040, isNonSteam: false };
+  const env = { PDC_STEAM_LAUNCH_EXE: "'HYP.exe:games/ZenlessZoneZero Game/ZenlessZoneZero.exe'", PDC_STEAM_LAUNCH_ARGS: "-use-d3d12" };
+  const wrappers = ["'/home/player home/.local/share/panel-de-control/bin/pdc-steam-launch'"];
+  const launch = { overrides: [], args: [], env, wrappers, launch_required: true };
+  const original = "gamemoderun %command% -user";
+  const conflicting = `PDC_STEAM_LAUNCH_EXE=user.exe ${original}`;
+  state.launch = conflicting;
+  state.job = { id: "steam-dll-conflict", appid: target.appid, kind: "install", state: "done", result: launch };
+  trackJob(state.job as never, target);
+  await vi.advanceTimersByTimeAsync(300);
+  expect(takeJobNotice(target.appid)).toEqual({ key: "up.lsfg.launchFailed" });
+  expect(state.launch).toBe(conflicting);
+
+  state.launch = original;
+  state.job = { id: "steam-dll-install", appid: target.appid, kind: "install", state: "done", result: launch };
+  trackJob(state.job as never, target);
+  await vi.advanceTimersByTimeAsync(300);
+  expect(state.launch).toBe(`PDC_STEAM_LAUNCH_EXE=${env.PDC_STEAM_LAUNCH_EXE} PDC_STEAM_LAUNCH_ARGS=-use-d3d12 gamemoderun ${wrappers[0]} %command% -user`);
+
+  state.job = { id: "steam-dll-uninstall", appid: target.appid, kind: "uninstall", state: "done", result: { overrides: [], args: [] } };
+  trackJob(state.job as never, target);
+  await vi.advanceTimersByTimeAsync(300);
+  expect(state.launch).toBe(original);
+  vi.useRealTimers();
+});

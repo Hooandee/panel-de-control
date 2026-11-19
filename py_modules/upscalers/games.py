@@ -371,7 +371,7 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
             # Combined libraries need a loader plus effect providers, checked against the chosen build.
             if lower in {"amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_dx12.dll"} and lower not in ours and path.is_file() and not path.is_symlink():
                 dll_targets.append(path.relative_to(root).as_posix())
-            if any(marker in lower for marker in ANTI_CHEAT):
+            if lower == "hoyokprotect.sys" or any(marker in lower for marker in ANTI_CHEAT):
                 anti_cheat = True
             for kind, names in INPUTS.items():
                 if lower in names and lower not in ours:
