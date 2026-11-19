@@ -126,6 +126,7 @@ async function applyLaunch(job: UpscalerJob, game: JobGame): Promise<JobNotice> 
   let addedOverrides: string[] = [];
   const managed = await applyManagedLaunch(game.appid, game.liveAppid, "upscaler", { env, wrappers }, {
     isNonSteam: game.isNonSteam,
+    ...(result.launch_required ? { requireComplete: true } : {}),
     ...(kind === "install" && job.state === "done" && transitions.has(job.id)
       ? { beforeApply: () => recordUpscalerArgs(game.appid, added, addedOverrides, []).then(() => undefined) } : {}),
     transform: (launch) => {
@@ -137,6 +138,7 @@ async function applyLaunch(job: UpscalerJob, game: JobGame): Promise<JobNotice> 
     },
   });
   if (!managed.ok) {
+    if (result.launch_required) return { key: "up.lsfg.launchFailed" };
     if (kind === "install" && job.state === "done") {
       const overrides = result.overrides ?? [];
       const value = `WINEDLLOVERRIDES="${overrides.map((o) => o.split("=")[0]).join(",")}=n,b" %command% ${(result.args ?? []).join(" ")}`;

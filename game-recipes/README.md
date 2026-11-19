@@ -14,6 +14,8 @@ File mappings use `destination: archive member`, relative to the selected execut
 
 `exe` is optional: without it Panel's own analysis picks the executable, which Unreal games need because Steam starts a small launcher next to the real one.
 
+For Steam DLL recipes, `steam_launcher` names the launcher executable at the root of the game installation. Panel de Control passes `args` to the recipe's `exe` through Proton when the recommended DLL has a matching provider beside that executable. Removing the scaler restores the Steam launch options it changed.
+
 Luma games use the official package for each game from the same `latest-N` release; games the OptiScaler wiki sends to "Luma Unreal Engine" share its generic package and start with `-dx11`. Far Cry 5's package is Luma's template and is not used.
 
 Final Fantasy VII Remake uses the official Luma release `latest-800`. Its `dxgi.dll` is mapped to `ReShade64.dll`, loaded through OptiScaler with `Plugins.LoadReshade=true`. The recipe requests DX11 and disables `Hotfix.CreateD3D12DeviceForLuma`. A matching recipe describes prerequisites; it does not establish that they are installed or active.

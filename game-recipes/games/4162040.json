@@ -1,0 +1,20 @@
+{
+  "name": "Zenless Zone Zero",
+  "revision": 1,
+  "conditions": {
+    "engine": ["dll"],
+    "platform": ["linux"],
+    "arch": ["x86_64"]
+  },
+  "exe": "games/ZenlessZoneZero Game/ZenlessZoneZero.exe",
+  "steam_launcher": "HYP.exe",
+  "args": ["-use-d3d12"],
+  "ini": {},
+  "dependencies": [],
+  "recommended_build": "fsr-4.1.2-lite-dll",
+  "tested_game_builds": ["25596035"],
+  "source_urls": [
+    "https://github.com/optiscaler/OptiScaler/wiki/Zenless-Zone-Zero",
+    "https://github.com/zgauthier2000/fsr4-shader-performance-overrides"
+  ]
+}

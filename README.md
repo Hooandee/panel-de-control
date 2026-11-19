@@ -62,6 +62,9 @@ salen, dónde y con qué colores.
 🚀 **Parámetros.** Las opciones de lanzamiento de cada juego convertidas en interruptores con su
 explicación. FSR4, HDR, escalado y compañía, pero solo lo que tu versión de Proton soporta.
 
+🎮 **Escaladores.** En Steam Deck LCD, al aplicar la DLL FSR 4.1.2 Lite a Zenless Zone Zero,
+el juego arranca en DirectX 12. La ficha avisa de que usa antitrampas antes de instalarla.
+
 🧹 **Limpieza.** Descubre cuánto ocupan la Shader Cache y los prefijos de tus juegos y recupera
 espacio en un momento.
 

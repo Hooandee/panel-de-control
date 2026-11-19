@@ -63,6 +63,9 @@ metrics show up, where and in what colors.
 🚀 **Launch options.** Each game's launch options turned into toggles with a plain explanation.
 FSR4, HDR, scaling and more, but only what your Proton version supports.
 
+🎮 **Upscalers.** On Steam Deck LCD, applying the FSR 4.1.2 Lite DLL to Zenless Zone Zero
+starts the game in DirectX 12. The game page warns you about anti-cheat before installation.
+
 🧹 **Cleanup.** See how much space your games' Shader Cache and prefixes take up and get it back in
 a moment.
 

@@ -97,7 +97,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 16
+    assert recipe.catalog_version == 17
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
@@ -122,6 +122,9 @@ def test_recipe_preserves_wiki_and_existing_rules():
     ('assets.json', lambda d: d['luma-ff7-800'].update(sha256='no')),
     ('assets.json', lambda d: d['luma-ff7-800'].update(size=True)),
     ('games/1462040.json', lambda d: d.update(args=['-dx11;echo'])),
+    ('games/4162040.json', lambda d: d.update(steam_launcher='games/HYP.exe')),
+    ('games/4162040.json', lambda d: d.update(exe='game/$(command).exe')),
+    ('games/4162040.json', lambda d: d['conditions'].update(engine=['optiscaler'])),
     ('games/1462040.json', lambda d: d.update(dependencies=['luma-ff7','luma-ff7'])),
 ])
 def test_invalid_catalog_rejected(catalog_dir, filename, change):

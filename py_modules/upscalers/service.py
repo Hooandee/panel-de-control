@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import threading
 import tempfile
@@ -114,6 +115,37 @@ exec "${@/%"$from"/"$to"}"
 """
 
 
+STEAM_LAUNCH_SCRIPT = """#!/usr/bin/env bash
+command=("$@")
+from="${PDC_STEAM_LAUNCH_EXE%%:*}"
+to="${PDC_STEAM_LAUNCH_EXE#*:}"
+if [[ -z "$from" || -z "$to" || "$from" == "$PDC_STEAM_LAUNCH_EXE" ]]; then exec "$@"; fi
+launcher=
+for ((i=1; i < ${#command[@]}; ++i)); do
+    arg="${command[i]}"
+    if [[ "$arg" != -* && ( "$arg" == "$from" || "$arg" == */"$from" ) && -f "$arg" ]]; then
+        if [[ -n "$launcher" ]]; then exec "$@"; fi
+        launcher=$i
+    fi
+done
+if [[ -z "$launcher" ]]; then exec "$@"; fi
+game="${command[launcher]%"$from"}$to"
+if [[ ! -f "$game" ]]; then exec "$@"; fi
+command[launcher]="$game"
+IFS=' ' read -r -a game_args <<< "$PDC_STEAM_LAUNCH_ARGS"
+for flag in "${game_args[@]}"; do
+    for arg in "${command[@]}"; do
+        if [[ "$arg" == "$flag" ]]; then continue 2; fi
+    done
+    command+=("$flag")
+done
+exec "${command[@]}"
+"""
+
+
+FFX_PROVIDER = "amd_fidelityfx_upscaler_dx12.dll"
+
+
 def _small_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8", errors="replace") \
@@ -124,7 +156,12 @@ def _small_text(path: Path) -> str:
 
 def _launch_result(install: dict) -> dict:
     launch = install.get("launch") if isinstance(install.get("launch"), dict) else None
-    return {"env": dict(launch["env"]), "wrappers": list(launch["wrappers"])} if launch else {}
+    if not launch:
+        return {}
+    result = {"env": dict(launch["env"]), "wrappers": list(launch["wrappers"])}
+    if launch.get("launch_required"):
+        result["launch_required"] = True
+    return result
 
 
 def _overrides(install: dict) -> list[str]:
@@ -351,8 +388,33 @@ class UpscalerService:
                 automatic = auto_recipes.plan(recipes.recipe_for(installed.appid, game_build=installed.build_id), installed)
             except auto_recipes.RecipeError:
                 automatic = None
-            result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, automatic)}
+            selected_exe = (self.state["games"].get(installed.appid) or {}).get("exe")
+            dll_launch = self._steam_dll_recipe(installed, selected_exe)
+            result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, dll_launch or automatic)}
         return result
+
+    def _steam_dll_recipe(self, installed: games.Installed, chosen_exe: str | None) -> recipe_catalog.GameRecipe | None:
+        if installed.native or installed.shortcut or installed.launcher:
+            return None
+        recipe = recipe_catalog.bundled().match(installed.appid, "dll", game_build=installed.build_id)
+        if not recipe or not recipe.steam_launcher:
+            return None
+        build = catalog.BUILDS.get(recipe.recommended_build)
+        if (not build or not build.available or build.engine != "dll"
+                or not catalog.build_supported(build, self.gpu, self.device) or set(build.replace) != {FFX_PROVIDER}):
+            return None
+        root = installed.root
+        exe = root / recipe.exe
+        try:
+            if chosen_exe and chosen_exe != recipe.exe and (root / chosen_exe).is_file():
+                return None
+            resolved_root = root.resolve()
+            paths = (root / recipe.steam_launcher, exe, exe.with_name(FFX_PROVIDER))
+            if any(not path.is_file() or path.is_symlink() or path.resolve() != resolved_root / path.relative_to(root) for path in paths):
+                return None
+        except OSError:
+            return None
+        return recipe
 
     def _locate(self, appid: str) -> games.Installed | None:
         hint = (self.state["games"].get(appid) or {}).get("shortcut_hint")
@@ -422,7 +484,8 @@ class UpscalerService:
             installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
         install = entry.get("install")
         automatic = None
-        recipe_info = _recipe_info(recipe)
+        dll_launch = self._steam_dll_recipe(installed, entry.get("exe"))
+        recipe_info = _recipe_info(recipe or (recipes.Recipe(appid) if dll_launch else None))
         if recipe_info and (installed.native or not analysis.get("inputs", {}).get(recipe_info["recommended_input"])):
             recipe_info["recommended_input"] = None
         if recipe_info and "luma" in recipe_info["needs"]:
@@ -440,6 +503,8 @@ class UpscalerService:
             except auto_recipes.RecipeError:
                 recipe_info["automatic"] = []
                 recipe_info["blocked"] = True
+        if dll_launch:
+            recipe_info.setdefault("automatic_builds", []).append(dll_launch.recommended_build)
         solutions = {}
         for candidate in catalog.BUILDS.values():
             solutions[candidate.id] = _build_solution(self.gpu, analysis, recipe, candidate, automatic,
@@ -447,7 +512,7 @@ class UpscalerService:
         selected = solutions.get((install or {}).get("build")) or solution_plan.resolve(self.gpu, analysis, recipe)
         return {
             "solution": selected, "solutions": solutions,
-            "preferred": catalog.preferred_build(self.gpu, automatic),
+            "preferred": catalog.preferred_build(self.gpu, dll_launch or automatic),
             "appid": appid,
             "name": installed.name,
             "updating": games.update_state(installed.state_flags),
@@ -683,7 +748,7 @@ class UpscalerService:
             if not install and not helix_removed and not installed.native and self.game(appid)["analysis"]["foreign"]:
                 raise UpscalerError("foreign")
             restore = {"overrides": _overrides(install) if install.get("engine") != "dll" else [],
-                       "args": list(install.get("args", [])), "env": {}} if install else None
+                       "args": list(install.get("args", [])), "env": {}, **_launch_result(install)} if install else None
             try:
                 checkpoint = self.scaler_transitions.begin(appid, installed.root, entry, restore,
                                                            install.get("target") if install else None,
@@ -718,7 +783,7 @@ class UpscalerService:
                                "removed_args": list(current.get("added_args", [])), "env": _owned_env(current)}
                     pending["rollback_result"] = ({"overrides": [], "args": [], **removed, **(prior or {}),
                                                    "env": {**removed["env"], **(prior or {}).get("env", {})}}
-                                                  if prior or any(removed.values()) else None)
+                                                  if prior or current.get("launch") or any(removed.values()) else None)
                     self.scaler_transitions._save(pending)
                 receipt = pending.get("recipe_prefix")
                 if pending.get("recipe_dependencies"):
@@ -1049,12 +1114,26 @@ class UpscalerService:
 
     def _launch_swap(self, swap: tuple[str, str]) -> dict:
         """Panel's launcher that starts the game's exe instead of its anti-cheat launcher, as the mod's author does."""
-        script = Path(self.home) / ".local/share/panel-de-control/bin/pdc-launch-exe"
+        script = self._launch_program("pdc-launch-exe", LAUNCH_SWAP_SCRIPT)
+        return {"env": {"PDC_LAUNCH_EXE": f"{swap[0]}:{swap[1]}"}, "wrappers": [script]}
+
+    def _launch_program(self, name: str, source: str) -> str:
+        home = Path(self.home)
+        script = home / ".local/share/panel-de-control/bin" / name
+        if any(path.is_symlink() for path in (script, *script.parents) if path.is_relative_to(home) and path != home):
+            raise UpscalerError("unsafe_folder")
         script.parent.mkdir(parents=True, exist_ok=True)
-        script.write_text(LAUNCH_SWAP_SCRIPT, encoding="utf-8")
-        script.chmod(0o755)
-        ownership.own_like(Path(self.home), [script.parent.parent.parent, script.parent.parent, script.parent, script])
-        return {"env": {"PDC_LAUNCH_EXE": f"{swap[0]}:{swap[1]}"}, "wrappers": [str(script)]}
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=script.parent, delete=False) as handle:
+            staged = Path(handle.name)
+            try:
+                handle.write(source)
+                handle.flush()
+                os.fchmod(handle.fileno(), 0o755)
+                os.replace(staged, script)
+            finally:
+                staged.unlink(missing_ok=True)
+        ownership.own_with_parents(home, script)
+        return shlex.quote(str(script))
 
     def _fetch_assets(self, assets: list[catalog.Asset], pinned_only=frozenset()) -> tuple[dict[str, Path], dict[str, catalog.Asset]]:
         """Each asset at its newest verified release, falling back to the catalog's own when that one fails."""
@@ -1100,19 +1179,29 @@ class UpscalerService:
 
     def _install_dll(self, appid: str, build: catalog.Build, choice: dict) -> dict:
         installed, analysis, _target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
-        name = "amd_fidelityfx_upscaler_dx12.dll"
+        name = FFX_PROVIDER
         loader = "amd_fidelityfx_loader_dx12.dll"
         framegen = "amd_fidelityfx_framegeneration_dx12.dll"
         legacy = "amd_fidelityfx_dx12.dll"
         if name not in build.replace or set(build.replace) - {name, loader, framegen}:
             raise UpscalerError("dll_unsupported")
+        entry = self._game_state(appid)
+        recipe = self._steam_dll_recipe(installed, entry.get("exe"))
+        if recipe and recipe.recommended_build != build.id:
+            recipe = None
+        if recipe and not self.scaler_transitions.pending(appid):
+            raise UpscalerError("recipe_transaction_required")
+        if recipe and analysis["exe"] != recipe.exe:
+            analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe)
+        provider = Path(recipe.exe).with_name(name).as_posix() if recipe else None
         targets = analysis.get("dll_targets", [])
+        if provider:
+            targets = [target for target in targets if target == provider]
         has_legacy = any(Path(path).name.lower() == legacy for path in targets)
         if set(build.legacy_replace) - {loader, framegen}:
             raise UpscalerError("dll_unsupported")
-        entry = self._game_state(appid)
         replacements = dict(build.replace)
-        if has_legacy or isinstance(entry.get("install"), dict):
+        if not recipe and (has_legacy or isinstance(entry.get("install"), dict)):
             replacements.update(build.legacy_replace)
         assets = {}
         for destination, asset_id in replacements.items():
@@ -1140,6 +1229,14 @@ class UpscalerService:
             raise UpscalerError("foreign")
         fetched, _chosen = self._fetch_assets(list(assets.values()))
         downloaded = {destination: fetched[asset.id] for destination, asset in assets.items()}
+        launch = None
+        if recipe:
+            launch = {
+                "env": {"PDC_STEAM_LAUNCH_EXE": shlex.quote(f"{recipe.steam_launcher}:{recipe.exe}"),
+                        "PDC_STEAM_LAUNCH_ARGS": shlex.quote(" ".join(recipe.args))},
+                "wrappers": [self._launch_program("pdc-steam-launch", STEAM_LAUNCH_SCRIPT)],
+                "launch_required": True,
+            }
         left = self._replace(entry, installed)
         root = installed.root
         self._recover_orphan(root)
@@ -1148,6 +1245,8 @@ class UpscalerService:
         if left is not None:
             analysis = games.analyze(root, entry.get("exe"), analysis["exe"])
             targets = analysis.get("dll_targets", [])
+            if provider:
+                targets = [target for target in targets if target == provider]
         if not targets:
             raise UpscalerError("dll_no_target")
         provider_dirs = {Path(path).parent for path in targets if Path(path).name.lower() in {name, legacy}}
@@ -1168,9 +1267,11 @@ class UpscalerService:
                 sources[relative] = downloaded[lower]
             else:
                 raise UpscalerError("dll_unsupported")
+            if recipe:
+                continue
             siblings = {p.name.lower(): p for p in path.parent.iterdir()}
-            provider = siblings.get(name, path.parent / name)
-            sources[provider.relative_to(root).as_posix()] = downloaded[name]
+            provider_path = siblings.get(name, path.parent / name)
+            sources[provider_path.relative_to(root).as_posix()] = downloaded[name]
             if lower == legacy and framegen not in siblings:
                 sources[(path.parent / framegen).relative_to(root).as_posix()] = downloaded[framegen]
         for relative in sources:
@@ -1182,14 +1283,17 @@ class UpscalerService:
         now = time.time()
         entry["install"] = {
             "build": build.id, "engine": "dll", "way": "fsr", "proxy": None,
-            "target": str(root), "exe": analysis["exe"], "dll_targets": targets,
+            "target": str(root), "exe": recipe.exe if recipe else analysis["exe"], "dll_targets": targets,
             "installed_at": now, "options": _clean_options({"fg": "off"}),
             "native_dlls": [], "fg_plan": None, "args": [], "added_args": [],
         }
-        entry["history"].append({"build": build.id, "proxy": None, "at": now, "result": "not_run", "exe": analysis["exe"]})
+        fresh = entry["install"]
+        if recipe:
+            fresh.update(launch=launch, game_build=installed.build_id, recipe_revision=recipe.revision)
+        entry["history"].append({"build": build.id, "proxy": None, "at": now, "result": "not_run", "exe": fresh["exe"]})
         entry["history"] = entry["history"][-HISTORY_LIMIT:]
         self._save()
-        return _with_leftovers({"files": len(sources), "overrides": [], "args": []}, left)
+        return _with_leftovers({"files": len(sources), "overrides": [], "args": [], **_launch_result(fresh)}, left)
 
     def _install_helix(self, appid: str, build: catalog.Build, choice: dict) -> dict:
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))

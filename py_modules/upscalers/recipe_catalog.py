@@ -84,6 +84,7 @@ class GameRecipe:
     optiscaler_fg: bool = True
     # Options the user must change in the game's own menu, as (setting, value) in the game's words.
     game_settings: tuple[tuple[str, str], ...] = ()
+    steam_launcher: str | None = None
 
 
 @dataclass(frozen=True)
@@ -294,7 +295,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
     for appid, item in raw['games'].items():
         if not isinstance(appid, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', appid):
             raise CatalogError('invalid_appid')
-        item = _object(item, ('name', 'revision', 'conditions', 'args', 'ini', 'dependencies', 'source_urls'), ('exe', 'tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings'))
+        item = _object(item, ('name', 'revision', 'conditions', 'args', 'ini', 'dependencies', 'source_urls'), ('exe', 'tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings', 'steam_launcher'))
         conditions = _object(item['conditions'], ('engine', 'platform', 'arch'), ('game_builds',))
         allowed = {'engine': _ENGINES, 'platform': _PLATFORMS, 'arch': _ARCHES}
         parsed_conditions = {}
@@ -366,9 +367,20 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
                     raise ValueError()
             except ValueError:
                 raise CatalogError('invalid_test_date') from None
+        exe = _path(item['exe']) if 'exe' in item else None
+        steam_launcher = None
+        if 'steam_launcher' in item:
+            steam_launcher = _path(item['steam_launcher'])
+            if (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9 _.-]*\.exe', steam_launcher, re.I)
+                    or not exe or not re.fullmatch(r'(?:[A-Za-z0-9][A-Za-z0-9 _.-]*/)*[A-Za-z0-9][A-Za-z0-9 _.-]*\.exe', exe, re.I)
+                    or exe.casefold() == steam_launcher.casefold()
+                    or not args or not recommended_build
+                    or any(parsed_conditions[key] != (value,) for key, value in
+                           (('engine', 'dll'), ('platform', 'linux'), ('arch', 'x86_64')))):
+                raise CatalogError('invalid_steam_launcher')
         entries[appid] = GameRecipe(appid, _text(item['name'], 160), _integer(item['revision'], 2**31 - 1),
-                                   parsed_conditions, _path(item['exe']) if 'exe' in item else None, args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
-                                   flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings))
+                                   parsed_conditions, exe, args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
+                                   flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings), steam_launcher)
     catalog = Catalog(1, version, assets, dependencies, entries)
     catalog.dependency_order(dependencies)
     return catalog
