@@ -911,7 +911,8 @@ export class AmbientRuntime {
     const url = await this.resolve(mediaRef);
     if (this.stopped || generation !== this.renderGeneration || !url) return;
     const kind = this.snapshot.items.find((i) => i.ref === mediaRef)?.kind ?? (VIDEO_URL.test(url) ? "video" : "image");
-    this.channel.publish({ owner: "panel", media: { url, kind }, motion });
+    const { blur = 0, dim = 0, vignette = 0 } = settings.background.filters ?? {};
+    this.channel.publish({ owner: "panel", media: { url, kind }, motion, filters: { blur, dim, vignette } });
     if (hosted) {
       this.layer.apply(null, { transition: settings.background.transition, nativeArt: "show", motion, visible: false });
       if (doc) applyNeutralizer(doc, []);

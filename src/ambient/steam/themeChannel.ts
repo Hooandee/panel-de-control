@@ -13,6 +13,7 @@ export interface ChannelState {
   media: { url: string; kind: "image" | "video" } | null;
   motion: "play" | "pause" | "freeze";
   music?: { playing: boolean };
+  filters?: { blur: number; dim: number; vignette: number };
 }
 
 export type ChannelFrame = HTMLImageElement | HTMLVideoElement;
@@ -36,7 +37,8 @@ const INITIAL: ChannelState = { owner: "theme", media: null, motion: "pause", mu
 
 function sameState(a: ChannelState, b: ChannelState): boolean {
   return a.owner === b.owner && a.motion === b.motion && a.media?.url === b.media?.url && a.media?.kind === b.media?.kind
-    && a.music?.playing === b.music?.playing;
+    && a.music?.playing === b.music?.playing
+    && a.filters?.blur === b.filters?.blur && a.filters?.dim === b.filters?.dim && a.filters?.vignette === b.filters?.vignette;
 }
 
 /**

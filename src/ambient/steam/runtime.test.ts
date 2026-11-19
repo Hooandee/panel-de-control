@@ -819,6 +819,18 @@ describe("AmbientRuntime", () => {
     expect(channel.getState().owner).toBe("theme");
   });
 
+  it("hands the wallpaper filters to a theme that paints the background itself", async () => {
+    const base = settings({ claims: { "hooandee-gallery": "panel" } });
+    base.background.filters = { blur: 60, dim: 30, vignette: 0 };
+    rpcMock.getAmbientState.mockResolvedValue({ settings: base, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    const channel = new AmbientThemeChannel();
+    channel.claim("hooandee-gallery", { name: "Gallery", surfaces: ["home"], mode: "host" });
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts, channel);
+    await runtime.start();
+    await vi.waitFor(() => expect(channel.getState()).toMatchObject({ owner: "panel", filters: { blur: 60, dim: 30, vignette: 0 } }));
+    runtime.stop();
+  });
+
   function hostGameArtFixture(mode: "host" | "yield" | null = "host", surfaces: readonly ("home" | "library")[] = ["home"]) {
     const configured = settings({ claims: structuredClone(hostGameArt.claims) as AmbientSettings["claims"] });
     configured.background.enabled = hostGameArt.backgroundEnabled;

@@ -30,6 +30,8 @@ export interface AmbientBackgroundState {
    * reported only once it lasts; absent on older Panels, which a theme reads as not playing.
    */
   music?: { playing: boolean };
+  /** Ambiente's wallpaper filters, 0 (off) to 100, for a host theme to paint over its own copy of the media. */
+  filters?: { blur: number; dim: number; vignette: number };
 }
 
 export interface AmbientClaimOptions {
