@@ -281,6 +281,8 @@ export const GameView: FC<{
   const qualityChanged = qualityMode.mode === "panel" && install?.options.quality !== choice.quality;
   const modelChanged = (install?.options.model ?? builds.find((build) => build.id === install?.build)?.models?.[0] ?? null)
     !== (choice.model ?? builds.find((build) => build.id === choice.build)?.models?.[0] ?? null);
+  const missingMod = !!detail?.recipe_info?.page && !!detail.recipe_info.needs.includes("mod") && !detail.recipe_info.user_files?.length
+    && Object.values(detail.analysis.inputs).every((files) => !files?.length);
   const avoidedFile = detail?.recipe_info?.user_files?.find((file) => file.state === "avoid");
   const awaitingExit = !!queued && queued.build === choice.build && (queued.model ?? null) === (choice.model ?? null)
     && (!detail?.recipe_info?.quality_on_exit || (queued.quality ?? null) === (choice.quality ?? null));
@@ -383,12 +385,6 @@ export const GameView: FC<{
       await load();
       onChanged();
     } else if (fg === "on") {
-      if (gameRunning) {
-        keepDraft.current = true;
-        changeChoice(next);
-        queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
-        return;
-      }
       const started = await startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
       setJob(started);
       await waitForJobCompletion(started.id);
@@ -415,10 +411,6 @@ export const GameView: FC<{
         // A reinstall with frame generation off took ANR's files out: they go back in with a new install.
         if (upscalerErrorCode(error) !== "anr_reinstall") throw error;
       }
-    }
-    if (gameRunning) {
-      queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
-      return;
     }
     const started = await startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
     setJob(started);
@@ -612,7 +604,7 @@ export const GameView: FC<{
                 : status === "active" ? undefined : installedBuild?.engine === "dll" && status === "not_run"
                   ? t("up.status.dll_not_run") : status === "loaded" && avoidedFile
                     ? t("up.userFile.avoid", { version: avoidedFile.installed_version ?? "", recommended: avoidedFile.version })
-                    : status === "loaded" && detail.recipe_info?.needs.includes("mod") && !detail.recipe_info.user_files?.length
+                    : status === "loaded" && missingMod
                       ? t("up.status.loadedNeedsMod") : t(`up.status.${status}`)}
               tone={status === "broken" ? "danger" : status === "loaded" || fallback ? "warn" : undefined}
             />

@@ -210,19 +210,6 @@ it("queues a first install chosen while the game is running instead of refusing 
   state.running = null;
 });
 
-it("queues frame generation that needs a new install while the game is running", async () => {
-  state.running = { liveAppid: 777 };
-  state.detail = { analysis: { target: "/game", inputs: { fsr31: ["amd_fidelityfx_dx12.dll"] }, candidates: [] }, history: [],
-    recipe_info: null, install: null } as unknown as GameDetail;
-  await act(async () => { render(<GameView {...props} overview={{ ...overview, anr_build: "fsr-4.1.1" } as unknown as UpscalersOverview} />); });
-  await act(async () => { await state.frameProps.onApplyOptiscaler("on", "anr"); });
-  const { installUpscaler } = await import("../api");
-  expect(installUpscaler).not.toHaveBeenCalled();
-  expect(screen.getByText("up.live.appliedOnExit")).toBeTruthy();
-  await act(async () => { fireEvent.click(screen.getAllByText("up.discard")[0]); });
-  state.running = null;
-});
-
 it("tells a game that needs a separate mod why OptiScaler loaded without upscaling", async () => {
   const detail = installed("loaded");
   state.detail = { ...detail, analysis: { ...detail.analysis, inputs: {} },

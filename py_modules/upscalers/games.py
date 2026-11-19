@@ -476,7 +476,7 @@ def embedded_upscalers(exe: Path) -> set[str]:
         cached = _embedded_cache.get(key)
     if cached and cached[0] == stamp:
         return set(cached[1])
-    pending = {kind: needles for kind, needles in EMBEDDED.items()}
+    pending = dict(EMBEDDED)
     found: set[str] = set()
     try:
         with open(exe, "rb") as handle:
