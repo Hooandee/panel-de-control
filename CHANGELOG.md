@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.93.0...panel-de-control-v0.94.0) (2026-11-19)
+
+
+### Features
+
+* **ambient:** hand the wallpaper filters to themes that paint the background ([#1430](https://github.com/Hooandee/panel-de-control/issues/1430)) ([3b57418](https://github.com/Hooandee/panel-de-control/commit/3b574180d2eb6630303b219f91e8f8ee03e851d3))
+
 ## [0.93.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.92.0...panel-de-control-v0.93.0) (2026-11-19)
 
 
