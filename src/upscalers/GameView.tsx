@@ -302,8 +302,10 @@ export const GameView: FC<{
   const scalerChoice = { ...choice, fg: install?.options.fg ?? "off" as const, fg_route: install?.options.fg_route ?? null };
   // ANR FG only runs on OptiScaler 10: another version goes in without it.
   const dropsAnr = scalerChoice.fg_route === "anr" && !selected?.anr;
+  // The anti-cheat warning is accepted per game: an install already in means the user accepted it, so a reinstall that
+  // brings in a new user file or mod carries that acceptance.
   const installSelected = () => startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
-    ...scalerChoice, ...(replacesFsr || dropsAnr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
+    ...scalerChoice, ...(replacesFsr || dropsAnr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat || !!install,
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
   });
   const reinstall = () => start(installSelected);
@@ -626,7 +628,8 @@ export const GameView: FC<{
           {!detail.native && !spatial && selectedEngine === "optiscaler" && !detail.recipe_info?.user_files?.length && (
             <ModFile appid={appid} mod={detail.mod ?? null} needed={!!detail.recipe_info?.needs.includes("mod")}
               name={wikiModName(detail.recipe_info?.page)} disabled={running || foreignBusy || gameRunning}
-              onDetail={(next) => { if (next.install && !next.mod?.applied) markPendingReinstall(appid); setDetail(next); }} />
+              onDetail={(next) => { if (next.install && !next.mod?.applied) markPendingReinstall(appid); setDetail(next); }}
+              onApply={install ? reinstall : undefined} />
           )}
           {(detail.native || externalHelix) && <ListRow label="Mako" chevron disabled={running || foreignBusy} onPress={() => selectSpatial(!spatial)} />}
           {wikiUpdating && (

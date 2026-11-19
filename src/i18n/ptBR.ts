@@ -664,6 +664,7 @@ export const ptBR: Record<string, string> = {
   "up.mod.named": "Mod {name}",
   "up.mod.where": "A página da wiki diz onde baixar; depois escolha aqui",
   "up.mod.pending": "Aplicado ao reinstalar o escalonamento",
+  "up.mod.apply": "Reinstalar para aplicar",
   "up.mod.files": "{count} arquivos ao lado do jogo",
   "up.mod.safety": "O Panel não executa nada do arquivo: copia os arquivos ao lado do jogo e os remove ao desativar o escalonamento",
   "up.error.mod_unsafe": "Esse arquivo tem caminhos inválidos ou é grande demais",

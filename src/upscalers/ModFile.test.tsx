@@ -41,9 +41,12 @@ it("offers the archive already in Downloads for a game the wiki says needs a mod
 
 it("says a mod waits for the upscaler to reinstall until it is in", async () => {
   const mod = { filename: "ERSS-FG free v4.zip", count: 12, files: [], native_dlls: ["d3d12"], applied: false };
-  await act(async () => { render(<ModFile appid="1245620" mod={mod} needed name="ERSS-FG" onDetail={vi.fn()} />); });
+  const onApply = vi.fn();
+  await act(async () => { render(<ModFile appid="1245620" mod={mod} needed name="ERSS-FG" onDetail={vi.fn()} onApply={onApply} />); });
   expect(screen.getByText(/ERSS-FG free v4.zip \| up.mod.pending/)).toBeTruthy();
   expect(screen.getByText("up.userFile.remove")).toBeTruthy();
+  fireEvent.click(screen.getByText("up.mod.apply"));
+  expect(onApply).toHaveBeenCalled();
 });
 
 it("keeps to one row on games that need no mod", async () => {

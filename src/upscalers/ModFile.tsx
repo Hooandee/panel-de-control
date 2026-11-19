@@ -24,7 +24,9 @@ export const ModFile: FC<{
   name: string | null;
   disabled?: boolean;
   onDetail: (detail: GameDetail) => void;
-}> = ({ appid, mod, needed, name, disabled = false, onDetail }) => {
+  /** Present while the upscaler is installed without this mod: puts it in now. */
+  onApply?: () => void;
+}> = ({ appid, mod, needed, name, disabled = false, onDetail, onApply }) => {
   const { t } = useI18n();
   const [folder, setFolder] = useState<string | null>(null);
   const [found, setFound] = useState<UserFileCandidate[]>([]);
@@ -79,6 +81,7 @@ export const ModFile: FC<{
           <ListRow key={candidate.path} label={t("up.userFile.use", { name: candidate.filename })}
             disabled={disabled || busy} onPress={() => void adopt(candidate.path)} />
         ))}
+        {mod && !mod.applied && onApply && <ListRow label={t("up.mod.apply")} disabled={disabled || busy} onPress={onApply} />}
         <ListRow label={t(mod ? "up.userFile.change" : "up.userFile.choose")} chevron disabled={disabled || busy} onPress={() => void pick()} />
         {mod && <ListRow danger label={t("up.userFile.remove")} disabled={disabled || busy} onPress={() => void run(() => removeUpscalerMod(appid))} />}
       </ListCard>

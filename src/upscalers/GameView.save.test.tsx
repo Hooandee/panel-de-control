@@ -230,3 +230,14 @@ it("blames the user file version known not to load when OptiScaler loads without
   expect(screen.getAllByText("up.userFile.avoid").length).toBeGreaterThan(0);
   expect(screen.queryByText("up.status.loaded")).toBeNull();
 });
+
+it("reinstalls a game with anti-cheat for a new mod without asking about the anti-cheat again", async () => {
+  const { markPendingReinstall } = await import("./userFileWatch");
+  const { installUpscaler } = await import("../api");
+  const detail = installed();
+  state.detail = { ...detail, analysis: { ...detail.analysis, anti_cheat: true } } as unknown as GameDetail;
+  markPendingReinstall("777");
+  await act(async () => { render(<GameView {...props} />); });
+  await act(async () => { await Promise.resolve(); });
+  expect(installUpscaler).toHaveBeenCalledWith("777", expect.objectContaining({ confirm_anti_cheat: true }));
+});

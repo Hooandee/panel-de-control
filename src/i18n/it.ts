@@ -664,6 +664,7 @@ export const it: Record<string, string> = {
   "up.mod.named": "Mod {name}",
   "up.mod.where": "La voce della wiki dice dove scaricarla; poi sceglila qui",
   "up.mod.pending": "Si applica alla reinstallazione dell'upscaler",
+  "up.mod.apply": "Reinstalla per applicarla",
   "up.mod.files": "{count} file accanto al gioco",
   "up.mod.safety": "Panel non esegue nulla dall'archivio: copia i file accanto al gioco e li rimuove quando disattivi l'upscaler",
   "up.error.mod_unsafe": "L'archivio ha percorsi non validi o è troppo grande",

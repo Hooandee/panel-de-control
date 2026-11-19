@@ -664,6 +664,7 @@ export const fr: Record<string, string> = {
   "up.mod.named": "Mod {name}",
   "up.mod.where": "La fiche du wiki indique où le télécharger ; choisissez-le ensuite ici",
   "up.mod.pending": "Appliqué à la réinstallation de la mise à l’échelle",
+  "up.mod.apply": "Réinstaller pour l’appliquer",
   "up.mod.files": "{count} fichiers à côté du jeu",
   "up.mod.safety": "Panel n’exécute rien de l’archive : il copie ses fichiers à côté du jeu et les retire quand la mise à l’échelle est désactivée",
   "up.error.mod_unsafe": "Cette archive contient des chemins non valides ou est trop grande",
