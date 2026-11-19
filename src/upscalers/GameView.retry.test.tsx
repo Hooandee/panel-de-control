@@ -232,7 +232,8 @@ it.each([undefined, false, true])("shows the Luma prerequisite only when not det
     recipe_info: { needs: ["luma", "mod"], luma_detected: detected } };
   await act(async () => { render(<GameView {...props} />); });
   expect(!!screen.queryByText("up.recipe.need.luma")).toBe(!detected);
-  expect(screen.queryByText("up.recipe.need.mod")).toBeTruthy();
+  // The mod card says it is required; the generic "needs a mod" notice would repeat it.
+  expect(screen.queryByText("up.recipe.need.mod")).toBeNull();
   expect(screen.queryByText("up.detect.noinputs")).toBeNull();
 });
 

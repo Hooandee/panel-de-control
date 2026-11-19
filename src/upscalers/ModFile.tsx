@@ -5,9 +5,11 @@ import { addUpscalerMod, getUpscalerModCandidates, removeUpscalerMod } from "../
 import { useI18n } from "../i18n";
 import { upscalerErrorCode } from "./errorCode";
 import { ListCard, ListRow, Note } from "./parts";
-import type { GameDetail, GameMod, UserFileCandidate } from "./types";
+import type { GameDetail, GameMod } from "./types";
+import { cancelUserFileWatch, downloadMod, MOD_WATCH, onUserFileWatch, watchingFor } from "./userFileWatch";
 
 const EXTENSIONS = ["zip", "7z", "rar"];
+const WIKI_PAGE = "https://github.com/optiscaler/OptiScaler/wiki/";
 
 /** The OptiScaler wiki names the mod in its page title: «Elden-Ring-(ERSS‐FG)» → «ERSS-FG». */
 export const wikiModName = (page: string | null | undefined): string | null => {
@@ -15,33 +17,44 @@ export const wikiModName = (page: string | null | undefined): string | null => {
   return named ? named.replace(/[‐‑–]/g, "-") : null;
 };
 
-/** A mod the user brings for this game: Panel copies its files beside the exe with OptiScaler and takes them out with
- *  it. Games the wiki says need one get the full card; any other game gets a single row to add one. */
+const errorKey = (code: string) => code === "busy" ? "up.error.busy"
+  : code === "mod_conflict" ? "up.error.mod_conflict"
+  : code === "mod_layout" ? "up.error.mod_layout"
+  : code === "mod_unsafe_archive" || code === "mod_too_large" || code === "mod_too_many_files" ? "up.error.mod_unsafe"
+  : "up.error.mod_unreadable";
+
+/** A mod the user brings for this game, installed beside the exe with OptiScaler. Games the wiki says need one get the
+ *  card with Download and Choose file; any other game gets a single row to add one. */
 export const ModFile: FC<{
   appid: string;
   mod: GameMod | null;
   needed: boolean;
   name: string | null;
+  /** Where to download it: a known free download, else the wiki entry that names it. */
+  download: string | null;
   disabled?: boolean;
   onDetail: (detail: GameDetail) => void;
-  /** Present while the upscaler is installed without this mod: puts it in now. */
+  /** Present while the upscaler is installed without this mod (or with a removed one): puts it in now. */
   onApply?: () => void;
-}> = ({ appid, mod, needed, name, disabled = false, onDetail, onApply }) => {
+}> = ({ appid, mod, needed, name, download, disabled = false, onDetail, onApply }) => {
   const { t } = useI18n();
   const [folder, setFolder] = useState<string | null>(null);
-  const [found, setFound] = useState<UserFileCandidate[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const full = needed || !!mod;
+  const [waiting, setWaiting] = useState(() => watchingFor(appid, MOD_WATCH));
+
+  useEffect(() => onUserFileWatch((event) => {
+    if (event.appid !== appid || event.dependency !== MOD_WATCH) return;
+    setWaiting(event.type === "watching");
+    if (event.type === "adopted") onDetail(event.detail);
+    if (event.type === "failed") setError(t(errorKey(event.code)));
+  }), [appid, onDetail, t]);
 
   useEffect(() => {
-    if (!full) return;
     let live = true;
-    getUpscalerModCandidates(appid)
-      .then((result) => { if (live) { setFolder(result.folder); setFound(result.candidates); } })
-      .catch(() => { if (live) setFound([]); });
+    getUpscalerModCandidates(appid).then((result) => { if (live) setFolder(result.folder); }).catch(() => undefined);
     return () => { live = false; };
-  }, [appid, full, mod?.filename]);
+  }, [appid]);
 
   const run = async (action: () => Promise<GameDetail>) => {
     setBusy(true);
@@ -49,44 +62,48 @@ export const ModFile: FC<{
     try {
       onDetail(await action());
     } catch (failure) {
-      const code = upscalerErrorCode(failure);
-      setError(t(code === "busy" ? "up.error.busy"
-        : code === "mod_unsafe_archive" || code === "mod_too_large" || code === "mod_too_many_files" ? "up.error.mod_unsafe"
-        : "up.error.mod_unreadable"));
+      setError(t(errorKey(upscalerErrorCode(failure))));
     } finally {
       setBusy(false);
     }
   };
-  const adopt = (path: string) => run(() => addUpscalerMod(appid, path));
   const pick = async () => {
     const picked = await openFilePicker(0 as never, folder ?? "/home", true, true, undefined, EXTENSIONS).catch(() => null);
-    if (picked?.realpath) await adopt(picked.realpath);
+    if (picked?.realpath) await run(() => addUpscalerMod(appid, picked.realpath));
   };
+  const off = disabled || busy;
+  const present = mod && !mod.removed ? mod : null;
 
-  if (!full) {
-    return <ListRow label={t("up.mod.add")} chevron disabled={disabled || busy} busy={busy} onPress={() => void pick()} />;
+  if (!needed && !mod) {
+    return (
+      <>
+        <ListRow label={t("up.mod.add")} chevron disabled={off} busy={busy} onPress={() => void pick()} />
+        {error && <Note tone="warn">{error}</Note>}
+      </>
+    );
   }
 
-  const caption = !mod ? t("up.mod.where")
-    : !mod.applied ? t("up.mod.pending")
-    : t("up.mod.files", { count: mod.count });
-  const offered = (mod ? found.filter((candidate) => candidate.filename !== mod.filename) : found).slice(0, mod ? 1 : 3);
+  const caption = mod?.removed ? t("up.mod.removing")
+    : present && !present.applied ? t("up.mod.pending")
+    : !present && needed ? t("up.mod.required")
+    : undefined;
 
   return (
     <>
       <ListCard>
         <ListRow first label={name ? t("up.mod.named", { name }) : t("up.mod.title")}
-          detail={mod?.filename ?? t("up.userFile.missing")} caption={caption} busy={busy} />
-        {offered.map((candidate) => (
-          <ListRow key={candidate.path} label={t("up.userFile.use", { name: candidate.filename })}
-            disabled={disabled || busy} onPress={() => void adopt(candidate.path)} />
-        ))}
-        {mod && !mod.applied && onApply && <ListRow label={t("up.mod.apply")} disabled={disabled || busy} onPress={onApply} />}
-        <ListRow label={t(mod ? "up.userFile.change" : "up.userFile.choose")} chevron disabled={disabled || busy} onPress={() => void pick()} />
-        {mod && <ListRow danger label={t("up.userFile.remove")} disabled={disabled || busy} onPress={() => void run(() => removeUpscalerMod(appid))} />}
+          detail={present?.filename ?? t("up.userFile.missing")} caption={caption} busy={busy} />
+        {mod && !mod.applied && onApply && <ListRow label={t("up.mod.apply")} disabled={off} onPress={onApply} />}
+        {!present && (waiting
+          ? <ListRow label={t("up.userFile.waiting")} caption={t("up.mod.waitingCaption")} busy detail={t("up.cancel")} onPress={cancelUserFileWatch} />
+          : download && <ListRow label={t("up.userFile.download")} chevron disabled={off} onPress={() => void downloadMod(appid, download)} />)}
+        <ListRow label={t(present ? "up.userFile.change" : "up.userFile.choose")} chevron disabled={off} onPress={() => void pick()} />
+        {present && <ListRow danger label={t("up.userFile.remove")} disabled={off} onPress={() => void run(() => removeUpscalerMod(appid))} />}
       </ListCard>
-      <Note>{t("up.mod.safety")}</Note>
       {error && <Note tone="warn">{error}</Note>}
     </>
   );
 };
+
+export const modDownload = (detail: Pick<GameDetail, "mod_download" | "recipe_info">): string | null =>
+  detail.mod_download ?? (detail.recipe_info?.page ? WIKI_PAGE + encodeURI(detail.recipe_info.page) : null);

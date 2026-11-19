@@ -136,6 +136,7 @@ export interface GameDetail {
     proxy: string;
     exe: string | null;
     installed_at: number;
+    anti_cheat_accepted?: boolean;
     options: { quality: Quality | null; sharpness: Sharpness | null; fg?: "on" | "off"; fg_route?: FgRoute | null; model?: string | null };
     status: UpscalerStatus;
     /** From the first launch after the quality last changed: whether the game asked OptiScaler for its size. */
@@ -152,6 +153,7 @@ export interface GameDetail {
   fg_plan: FgPlan | null;
   identity: { steam_appid: number | null; name: string | null; source: string } | null;
   mod?: GameMod | null;
+  mod_download?: string | null;
 }
 
 export interface VerifyResult {
@@ -192,6 +194,8 @@ export interface GameMod {
   files: string[];
   native_dlls: string[];
   applied: boolean;
+  /** Removed here; its files stay in the game until the upscaler reinstalls. */
+  removed?: boolean;
 }
 
 export interface UserFileCandidate {
