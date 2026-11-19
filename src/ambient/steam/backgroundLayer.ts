@@ -20,7 +20,7 @@ export interface LayerOptions {
 
 const BLUR_MAX_PX = 24;
 const DIM_MAX = 0.8;
-const VIGNETTE_MAX = 0.9;
+const VIGNETTE_MAX = 1;
 
 /**
  * Filters run on the GPU: `filter: blur` on the media and two plain overlays. Blur eats the picture's
@@ -96,7 +96,7 @@ function layerCss(nativeArtClass: string | null, nativeArtBoxClass: string | nul
 #${ROOT_ID}[data-blur] [data-media]{filter:blur(var(--pdc-bg-blur))}
 #${ROOT_ID}[data-dim]::before,#${ROOT_ID}[data-vignette]::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none}
 #${ROOT_ID}[data-dim]::before{background:#000;opacity:var(--pdc-bg-dim)}
-#${ROOT_ID}[data-vignette]::after{background:radial-gradient(ellipse at center,transparent 40%,#000 140%);opacity:var(--pdc-bg-vignette)}
+#${ROOT_ID}[data-vignette]::after{background:radial-gradient(ellipse at center,transparent 25%,#000 100%);opacity:var(--pdc-bg-vignette)}
 #${ROOT_ID} [data-media]{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 #${ROOT_ID}[data-transition=kenburns] [data-active] [data-media]{animation:pdc-ambient-kb 24s ease-in-out infinite alternate}
 #${ROOT_ID}[data-motion=pause] [data-media],#${ROOT_ID}[data-motion=freeze] [data-media]{animation-play-state:paused}
