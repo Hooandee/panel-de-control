@@ -44,6 +44,7 @@ interface Badge {
   provider: ProviderFamily | null;
   fg: boolean;
   fgRoute: string | null;
+  modFg: string | null;
   fallback: ScalerFallback | null;
 }
 
@@ -71,7 +72,7 @@ export function publishOverview(overview: UpscalersOverview): void {
     const cover = fallback
       ? { label: translate(fallback.observed ? "up.fallback.cover" : "up.fallback.coverNone", { from: fallback.requested, to: fallback.observed ?? "" }), short: fallback.observed ?? translate("up.fallback.coverNone", { from: fallback.requested, to: "" }), state: "fallback" }
       : { label: label.full, short: label.short, state: install.status };
-    next[appid] = { ...cover, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null, fallback };
+    next[appid] = { ...cover, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null, modFg: install.mod_fg ?? null, fallback };
   }
   installs = next;
   makoEngines = Object.fromEntries(Object.entries(overview.engines ?? {}).flatMap(([appid, engines]) => engines.mako?.engine ? [[appid, engines.mako.engine]] : []));
@@ -82,7 +83,7 @@ export function publishOverview(overview: UpscalersOverview): void {
     const label = engines.mako?.spatial ? mako
       : engines.mako?.fg ? `${mako}${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
       : engines.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
-    if (label) covers[appid] = { label, short: label, state: "pending", build: label.toLowerCase(), engine: null, provider: null, fg: false, fgRoute: null, fallback: null };
+    if (label) covers[appid] = { label, short: label, state: "pending", build: label.toLowerCase(), engine: null, provider: null, fg: false, fgRoute: null, modFg: null, fallback: null };
   }
   engineCovers = covers;
   emit();
@@ -419,8 +420,9 @@ export const InGameBadge: FC = () => {
   const fallback = live ? live.fallback ?? null : badge?.fallback ?? null;
   const fgLabel = lossless
     ? `Lossless Scaling ×${lossless.multiplier} · ${t("up.lsfg.flowScale")} ${Math.round(lossless.flow_scale * 100)} %`
-    : badge?.fg ? t(`up.fg.pick.${badge.fgRoute ?? "optiscaler"}`) : null;
-  const fgState = lossless || live?.fg == null ? t("up.overlay.configured") : live.fg ? t("up.overlay.generating") : t("up.overlay.paused");
+    : badge?.fg ? t(`up.fg.pick.${badge.fgRoute ?? "optiscaler"}`) : badge?.modFg ?? null;
+  // OptiScaler's own FG reading says nothing about the frame generation a mod runs.
+  const fgState = lossless || live?.fg == null || (!badge?.fg && !!badge?.modFg) ? t("up.overlay.configured") : live.fg ? t("up.overlay.generating") : t("up.overlay.paused");
 
   useEffect(() => {
     const update = () => {

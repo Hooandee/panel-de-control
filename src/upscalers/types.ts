@@ -36,6 +36,8 @@ export interface UpscalerJob {
   result?: {
     overrides?: string[]; args?: string[]; kept?: string[]; launcher?: "heroic" | "lutris" | "portproton";
     removed_overrides?: string[]; removed_args?: string[]; env?: Record<string, string | null>;
+    /** Panel's own launch wrappers (the anti-cheat launcher swap a mod needs), placed before %command%. */
+    wrappers?: string[];
   };
 }
 
@@ -48,7 +50,9 @@ export interface UpscalersOverview {
   anr_build?: string | null;
   builds: BuildInfo[];
   cached: string[];
-  installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice>; fallback?: ScalerFallback | null }>;
+  installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice>; fallback?: ScalerFallback | null;
+    /** Frame generation the recipe turns on inside the user's mod (ERSS-FG). */
+    mod_fg?: string | null }>;
   /** Mako and Lossless Scaling per game: they never show up as an install. */
   engines?: Record<string, {
     mako?: { spatial: boolean; fg: boolean; multiplier: number | null; engine?: 4 | 5 };
@@ -136,6 +140,7 @@ export interface GameDetail {
     proxy: string;
     exe: string | null;
     installed_at: number;
+    anti_cheat_accepted?: boolean;
     options: { quality: Quality | null; sharpness: Sharpness | null; fg?: "on" | "off"; fg_route?: FgRoute | null; model?: string | null };
     status: UpscalerStatus;
     /** From the first launch after the quality last changed: whether the game asked OptiScaler for its size. */
@@ -151,6 +156,8 @@ export interface GameDetail {
   native: boolean;
   fg_plan: FgPlan | null;
   identity: { steam_appid: number | null; name: string | null; source: string } | null;
+  mod?: GameMod | null;
+  mod_download?: string | null;
 }
 
 export interface VerifyResult {
@@ -182,6 +189,17 @@ export interface UserFile {
   installed_version: string | null;
   filename: string | null;
   state: "missing" | "ready" | "avoid" | "other_version";
+}
+
+/** A mod the user brought for one game, installed beside the exe with OptiScaler. */
+export interface GameMod {
+  filename: string | null;
+  count: number;
+  files: string[];
+  native_dlls: string[];
+  applied: boolean;
+  /** Removed here; its files stay in the game until the upscaler reinstalls. */
+  removed?: boolean;
 }
 
 export interface UserFileCandidate {

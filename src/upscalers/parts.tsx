@@ -289,9 +289,11 @@ export const ListRow: FC<{
   chevron?: boolean;
   danger?: boolean;
   busy?: boolean;
+  /** A spinner on a row that still takes presses (a wait that can be cancelled). */
+  spinner?: boolean;
   disabled?: boolean;
   first?: boolean;
-}> = ({ label, onPress, detail, caption, on, chevron, danger, busy, disabled, first }) => {
+}> = ({ label, onPress, detail, caption, on, chevron, danger, busy, spinner, disabled, first }) => {
   const press = onPress ? () => { if (!disabled && !busy) onPress(); } : undefined;
   return (
     <Focusable
@@ -308,7 +310,7 @@ export const ListRow: FC<{
         <span style={{ fontSize: theme.font.body, color: danger ? theme.color.danger : theme.color.textPrimary, fontWeight: danger ? 600 : 400 }}>{label}</span>
         {caption && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{caption}</span>}
       </span>
-      {busy && <Spinner size={12} />}
+      {(busy || spinner) && <Spinner size={12} />}
       {detail !== undefined && <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textMuted, textAlign: "right" }}>{detail}</span>}
       {on !== undefined && <Switch on={on} />}
       {chevron && <LuChevronRight size={16} color={theme.color.textMuted} />}

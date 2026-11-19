@@ -7,6 +7,9 @@ import type { GameEntry } from "../launch/steamApi";
 const state = vi.hoisted(() => ({ live: { fps: null, render: null, output: null, generating: null, canPause: false, active: false } as any, imageDirty: null as null | ((dirty: boolean) => void), imageSaves: 0, detail: null as unknown, job: null as unknown, nextId: 0, running: null as any, advancedRows: false, frameProps: null as any, t: (key: string, _params?: Record<string, unknown>) => key }));
 vi.mock("../system/uiEvents", () => ({ recordUiEvent: vi.fn() }));
 vi.mock("../api", () => ({
+  getUpscalerModCandidates: vi.fn(async () => ({ folder: "/home/deck/Downloads", candidates: [] })),
+  addUpscalerMod: vi.fn(),
+  removeUpscalerMod: vi.fn(),
   getMakoStatus: vi.fn(async () => ({ profiles: {} })),
   getUpscalersGame: vi.fn(async () => state.detail),
   getUpscalersJob: vi.fn(async () => state.job),
@@ -226,4 +229,15 @@ it("blames the user file version known not to load when OptiScaler loads without
   await act(async () => { render(<GameView {...props} />); });
   expect(screen.getAllByText("up.userFile.avoid").length).toBeGreaterThan(0);
   expect(screen.queryByText("up.status.loaded")).toBeNull();
+});
+
+it("reinstalls a game with anti-cheat for a new mod without asking about the anti-cheat again", async () => {
+  const { markPendingReinstall } = await import("./userFileWatch");
+  const { installUpscaler } = await import("../api");
+  const detail = installed();
+  state.detail = { ...detail, analysis: { ...detail.analysis, anti_cheat: true } } as unknown as GameDetail;
+  markPendingReinstall("777");
+  await act(async () => { render(<GameView {...props} />); });
+  await act(async () => { await Promise.resolve(); });
+  expect(installUpscaler).toHaveBeenCalledWith("777", expect.objectContaining({ confirm_anti_cheat: true }));
 });
