@@ -1489,7 +1489,7 @@ class Plugin(AmbientRpc):
         return await self._upscalers_call("mod_candidates", str(appid))
 
     async def add_upscaler_mod(self, appid: str, path: str, password: str | None = None) -> dict:
-        result = await self._upscalers_call("add_mod", str(appid), str(path), str(password)[:256] if password else None)
+        result = await self._upscalers_call("add_mod", str(appid), str(path), str(password) if password else None)
         _upscalers_journal("INFO", "mod", appid=str(appid), files=(result.get("mod") or {}).get("count"))
         return result
 

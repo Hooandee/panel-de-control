@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import time
 import zipfile
+import zlib
 from pathlib import Path, PurePosixPath
 
 from . import pe, user_deps
@@ -113,7 +114,7 @@ def _seven_zip() -> bool:
     return bool(shutil.which("7z")) or os.path.isabs(user_deps.resolve_bin("7z"))
 
 
-def _entries(path: Path) -> tuple[list[tuple[str, int]], bool]:
+def _entries(path: Path, password: str | None = None) -> tuple[list[tuple[str, int]], bool]:
     """Files in the archive with their sizes, and whether they are encrypted, read before anything is extracted;
     links are refused."""
     if path.suffix.lower() == ".zip":
@@ -129,8 +130,12 @@ def _entries(path: Path) -> tuple[list[tuple[str, int]], bool]:
                 entries.append((info.filename, info.file_size))
             return entries, encrypted
     if _seven_zip():
-        result = user_deps.run_archiver(["7z", "l", "-slt", "-ba", str(path.resolve())], 60)
+        # -p always: an archive with encrypted names otherwise waits for a password on stdin.
+        result = user_deps.run_archiver(["7z", "l", "-slt", "-ba", f"-p{password or ''}", str(path.resolve())], 60)
         if result.returncode != 0:
+            said = (result.stdout + result.stderr).decode("utf-8", "replace").lower()
+            if "wrong password" in said or "encrypted" in said:
+                raise ModError("password_wrong" if password else "password")
             raise ModError("unreadable")
         entries = []
         encrypted = False
@@ -165,7 +170,7 @@ def _readable(path: Path, password: str | None = None) -> list[str]:
     if path.stat().st_size > user_deps.MAX_ARCHIVE:
         raise ModError("too_large")
     try:
-        entries, encrypted = _entries(path)
+        entries, encrypted = _entries(path, password)
     except ModError:
         raise
     except (OSError, zipfile.BadZipFile, subprocess.SubprocessError, ValueError):
@@ -192,7 +197,7 @@ def _extract_all(path: Path, wanted: dict[str, str], destination: Path, password
                 try:
                     with archive.open(member, pwd=password.encode() if password else None) as source, open(out, "wb") as sink:
                         shutil.copyfileobj(source, sink)
-                except RuntimeError:
+                except (RuntimeError, zipfile.BadZipFile, zlib.error):
                     raise ModError("password_wrong" if password else "password") from None
                 except NotImplementedError:
                     raise ModError("unreadable") from None
@@ -200,7 +205,6 @@ def _extract_all(path: Path, wanted: dict[str, str], destination: Path, password
     staging = Path(tempfile.mkdtemp(dir=destination.parent, prefix=".unpack-"))
     try:
         if _seven_zip():
-            # -p always: without it 7z would stop and ask for the password.
             command = ["7z", "x", "-y", f"-p{password or ''}", f"-o{staging}", str(path.resolve())]
         else:
             command = ["bsdtar", "-xf", str(path.resolve()), "-C", str(staging)]
@@ -213,6 +217,8 @@ def _extract_all(path: Path, wanted: dict[str, str], destination: Path, password
             if "wrong password" in said or "encrypted" in said:
                 raise ModError("password_wrong" if password else "password")
             raise ModError("unreadable")
+        if any(found.is_symlink() for found in staging.rglob("*")):
+            raise ModError("unsafe_archive")
         for target, member in wanted.items():
             source = staging / member
             if source.is_symlink() or not source.is_file() or not source.resolve().is_relative_to(staging.resolve()):
@@ -283,13 +289,6 @@ class Store:
         files = [f for f in meta.get("files", []) if isinstance(f, str)]
         if not files or not all((self._folder(appid) / "files" / f).is_file() for f in files):
             return None
-        if "verbs" not in meta:
-            # Kept before Panel looked at what the mod's DLLs import: worked out once and written down.
-            meta["verbs"] = prefix_verbs(self._folder(appid) / "files", files)
-            try:
-                (self._folder(appid) / "meta.json").write_text(json.dumps(meta))
-            except OSError:
-                pass
         return {"filename": meta.get("filename"), "id": meta.get("id"), "target": meta.get("target"), "count": len(files),
                 "files": files[:PREVIEW], "native_dlls": native_dlls(files),
                 "verbs": [v for v in meta.get("verbs", []) if v == "vcrun2022"]}

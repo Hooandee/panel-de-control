@@ -110,8 +110,16 @@ LAUNCH_SWAP_SCRIPT = """#!/usr/bin/env bash
 from="${PDC_LAUNCH_EXE%%:*}"
 to="${PDC_LAUNCH_EXE#*:}"
 if [ -z "$from" ] || [ -z "$to" ] || [ "$from" = "$PDC_LAUNCH_EXE" ]; then exec "$@"; fi
-exec "${@/$from/$to}"
+exec "${@/%"$from"/"$to"}"
 """
+
+
+def _small_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace") \
+            if path.is_file() and not path.is_symlink() and path.stat().st_size < 1024 * 1024 else ""
+    except OSError:
+        return ""
 
 
 def _launch_result(install: dict) -> dict:
@@ -501,6 +509,8 @@ class UpscalerService:
         return {"folder": str(folder), "candidates": user_mods.candidates(folders), "downloading": user_mods.downloading(folders)}
 
     def add_mod(self, appid: str, path: str, password: str | None = None) -> dict:
+        if password is not None and len(password) > 256:
+            raise UpscalerError("mod_password_wrong")
         chosen = Path(str(path))
         allowed = (Path(self.home).resolve(), Path("/run/media"))
         try:
@@ -835,9 +845,10 @@ class UpscalerService:
             pinned_only |= {asset.id for asset in auto_recipes.assets(automatic)}
             paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
         mod = self.user_mods.status(appid)
-        # Checked before the old install goes, so a mod that can't go in leaves the game exactly as it was.
         if mod and mod.get("target") != Path(analysis["target"]).relative_to(installed.root).as_posix():
             raise UpscalerError("mod_moved")
+        # The mod's settings as the user left them: the old install takes those files away with it.
+        kept_settings = {relative: _small_text(target / relative) for relative in (recipe.mod_settings if mod and recipe else {})}
         left = self._replace(entry, installed)
         # Files the game replaced since (an update) stayed behind with stale backups: those copies go, the game's stay.
         self._recover_orphan(target)
@@ -975,13 +986,7 @@ class UpscalerService:
                 sources[REFRAMEWORK_CONFIG] = seed
             owned = set(mod_sources)
             for relative, changes in (recipe.mod_settings.items() if mod_sources and recipe else ()):
-                # The mod's own options a recipe turns on, kept over what the user already chose there.
-                current = target / relative
-                try:
-                    text = current.read_text(encoding="utf-8", errors="replace") \
-                        if current.is_file() and not current.is_symlink() and current.stat().st_size < 1024 * 1024 else ""
-                except OSError:
-                    text = ""
+                text = kept_settings.get(relative) or _small_text(target / relative)
                 seed = Path(prepared) / "mod-settings" / relative
                 seed.parent.mkdir(parents=True, exist_ok=True)
                 seed.write_text(ini.apply(text, changes), encoding="utf-8")
@@ -2273,7 +2278,7 @@ class UpscalerService:
         mod = self.user_mods.status(appid)
         if mod:
             report["mod"] = {"count": mod["count"], "native_dlls": mod["native_dlls"],
-                             "applied": (entry.get("install") or {}).get("mod") == mod.get("filename")}
+                             "applied": ((entry.get("install") or {}).get("mod") or {}).get("id") == mod.get("id")}
         if info:
             report["recipe"]["needs"] = [str(item)[:80] for item in info.get("needs", [])[:16]]
             report["recipe"]["inputs"] = [str(item)[:40] for item in info.get("inputs", [])[:16]]
