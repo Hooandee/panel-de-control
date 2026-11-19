@@ -324,7 +324,6 @@
         "name",
         "revision",
         "conditions",
-        "exe",
         "args",
         "ini",
         "dependencies",

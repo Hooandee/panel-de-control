@@ -124,6 +124,14 @@ it("drops the in-game input hint once the scaler is seen working", async () => {
   expect(screen.queryByText("up.input.recommended")).toBeNull();
 });
 
+it("does not ask for DLSS in the game when Luma supplies it", async () => {
+  state.running = { liveAppid: 777 };
+  const detail = installed();
+  state.detail = { ...detail, recipe_info: { ...detail.recipe_info!, automatic: ["Luma"] } } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.queryByText("up.input.recommended")).toBeNull();
+});
+
 it("hides quality when the game decides it", async () => {
   state.detail = { ...installed(), solution: { quality: { owner: "game" }, recommended_input: null, offered_fg_plan: null, fg_plan: null } } as unknown as GameDetail;
   await act(async () => { render(<GameView {...props} />); });

@@ -12,6 +12,10 @@ Increase a game's `revision` when changing its behavior and `catalog_version` wh
 
 File mappings use `destination: archive member`, relative to the selected executable directory and archive root respectively. Paths cannot escape those roots. The installer must also reject archive symlinks and reparse points, verify downloads against the pinned hash and size, preserve unrelated files and roll back failed changes. Dependency files are merged first; the selected OptiScaler files take precedence for shared upscaler libraries.
 
+`exe` is optional: without it Panel's own analysis picks the executable, which Unreal games need because Steam starts a small launcher next to the real one.
+
+Luma games use the official package for each game from the same `latest-N` release; games the OptiScaler wiki sends to "Luma Unreal Engine" share its generic package and start with `-dx11`. Far Cry 5's package is Luma's template and is not used.
+
 Final Fantasy VII Remake uses the official Luma release `latest-800`. Its `dxgi.dll` is mapped to `ReShade64.dll`, loaded through OptiScaler with `Plugins.LoadReshade=true`. The recipe requests DX11 and disables `Hotfix.CreateD3D12DeviceForLuma`. A matching recipe describes prerequisites; it does not establish that they are installed or active.
 
 ## Loader API

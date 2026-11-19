@@ -535,7 +535,9 @@ export const GameView: FC<{
   const scalerSeenWorking = sameBuild && (status === "active" || (playing && live.active));
   // Locked quality already names the input to pick, right under the selector.
   const inputHintShown = !scalerSeenWorking && qualityMode.mode !== "locked";
-  const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown
+  // Luma hands OptiScaler its DLSS input itself; these games have no such option in their menus.
+  const lumaInput = !!detail?.recipe_info?.luma_detected || !!detail?.recipe_info?.automatic?.includes("Luma");
+  const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown && !lumaInput
     ? INPUT_NAMES[recommendedInputKey] : null;
   const notice = detail && !detail.native ? gameNotice(detail.identity?.steam_appid ?? appid) : null;
   const strain = detail && !detail.native && !spatial ? steamMachineStrain(overview.device, gameOutputHeight(detail?.history ?? [], overview.display), selected, choice.quality) : null;

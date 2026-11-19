@@ -40,6 +40,13 @@ TRACKS: dict[str, Track] = {
     "optipatcher-0.42": Track("optiscaler/OptiPatcher", r"OptiPatcher_v\d+\.\d+\.asi"),
     "luma-ff7-800": Track("Filoppi/Luma-Framework", r"Luma-Final_Fantasy_VII_Remake\.zip"),
     "luma-p5r-825": Track("Filoppi/Luma-Framework", r"Luma-Persona_5_Royal\.zip"),
+    "luma-mrf-840": Track("Filoppi/Luma-Framework", r"Luma-Metaphor_ReFantazio\.zip"),
+    "luma-gbfr-840": Track("Filoppi/Luma-Framework", r"Luma-Granblue_Fantasy_Relink\.zip"),
+    "luma-qb-840": Track("Filoppi/Luma-Framework", r"Luma-Quantum_Break\.zip"),
+    "luma-prey-840": Track("Filoppi/Luma-Framework", r"Luma-Prey\.zip"),
+    "luma-dh2-840": Track("Filoppi/Luma-Framework", r"Luma-Dishonored_2\.zip"),
+    "luma-wd2-840": Track("Filoppi/Luma-Framework", r"Luma-Watch_Dogs_2\.zip"),
+    "luma-ue-840": Track("Filoppi/Luma-Framework", r"Luma-Unreal_Engine\.zip"),
     "helixsr-3.2.0": Track("lonewolf0622/HelixSR", r"HelixSR-3\.\d+\.\d+\.zip"),
     "anr-fg-addon": Track("apex-compute/ANR", r"anr-fg-V\.B\d+-addon\.zip"),
 }
