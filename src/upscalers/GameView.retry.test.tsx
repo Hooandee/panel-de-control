@@ -7,6 +7,9 @@ import type { GameEntry } from "../launch/steamApi";
 const state = vi.hoisted(() => ({ detail: null as unknown, job: null as unknown, nextId: 0, running: null as any, advancedRows: false, frameProps: null as any, t: (key: string, _params?: Record<string, unknown>) => key }));
 vi.mock("../system/uiEvents", () => ({ recordUiEvent: vi.fn() }));
 vi.mock("../api", () => ({
+  getUpscalerModCandidates: vi.fn(async () => ({ folder: "/home/deck/Downloads", candidates: [] })),
+  addUpscalerMod: vi.fn(),
+  removeUpscalerMod: vi.fn(),
   getMakoStatus: vi.fn(async () => ({ profiles: {} })),
   getUpscalersGame: vi.fn(async () => state.detail),
   getUpscalersJob: vi.fn(async () => state.job),
@@ -229,7 +232,8 @@ it.each([undefined, false, true])("shows the Luma prerequisite only when not det
     recipe_info: { needs: ["luma", "mod"], luma_detected: detected } };
   await act(async () => { render(<GameView {...props} />); });
   expect(!!screen.queryByText("up.recipe.need.luma")).toBe(!detected);
-  expect(screen.queryByText("up.recipe.need.mod")).toBeTruthy();
+  // The mod card says it is required; the generic "needs a mod" notice would repeat it.
+  expect(screen.queryByText("up.recipe.need.mod")).toBeNull();
   expect(screen.queryByText("up.detect.noinputs")).toBeNull();
 });
 

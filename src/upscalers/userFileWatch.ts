@@ -1,7 +1,8 @@
 import { Navigation } from "@decky/ui";
 
-import { addUpscalerUserFile, getUpscalerUserFileCandidates } from "../api";
+import { addUpscalerMod, addUpscalerUserFile, getUpscalerModCandidates, getUpscalerUserFileCandidates } from "../api";
 import { upscalerErrorCode } from "./errorCode";
+import { holdPage } from "./pageMemory";
 import type { GameDetail, UserFile } from "./types";
 
 const POLL_MS = 3000;
@@ -11,15 +12,23 @@ export type UserFileWatchEvent =
   | { type: "watching"; appid: string; dependency: string }
   | { type: "stopped"; appid: string; dependency: string }
   | { type: "adopted"; appid: string; dependency: string; detail: GameDetail }
-  | { type: "failed"; appid: string; dependency: string; code: string };
+  | { type: "failed"; appid: string; dependency: string; code: string; path?: string };
+
+/** Mods have no fixed content to check: a new archive counts once its size holds still between two looks. */
+export const MOD_WATCH = "mod";
+
+interface Found { path: string; size?: number }
 
 interface Watch {
   appid: string;
   dependency: string;
   known: Set<string>;
+  sizes: Map<string, number>;
   until: number;
   timer: ReturnType<typeof setInterval>;
   busy: boolean;
+  list: () => Promise<Found[]>;
+  adopt: (path: string) => Promise<GameDetail>;
 }
 
 let watch: Watch | null = null;
@@ -71,20 +80,26 @@ async function tick(): Promise<void> {
   }
   current.busy = true;
   try {
-    const { candidates } = await getUpscalerUserFileCandidates(current.dependency);
+    const candidates = await current.list();
     if (watch !== current) return;
-    // A half-written download doesn't open as an archive yet, so it never shows up here.
-    const fresh = candidates.find((candidate) => !current.known.has(candidate.path));
+    // A half-written user file doesn't open as an archive yet; a mod waits until its size stops changing.
+    const fresh = candidates.find((candidate) => {
+      if (current.known.has(candidate.path)) return false;
+      if (candidate.size === undefined) return true;
+      const before = current.sizes.get(candidate.path);
+      current.sizes.set(candidate.path, candidate.size);
+      return before === candidate.size && candidate.size > 0;
+    });
     if (!fresh) return;
     let detail: GameDetail;
     try {
-      detail = await addUpscalerUserFile(current.appid, current.dependency, fresh.path);
+      detail = await current.adopt(fresh.path);
     } catch (error) {
       const code = upscalerErrorCode(error);
       // An install is running: the next tick tries again.
       if (code === "busy") return;
       if (watch === current) stop();
-      emit({ type: "failed", appid: current.appid, dependency: current.dependency, code });
+      emit({ type: "failed", appid: current.appid, dependency: current.dependency, code, path: fresh.path });
       return;
     }
     if (watch === current) stop();
@@ -98,18 +113,33 @@ async function tick(): Promise<void> {
 }
 
 /** Opens the file's download page in Steam's browser and picks the archive up as soon as it lands in Downloads. */
-export async function downloadUserFile(appid: string, file: Pick<UserFile, "id" | "page_url" | "download_url">): Promise<void> {
+async function startWatch(appid: string, dependency: string, url: string, list: Watch["list"], adopt: Watch["adopt"]): Promise<void> {
   cancelUserFileWatch();
   const press = ++pressed;
   let known = new Set<string>();
   try {
-    known = new Set((await getUpscalerUserFileCandidates(file.id)).candidates.map((candidate) => candidate.path));
+    known = new Set((await list()).map((candidate) => candidate.path));
   } catch {
     /* every download then counts as new */
   }
   // A later press owns the watch.
   if (press !== pressed) return;
-  watch = { appid, dependency: file.id, known, until: Date.now() + LIMIT_MS, timer: setInterval(() => void tick(), POLL_MS), busy: false };
-  emit({ type: "watching", appid, dependency: file.id });
-  Navigation.NavigateToExternalWeb(file.download_url ?? file.page_url);
+  watch = { appid, dependency, known, sizes: new Map(), until: Date.now() + LIMIT_MS, timer: setInterval(() => void tick(), POLL_MS), busy: false, list, adopt };
+  emit({ type: "watching", appid, dependency });
+  // Steam's browser closes the QAM: the game page comes back with the panel.
+  holdPage();
+  Navigation.NavigateToExternalWeb(url);
+}
+
+export function downloadUserFile(appid: string, file: Pick<UserFile, "id" | "page_url" | "download_url">): Promise<void> {
+  return startWatch(appid, file.id, file.download_url ?? file.page_url,
+    async () => (await getUpscalerUserFileCandidates(file.id)).candidates,
+    (path) => addUpscalerUserFile(appid, file.id, path));
+}
+
+/** Opens the mod's download page in Steam's browser and adds the archive once it lands in Downloads. */
+export function downloadMod(appid: string, url: string): Promise<void> {
+  return startWatch(appid, MOD_WATCH, url,
+    async () => (await getUpscalerModCandidates(appid)).candidates,
+    (path) => addUpscalerMod(appid, path));
 }

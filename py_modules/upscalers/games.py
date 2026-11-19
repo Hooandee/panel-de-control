@@ -1,9 +1,9 @@
 """Where an installed game lives, which executable creates its device and what it ships."""
 
 import json
-import mmap
 import os
 import re
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -346,6 +346,10 @@ def _graphics_apis(exe: Path) -> list[str]:
     return sorted(apis)
 
 
+def _creates_device(apis: list[str]) -> bool:
+    return any(api in apis for api in ("d3d12", "d3d11", "vulkan"))
+
+
 def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = None) -> dict:
     """Candidates for the device-creating executable plus what the game ships.
 
@@ -384,7 +388,7 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
     candidates = []
     for index, (score, path, size) in enumerate(exes[:MAX_PE_SCANS]):
         apis = _graphics_apis(path)
-        if any(api in apis for api in ("d3d12", "d3d11", "vulkan")):
+        if _creates_device(apis):
             score += 30
         candidates.append({
             "exe": path.relative_to(root).as_posix(),
@@ -392,7 +396,9 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
             "size": size,
             "score": score,
         })
-    candidates.sort(key=lambda item: (-item["score"], item["exe"]))
+    # On a tie the exe that imports a graphics API wins: Unity extras (a guide, an artbook) score
+    # as much as the game through their _Data folder.
+    candidates.sort(key=lambda item: (-item["score"], not _creates_device(item["apis"]), item["exe"]))
 
     manual = False
     selected = candidates[0] if candidates else None
@@ -458,12 +464,44 @@ def running_under(root: Path, proc: str = "/proc") -> bool:
 EMBEDDED = {"fsr2": (b"ffxFsr2ContextCreate",), "fsr31": (b"ffxFsr3UpscalerContextCreate",), "xess": (b"xessD3D12CreateContext",)}
 
 
+_EMBEDDED_CHUNK = 4 * 1024 * 1024
+_EMBEDDED_OVERLAP = max(len(n) for needles in EMBEDDED.values() for n in needles) - 1
+_embedded_cache: dict[str, tuple[tuple[int, int], frozenset[str]]] = {}
+_embedded_lock = threading.Lock()
+
+
 def embedded_upscalers(exe: Path) -> set[str]:
+    # Plain reads, not mmap: mmap.find holds the GIL while it pages the exe in from a slow SD card.
     try:
-        with open(exe, "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
-            return {kind for kind, needles in EMBEDDED.items() if any(data.find(n) != -1 for n in needles)}
-    except (OSError, ValueError):
+        info = os.stat(exe)
+    except OSError:
         return set()
+    key, stamp = str(exe), (info.st_size, info.st_mtime_ns)
+    with _embedded_lock:
+        cached = _embedded_cache.get(key)
+    if cached and cached[0] == stamp:
+        return set(cached[1])
+    pending = dict(EMBEDDED)
+    found: set[str] = set()
+    try:
+        with open(exe, "rb") as handle:
+            tail = b""
+            while pending:
+                chunk = handle.read(_EMBEDDED_CHUNK)
+                if not chunk:
+                    break
+                window = tail + chunk
+                for kind in [k for k, needles in pending.items() if any(n in window for n in needles)]:
+                    found.add(kind)
+                    del pending[kind]
+                tail = window[-_EMBEDDED_OVERLAP:]
+    except OSError:
+        return set()
+    with _embedded_lock:
+        if len(_embedded_cache) >= 512:
+            _embedded_cache.clear()
+        _embedded_cache[key] = (stamp, frozenset(found))
+    return found
 
 
 def is_optiscaler(path: Path) -> bool:

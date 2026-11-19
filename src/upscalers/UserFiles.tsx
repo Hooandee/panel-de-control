@@ -4,6 +4,7 @@ import { useEffect, useState, type FC } from "react";
 import { addUpscalerUserFile, getUpscalerUserFileCandidates, removeUpscalerUserFile } from "../api";
 import { useI18n } from "../i18n";
 import { upscalerErrorCode } from "./errorCode";
+import { holdPage } from "./pageMemory";
 import { ListCard, ListRow, Note } from "./parts";
 import type { GameDetail, UserFile, UserFileCandidate } from "./types";
 import { cancelUserFileWatch, downloadUserFile, onUserFileWatch, watchingFor } from "./userFileWatch";
@@ -63,6 +64,8 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
   };
   const adopt = (path: string) => run(() => addUpscalerUserFile(appid, file.id, path));
   const pick = async () => {
+    // The picker opens in Steam's main window and closes the QAM: the game page comes back with the panel.
+    holdPage();
     const picked = await openFilePicker(0 as never, folder ?? "/home", true, true, undefined, EXTENSIONS).catch(() => null);
     if (picked?.realpath) await adopt(picked.realpath);
   };
@@ -83,7 +86,7 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
             caption={candidate.version ?? undefined} disabled={disabled || busy} onPress={() => void adopt(candidate.path)} />
         ))}
         {waiting
-          ? <ListRow label={t("up.userFile.waiting")} caption={t("up.userFile.waitingCaption")} busy detail={t("up.cancel")} onPress={cancelUserFileWatch} />
+          ? <ListRow label={t("up.userFile.waiting")} caption={t("up.userFile.waitingCaption")} spinner detail={t("up.cancel")} onPress={cancelUserFileWatch} />
           : file.state !== "ready" && <ListRow label={t("up.userFile.download")} chevron disabled={disabled || busy} onPress={() => void downloadUserFile(appid, file)} />}
         <ListRow label={t(missing ? "up.userFile.choose" : "up.userFile.change")} chevron disabled={disabled || busy} onPress={() => void pick()} />
         {!missing && (
