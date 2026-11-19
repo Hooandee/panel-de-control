@@ -70,7 +70,8 @@ tele que sigue sonando mientras juegas. Más abajo te lo cuento.
 
 ✨ **Temas.** Cambia la cara de Steam por completo con temas que se instalan y se actualizan desde
 el propio Panel. Los que están en acceso anticipado salen con la etiqueta Early y se instalan
-desde su zip.
+desde su zip. Los temas compatibles muestran en sus propias portadas las etiquetas de Escaladores
+cuando está activada «Etiqueta en las portadas».
 
 🎮 **Mandos.** Remapeo de botones que se entiende con Handheld Daemon e InputPlumber. Todavía en
 beta.

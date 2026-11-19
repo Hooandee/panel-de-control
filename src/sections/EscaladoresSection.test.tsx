@@ -18,7 +18,8 @@ vi.mock("../components/GameCover", () => ({ GameCover: () => null }));
 vi.mock("../launch/steamApi", () => ({ listInstalledGames: () => games.map((game) => ({ ...game })) }));
 vi.mock("../upscalers/BulkPanel", () => ({ BulkPanel: () => null }));
 vi.mock("../upscalers/overlays", () => ({
-  IN_GAME_MODES: [], publishOverview: vi.fn(), readInGameMode: () => "start", setUpscalersSectionOpen: vi.fn(), writeInGameMode: vi.fn(), readCoverBadges: () => true, writeCoverBadges: vi.fn(),
+  refreshUpscalersOverview: () => import("../api").then(({ getUpscalersOverview }) => getUpscalersOverview()),
+  IN_GAME_MODES: [], readInGameMode: () => "start", setUpscalersSectionOpen: vi.fn(), writeInGameMode: vi.fn(), readCoverBadges: () => true, writeCoverBadges: vi.fn(),
 }));
 vi.mock("../upscalers/pageMemory", () => ({ showGame: vi.fn(), takeHeldPage: () => null }));
 vi.mock("../upscalers/GameView", () => ({

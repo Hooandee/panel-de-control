@@ -70,7 +70,8 @@ a moment.
 that keeps going while you play. More on it below.
 
 ✨ **Themes.** Change how Steam looks from top to bottom with themes you install and update right
-from Panel. Themes in early access show an Early label and install from their zip.
+from Panel. Themes in early access show an Early label and install from their zip. Compatible themes
+show Upscalers badges on their own covers when “Badge on covers” is enabled.
 
 🎮 **Controllers.** Button remapping that works with Handheld Daemon and InputPlumber. Still
 in beta.

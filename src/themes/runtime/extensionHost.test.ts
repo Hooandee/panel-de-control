@@ -1274,6 +1274,54 @@ describe("theme storage", () => {
     expect(games.howLongToBeat).toHaveBeenCalledWith(730, "Counter-Strike 2");
     host.dispose();
   });
+
+  it("exposes cover labels and drops the theme's subscription on dispose", async () => {
+    const stop = vi.fn();
+    const listener = vi.fn();
+    const labels = { "730": { label: "FSR 4.1.2 Lite", short: "FSR 4 Lite", state: "active" } };
+    const coverLabels = { read: () => labels, subscribe: vi.fn(() => stop) };
+    const games = { pause: vi.fn(), resume: vi.fn(), howLongToBeat: vi.fn(), protonDb: vi.fn(), coverLabels };
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, games, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+
+    const access = seen?.games?.coverLabels;
+    expect(access?.read()).toBe(labels);
+    expect(Object.isFrozen(access)).toBe(true);
+    access?.subscribe(listener);
+    expect(coverLabels.subscribe).toHaveBeenCalledWith(listener);
+    host.dispose();
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("drops cover subscriptions when an ABI-1 mount is overtaken by another reconcile", async () => {
+    const stop = vi.fn();
+    const themeStop = vi.fn(() => { throw new Error("dispose failed"); });
+    const coverLabels = { read: () => ({}), subscribe: vi.fn(() => stop) };
+    const games = { pause: vi.fn(), resume: vi.fn(), howLongToBeat: vi.fn(), protonDb: vi.fn(), coverLabels };
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(), doc: document, games, log: vi.fn(),
+      evaluate: () => Object.freeze({
+        abiVersion: 1,
+        mount: (context: ThemeExtensionMountContext) => {
+          context.games?.coverLabels?.subscribe(() => {});
+          host.reconcile(snapshot([]));
+          return themeStop;
+        },
+      }),
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+
+    expect(themeStop).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledOnce();
+    host.dispose();
+    expect(stop).toHaveBeenCalledOnce();
+  });
 });
 
 describe("shared groups", () => {

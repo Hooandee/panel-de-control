@@ -2,7 +2,7 @@ import { LuCircleCheck, LuClock, LuSlidersHorizontal, LuTriangleAlert } from "re
 import { Focusable } from "@decky/ui";
 import { useCallback, useEffect, useMemo, useState, type FC, type ComponentProps } from "react";
 
-import { getUpscalersCompat, getUpscalersOverview, type GameCompat } from "../api";
+import { getUpscalersCompat, type GameCompat } from "../api";
 import { FocusableCard } from "../components/FocusableCard";
 import { GameCover } from "../components/GameCover";
 import { useI18n } from "../i18n";
@@ -11,7 +11,7 @@ import { onUpscalersGameRequest, takePendingUpscalersGame } from "../upscalers/d
 import { theme } from "../theme";
 import { BulkPanel } from "../upscalers/BulkPanel";
 import { GameView } from "../upscalers/GameView";
-import { IN_GAME_MODES, publishOverview, readCoverBadges, readInGameMode, setUpscalersSectionOpen, writeCoverBadges, writeInGameMode, type InGameMode } from "../upscalers/overlays";
+import { IN_GAME_MODES, readCoverBadges, readInGameMode, refreshUpscalersOverview, setUpscalersSectionOpen, writeCoverBadges, writeInGameMode, type InGameMode } from "../upscalers/overlays";
 import { Fold, Label, SegmentRow } from "../upscalers/parts";
 import { badgeLabel, fallbackLine } from "../upscalers/model";
 import { MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
@@ -37,9 +37,7 @@ export const EscaladoresSection: FC = () => {
 
   const refresh = useCallback(async () => {
     try {
-      const next = await getUpscalersOverview();
-      setOverview(next);
-      publishOverview(next);
+      setOverview(await refreshUpscalersOverview());
       setFailed(false);
     } catch {
       setFailed(true);
