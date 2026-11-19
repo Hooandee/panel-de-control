@@ -86,7 +86,7 @@ MOUNT_ROOTS = ("/run/media", "/media", "/mnt")
 DISCOVERY_DEPTH = 3
 DISCOVERY_TTL_S = 60.0
 # A share that stops answering hangs whoever lists it; discovery never walks into one.
-NETWORK_FS = ("nfs", "nfs4", "cifs", "smb3", "smbfs", "9p", "davfs", "fuse.sshfs", "fuse.rclone", "afs", "ceph", "glusterfs")
+NETWORK_FS = ("nfs", "nfs4", "cifs", "smb3", "smbfs", "9p", "davfs", "fuse.sshfs", "fuse.rclone", "afs", "ceph", "glusterfs", "autofs")
 _steam_reported: dict[Path, None] = {}
 _discovered: tuple[float, str, list[Path]] | None = None
 _libraries_lock = threading.Lock()
@@ -138,7 +138,7 @@ def _network_mounts(mountinfo: str = "/proc/self/mountinfo") -> set[str]:
                 fields, _sep, rest = line.partition(" - ")
                 parts, kind = fields.split(), rest.split()[:1]
                 if len(parts) > 4 and kind and kind[0] in NETWORK_FS:
-                    mounts.add(parts[4].replace("\\040", " "))
+                    mounts.add(re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), parts[4]))
     except OSError:
         pass
     return mounts
@@ -154,7 +154,7 @@ def _discover(home: str) -> list[Path]:
         network = _network_mounts()
         found: list[Path] = []
         for base in (*MOUNT_ROOTS, home):
-            pending = [(Path(base), 0)]
+            pending = [(_real(Path(base)), 0)]
             while pending:
                 folder, depth = pending.pop()
                 if str(folder) in network:
@@ -392,15 +392,18 @@ def _lenient_manifest(manifest: Path) -> dict:
     """The few top-level fields Panel needs from a manifest the strict reader refused; Steam still loads it."""
     with open(manifest, "rb") as source:
         text = source.read(vdf.MAX_BYTES).decode("utf-8", errors="replace")
+    opening = text.find("{")
+    nested = text.find("{", opening + 1)
+    top = text[opening + 1:nested if nested > opening else len(text)]
     state = {}
     for key in ("appid", "name", "installdir", "stateflags", "buildid"):
-        match = re.search(rf'"{key}"\s+"((?:\\.|[^"\\])*)"', text, re.I)
+        match = re.search(rf'"{key}"\s+"((?:\\.|[^"\\])*)"', top, re.I)
         if match:
             state[key] = re.sub(r'\\([\\"])', r"\1", match.group(1))
     return state
 
 
-def _manifest_game(library: Path, appid: str) -> tuple[str, Installed | None]:
+def _manifest_game(library: Path, appid: str, contained: bool = False) -> tuple[str, Installed | None]:
     apps = library / "steamapps"
     manifest = apps / f"appmanifest_{appid}.acf"
     try:
@@ -420,6 +423,8 @@ def _manifest_game(library: Path, appid: str) -> tuple[str, Installed | None]:
     if not isinstance(installdir, str) or installdir in ("", ".", "..") or "/" in installdir or "\0" in installdir:
         return "manifest_invalid", None
     root = apps / "common" / installdir
+    if contained and (root.is_symlink() or not _real(root).is_relative_to(_real(apps / "common"))):
+        return "folder_outside", None
     try:
         if not stat.S_ISDIR(root.stat().st_mode):
             return "folder_missing", None
@@ -456,7 +461,7 @@ def find_installed(home: str, appid: str, lookup: Counter | None = None) -> Inst
             if library in trusted:
                 continue
             counts["discovered"] += 1
-            outcome, installed = _manifest_game(library, appid)
+            outcome, installed = _manifest_game(library, appid, contained=True)
             if outcome != "manifest_missing":
                 counts[f"discovery_{outcome}"] += 1
             if installed is not None:

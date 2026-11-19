@@ -269,3 +269,49 @@ def test_discovery_skips_network_shares(tmp_path, monkeypatch):
     monkeypatch.setattr(games, "MOUNT_ROOTS", (str(share), str(local)))
 
     assert games._discover(str(tmp_path / "private-home")) == [(local / "Games").resolve()]
+
+
+def test_discovery_reaches_network_shares_through_a_linked_mount_root_and_skips_them(tmp_path, monkeypatch):
+    from upscalers import games
+
+    real = tmp_path / "private-var-mnt"
+    (real / "nas" / "Games" / "steamapps").mkdir(parents=True)
+    (real / "disk" / "Games" / "steamapps").mkdir(parents=True)
+    linked = tmp_path / "private-mnt"
+    linked.symlink_to(real)
+    mountinfo = tmp_path / "mountinfo"
+    mountinfo.write_text(f"36 25 0:52 / {real.resolve()}/nas rw - nfs4 server:/export rw\n")
+    read = games._network_mounts
+    monkeypatch.setattr(games, "_network_mounts", lambda: read(str(mountinfo)))
+    monkeypatch.setattr(games, "MOUNT_ROOTS", (str(linked),))
+
+    assert games._discover(str(tmp_path / "private-home")) == [(real / "disk" / "Games").resolve()]
+
+
+def test_discovered_game_folder_linking_outside_its_library_is_refused(tmp_path, steam_install, monkeypatch):
+    from upscalers import games
+
+    service, _steamapps = steam_install
+    media = tmp_path / "private-media"
+    apps = media / "usb" / "steamapps"
+    _write_manifest(apps)
+    elsewhere = tmp_path / "private-elsewhere"
+    elsewhere.mkdir()
+    (apps / "common").mkdir()
+    (apps / "common" / GAME_NAME).symlink_to(elsewhere)
+    monkeypatch.setattr(games, "MOUNT_ROOTS", (str(media),))
+
+    with pytest.raises(UpscalerError) as refused:
+        service.game(APPID)
+    assert refused.value.lookup["discovery_folder_outside"] == 1
+
+
+def test_lenient_manifest_reads_only_top_level_fields(tmp_path, steam_install):
+    service, steamapps = steam_install
+    _install(steamapps)
+    (steamapps / f"appmanifest_{APPID}.acf").write_text(
+        f'"AppState" {{ "appid" "{APPID}" "name" "{GAME_NAME}" "installdir" "{GAME_NAME}" "StateFlags" "4" '
+        '"InstalledDepots" { "1" { "installdir" "Other" "name" "Other" } } "UserConfig" { "x" "1" "X" "1" } }'
+    )
+
+    assert service.game(APPID)["name"] == GAME_NAME
