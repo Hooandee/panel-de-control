@@ -109,3 +109,13 @@ it("removes its own wrapper after the user removed one that was there before", (
   expect(disabled.preserved.wrappers).toEqual([]);
   expect(planLaunchOverlay(disabled.value, {}, disabled.receipt)?.value).toBe(disabled.value);
 });
+
+it("adds Panel's anti-cheat launcher swap a mod needs and takes it out again", () => {
+  const wrapper = "/home/deck/.local/share/panel-de-control/bin/pdc-launch-exe";
+  const desired = { env: { PDC_LAUNCH_EXE: "start_protected_game.exe:eldenring.exe" }, wrappers: [wrapper] };
+  const plan = planLaunchOverlay('WINEDLLOVERRIDES="dxgi,d3d12=n,b" %command%', desired, null);
+  expect(plan?.value).toContain("PDC_LAUNCH_EXE=start_protected_game.exe:eldenring.exe");
+  expect(plan?.value).toContain(`${wrapper} %command%`);
+  const removed = planLaunchOverlay(plan!.value, { env: {}, wrappers: [] }, plan!.receipt);
+  expect(removed?.value).toBe('WINEDLLOVERRIDES="dxgi,d3d12=n,b" %command%');
+});

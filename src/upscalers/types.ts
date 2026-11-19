@@ -36,6 +36,8 @@ export interface UpscalerJob {
   result?: {
     overrides?: string[]; args?: string[]; kept?: string[]; launcher?: "heroic" | "lutris" | "portproton";
     removed_overrides?: string[]; removed_args?: string[]; env?: Record<string, string | null>;
+    /** Panel's own launch wrappers (the anti-cheat launcher swap a mod needs), placed before %command%. */
+    wrappers?: string[];
   };
 }
 
