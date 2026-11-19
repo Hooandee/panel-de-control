@@ -666,6 +666,7 @@ export const ptBR: Record<string, string> = {
   "up.mod.required": "Obrigatório para escalonar",
   "up.mod.removing": "Removido ao reinstalar o escalonamento",
   "up.mod.waitingCaption": "Adicionado assim que chegar em Downloads",
+  "up.mod.downloading": "Baixando… {size} MB",
   "up.error.mod_conflict": "Esse mod traz arquivos do OptiScaler: use a versão sem OptiScaler",
   "up.error.mod_layout": "Esse mod se espalha pela pasta do jogo; instale manualmente",
   "up.mod.apply": "Reinstalar para aplicar",

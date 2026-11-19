@@ -666,6 +666,7 @@ export const fr: Record<string, string> = {
   "up.mod.required": "Indispensable pour la mise à l’échelle",
   "up.mod.removing": "Retiré à la réinstallation de la mise à l’échelle",
   "up.mod.waitingCaption": "Ajouté dès son arrivée dans Téléchargements",
+  "up.mod.downloading": "Téléchargement… {size} Mo",
   "up.error.mod_conflict": "Ce mod contient des fichiers d’OptiScaler : utilisez la version sans OptiScaler",
   "up.error.mod_layout": "Ce mod se répartit dans le dossier du jeu ; installez-le à la main",
   "up.mod.apply": "Réinstaller pour l’appliquer",

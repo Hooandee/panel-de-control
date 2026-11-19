@@ -9,6 +9,9 @@ import type { GameDetail, GameMod } from "./types";
 import { cancelUserFileWatch, downloadMod, MOD_WATCH, onUserFileWatch, watchingFor } from "./userFileWatch";
 
 const EXTENSIONS = ["zip", "7z", "rar"];
+const PROGRESS_MS = 2000;
+// The file picker closes the QAM and the panel mounts again: an error from adding the picked file has to outlive it.
+const lastError = new Map<string, string>();
 const WIKI_PAGE = "https://github.com/optiscaler/OptiScaler/wiki/";
 
 /** The OptiScaler wiki names the mod in its page title: «Elden-Ring-(ERSS‐FG)» → «ERSS-FG». */
@@ -40,8 +43,14 @@ export const ModFile: FC<{
   const { t } = useI18n();
   const [folder, setFolder] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setErrorState] = useState<string | null>(() => lastError.get(appid) ?? null);
+  const setError = (text: string | null) => {
+    if (text) lastError.set(appid, text);
+    else lastError.delete(appid);
+    setErrorState(text);
+  };
   const [waiting, setWaiting] = useState(() => watchingFor(appid, MOD_WATCH));
+  const [received, setReceived] = useState<number | null>(null);
 
   useEffect(() => onUserFileWatch((event) => {
     if (event.appid !== appid || event.dependency !== MOD_WATCH) return;
@@ -55,6 +64,20 @@ export const ModFile: FC<{
     getUpscalerModCandidates(appid).then((result) => { if (live) setFolder(result.folder); }).catch(() => undefined);
     return () => { live = false; };
   }, [appid]);
+
+  // Steam's browser shows no download progress: the growing file in Downloads stands in for it.
+  useEffect(() => {
+    if (!waiting) {
+      setReceived(null);
+      return undefined;
+    }
+    const timer = setInterval(() => {
+      getUpscalerModCandidates(appid)
+        .then((result) => setReceived(result.downloading?.size ?? null))
+        .catch(() => undefined);
+    }, PROGRESS_MS);
+    return () => clearInterval(timer);
+  }, [appid, waiting]);
 
   const run = async (action: () => Promise<GameDetail>) => {
     setBusy(true);
@@ -95,7 +118,7 @@ export const ModFile: FC<{
           detail={present?.filename ?? t("up.userFile.missing")} caption={caption} busy={busy} />
         {mod && !mod.applied && onApply && <ListRow label={t("up.mod.apply")} disabled={off} onPress={onApply} />}
         {!present && (waiting
-          ? <ListRow label={t("up.userFile.waiting")} caption={t("up.mod.waitingCaption")} spinner detail={t("up.cancel")} onPress={cancelUserFileWatch} />
+          ? <ListRow label={t("up.userFile.waiting")} caption={received !== null ? t("up.mod.downloading", { size: (received / 1048576).toFixed(1) }) : t("up.mod.waitingCaption")} spinner detail={t("up.cancel")} onPress={cancelUserFileWatch} />
           : download && <ListRow label={t("up.userFile.download")} chevron disabled={off} onPress={() => void downloadMod(appid, download)} />)}
         <ListRow label={t(present ? "up.userFile.change" : "up.userFile.choose")} chevron disabled={off} onPress={() => void pick()} />
         {present && <ListRow danger label={t("up.userFile.remove")} disabled={off} onPress={() => void run(() => removeUpscalerMod(appid))} />}

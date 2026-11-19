@@ -666,6 +666,7 @@ export const it: Record<string, string> = {
   "up.mod.required": "Necessaria per l'upscaling",
   "up.mod.removing": "Si rimuove alla reinstallazione dell'upscaler",
   "up.mod.waitingCaption": "Si aggiunge appena arriva in Download",
+  "up.mod.downloading": "Download in corso… {size} MB",
   "up.error.mod_conflict": "Questa mod include file di OptiScaler: usa la versione senza OptiScaler",
   "up.error.mod_layout": "Questa mod si sparge nella cartella del gioco; installala a mano",
   "up.mod.apply": "Reinstalla per applicarla",

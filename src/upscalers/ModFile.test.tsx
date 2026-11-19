@@ -81,3 +81,25 @@ it("lets the download wait be cancelled", async () => {
   await act(async () => { fireEvent.click(screen.getByText(/up.userFile.waiting/)); });
   expect(screen.getByText("up.userFile.download")).toBeTruthy();
 });
+
+it("keeps the error from a picked archive after the picker closed and reopened the panel", async () => {
+  const { openFilePicker } = await import("@decky/api");
+  const { addUpscalerMod } = await import("../api");
+  vi.mocked(openFilePicker).mockResolvedValueOnce({ realpath: "/home/deck/Downloads/broken.7z" } as never);
+  vi.mocked(addUpscalerMod).mockRejectedValueOnce(Object.assign(new Error("mod_unreadable"), { pythonTraceback: "RuntimeError: mod_unreadable" }));
+  const first = render(<ModFile appid="999" mod={null} needed name="X" download={null} onDetail={vi.fn()} />);
+  await act(async () => { fireEvent.click(screen.getByText("up.userFile.choose")); });
+  first.unmount();
+  await act(async () => { render(<ModFile appid="999" mod={null} needed name="X" download={null} onDetail={vi.fn()} />); });
+  expect(screen.getByText("up.error.mod_unreadable")).toBeTruthy();
+});
+
+it("shows how much of the mod has downloaded while waiting", async () => {
+  vi.useFakeTimers();
+  const { getUpscalerModCandidates } = await import("../api");
+  await act(async () => { render(<ModFile appid="1245620" mod={null} needed name="ERSS-FG" download={PATREON} onDetail={vi.fn()} />); });
+  await act(async () => { fireEvent.click(screen.getByText("up.userFile.download")); });
+  vi.mocked(getUpscalerModCandidates).mockResolvedValue({ folder: "/home/deck/Downloads", candidates: [], downloading: { filename: "x.7z.crdownload", size: 47185920 } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(screen.getByText(/up.mod.downloading/)).toBeTruthy();
+});
