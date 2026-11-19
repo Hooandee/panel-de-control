@@ -62,5 +62,13 @@
     "size": 37461871,
     "filename": "Luma-Metaphor_ReFantazio.zip",
     "format": "zip"
+  },
+  "luma-gbfr-840": {
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Granblue_Fantasy_Relink.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "e4aa1a7cf5404ab74382cb2611559c92fb2c84bb9063c85910c345bd1e5abc78",
+    "size": 131761937,
+    "filename": "Luma-Granblue_Fantasy_Relink.zip",
+    "format": "zip"
   }
 }

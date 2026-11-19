@@ -25,6 +25,9 @@ _MODS = {
     "2679460": _Mod('Luma-Metaphor ReFantazio.addon',
                     'Luma/Metaphor ReFantazio/Luma_PrepareMotionVector.hlsl',
                     (b'Metaphor: ReFantazio Luma mod',)),
+    "881020": _Mod('Luma-Granblue Fantasy Relink.addon',
+                   'Luma/Granblue Fantasy Relink/Luma_GBFR_Tonemap.hlsl',
+                   (b'Luma for "Granblue Fantasy Relink" is developed by ',)),
 }
 
 
