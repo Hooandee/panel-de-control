@@ -514,6 +514,7 @@ export const de: Record<string, string> = {
   "up.status.active": "Das Spiel hat es aktiviert",
   "up.status.pending": "Spiel kurz, um es zu prüfen",
   "up.status.loaded": "Aktiviere Upscaling in den Grafikeinstellungen des Spiels",
+  "up.status.loadedNeedsMod": "OptiScaler wurde geladen, hat aber ohne die Mod, die dieses Spiel braucht, nichts zu skalieren. Der Wiki-Eintrag nennt sie",
   "up.input.recommended": "Wähle im Spiel {input}. Panel de Control wendet {name} an",
   "up.status.not_run": "Spiel kurz, um es zu prüfen",
   "up.status.dll_not_run": "Prüfe die Version in den Spieleinstellungen",

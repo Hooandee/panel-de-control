@@ -221,3 +221,12 @@ it("queues frame generation that needs a new install while the game is running",
   await act(async () => { fireEvent.click(screen.getAllByText("up.discard")[0]); });
   state.running = null;
 });
+
+it("tells a game that needs a separate mod why OptiScaler loaded without upscaling", async () => {
+  const detail = installed("loaded");
+  state.detail = { ...detail, analysis: { ...detail.analysis, inputs: {} },
+    recipe_info: { recommended_input: null, needs: ["mod"], page: "Elden-Ring-(ERSS‐FG)", status: "works" } } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.getByText("up.status.loadedNeedsMod")).toBeTruthy();
+  expect(screen.queryByText("up.status.loaded")).toBeNull();
+});

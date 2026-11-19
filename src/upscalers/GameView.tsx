@@ -609,7 +609,8 @@ export const GameView: FC<{
               sub={fallback ? t(`up.fallback.reason.${fallback.reason}`) : status === "active" && render && output
                 ? t(render < output ? "up.state.checked" : "up.state.checkedNative", { from: render, to: output })
                 : status === "active" ? undefined : installedBuild?.engine === "dll" && status === "not_run"
-                  ? t("up.status.dll_not_run") : t(`up.status.${status}`)}
+                  ? t("up.status.dll_not_run") : status === "loaded" && detail.recipe_info?.needs.includes("mod") && !detail.recipe_info.user_files?.length
+                    ? t("up.status.loadedNeedsMod") : t(`up.status.${status}`)}
               tone={status === "broken" ? "danger" : status === "loaded" || fallback ? "warn" : undefined}
             />
           ) : detail.analysis.foreign ? (
