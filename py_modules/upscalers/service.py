@@ -237,6 +237,11 @@ class UpscalerService:
         self._save()
 
     # ---- read side -----------------------------------------------------------
+    @staticmethod
+    def _mod_frame_generation(appid: str, install: dict) -> str | None:
+        recipe = recipes.RECIPES.get(str(appid))
+        return recipe.mod_frame_generation if recipe and install.get("mod") else None
+
     def overview(self) -> dict:
         installs = {}
         for appid, entry in self.state["games"].items():
@@ -248,6 +253,7 @@ class UpscalerService:
                     "status": self._status(install, entry),
                     "options": install.get("options") or {},
                     "fallback": self._last_fallback(install, entry),
+                    "mod_fg": self._mod_frame_generation(appid, install),
                 }
         return {
             "gpu": self.gpu,
