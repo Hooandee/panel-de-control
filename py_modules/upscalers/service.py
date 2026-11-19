@@ -478,7 +478,7 @@ class UpscalerService:
         home = Path(self.home)
         folders = [home / "Downloads", home / "Descargas"]
         folder = next((f for f in folders if f.is_dir()), home)
-        return {"folder": str(folder), "candidates": user_mods.candidates(folders)}
+        return {"folder": str(folder), "candidates": user_mods.candidates(folders), "downloading": user_mods.downloading(folders)}
 
     def add_mod(self, appid: str, path: str) -> dict:
         chosen = Path(str(path))

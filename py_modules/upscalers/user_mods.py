@@ -182,6 +182,27 @@ def _extract_all(path: Path, wanted: dict[str, str], destination: Path) -> None:
         shutil.rmtree(staging, ignore_errors=True)
 
 
+PARTIAL = (".crdownload", ".part", ".download", ".tmp")
+
+
+def downloading(folders) -> dict | None:
+    """The download still being written (Steam's browser shows no progress), newest first."""
+    found = []
+    for folder in folders:
+        try:
+            for entry in os.scandir(folder):
+                if entry.is_file(follow_symlinks=False) and entry.name.lower().endswith(PARTIAL):
+                    info = entry.stat()
+                    if time.time() - info.st_mtime < 60:
+                        found.append((info.st_mtime, entry.name, info.st_size))
+        except OSError:
+            continue
+    if not found:
+        return None
+    _, name, size = max(found)
+    return {"filename": name, "size": size}
+
+
 def candidates(folders, limit: int = 6) -> list[dict]:
     """Archives in Downloads, newest first. A mod has no fixed content to check, so the user picks it; the size lets
     a download watcher wait until the file stops growing."""

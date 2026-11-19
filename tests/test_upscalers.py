@@ -2064,3 +2064,12 @@ def test_a_new_copy_of_the_mod_with_the_same_name_still_needs_a_reinstall(steam,
     assert service.add_mod(APPID, str(archive))["mod"]["applied"] is False
     removed = service.remove_mod(APPID)["mod"]
     assert removed["removed"] is True and removed["applied"] is False, "its files stay in the game until the reinstall"
+
+
+def test_a_mod_download_in_progress_is_reported(steam, fake_catalog, proc):
+    home, _ = steam
+    _write(home / "Downloads/ERSS-FG-v4.14.1-Release.7z.crdownload", b"x" * 2048)
+    service = _service(steam, fake_catalog, proc)
+    found = service.mod_candidates(APPID)
+    assert found["downloading"] == {"filename": "ERSS-FG-v4.14.1-Release.7z.crdownload", "size": 2048}
+    assert found["candidates"] == []
