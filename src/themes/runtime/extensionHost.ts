@@ -386,9 +386,13 @@ function freezePatch(patch: CssLoaderPatch): Readonly<CssLoaderPatch> {
 // A game the theme froze thaws when the theme goes, not only when the backend's deadline passes.
 function scopedGames(games: Readonly<ThemeExtensionGamesAccess>, scope: MountScope): Readonly<ThemeExtensionGamesAccess> {
   let release: (() => void) | null = null;
-  const forceClose = games.forceClose;
+  const { forceClose, coverLabels } = games;
   return Object.freeze({
     ...(forceClose ? { forceClose: (appid: number | string) => forceClose.call(games, appid) } : {}),
+    ...(coverLabels ? { coverLabels: Object.freeze({
+      read: () => coverLabels.read(),
+      subscribe: (listener: () => void) => scope.track(coverLabels.subscribe(listener)),
+    }) } : {}),
     pause: (ms: number) => {
       release ??= scope.track(() => { void games.resume(); });
       return games.pause(ms);

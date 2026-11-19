@@ -16,7 +16,20 @@ export interface ThemeHowLongToBeat {
   complete: number | null;
 }
 
+export interface ThemeGameCoverLabel {
+  readonly label: string;
+  readonly short: string;
+  readonly state: string;
+}
+
+export interface ThemeGameCoverLabelsAccess {
+  read(): Readonly<Record<string, ThemeGameCoverLabel>>;
+  subscribe(listener: () => void): () => void;
+}
+
 export interface ThemeExtensionGamesAccess {
+  // The AppID-keyed labels shown by Panel's cover setting, empty when disabled.
+  coverLabels?: Readonly<ThemeGameCoverLabelsAccess>;
   // Absent where Panel cannot close a game by force (Windows): a theme then offers no "force close".
   forceClose?(appid: number | string): Promise<ThemeForceCloseResult>;
   // False when no game runs or nothing could be frozen.
@@ -70,7 +83,10 @@ function hoursOrNull(value: unknown): number | null {
 
 const RESULTS = new Set<ThemeForceCloseResult>(["not_found", "terminated", "killed", "failed"]);
 
-export function createThemeGamesAccess(backend: ThemeGamesBackend): Readonly<ThemeExtensionGamesAccess> {
+export function createThemeGamesAccess(
+  backend: ThemeGamesBackend,
+  coverLabels?: Readonly<ThemeGameCoverLabelsAccess>,
+): Readonly<ThemeExtensionGamesAccess> {
   const close = backend.forceClose;
   const forceClose = close
     ? async (appid: number | string): Promise<ThemeForceCloseResult> => {
@@ -88,6 +104,7 @@ export function createThemeGamesAccess(backend: ThemeGamesBackend): Readonly<The
     : undefined;
   return Object.freeze({
     ...(forceClose ? { forceClose } : {}),
+    ...(coverLabels ? { coverLabels } : {}),
     async pause(ms: number): Promise<boolean> {
       const appid = runningAppId();
       if (!appid || !backend.pause || !Number.isFinite(ms) || ms <= 0) return false;

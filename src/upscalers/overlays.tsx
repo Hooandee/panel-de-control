@@ -1,5 +1,5 @@
 import { findSP } from "@decky/ui";
-import { useEffect, useMemo, useRef, useState, type FC } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FC } from "react";
 import { createPortal } from "react-dom";
 
 import { getUpscalersOverview } from "../api";
@@ -7,7 +7,8 @@ import { translate, useI18n } from "../i18n";
 import { registerGlobal } from "../platform/globalComponent";
 import { OverGameComposition } from "../platform/overGameComposition";
 import { subscribeQamSurface, type QamSurface } from "../platform/qamSurface";
-import { readString, writeString } from "../system/pdcStorage";
+import { onPrefsHealed, readString, writeString } from "../system/pdcStorage";
+import type { ThemeGameCoverLabel, ThemeGameCoverLabelsAccess } from "../themes/runtime/gamesAccess";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useGameInFront } from "./gameInFront";
 import { useOverlayLive } from "./useOverlayLive";
@@ -35,10 +36,7 @@ function providerOf(build: BuildInfo | undefined): ProviderFamily | null {
   return build.family === "xess" ? "xess" : "fsr";
 }
 
-interface Badge {
-  label: string;
-  short: string;
-  state: string;
+interface Badge extends ThemeGameCoverLabel {
   build: string;
   engine: string | null;
   provider: ProviderFamily | null;
@@ -49,8 +47,27 @@ interface Badge {
 }
 
 let installs: Record<string, Badge> = {};
-// Covers also name what runs without an upscaler install: Mako's spatial scaling or a frame generator on its own.
-let engineCovers: Record<string, Badge> = {};
+const NO_COVERS: Readonly<Record<string, ThemeGameCoverLabel>> = Object.freeze({});
+let coverLabels = NO_COVERS;
+let lastVisibleCovers = NO_COVERS;
+const coverListeners = new Set<() => void>();
+
+export const upscalerCoverLabels: Readonly<ThemeGameCoverLabelsAccess> = Object.freeze({
+  read: () => readCoverBadges() ? coverLabels : NO_COVERS,
+  subscribe(listener: () => void) {
+    coverListeners.add(listener);
+    return () => { coverListeners.delete(listener); };
+  },
+});
+
+function emitCoverLabels(): void {
+  const visible = upscalerCoverLabels.read();
+  if (visible === lastVisibleCovers) return;
+  lastVisibleCovers = visible;
+  for (const listener of coverListeners) {
+    try { listener(); } catch {}
+  }
+}
 let sectionOpen = false;
 let ghost: { image: string; opacity: number } | null = null;
 const listeners = new Set<() => void>();
@@ -64,6 +81,7 @@ let makoEngines: Record<string, 4 | 5> = {};
 
 export function publishOverview(overview: UpscalersOverview): void {
   const next: Record<string, Badge> = {};
+  const covers: Record<string, ThemeGameCoverLabel> = {};
   for (const [appid, install] of Object.entries(overview.installs)) {
     const build = overview.builds.find((b) => b.id === install.build);
     const label = badgeLabel(build, install.options?.model, install.build);
@@ -72,41 +90,28 @@ export function publishOverview(overview: UpscalersOverview): void {
     const cover = fallback
       ? { label: translate(fallback.observed ? "up.fallback.cover" : "up.fallback.coverNone", { from: fallback.requested, to: fallback.observed ?? "" }), short: fallback.observed ?? translate("up.fallback.coverNone", { from: fallback.requested, to: "" }), state: "fallback" }
       : { label: label.full, short: label.short, state: install.status };
+    covers[appid] = Object.freeze(cover);
     next[appid] = { ...cover, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null, modFg: install.mod_fg ?? null, fallback };
   }
   installs = next;
   makoEngines = Object.fromEntries(Object.entries(overview.engines ?? {}).flatMap(([appid, engines]) => engines.mako?.engine ? [[appid, engines.mako.engine]] : []));
-  const covers: Record<string, Badge> = {};
+  // Covers also name Mako's spatial scaling or a frame generator on its own.
   for (const [appid, engines] of Object.entries(overview.engines ?? {})) {
     if (next[appid]) continue;
     const mako = engines.mako ? `Mako ${engines.mako.engine === 5 ? 5 : 4}` : "Mako";
     const label = engines.mako?.spatial ? mako
       : engines.mako?.fg ? `${mako}${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
       : engines.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
-    if (label) covers[appid] = { label, short: label, state: "pending", build: label.toLowerCase(), engine: null, provider: null, fg: false, fgRoute: null, modFg: null, fallback: null };
+    if (label) covers[appid] = Object.freeze({ label, short: label, state: "pending" });
   }
-  engineCovers = covers;
+  coverLabels = Object.keys(covers).length ? Object.freeze(covers) : NO_COVERS;
   emit();
-}
-
-const NO_COVERS: Record<string, Badge> = {};
-
-function useCoverLabels(): Record<string, Badge> {
-  const installed = useInstalls();
-  const [engines, setEngines] = useState(engineCovers);
-  const [shown, setShown] = useState(readCoverBadges);
-  useEffect(() => {
-    const update = () => { setEngines(engineCovers); setShown(readCoverBadges()); };
-    update();
-    listeners.add(update);
-    return () => { listeners.delete(update); };
-  }, []);
-  return useMemo(() => shown ? { ...engines, ...installed } : NO_COVERS, [engines, installed, shown]);
+  emitCoverLabels();
 }
 
 /** Games with a Panel upscaler or engine profile, for a report to describe. */
 export function reportedAppids(): string[] {
-  return [...new Set([...Object.keys(installs), ...Object.keys(engineCovers)])];
+  return Object.keys(coverLabels);
 }
 
 export function useInstalls(): Record<string, Badge> {
@@ -149,7 +154,7 @@ export function readCoverBadges(): boolean {
 
 export function writeCoverBadges(shown: boolean): void {
   writeString(COVERS_KEY, shown ? "on" : "off");
-  emit();
+  emitCoverLabels();
 }
 
 function mainWindow(): Window | null {
@@ -268,7 +273,7 @@ function isRound(tile: HTMLElement, view: Window): boolean {
   return radius.endsWith("%") ? parseFloat(radius) >= 35 : parseFloat(radius) >= tile.getBoundingClientRect().width * 0.35;
 }
 
-function placeBadge(host: HTMLElement, tile: HTMLElement, badge: Badge, view: Window): void {
+function placeBadge(host: HTMLElement, tile: HTMLElement, badge: ThemeGameCoverLabel, view: Window): void {
   let node = host.querySelector<HTMLElement>(`:scope > .${BADGE_CLASS}`);
   if (!node) {
     node = host.ownerDocument.createElement("span");
@@ -303,7 +308,7 @@ function clearBadge(tile: Element): void {
 
 /** Puts a pill on every tile showing a game's art, in Steam's library and in any theme that draws its own tiles. */
 export const CoverBadges: FC = () => {
-  const map = useCoverLabels();
+  const map = useSyncExternalStore(upscalerCoverLabels.subscribe, upscalerCoverLabels.read);
   useEffect(() => {
     // Nothing to mark: the previous run's cleanup already removed the pills.
     if (!Object.keys(map).length) return;
@@ -322,7 +327,7 @@ export const CoverBadges: FC = () => {
       pending = 0;
       const limit = view.innerWidth * 0.6;
       // A tile can hold several copies of the art (Gallery's reflection, crossfade layers); the largest is the face.
-      const faces = new Map<HTMLElement, { img: HTMLImageElement; badge: Badge; area: number }>();
+      const faces = new Map<HTMLElement, { img: HTMLImageElement; badge: ThemeGameCoverLabel; area: number }>();
       for (const img of Array.from(doc.querySelectorAll<HTMLImageElement>("img[src*='/assets/'], img[src*='/customimages/'], img[src*='/apps/']"))) {
         const appid = appidOf(img.src);
         if (!appid || NOT_TILE.test(img.src)) continue;
@@ -528,6 +533,7 @@ export const InGameBadge: FC = () => {
 /** Mounts covers and the in-game pill for the plugin's lifetime and loads the first overview. */
 export function startUpscalerOverlays(): () => void {
   const stopCounterSession = startFpsCounterSession();
+  const stopPrefsHealed = onPrefsHealed(emitCoverLabels);
   const covers = registerGlobal("PanelDeControlUpscalerCovers", CoverBadges);
   const inGame = registerGlobal("PanelDeControlUpscalerInGame", InGameBadge);
   let stopped = false;
@@ -546,6 +552,7 @@ export function startUpscalerOverlays(): () => void {
     stopped = true;
     stopJobs();
     stopCounterSession();
+    stopPrefsHealed();
     window.clearTimeout(retry);
     inGame();
     covers();

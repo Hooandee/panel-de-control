@@ -78,7 +78,7 @@ import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeAct
 import { startThemesRuntime } from "./themes/runtime/start";
 import { themesClientOptionsWriter } from "./themes/runtime/themeOptions";
 import { ambientThemeChannel, startAmbient } from "./ambient";
-import { startUpscalerOverlays } from "./upscalers/overlays";
+import { startUpscalerOverlays, upscalerCoverLabels } from "./upscalers/overlays";
 import { adoptStaleActivePlugin } from "./deckyInternal";
 import { createGameSessionPort } from "./platform/gameSessions";
 import { createPowerPort } from "./platform/power";
@@ -296,7 +296,10 @@ export default definePlugin(() => {
     subscribeQamDocument: onQamDocument,
     ambient: ambientThemeChannel,
     storage: createThemeStorage({ get: getThemeStorage, set: setThemeStorage }),
-    games: createThemeGamesAccess({ forceClose: forceCloseGame, pause: pauseThemeGame, resume: resumeThemeGame, howLongToBeat: getThemeHltb, protonDb: getThemeProtonDb }),
+    games: createThemeGamesAccess(
+      { forceClose: forceCloseGame, pause: pauseThemeGame, resume: resumeThemeGame, howLongToBeat: getThemeHltb, protonDb: getThemeProtonDb },
+      upscalerCoverLabels,
+    ),
     subscribePackageChanges: onThemePackagesChanged,
     groups: themeGroups,
     actions: themeActionsChannel,
