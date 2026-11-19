@@ -1488,8 +1488,8 @@ class Plugin(AmbientRpc):
     async def get_upscaler_mod_candidates(self, appid: str) -> dict:
         return await self._upscalers_call("mod_candidates", str(appid))
 
-    async def add_upscaler_mod(self, appid: str, path: str) -> dict:
-        result = await self._upscalers_call("add_mod", str(appid), str(path))
+    async def add_upscaler_mod(self, appid: str, path: str, password: str | None = None) -> dict:
+        result = await self._upscalers_call("add_mod", str(appid), str(path), str(password)[:256] if password else None)
         _upscalers_journal("INFO", "mod", appid=str(appid), files=(result.get("mod") or {}).get("count"))
         return result
 
@@ -16354,6 +16354,6 @@ journal.trace_calls(
         "get_theme_storage", "set_theme_storage", "force_close_game", "pause_theme_game", "resume_theme_game",
     }),
     automatic=frozenset({"load_theme_extension"}),
-    hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers"}),
+    hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers", "add_upscaler_mod"}),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

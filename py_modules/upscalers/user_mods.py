@@ -88,23 +88,32 @@ def native_dlls(destinations) -> list[str]:
                    if "/" not in d and d.lower().endswith(".dll") and PurePosixPath(d).stem.lower() in SYSTEM_DLLS})
 
 
-def _entries(path: Path) -> list[tuple[str, int]]:
-    """Files in the archive with their sizes, read before anything is extracted; links are refused."""
+def _seven_zip() -> bool:
+    """7z reads every 7-Zip method and password-protected archives (Patreon mods often are); bsdtar doesn't."""
+    return bool(shutil.which("7z")) or os.path.isabs(user_deps.resolve_bin("7z"))
+
+
+def _entries(path: Path) -> tuple[list[tuple[str, int]], bool]:
+    """Files in the archive with their sizes, and whether they are encrypted, read before anything is extracted;
+    links are refused."""
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:
             entries = []
+            encrypted = False
             for info in archive.infolist():
                 if info.is_dir():
                     continue
                 if stat.S_ISLNK(info.external_attr >> 16):
                     raise ModError("unsafe_archive")
+                encrypted |= bool(info.flag_bits & 0x1)
                 entries.append((info.filename, info.file_size))
-            return entries
-    if user_deps._archiver() == "7z":
+            return entries, encrypted
+    if _seven_zip():
         result = user_deps.run_archiver(["7z", "l", "-slt", "-ba", str(path.resolve())], 60)
         if result.returncode != 0:
             raise ModError("unreadable")
         entries = []
+        encrypted = False
         for block in result.stdout.decode("utf-8", "replace").replace("\r", "").split("\n\n"):
             fields = dict(line.split(" = ", 1) for line in block.splitlines() if " = " in line)
             if not fields.get("Path") or fields.get("Folder") == "+" or fields.get("Attributes", "").startswith("D"):
@@ -112,8 +121,9 @@ def _entries(path: Path) -> list[tuple[str, int]]:
             mode = fields.get("Attributes", "").partition(" ")[2].lstrip("-")
             if mode.startswith("l") or fields.get("Symbolic Link"):
                 raise ModError("unsafe_archive")
+            encrypted |= fields.get("Encrypted") == "+"
             entries.append((fields["Path"], int(fields.get("Size") or 0)))
-        return entries
+        return entries, encrypted
     result = user_deps.run_archiver(["bsdtar", "-tvf", str(path.resolve())], 60)
     if result.returncode != 0:
         raise ModError("unreadable")
@@ -125,16 +135,17 @@ def _entries(path: Path) -> list[tuple[str, int]]:
         if not fields[0].startswith("-"):
             raise ModError("unsafe_archive")
         entries.append((fields[8], int(fields[4])))
-    return entries
+    # bsdtar can't tell encryption apart in a listing; extracting then fails and says so.
+    return entries, False
 
 
-def _readable(path: Path) -> list[str]:
+def _readable(path: Path, password: str | None = None) -> list[str]:
     if path.is_symlink() or not path.is_file() or path.suffix.lower() not in user_deps.ARCHIVES:
         raise ModError("unreadable")
     if path.stat().st_size > user_deps.MAX_ARCHIVE:
         raise ModError("too_large")
     try:
-        entries = _entries(path)
+        entries, encrypted = _entries(path)
     except ModError:
         raise
     except (OSError, zipfile.BadZipFile, subprocess.SubprocessError, ValueError):
@@ -146,23 +157,31 @@ def _readable(path: Path) -> list[str]:
         raise ModError("too_many_files")
     if any(size > user_deps.MAX_MEMBER for _, size in entries) or sum(size for _, size in entries) > MAX_TOTAL:
         raise ModError("too_large")
+    if encrypted and not password:
+        raise ModError("password")
     return members
 
 
-def _extract_all(path: Path, wanted: dict[str, str], destination: Path) -> None:
+def _extract_all(path: Path, wanted: dict[str, str], destination: Path, password: str | None = None) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:
             for target, member in wanted.items():
                 out = destination / target
                 out.parent.mkdir(parents=True, exist_ok=True)
-                with archive.open(member) as source, open(out, "wb") as sink:
-                    shutil.copyfileobj(source, sink)
+                try:
+                    with archive.open(member, pwd=password.encode() if password else None) as source, open(out, "wb") as sink:
+                        shutil.copyfileobj(source, sink)
+                except RuntimeError:
+                    raise ModError("password_wrong" if password else "password") from None
+                except NotImplementedError:
+                    raise ModError("unreadable") from None
         return
     staging = Path(tempfile.mkdtemp(dir=destination.parent, prefix=".unpack-"))
     try:
-        if user_deps._archiver() == "7z":
-            command = ["7z", "x", "-y", f"-o{staging}", str(path.resolve())]
+        if _seven_zip():
+            # -p always: without it 7z would stop and ask for the password.
+            command = ["7z", "x", "-y", f"-p{password or ''}", f"-o{staging}", str(path.resolve())]
         else:
             command = ["bsdtar", "-xf", str(path.resolve()), "-C", str(staging)]
         try:
@@ -170,6 +189,9 @@ def _extract_all(path: Path, wanted: dict[str, str], destination: Path) -> None:
         except subprocess.TimeoutExpired:
             raise ModError("unreadable") from None
         if done.returncode != 0:
+            said = (done.stdout + done.stderr).decode("utf-8", "replace").lower()
+            if "wrong password" in said or "encrypted" in said:
+                raise ModError("password_wrong" if password else "password")
             raise ModError("unreadable")
         for target, member in wanted.items():
             source = staging / member
@@ -250,17 +272,18 @@ class Store:
         folder = self._folder(appid) / "files"
         return {name: folder / name for name in self._meta(appid)["files"]}
 
-    def adopt(self, appid: str, path: Path, target: str, existing: set[str], root_dirs: set[str]) -> dict:
+    def adopt(self, appid: str, path: Path, target: str, existing: set[str], root_dirs: set[str],
+              password: str | None = None) -> dict:
         path = Path(path)
         self._folder(appid)
-        members = _readable(path)
+        members = _readable(path, password)
         wanted = layout(members, target, existing, root_dirs)
         if replaces_optiscaler(wanted):
             raise ModError("conflict")
         self.root.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(dir=self.root, prefix=f".{appid}-"))
         try:
-            _extract_all(path, wanted, staging / "files")
+            _extract_all(path, wanted, staging / "files", password)
             (staging / "meta.json").write_text(json.dumps({
                 "filename": path.name, "files": sorted(wanted), "target": target, "id": f"{path.name}@{time.time_ns()}",
             }))
