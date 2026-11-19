@@ -1978,3 +1978,165 @@ def test_a_missing_record_still_asks_the_bridge_and_accepts_not_installed(steam,
     service.uninstall(APPID)
     assert service.helix.calls == [("remove",)]
     assert service.game(APPID)["install"] is None
+
+
+def _mod_zip(path, members):
+    import zipfile
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, content in members.items():
+            archive.writestr(name, content)
+    return path
+
+
+def test_mod_layout_follows_the_exe_folder():
+    from upscalers import user_mods
+    assert user_mods.layout(["Game/ERSS-FG.dll", "Game/ERSS2/a.ini"], "Game") == {"ERSS-FG.dll": "Game/ERSS-FG.dll", "ERSS2/a.ini": "Game/ERSS2/a.ini"}
+    assert user_mods.layout(["ERSS-FG v4/D3D12.dll", "ERSS-FG v4/ERSS2/a.ini"], "Game") == {"D3D12.dll": "ERSS-FG v4/D3D12.dll", "ERSS2/a.ini": "ERSS-FG v4/ERSS2/a.ini"}
+    # A folder the game already has is part of where the mod goes, not a wrapper.
+    assert user_mods.layout(["reframework/plugins/x.dll"], "", {"reframework"}) == {"reframework/plugins/x.dll": "reframework/plugins/x.dll"}
+    assert user_mods.native_dlls(["D3D12.dll", "ERSS-FG.dll", "ERSS2/dxgi.dll", "dinput8.dll"]) == ["d3d12", "dinput8"]
+    # A wrapper around the game's own path, and mods that reach elsewhere in the game.
+    assert user_mods.layout(["ELDEN RING/Game/D3D12.dll"], "Game", set(), {"Game", "AdvGuide"}) == {"D3D12.dll": "ELDEN RING/Game/D3D12.dll"}
+    with pytest.raises(user_mods.ModError, match="layout"):
+        user_mods.layout(["bin/x64/version.dll", "r6/scripts/x.reds"], "bin/x64", set(), {"bin", "r6"})
+    with pytest.raises(user_mods.ModError, match="layout"):
+        user_mods.layout(["Game/Binaries/Win64/dxgi.dll", "Game/Content/Paks/~mods/x.pak"], "Game/Binaries/Win64", set(), {"Game", "Engine"})
+
+
+def test_a_users_mod_goes_in_with_optiscaler_and_leaves_with_it(steam, fake_catalog, proc):
+    home, game = steam
+    target = game / "bin/x64_dx12"
+    _write(target / "D3D12.dll", b"game's own")
+    archive = _mod_zip(home / "Downloads/ERSS-FG free v4.zip",
+                       {"ERSS-FG/D3D12.dll": b"loader", "ERSS-FG/dxgi.dll": b"mod dxgi", "ERSS-FG/ERSS2/ERSS.ini": b"[x]"})
+    service = _service(steam, fake_catalog, proc)
+    assert service.mod_candidates(APPID)["candidates"][0]["filename"] == "ERSS-FG free v4.zip"
+    detail = service.add_mod(APPID, str(archive))
+    assert detail["mod"]["count"] == 3 and detail["mod"]["applied"] is False
+    assert detail["mod"]["native_dlls"] == ["d3d12", "dxgi"]
+
+    result = service.install(APPID, {"build": "fsr-test"})
+    install = service.game(APPID)["install"]
+    assert install["proxy"] != "dxgi.dll", "the mod's dxgi.dll keeps its name; OptiScaler moves aside"
+    assert (target / install["proxy"]).is_file()
+    assert (target / "dxgi.dll").read_bytes() == b"mod dxgi"
+    assert (target / "D3D12.dll").read_bytes() == b"loader"
+    assert (target / "ERSS2/ERSS.ini").is_file()
+    assert {"d3d12", "dxgi"} <= set(install["native_dlls"])
+    assert any("d3d12" in override for override in result["overrides"])
+    assert service.game(APPID)["mod"]["applied"] is True
+    (target / "ERSS2/ERSS.ini").write_bytes(b"[rewritten by the mod]")
+
+    service.uninstall(APPID)
+    assert (target / "D3D12.dll").read_bytes() == b"game's own"
+    assert not (target / "dxgi.dll").exists() and not (target / "ERSS2").exists()
+
+
+def test_a_mod_that_overwrites_optiscalers_files_is_refused(steam, fake_catalog, proc):
+    home, _ = steam
+    archive = _mod_zip(home / "Downloads/bad.zip", {"OptiScaler.ini": b"[x]", "nvngx.dll": b"x"})
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    # Refused when added, before an automatic reinstall could take the working upscaler out.
+    with pytest.raises(UpscalerError, match="mod_conflict"):
+        service.add_mod(APPID, str(archive))
+    assert service.game(APPID)["install"] is not None and service.game(APPID)["mod"] is None
+
+
+def test_a_mod_archive_escaping_the_game_folder_is_refused(steam, fake_catalog, proc):
+    home, _ = steam
+    archive = _mod_zip(home / "Downloads/evil.zip", {"../../evil.dll": b"x"})
+    service = _service(steam, fake_catalog, proc)
+    with pytest.raises(UpscalerError, match="mod_unsafe_archive"):
+        service.add_mod(APPID, str(archive))
+    assert service.game(APPID)["mod"] is None
+
+
+def test_a_new_copy_of_the_mod_with_the_same_name_still_needs_a_reinstall(steam, fake_catalog, proc):
+    home, game = steam
+    archive = _mod_zip(home / "Downloads/ERSS-FG.zip", {"D3D12.dll": b"v1"})
+    service = _service(steam, fake_catalog, proc)
+    service.add_mod(APPID, str(archive))
+    service.install(APPID, {"build": "fsr-test"})
+    assert service.game(APPID)["mod"]["applied"] is True
+    _mod_zip(home / "Downloads/ERSS-FG.zip", {"D3D12.dll": b"v2"})
+    assert service.add_mod(APPID, str(archive))["mod"]["applied"] is False
+    removed = service.remove_mod(APPID)["mod"]
+    assert removed["removed"] is True and removed["applied"] is False, "its files stay in the game until the reinstall"
+
+
+def test_a_mod_download_in_progress_is_reported(steam, fake_catalog, proc):
+    home, _ = steam
+    _write(home / "Downloads/ERSS-FG-v4.14.1-Release.7z.crdownload", b"x" * 2048)
+    service = _service(steam, fake_catalog, proc)
+    found = service.mod_candidates(APPID)
+    assert found["downloading"] == {"filename": "ERSS-FG-v4.14.1-Release.7z.crdownload", "size": 2048}
+    assert found["candidates"] == []
+
+
+def test_a_password_protected_mod_asks_for_its_password(tmp_path, monkeypatch):
+    # ERSS-FG ships as a 7z whose files are all encrypted (7zAES); the password is in its Patreon post.
+    import subprocess
+    from upscalers import user_mods
+    archive = tmp_path / "ERSS-FG-v4.14.1-Release.7z"
+    archive.write_bytes(b"7z")
+    listing = ("Path = D3D12.dll\nSize = 4\nAttributes = A_ -rw-r--r--\nEncrypted = +\n\n"
+               "Path = ERSS2/bin/ffx_cas_x64.dll\nSize = 4\nAttributes = A_ -rw-r--r--\nEncrypted = +\n")
+    commands = []
+
+    def run(command, timeout):
+        commands.append(command)
+        if command[1] == "l":
+            return subprocess.CompletedProcess(command, 0, listing.encode(), b"")
+        if "-pfree" not in command:
+            return subprocess.CompletedProcess(command, 2, b"", b"ERROR: Wrong password : D3D12.dll")
+        staging = Path(next(arg for arg in command if arg.startswith("-o"))[2:])
+        (staging / "ERSS2/bin").mkdir(parents=True)
+        (staging / "D3D12.dll").write_bytes(b"MZ")
+        (staging / "ERSS2/bin/ffx_cas_x64.dll").write_bytes(b"MZ")
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    monkeypatch.setattr(user_mods, "_seven_zip", lambda: True)
+    monkeypatch.setattr(user_mods.user_deps, "run_archiver", run)
+    store = user_mods.Store(tmp_path / "store")
+    with pytest.raises(user_mods.ModError, match="^password$"):
+        store.adopt("1245620", archive, "Game", set(), {"Game"})
+    with pytest.raises(user_mods.ModError, match="password_wrong"):
+        store.adopt("1245620", archive, "Game", set(), {"Game"}, "nope")
+    assert store.adopt("1245620", archive, "Game", set(), {"Game"}, "free")["count"] == 2
+    assert all(command[0] == "7z" for command in commands)
+
+
+def test_a_recipe_prepares_the_mod_it_needs_without_the_user(steam, fake_catalog, proc, monkeypatch):
+    # Elden Ring + ERSS-FG: VC++ runtime in the prefix, anti-cheat launcher swapped, FSR and FSR-FG on in its settings.
+    from upscalers import prefix_dependencies, recipes, service as service_module, user_mods
+    home, game = steam
+    target = game / "bin/x64_dx12"
+    _write(target / "ERSS2/ERSS-FG.toml", b'OverlayToggleKey = "Home"\n\n[Renderer]\nScalingMode = "None"\nIsHDR = true\n')
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(
+        APPID, mod_launch_exe=("start_protected_game.exe", "eldenring.exe"),
+        mod_settings={"ERSS2/ERSS-FG.toml": {"Renderer.ScalingMode": '"FSR3U"', "FrameGeneration.FrameGenMode": "1"}},
+        mod_frame_generation="ERSS-FG"))
+    monkeypatch.setattr(user_mods.pe, "imported_dlls", lambda path: {"msvcp140.dll", "kernel32.dll"} if path.endswith("ERSS-FG.dll") else set())
+    prepared = []
+    monkeypatch.setattr(prefix_dependencies, "prepare", lambda home, installed, verbs, *a, **k: prepared.append(tuple(verbs)))
+    archive = _mod_zip(home / "Downloads/ERSS-FG.zip", {"D3D12.dll": b"MZ", "ERSS-FG.dll": b"MZ"})
+    service = _service(steam, fake_catalog, proc)
+    assert service.add_mod(APPID, str(archive))["mod"]["applied"] is False
+
+    result = service.install(APPID, {"build": "fsr-test"})
+    assert prepared == [("vcrun2022",)]
+    script = home / ".local/share/panel-de-control/bin/pdc-launch-exe"
+    assert result["wrappers"] == [str(script)] and result["env"] == {"PDC_LAUNCH_EXE": "start_protected_game.exe:eldenring.exe"}
+    assert '"${@/%"$from"/"$to"}"' in script.read_text() and script.stat().st_mode & 0o111
+    settings = (target / "ERSS2/ERSS-FG.toml").read_text()
+    assert 'ScalingMode="FSR3U"' in settings and "FrameGenMode=1" in settings and "IsHDR = true" in settings
+    assert service.overview()["installs"][APPID]["mod_fg"] == "ERSS-FG"
+
+    (target / "ERSS2/ERSS-FG.toml").write_text("rewritten by the mod while playing")
+    service.uninstall(APPID)
+    assert APPID not in service.overview()["installs"]
+    assert (target / "ERSS2/ERSS-FG.toml").read_bytes() == b'OverlayToggleKey = "Home"\n\n[Renderer]\nScalingMode = "None"\nIsHDR = true\n'
+    assert not (target / "ERSS-FG.dll").exists()
+    assert service_module._launch_result({}) == {}

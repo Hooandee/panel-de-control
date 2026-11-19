@@ -11,6 +11,8 @@ import time
 import zipfile
 from pathlib import Path, PurePosixPath
 
+from pdc_platform.host_env import clean_env, resolve_bin
+
 from . import pe
 
 ARCHIVES = (".zip", ".7z", ".rar")
@@ -47,11 +49,18 @@ def _dll_version(path: Path) -> str | None:
 
 
 def _archiver() -> str:
-    """bsdtar reads every format Nexus serves, but not every distribution ships it; 7z is the fallback."""
+    """bsdtar reads every format Nexus serves, but not every distribution ships it; 7z is the fallback. Decky's
+    backend can run with a minimal PATH, so the tools are looked up in the system folders too."""
     for tool in ("bsdtar", "7z"):
-        if shutil.which(tool):
+        if shutil.which(tool) or os.path.isabs(resolve_bin(tool)):
             return tool
     raise OSError("no archive tool")
+
+
+def run_archiver(arguments: list[str], timeout: int) -> subprocess.CompletedProcess:
+    """The archive tool by its full path, without Decky's bundled libraries."""
+    return subprocess.run([resolve_bin(arguments[0]), *arguments[1:]], capture_output=True, timeout=timeout,
+                          check=False, env=clean_env(), stdin=subprocess.DEVNULL)
 
 
 def _members(path: Path) -> list[str]:
@@ -59,7 +68,7 @@ def _members(path: Path) -> list[str]:
         with zipfile.ZipFile(path) as archive:
             return [info.filename for info in archive.infolist() if not info.is_dir()]
     if _archiver() == "7z":
-        result = subprocess.run(["7z", "l", "-slt", "-ba", str(path.resolve())], capture_output=True, timeout=60, check=False)
+        result = run_archiver(["7z", "l", "-slt", "-ba", str(path.resolve())], 60)
         if result.returncode != 0:
             raise OSError("unreadable archive")
         members = []
@@ -68,7 +77,7 @@ def _members(path: Path) -> list[str]:
             if fields.get("Path") and fields.get("Folder") != "+" and not fields.get("Attributes", "").startswith("D"):
                 members.append(fields["Path"])
         return members
-    result = subprocess.run(["bsdtar", "-tf", str(path.resolve())], capture_output=True, timeout=60, check=False)
+    result = run_archiver(["bsdtar", "-tf", str(path.resolve())], 60)
     if result.returncode != 0:
         raise OSError("unreadable archive")
     return [line for line in result.stdout.decode("utf-8", "replace").splitlines() if line and not line.endswith("/")]
@@ -123,7 +132,7 @@ def _extract(path: Path, members: dict[str, str], destination: Path) -> None:
             # bsdtar reads member names as patterns: escape so "Plugin [1.1.2]/x.dll" means itself.
             patterns = [re.sub(r"([][*?\\])", r"\\\1", member) for member in members.values()]
             command = ["bsdtar", "-xf", str(path.resolve()), "-C", str(staging), "--", *patterns]
-        result = subprocess.run(command, capture_output=True, timeout=300, check=False)
+        result = run_archiver(command, 300)
         if result.returncode != 0:
             raise UserFileError("unreadable")
         for wanted, member in members.items():
