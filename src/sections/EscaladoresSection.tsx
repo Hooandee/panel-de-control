@@ -6,7 +6,7 @@ import { getUpscalersCompat, getUpscalersOverview, type GameCompat } from "../ap
 import { FocusableCard } from "../components/FocusableCard";
 import { GameCover } from "../components/GameCover";
 import { useI18n } from "../i18n";
-import { listInstalledGames, type GameEntry } from "../launch/steamApi";
+import { readUpscalersSelection } from "../launch/steamApi";
 import { onUpscalersGameRequest, takePendingUpscalersGame } from "../upscalers/deepLink";
 import { theme } from "../theme";
 import { BulkPanel } from "../upscalers/BulkPanel";
@@ -15,9 +15,12 @@ import { IN_GAME_MODES, publishOverview, readCoverBadges, readInGameMode, setUps
 import { Fold, Label, SegmentRow } from "../upscalers/parts";
 import { badgeLabel, fallbackLine } from "../upscalers/model";
 import { MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
+import { publishSelectorContext } from "../upscalers/selectorContext";
 import { steamLibraryFolders } from "../upscalers/steamLibraries";
 import { showGame, takeHeldPage, type PageDraft } from "../upscalers/pageMemory";
 import type { UpscalerChoice, UpscalersOverview } from "../upscalers/types";
+
+const NO_COMPAT: Record<string, GameCompat> = {};
 
 const NavigationGroup = Focusable as FC<ComponentProps<typeof Focusable> & { childFocusDisabled?: boolean }>;
 
@@ -26,9 +29,8 @@ export const EscaladoresSection: FC = () => {
   const [overview, setOverview] = useState<UpscalersOverview | null>(null);
   const [failed, setFailed] = useState(false);
   const [held] = useState(takeHeldPage);
-  const [selected, setSelected] = useState<GameEntry | null>(() => held ? listInstalledGames().find((g) => g.liveAppid === held.appid) ?? null : null);
-  const [compat, setCompat] = useState<Record<string, GameCompat>>({});
-  const [compatRead, setCompatRead] = useState(false);
+  const [selectedAppid, setSelectedAppid] = useState<number | null>(() => held?.appid ?? null);
+  const [compatResult, setCompatResult] = useState<{ appids: string; compat: Record<string, GameCompat> } | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -38,7 +40,7 @@ export const EscaladoresSection: FC = () => {
 
   const refresh = useCallback(async () => {
     try {
-      const next = await getUpscalersOverview();
+      const next = await getUpscalersOverview(true);
       setOverview(next);
       publishOverview(next);
       setFailed(false);
@@ -54,26 +56,30 @@ export const EscaladoresSection: FC = () => {
   }, []);
   const closeGame = useCallback(() => {
     showGame(null);
-    setSelected(null);
+    setSelectedAppid(null);
   }, []);
 
+  const selection = useMemo(() => readUpscalersSelection(overview?.installed_steam?.appids ?? []), [overview]);
+  const games = useMemo(() => {
+    const installs = overview?.installs ?? {};
+    return [...selection.games]
+      .sort((a, b) => Number(String(b.liveAppid) in installs) - Number(String(a.liveAppid) in installs) || b.lastPlayed - a.lastPlayed);
+  }, [overview, selection]);
+  const selected = games.find((game) => game.liveAppid === selectedAppid);
+
   useEffect(() => {
+    if (!overview) return;
     const open = () => {
       const appid = takePendingUpscalersGame();
-      const game = appid === null ? null : listInstalledGames().find((g) => g.liveAppid === appid);
-      if (game) setSelected(game);
+      if (games.some((game) => game.liveAppid === appid)) setSelectedAppid(appid);
     };
     open();
     return onUpscalersGameRequest(open);
-  }, []);
+  }, [overview, games]);
 
-  const games = useMemo(() => {
-    const installs = overview?.installs ?? {};
-    return listInstalledGames()
-      .sort((a, b) => Number(String(b.liveAppid) in installs) - Number(String(a.liveAppid) in installs) || b.lastPlayed - a.lastPlayed);
-  }, [overview]);
-
-  const appids = games.map((g) => String(g.liveAppid)).join(",");
+  const appids = overview ? games.map((g) => String(g.liveAppid)).join(",") : "";
+  const compatRead = compatResult?.appids === appids;
+  const compat = (compatRead && compatResult?.compat) || NO_COMPAT;
   useEffect(() => {
     if (!appids) return;
     let alive = true;
@@ -82,14 +88,40 @@ export const EscaladoresSection: FC = () => {
     const batches = Array.from({ length: Math.ceil(ids.length / 400) }, (_, index) => ids.slice(index * 400, index * 400 + 400));
     const libraries = steamLibraryFolders();
     Promise.all(batches.map((batch) => getUpscalersCompat(batch, libraries).catch(() => ({}))))
-      .then((parts) => { if (alive) setCompat(Object.assign({}, ...parts)); })
-      .finally(() => { if (alive) setCompatRead(true); });
+      .then((parts) => { if (alive) setCompatResult({ appids, compat: Object.assign({}, ...parts) }); });
     return () => { alive = false; };
   }, [appids]);
   // Store shortcuts with no installed game behind them (Unifideck lists a whole library) have nothing to scale.
   // Shortcuts wait for that answer, so a library-only entry never shows up and then vanishes under the focus.
   const listed = useMemo(() => games.filter((g) => compatRead ? !compat[String(g.liveAppid)]?.unavailable : !g.isNonSteam),
     [games, compat, compatRead]);
+
+  useEffect(() => {
+    if (failed) {
+      publishSelectorContext(null);
+      return;
+    }
+    if (!overview || selected) return;
+    const listedIds = new Set(listed.map((game) => game.liveAppid));
+    const priority = (sample: (typeof selection.steam)[number]) =>
+      Number(!listedIds.has(sample.appid) || !sample.collection || sample.local !== "true");
+    const samples = [...selection.steam]
+      .sort((a, b) => priority(b) - priority(a))
+      .slice(0, 12)
+      .map((sample) => ({ ...sample,
+        row: listedIds.has(sample.appid) ? "visible" as const : "unavailable" as const }));
+    const shortcut_rows = listed.filter((game) => game.isNonSteam).length;
+    const { no_metadata, not_game } = selection;
+    publishSelectorContext({
+      complete: overview.installed_steam?.complete === true,
+      steam_rows: listed.length - shortcut_rows,
+      shortcut_rows,
+      filtered: (compatRead ? games.length - listed.length : 0) + no_metadata + not_game,
+      no_metadata,
+      not_game,
+      samples,
+    });
+  }, [overview, failed, selected, games, listed, compatRead, selection]);
 
   return (
     <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
@@ -150,7 +182,7 @@ export const EscaladoresSection: FC = () => {
             const scaler = install ? (fallback ? (fallback.observed ?? t("up.fallback.coverNone", { from: fallback.requested })) : badgeLabel(build, install.options?.model, install.build).full) : engines?.mako?.spatial ? makoName : null;
             const active = scaler === makoName && frameGen?.startsWith(makoName) ? frameGen : [scaler, frameGen].filter(Boolean).join(" - ");
             return (
-              <FocusableCard key={game.instanceKey} onActivate={() => setSelected(game)}>
+              <FocusableCard key={game.instanceKey} onActivate={() => setSelectedAppid(game.liveAppid)}>
                 <GameCover urls={game.coverUrls} name={game.name} width={30} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

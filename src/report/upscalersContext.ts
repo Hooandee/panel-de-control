@@ -2,6 +2,8 @@ import { listInstalledGames } from "../launch/steamApi";
 import { readRunningGame } from "../tdp/runningGame";
 import { readCoverBadges, readInGameMode, reportedAppids } from "../upscalers/overlays";
 
+import { readSelectorContext } from "../upscalers/selectorContext";
+
 const MAX_GAMES = 12;
 const DETAILS_MS = 1500;
 
@@ -68,7 +70,7 @@ export async function upscalersReportContext() {
       };
     }
   } catch {
-    return { collected_at, status: "unavailable", badges, running: null, games: {} };
+    return { collected_at, status: "unavailable", badges, ...readSelectorContext(), running: null, games: {} };
   }
   const games: Record<string, SteamGameFacts> = {};
   try {
@@ -79,5 +81,5 @@ export async function upscalersReportContext() {
       if (details[index]) games[appid] = steamFacts(details[index]!, typeof userId === "string" ? userId : null);
     });
   } catch { /* the report still goes out with what the backend reads itself */ }
-  return { collected_at, status: "available", badges, running, games };
+  return { collected_at, status: "available", badges, ...readSelectorContext(), running, games };
 }

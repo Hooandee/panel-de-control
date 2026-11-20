@@ -72,25 +72,83 @@ export function overviewToEntry(ov: Overview): GameEntry {
   };
 }
 
+function isListedInstall(overview: Overview): boolean {
+  return overview.app_type !== APP_TYPE_TOOL &&
+    (isNonSteam(overview) || overview.local_per_client_data?.installed === true);
+}
+
 /** Installed Steam games + non-Steam shortcuts (order applied by the caller). Never throws. */
 export function listInstalledGames(): GameEntry[] {
   try {
     const all: Overview[] = w.collectionStore?.allAppsCollection?.allApps ?? [];
     const out: GameEntry[] = [];
     for (const ov of all) {
-      if (!ov || typeof ov.appid !== "number") continue;
-      // Tools (Proton builds, runtimes, redistributables) aren't games you set
-      // launch options on — never list them.
-      if (ov.app_type === APP_TYPE_TOOL) continue;
-      // Non-Steam shortcuts are inherently local (they don't reliably populate the
-      // installed flag); Steam games are listed only when actually installed.
-      if (!isNonSteam(ov) && ov.local_per_client_data?.installed !== true) continue;
-      out.push(overviewToEntry(ov));
+      if (ov && typeof ov.appid === "number" && isListedInstall(ov)) out.push(overviewToEntry(ov));
     }
     return out;
   } catch {
     return [];
   }
+}
+
+function isPublicSteamGame(ov: Overview): boolean {
+  return Number.isSafeInteger(ov.appid) && ov.appid > 0 && !isNonSteam(ov) &&
+    (ov.app_type === 1 || ov.app_type === 8);
+}
+
+function lookupOverview(appid: number): Overview | undefined {
+  try {
+    const ov = w.appStore?.GetAppOverviewByAppID?.(appid);
+    return ov?.appid === appid ? ov : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export interface SelectorSteamMetadata {
+  appid: number;
+  collection: boolean;
+  local: "true" | "false" | "missing";
+}
+
+/** Complement Steam's installed flags with positive installer evidence for known games. */
+export function readUpscalersSelection(confirmedAppids: readonly number[]) {
+  const collection = new Map<number, Overview>();
+  try {
+    const all: Overview[] = w.collectionStore?.allAppsCollection?.allApps ?? [];
+    for (const ov of all) {
+      if (ov && typeof ov.appid === "number") collection.set(ov.appid, ov);
+    }
+  } catch {
+    // Manifest-backed games can still resolve through appStore.
+  }
+  const rows = new Map<number, Overview>();
+  for (const ov of collection.values()) {
+    if (isListedInstall(ov)) rows.set(ov.appid, ov);
+  }
+  let no_metadata = 0;
+  let not_game = 0;
+  for (const appid of new Set(confirmedAppids)) {
+    if (!Number.isSafeInteger(appid) || appid <= 0 || appid >= 2 ** 31) continue;
+    const inCollection = collection.get(appid);
+    const ov = inCollection?.app_type === undefined ? lookupOverview(appid) ?? inCollection : inCollection;
+    if (!ov || ov.app_type === undefined) {
+      no_metadata++;
+    } else if (!isPublicSteamGame(ov)) {
+      not_game++;
+    } else {
+      rows.set(appid, ov);
+    }
+  }
+  const steam: SelectorSteamMetadata[] = [];
+  for (const ov of rows.values()) {
+    if (!isPublicSteamGame(ov)) continue;
+    const inCollection = collection.get(ov.appid);
+    const installed = (inCollection ?? ov).local_per_client_data?.installed;
+    steam.push({ appid: ov.appid, collection: inCollection !== undefined,
+      local: typeof installed === "boolean" ? installed ? "true" : "false" : "missing" });
+  }
+  return { games: Array.from(rows.values(), overviewToEntry), steam, no_metadata, not_game };
 }
 
 /** Every game in the library, installed or not, plus non-Steam shortcuts; tools excluded. Ids and names only. Never throws. */
