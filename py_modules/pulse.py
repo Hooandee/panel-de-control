@@ -244,6 +244,9 @@ def system_sample(root: str = "/") -> dict:
         "gpu": _gpu(root),
         "screen": _screens(root),
         "proc": _processes(root),
+        "smt_active": {"0": False, "1": True}.get(
+            (_read(os.path.join(root, "sys/devices/system/cpu/smt/active")) or "").strip()
+        ),
         "performance": performance_sample(root),
     }
 

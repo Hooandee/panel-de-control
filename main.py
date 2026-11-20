@@ -98,7 +98,7 @@ from tdp.types import (
 from tdp_profiles import AUTO_RANGE_UNSET, ProfileStore
 from power_ownership import OwnershipConflict, PowerOwnershipStore, validate_steam_settings
 from power_presets import PowerPresetStore
-from lifecycle import LifecycleManager, read_on_ac
+from lifecycle import MIN_SUSPEND_S, LifecycleManager, read_on_ac, read_suspend_time
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
 from fans import control as fan_control
 from fans import legion_ec
@@ -960,6 +960,7 @@ class Plugin(AmbientRpc):
         self._charge_limit_failures = 0
         self._charge_limit_verify_delays = _CHARGE_LIMIT_VERIFY_DELAYS
         self._charge_limit_generation = 0
+        self._charge_limit_resume_current = None
         self._charge_limit_reconcile_task = None
         self._charge_limit_apply_tasks = set()
         self._charge_limit_candidate = None
@@ -8675,8 +8676,14 @@ class Plugin(AmbientRpc):
             and self._tdp_reconcile_memory.live_limit_signature is not None
         ):
             return
+        current = self._resume_work_current() if reason in ("lifecycle", "settle-retry") else None
         command = self._capture_tdp_command(reason, on_ac)
-        self._offload(lambda: self._execute_tdp_command(command))
+
+        def apply():
+            if current is None or current():
+                self._execute_tdp_command(command)
+
+        self._offload(apply)
 
     def _low_battery_hold_strategy(self):
         sidecar = getattr(self, "_low_battery_hold_backend", None)
@@ -9608,6 +9615,7 @@ class Plugin(AmbientRpc):
         charge_generation = self._cancel_charge_limit_reconcile(
             "reapply",
             preserve_candidate=not getattr(self, "_shutting_down", False),
+            resume_current=self._resume_work_current(),
         )
         charge_limit_candidate_pending = (
             getattr(self, "_charge_limit_candidate", None) is not None
@@ -9733,12 +9741,13 @@ class Plugin(AmbientRpc):
             )
 
     def _charge_limit_apply_current(self, generation) -> bool:
+        current = getattr(self, "_charge_limit_resume_current", None)
         return (
             self._module_enabled("chargeLimit")
             and not getattr(self, "_shutting_down", False)
             and (
                 generation is None
-                or generation == self._charge_limit_generation
+                or (generation == self._charge_limit_generation and (current is None or current()))
             )
         )
 
@@ -10067,6 +10076,8 @@ class Plugin(AmbientRpc):
             if not getattr(candidate, "supported", False):
                 return
             _, _, operation = self._charge_limit_operation_for(candidate)
+            if not self._charge_limit_apply_current(generation):
+                return
             applied = operation()
             if (
                 applied is False
@@ -10087,11 +10098,7 @@ class Plugin(AmbientRpc):
         )
 
     def _charge_limit_intent_current(self, generation) -> bool:
-        return (
-            generation == self._charge_limit_generation
-            and not getattr(self, "_shutting_down", False)
-            and self._module_enabled("chargeLimit")
-        )
+        return generation is not None and self._charge_limit_apply_current(generation)
 
     def _charge_limit_late_probe_eligible(self) -> bool:
         key = getattr(self._device, "key", "")
@@ -10101,11 +10108,12 @@ class Plugin(AmbientRpc):
         )
 
     def _cancel_charge_limit_reconcile(
-        self, reason, preserve_candidate=False
+        self, reason, preserve_candidate=False, resume_current=None
     ) -> int:
         self._charge_limit_generation = int(
             getattr(self, "_charge_limit_generation", 0)
         ) + 1
+        self._charge_limit_resume_current = resume_current
         if not preserve_candidate:
             self._charge_limit_candidate = None
         task = getattr(self, "_charge_limit_reconcile_task", None)
@@ -10161,7 +10169,9 @@ class Plugin(AmbientRpc):
         await self._offload_call(lambda: None)
 
     def _schedule_charge_limit_reconcile(self, trigger) -> None:
-        generation = self._cancel_charge_limit_reconcile("rescheduled")
+        generation = self._cancel_charge_limit_reconcile(
+            "rescheduled", resume_current=getattr(self, "_charge_limit_resume_current", None),
+        )
         active = (
             self._module_enabled("chargeLimit")
             and bool(self._settings.get("charge_limit_enabled", False))
@@ -10594,7 +10604,7 @@ class Plugin(AmbientRpc):
 
     def _run_cpu_apply(
         self, intent, generation, enabled=None,
-        preserve_frequency_ownership=False,
+        preserve_frequency_ownership=False, resume_current=None,
     ):
         if generation != getattr(self, "_cpu_generation", 0):
             return CpuCoordinatorResult(
@@ -10614,6 +10624,7 @@ class Plugin(AmbientRpc):
             enabled=bool(enabled),
             eco=bool(self._settings.get("eco_enabled", False)),
             preserve_frequency_ownership=preserve_frequency_ownership,
+            resume_current=resume_current,
         )
         self._guard_sleep_with_cores_off()
         return result
@@ -10708,15 +10719,17 @@ class Plugin(AmbientRpc):
         if getattr(self, "_cpu_shutdown", False):
             return
         generation = self._next_cpu_generation()
+        current = self._resume_work_current()
         intent = self._hold_cores_after_resume(self._cpu_intent())
         holder = {}
 
         def apply():
-            holder["result"] = self._run_cpu_apply(intent, generation)
+            if current():
+                holder["result"] = self._run_cpu_apply(intent, generation, resume_current=current)
 
         def record():
             result = holder.get("result")
-            if result is not None:
+            if result is not None and current():
                 self._record_cpu_result(result, "reapply")
 
         self._offload(apply, done=record)
@@ -12232,6 +12245,19 @@ class Plugin(AmbientRpc):
             self._record_gpu_clock_transition(result, "reapply")
 
     # ---- After a resume ----------------------------------------------------------
+    def _resume_work_current(self):
+        """A worker can run on wake before the lifecycle poll updates the token."""
+        token = getattr(self, "_resume_token", None)
+        baseline = read_suspend_time()
+
+        def current():
+            now = read_suspend_time()
+            return token == getattr(self, "_resume_token", None) and (
+                baseline is None or (now is not None and now - baseline < MIN_SUSPEND_S)
+            )
+
+        return current
+
     def _in_resume_window(self) -> bool:
         resumed = getattr(self, "_resume_at", None)
         return resumed is not None and time.monotonic() - resumed < _RESUME_WINDOW_S
