@@ -639,3 +639,59 @@ def test_charger_change_while_asleep_waits_for_the_resume_reapply():
     ac["v"] = True
     lm.check(now=7.0)            # an ordinary charger change once awake still applies at once
     assert full == [False, True]
+
+
+def test_charger_change_waits_for_delayed_wakeup_count_or_expiry():
+    for wake_confirmed in (True, False):
+        writes = []
+        clock = [0.0]
+        wakeup = [5]
+        ac = [False]
+        manager = LifecycleManager(
+            apply_cb=writes.append, reassert_cb=lambda _: None,
+            read_wakeup=lambda: wakeup[0], read_suspend=lambda: clock[0],
+            read_ac=lambda: ac[0], wakeup_delay=4.0,
+        )
+        manager.check(now=0)
+        clock[0] = 168.155
+        ac[0] = True
+        manager.check(now=2)
+        assert writes == []
+        clock[0] = None
+        manager.check(now=3)
+        assert writes == []
+        if wake_confirmed:
+            wakeup[0] += 1
+        manager.check(now=4)
+        assert writes == []
+        manager.check(now=8)
+        assert writes == ([True] if wake_confirmed else [])
+        manager.check(now=14)
+        assert writes == [True]
+        assert manager.diagnostics()["resume_count"] == int(wake_confirmed)
+
+
+def test_new_resume_replaces_retries_and_uses_latest_charger_state():
+    calls = []
+    wakeup, suspended, charger = [0], [0.0], [False]
+    manager = LifecycleManager(
+        apply_cb=lambda ac: calls.append(("full", ac)),
+        reassert_cb=lambda ac: calls.append(("tdp", ac)),
+        read_wakeup=lambda: wakeup[0], read_suspend=lambda: suspended[0],
+        read_ac=lambda: charger[0], wakeup_delay=4.0,
+    )
+    manager.check(now=0)
+    charger[0] = True
+    manager.check(now=2)
+    assert calls == [("full", True)]
+    calls.clear()
+    suspended[0] = 168.155
+    manager.check(now=4)
+    wakeup[0] += 1
+    manager.check(now=6)
+    charger[0] = False
+    manager.check(now=8)
+    assert calls == []
+    for now in (10, 12, 15, 19, 21):
+        manager.check(now=now)
+    assert calls == [("full", False)] + [("tdp", False)] * 3

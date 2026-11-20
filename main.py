@@ -10709,10 +10709,13 @@ class Plugin(AmbientRpc):
             return
         generation = self._next_cpu_generation()
         intent = self._hold_cores_after_resume(self._cpu_intent())
+        resume_token = getattr(self, "_resume_token", None)
         holder = {}
 
         def apply():
-            holder["result"] = self._run_cpu_apply(intent, generation)
+            # A queued automatic profile may predate the hold on the event loop.
+            if resume_token == getattr(self, "_resume_token", None):
+                holder["result"] = self._run_cpu_apply(intent, generation)
 
         def record():
             result = holder.get("result")

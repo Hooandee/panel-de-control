@@ -168,3 +168,29 @@ def test_manual_override_does_not_leak_into_another_game(tmp_path, monkeypatch):
         assert profiles.effective('42')['cores'] == 6
 
     asyncio.run(scenario())
+
+
+def test_queued_profile_cannot_park_threads_after_resume_detection(tmp_path, monkeypatch):
+    import threading
+
+    plugin, smt = _plugin(tmp_path, monkeypatch)
+    unblock = threading.Event()
+
+    async def scenario():
+        plugin._offload(unblock.wait)
+        try:
+            plugin._apply_cpu()
+            # The sleep service leaves all threads online before the worker resumes.
+            smt.set(True)
+            plugin._cores.set(8)
+            plugin._on_resume_detected(42.6)
+        finally:
+            unblock.set()
+        await plugin._offload_call(lambda: None)
+        assert smt.enabled() and plugin._cores.active() == 8
+        await _apply(plugin)
+        plugin._release_resume_hold(plugin._resume_token)
+        await plugin._offload_call(lambda: None)
+        assert not smt.enabled() and plugin._cores.active() == 4
+
+    asyncio.run(scenario())

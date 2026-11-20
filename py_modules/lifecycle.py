@@ -89,6 +89,7 @@ class LifecycleManager:
         self._event_cb = event_cb
         self._last_wakeup = None
         self._last_suspend = None
+        self._observed_suspend = None
         self._suspend_evidence_since = None
         self._suspend_clock_available = False
         self._last_ac = None
@@ -246,6 +247,11 @@ class LifecycleManager:
         if not suspend_ok:
             suspend_time = None
         self._suspend_clock_available = suspend_time is not None
+        if suspend_time is not None:
+            self._observed_suspend = suspend_time
+        elif self._suspend_evidence_since is not None:
+            # A missing clock sample cannot invalidate evidence inside the pairing window.
+            suspend_time = self._observed_suspend
         # initialize on first observation (no event)
         if self._last_wakeup is None:
             self._last_wakeup, self._last_ac = wc, ac
@@ -279,12 +285,17 @@ class LifecycleManager:
         elif suspend_evidence and not wakeup_changed:
             if self._suspend_evidence_since is None:
                 self._suspend_evidence_since = now
+        waiting_for_wakeup = suspend_evidence and not wakeup_changed
         resumed_now = wakeup_changed and suspend_evidence
         if resumed_now:
             self._resume_count += 1
             base = now + self._wakeup_delay
-            self._pending.append(base)
-            self._pending_light.extend(base + d for d in self._RESUME_SETTLE_RETRIES)
+            if self._ac_stable_at is not None and self._ac_stable_at <= base:
+                self._ac_stable_at = None
+            # A new resume supersedes retries scheduled before this sleep.
+            self._pending = [base]
+            self._pending_light = [base + d for d in self._RESUME_SETTLE_RETRIES]
+            self._pending_ac_light.clear()
             self._emit(
                 "resume_detected",
                 suspend_seconds=round(suspend_delta, 3),
@@ -315,12 +326,12 @@ class LifecycleManager:
             self._last_ac = ac
             self._ac_transition_count += 1
             flapping = self._record_ac_change(now, now if wall is None else wall)
-            if resumed_now:
+            if resumed_now or (self._pending and not flapping and not waiting_for_wakeup):
                 # Charger plugged or pulled while asleep: the delayed resume re-apply
                 # reads AC live, so nothing is written the instant the machine wakes.
                 self._emit("ac_changed", on_ac=bool(ac), deferred_to_resume=True)
-            elif flapping:
-                self._ac_stable_at = now + self._AC_STABLE_S
+            elif flapping or waiting_for_wakeup:
+                self._ac_stable_at = now + self._AC_STABLE_S if flapping else now
                 self._pending_ac_light = []
                 self._emit("ac_changed", on_ac=bool(ac), deferred=True)
             else:
@@ -331,7 +342,7 @@ class LifecycleManager:
                     on_ac=bool(ac),
                     tdp_settle_retries=len(self._AC_SETTLE_RETRIES),
                 )
-        elif self._ac_stable_at is not None and now >= self._ac_stable_at:
+        elif not waiting_for_wakeup and self._ac_stable_at is not None and now >= self._ac_stable_at:
             self._ac_stable_at = None
             self._ac_deferred_reapplies += 1
             self._safe(self._apply, ac, "ac-stable-reapply")
@@ -342,7 +353,10 @@ class LifecycleManager:
                 on_ac=bool(ac),
                 deferred_reapplies=self._ac_deferred_reapplies,
             )
-        # fire scheduled re-applies whose delay has elapsed (re-reading AC live)
+        # The suspend clock can advance a poll before wakeup_count. Keep pending
+        # writes until the pair is confirmed or its evidence window expires.
+        if waiting_for_wakeup:
+            return
         if self._ac_stable_at is None:
             self._pending = self._fire_due(
                 self._pending, self._apply, now, "resume-full-reapply", ac
