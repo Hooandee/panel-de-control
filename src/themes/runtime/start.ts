@@ -22,13 +22,13 @@ import type { ThemeActionsProvider } from "./themeActions";
 import type { ThemeOptionsWriter } from "./themeOptions";
 
 interface RuntimeManagerLike {
-  reconcile(snapshot: CssLoaderSnapshot): void;
+  reconcile(snapshot: CssLoaderSnapshot, runtimeInstallHold?: string): void;
   refreshDescriptors?(): Promise<void>;
   dispose(): void;
 }
 
 export interface SteamRuntimeBridge {
-  reconcile(snapshot: CssLoaderSnapshot): void;
+  reconcile(snapshot: CssLoaderSnapshot, runtimeInstallHold?: string): void;
   refreshDescriptors(): void;
   dispose(): void;
 }
@@ -105,7 +105,7 @@ export function createSteamRuntimeBridge(
   };
 
   return {
-    reconcile(snapshot) {
+    reconcile(snapshot, runtimeInstallHold) {
       let nextDocument: Document | null = null;
       try {
         nextDocument = getSteamDocument();
@@ -132,7 +132,8 @@ export function createSteamRuntimeBridge(
       const inventoryChanged = inventoryFingerprint !== null
         && inventoryFingerprint !== nextInventoryFingerprint;
       inventoryFingerprint = nextInventoryFingerprint;
-      manager?.reconcile(snapshot);
+      if (runtimeInstallHold === undefined) manager?.reconcile(snapshot);
+      else manager?.reconcile(snapshot, runtimeInstallHold);
       if (inventoryChanged) void manager?.refreshDescriptors?.();
     },
     refreshDescriptors() {
@@ -143,7 +144,7 @@ export function createSteamRuntimeBridge(
 }
 
 interface ThemesRuntimeClient {
-  getSnapshot(): { snapshot: CssLoaderSnapshot };
+  getSnapshot(): { snapshot: CssLoaderSnapshot; runtimeInstallHold?: string | null };
   subscribe(listener: () => void, refreshIntervalMs?: number): () => void;
   refresh(): Promise<void>;
 }
@@ -225,7 +226,10 @@ export function startThemesRuntime({
     }),
     () => { void client.refresh(); },
   );
-  const reconcile = () => bridge.reconcile(client.getSnapshot().snapshot);
+  const reconcile = () => {
+    const { snapshot, runtimeInstallHold } = client.getSnapshot();
+    bridge.reconcile(snapshot, runtimeInstallHold ?? undefined);
+  };
   const unsubscribe = client.subscribe(reconcile, 30_000);
   const stopPackageWatch = subscribePackageChanges?.(() => bridge.refreshDescriptors());
   let stopped = false;

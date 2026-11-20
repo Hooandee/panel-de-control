@@ -44,7 +44,7 @@ export const prepareRemoteThemeInstall = callable<[
 ], unknown>("prepare_remote_theme_install");
 export const checkThemeReleases = callable<[force: boolean], unknown>("check_theme_releases");
 export const checkThemeEarly = callable<[force: boolean], unknown>("check_theme_early");
-export const prepareEarlyThemeInstall = callable<[archivePath: string], unknown>("prepare_early_theme_install");
+export const prepareEarlyThemeInstall = callable<[archivePath: string, catalogId?: string], unknown>("prepare_early_theme_install");
 export const earlyThemeArchiveFolder = callable<[], string>("early_theme_archive_folder");
 export const listThemeExtensions = callable<[], unknown>("list_theme_extensions");
 export const getThemeHealth = callable<[], unknown>("get_theme_health");

@@ -70,7 +70,10 @@ tele que sigue sonando mientras juegas. Más abajo te lo cuento.
 
 ✨ **Temas.** Cambia la cara de Steam por completo con temas que se instalan y se actualizan desde
 el propio Panel. Los que están en acceso anticipado salen con la etiqueta Early y se instalan
-desde su zip.
+desde su zip. Si Steam se bloquea al actualizar un tema Early, cuando vuelva a responder abre
+la ficha y pulsa **Desactivar tema**. En **Instalar desde archivo**, elige el ZIP nuevo o el ZIP
+original de una versión anterior que siga en el catálogo. Activa el tema después de instalarlo.
+Si la ficha es inaccesible, también puedes desactivar el tema en **… → CSS Loader**.
 
 🎮 **Mandos.** Remapeo de botones que se entiende con Handheld Daemon e InputPlumber. Todavía en
 beta.

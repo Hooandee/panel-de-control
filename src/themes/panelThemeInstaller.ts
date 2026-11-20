@@ -9,7 +9,7 @@ export interface ThemeInstallResult {
 
 export interface ThemeInstallHost {
   prepareRemote(themeId: string, expectedVersion: string): Promise<unknown>;
-  prepareEarly(archivePath: string): Promise<unknown>;
+  prepareEarly(archivePath: string, catalogId: string): Promise<unknown>;
   commit(transaction: string): Promise<unknown>;
   discard(catalogId: string): Promise<unknown>;
   rollback(transaction: string): Promise<unknown>;
@@ -51,7 +51,7 @@ export class PanelThemeInstaller {
       if (typeof source.archivePath !== "string" || !source.archivePath.startsWith("/")) {
         throw new ThemeInstallError("unsupported_source", "Theme install source is not permitted");
       }
-      response = await this.host.prepareEarly(source.archivePath);
+      response = await this.host.prepareEarly(source.archivePath, catalogId);
     } else {
       if (
         source.kind !== "official-remote"
