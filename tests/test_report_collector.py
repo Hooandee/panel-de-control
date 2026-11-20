@@ -1701,3 +1701,11 @@ def test_bundle_keeps_only_observed_sleep_events_by_boot():
     ]
     assert bundle["kernel"]["sleep_userspace"] == []
     assert kernel_logs(lambda cmd: None)["sleep_userspace"] is None
+
+    def journalctl(cmd, **_kwargs):
+        stderr = "No journal boot entry found for the specified boot (-1)." if "-1" in cmd else ""
+        return types.SimpleNamespace(returncode=1, stdout="", stderr=stderr)
+
+    missing = kernel_logs(lambda cmd: report_collector.capture_command(cmd, run=journalctl))
+    assert missing["sleep_userspace"] == []
+    assert missing["previous_boot_sleep_userspace"] is None

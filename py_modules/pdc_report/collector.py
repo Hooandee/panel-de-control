@@ -620,10 +620,11 @@ _SLEEP_USERSPACE_ARGS = [
 
 
 def _sleep_userspace_events(text: str | None) -> list[dict] | None:
+    # journalctl --grep with JSON output exits 1 with no stderr for an empty match.
+    if text is not None and text.strip() in ("", "-- No entries --", "[exit 1]"):
+        return []
     if text is None or text.startswith("[exit "):
         return None
-    if text.strip() in ("", "-- No entries --"):
-        return []
     events = []
     for line in text.splitlines()[:_SLEEP_USERSPACE_LIMIT]:
         try:
