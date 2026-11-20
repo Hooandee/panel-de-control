@@ -615,7 +615,7 @@ _SLEEP_USERSPACE_ARGS = [
     "-u", "plugin_loader", "-u", "panel-de-control-sleep-cores.service",
     "-o", "json", "--output-fields=MESSAGE",
     "--grep", "^(?:" + "|".join(map(re.escape, _SLEEP_USERSPACE_MESSAGES)) + ")$",
-    "-n", str(_SLEEP_USERSPACE_LIMIT), "--no-pager",
+    "-n", str(_SLEEP_USERSPACE_LIMIT), "--reverse", "--no-pager",
 ]
 
 
@@ -636,7 +636,9 @@ def _sleep_userspace_events(text: str | None) -> list[dict] | None:
         except (ValueError, TypeError, KeyError):
             continue
         events.append({"t": int(stamp) / 1_000_000, **event})
-    return sorted(events, key=lambda row: row["t"]) or None
+    # --reverse selects the newest entries first even if the wall clock moved.
+    events.reverse()
+    return events or None
 
 
 # Split-lock traps from Steam's HTTP threads fill a whole tail on some kernels. journalctl

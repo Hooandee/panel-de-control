@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import threading
 import time
 
 import pulse
@@ -401,28 +402,27 @@ def test_after_a_resume_the_pulse_samples_faster_for_a_while(tmp_path):
     assert beat._next_wait() == 10.0
 
 
-def test_an_unsynced_mark_wakes_the_thread_which_writes_without_sampling(tmp_path):
-    samples = []
+def test_an_unsynced_mark_wakes_the_thread_which_writes_without_sampling(tmp_path, monkeypatch):
+    initial_write = threading.Event()
+    mark_write = threading.Event()
+    write_synced = pulse._write_synced
 
-    def sample():
-        samples.append(1)
-        return {"avail_mb": 900}
+    def write(path, payload):
+        write_synced(path, payload)
+        (mark_write if payload["marks"] else initial_write).set()
 
-    beat = Pulse(str(tmp_path), sample=sample, interval_s=30, current_boot=lambda: "boot-a")
+    monkeypatch.setattr(pulse, "_write_synced", write)
+    beat = _pulse(str(tmp_path), interval_s=30)
     beat.start()
-    deadline = time.time() + 2
-    while not samples and time.time() < deadline:
-        time.sleep(0.01)
-    beat.mark("resume", sync=False)
-    deadline = time.time() + 2
-    while time.time() < deadline:
-        saved = json.loads((tmp_path / "pulse.json").read_text() or "{}")
-        if saved.get("marks"):
-            break
-        time.sleep(0.01)
-    beat.stop()
-    assert saved["marks"][-1]["step"] == "resume"
-    assert len(samples) == 1
+    try:
+        assert initial_write.wait(2)
+        beat.mark("resume", sync=False)
+        assert mark_write.wait(2)
+        saved = json.loads((tmp_path / "pulse.json").read_text())
+        assert saved["marks"][-1]["step"] == "resume"
+        assert len(saved["samples"]) == 1
+    finally:
+        beat.stop()
 
 
 def test_pulse_reads_online_cpus_and_gpu_level(tmp_path):

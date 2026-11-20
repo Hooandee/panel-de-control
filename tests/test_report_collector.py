@@ -1686,17 +1686,19 @@ def test_bundle_keeps_only_observed_sleep_events_by_boot():
             return None
         if "-1" not in cmd:
             return "-- No entries --"
+        assert "--reverse" in cmd
+        stamps = [1, 3, 2, 4, 5]  # The wall clock moved back during reconnect.
         return "\n".join(json.dumps({
-            "__REALTIME_TIMESTAMP": str(1_000_000 * index), "MESSAGE": message,
+            "__REALTIME_TIMESTAMP": str(1_000_000 * stamp), "MESSAGE": message,
             "_HOSTNAME": "private-host", "_BOOT_ID": "private-boot",
-        }) for index, message in enumerate(messages, start=1))
+        }) for stamp, message in reversed(list(zip(stamps, messages))))
 
     bundle = build_bundle(app="pdc", categories=[], text="", environment={}, capabilities={},
                           state={}, stores={}, logs=[], kernel=kernel_logs(run))
     assert bundle["kernel"]["previous_boot_sleep_userspace"] == [
         {"t": 1, "event": "cef_disconnected"},
-        {"t": 2, "event": "steam_browser_connected"},
-        {"t": 3, "event": "decky_frontend_loading"},
+        {"t": 3, "event": "steam_browser_connected"},
+        {"t": 2, "event": "decky_frontend_loading"},
         {"t": 4, "event": "sleep_core_guard", "ok": False, "smt_active": None},
     ]
     assert bundle["kernel"]["sleep_userspace"] == []

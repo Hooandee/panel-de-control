@@ -42,7 +42,7 @@ def _plugin(tmp_path, monkeypatch, device_key="legion_go"):
         "frequency": {"manual": False, "min_khz": None, "max_khz": None},
     })
 
-    def run_cpu_apply(intent, generation, enabled=None, preserve_frequency_ownership=False):
+    def run_cpu_apply(intent, generation, enabled=None, **kwargs):
         intents.append(intent["cores"])
 
     monkeypatch.setattr(plugin, "_run_cpu_apply", run_cpu_apply)
