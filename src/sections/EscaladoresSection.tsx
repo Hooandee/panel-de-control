@@ -2,7 +2,7 @@ import { LuCircleCheck, LuClock, LuSlidersHorizontal, LuTriangleAlert } from "re
 import { Focusable } from "@decky/ui";
 import { useCallback, useEffect, useMemo, useState, type FC, type ComponentProps } from "react";
 
-import { getUpscalersCompat, getUpscalersOverview, type GameCompat } from "../api";
+import { getUpscalersCompat, getUpscalersOverview, getUpscalersSelectorInstalls, type GameCompat } from "../api";
 import { FocusableCard } from "../components/FocusableCard";
 import { GameCover } from "../components/GameCover";
 import { useI18n } from "../i18n";
@@ -27,6 +27,7 @@ const NavigationGroup = Focusable as FC<ComponentProps<typeof Focusable> & { chi
 export const EscaladoresSection: FC = () => {
   const { t } = useI18n();
   const [overview, setOverview] = useState<UpscalersOverview | null>(null);
+  const [inventory, setInventory] = useState<{ appids: number[]; complete: boolean } | null>(null);
   const [failed, setFailed] = useState(false);
   const [held] = useState(takeHeldPage);
   const [selectedAppid, setSelectedAppid] = useState<number | null>(() => held?.appid ?? null);
@@ -40,7 +41,7 @@ export const EscaladoresSection: FC = () => {
 
   const refresh = useCallback(async () => {
     try {
-      const next = await getUpscalersOverview(true);
+      const next = await getUpscalersOverview();
       setOverview(next);
       publishOverview(next);
       setFailed(false);
@@ -51,6 +52,13 @@ export const EscaladoresSection: FC = () => {
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
+    let alive = true;
+    getUpscalersSelectorInstalls(steamLibraryFolders())
+      .then((result) => { if (alive) setInventory(result); })
+      .catch(() => { if (alive) setInventory({ appids: [], complete: false }); });
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => {
     setUpscalersSectionOpen(true);
     return () => setUpscalersSectionOpen(false);
   }, []);
@@ -59,7 +67,7 @@ export const EscaladoresSection: FC = () => {
     setSelectedAppid(null);
   }, []);
 
-  const selection = useMemo(() => readUpscalersSelection(overview?.installed_steam?.appids ?? []), [overview]);
+  const selection = useMemo(() => readUpscalersSelection(inventory?.appids ?? []), [overview, inventory]);
   const games = useMemo(() => {
     const installs = overview?.installs ?? {};
     return [...selection.games]
@@ -70,16 +78,18 @@ export const EscaladoresSection: FC = () => {
   useEffect(() => {
     if (!overview) return;
     const open = () => {
-      const appid = takePendingUpscalersGame();
-      if (games.some((game) => game.liveAppid === appid)) setSelectedAppid(appid);
+      const hasGame = (appid: number) => games.some((game) => game.liveAppid === appid);
+      const appid = takePendingUpscalersGame((id) => inventory !== null || hasGame(id));
+      if (appid !== null && hasGame(appid)) setSelectedAppid(appid);
     };
     open();
     return onUpscalersGameRequest(open);
-  }, [overview, games]);
+  }, [overview, games, inventory]);
 
   const appids = overview ? games.map((g) => String(g.liveAppid)).join(",") : "";
   const compatRead = compatResult?.appids === appids;
-  const compat = (compatRead && compatResult?.compat) || NO_COMPAT;
+  const compat = compatResult?.compat ?? NO_COMPAT;
+  const compatIds = useMemo(() => new Set(compatResult?.appids.split(",")), [compatResult]);
   useEffect(() => {
     if (!appids) return;
     let alive = true;
@@ -93,8 +103,10 @@ export const EscaladoresSection: FC = () => {
   }, [appids]);
   // Store shortcuts with no installed game behind them (Unifideck lists a whole library) have nothing to scale.
   // Shortcuts wait for that answer, so a library-only entry never shows up and then vanishes under the focus.
-  const listed = useMemo(() => games.filter((g) => compatRead ? !compat[String(g.liveAppid)]?.unavailable : !g.isNonSteam),
-    [games, compat, compatRead]);
+  const listed = useMemo(() => games.filter((game) => {
+    const id = String(game.liveAppid);
+    return compatIds.has(id) ? !compat[id]?.unavailable : !game.isNonSteam;
+  }), [games, compat, compatIds]);
 
   useEffect(() => {
     if (failed) {
@@ -111,17 +123,18 @@ export const EscaladoresSection: FC = () => {
       .map((sample) => ({ ...sample,
         row: listedIds.has(sample.appid) ? "visible" as const : "unavailable" as const }));
     const shortcut_rows = listed.filter((game) => game.isNonSteam).length;
-    const { no_metadata, not_game } = selection;
+    const { no_metadata, not_game, unreadable } = selection;
     publishSelectorContext({
-      complete: overview.installed_steam?.complete === true,
+      complete: inventory?.complete === true,
       steam_rows: listed.length - shortcut_rows,
       shortcut_rows,
-      filtered: (compatRead ? games.length - listed.length : 0) + no_metadata + not_game,
+      filtered: (compatRead ? games.length - listed.length : 0) + no_metadata + not_game + unreadable,
       no_metadata,
       not_game,
+      unreadable,
       samples,
     });
-  }, [overview, failed, selected, games, listed, compatRead, selection]);
+  }, [overview, failed, selected, games, listed, compatRead, selection, inventory]);
 
   return (
     <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>

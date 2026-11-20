@@ -10,6 +10,7 @@ const games = vi.hoisted(() => [
 vi.mock("@decky/ui", () => ({ Focusable: ({ children }: any) => <div>{children}</div> }));
 vi.mock("../api", () => ({
   getUpscalersOverview: vi.fn(async () => ({ builds: [], installs: {}, job: null, preferred: "fsr" })),
+  getUpscalersSelectorInstalls: vi.fn(async () => ({ complete: true, appids: [] as number[] })),
   getUpscalersCompat: vi.fn(async () => ({})),
 }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
@@ -114,10 +115,7 @@ it.each(["absent", "false", "missing"] as const)("lists a confirmed Steam instal
     ] } });
   }
   vi.stubGlobal("appStore", { GetAppOverviewByAppID: () => steamOverview });
-  vi.mocked(api.getUpscalersOverview).mockResolvedValueOnce({
-    builds: [], installs: {}, job: null, preferred: "fsr",
-    installed_steam: { complete: true, appids: [requiemManifest.appid] },
-  } as never);
+  vi.mocked(api.getUpscalersSelectorInstalls).mockResolvedValueOnce({ complete: true, appids: [requiemManifest.appid] });
   await act(async () => { render(<EscaladoresSection />); });
   expect(screen.getByText(requiemManifest.name)).toBeTruthy();
   expect(readSelectorContext().selector?.samples[0]).toEqual({
@@ -136,10 +134,7 @@ it("keeps an installed native shortcut alongside a confirmed Steam install", asy
   vi.stubGlobal("appStore", { GetAppOverviewByAppID: () => ({
     appid: requiemManifest.appid, display_name: requiemManifest.name, app_type: 8,
   }) });
-  vi.mocked(api.getUpscalersOverview).mockResolvedValueOnce({
-    builds: [], installs: {}, job: null, preferred: "fsr",
-    installed_steam: { complete: true, appids: [requiemManifest.appid] },
-  } as never);
+  vi.mocked(api.getUpscalersSelectorInstalls).mockResolvedValueOnce({ complete: true, appids: [requiemManifest.appid] });
   vi.mocked(api.getUpscalersCompat).mockResolvedValueOnce({
     "3000000123": { inputs: [], native: true, unavailable: null },
   } as never);
@@ -156,10 +151,7 @@ it("counts rejected manifest candidates without sampling tools or mismatched Ste
   vi.stubGlobal("appStore", { GetAppOverviewByAppID: (appid: number) =>
     appid === 50 ? { appid, app_type: 4, display_name: "Tool" }
       : { appid: 99, app_type: 1, display_name: "Other game" } });
-  vi.mocked(api.getUpscalersOverview).mockResolvedValueOnce({
-    builds: [], installs: {}, job: null, preferred: "fsr",
-    installed_steam: { complete: false, appids: [50, 51] },
-  } as never);
+  vi.mocked(api.getUpscalersSelectorInstalls).mockResolvedValueOnce({ complete: false, appids: [50, 51] });
   await act(async () => { render(<EscaladoresSection />); });
   expect(screen.queryByText("Tool")).toBeNull();
   expect(screen.queryByText("Other game")).toBeNull();
@@ -174,4 +166,30 @@ it("keeps an overview failure distinct from an observed empty selector", async (
   await act(async () => { render(<EscaladoresSection />); });
   expect(screen.getByText("load.error")).toBeTruthy();
   expect(readSelectorContext()).toEqual({ selector: null, selector_status: "failed" });
+});
+
+it("shows the normal list while the manifest RPC waits and opens its pending game on arrival", async () => {
+  const api = await import("../api");
+  let finish: (result: { complete: boolean; appids: number[] }) => void = () => undefined;
+  vi.mocked(api.getUpscalersSelectorInstalls).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+  vi.stubGlobal("appStore", { GetAppOverviewByAppID: () => ({
+    appid: requiemManifest.appid, display_name: requiemManifest.name, app_type: 1,
+  }) });
+  await act(async () => { openUpscalersFor(requiemManifest.appid); render(<EscaladoresSection />); });
+  expect(screen.getByText("A")).toBeTruthy();
+  expect(screen.queryByTestId("page")).toBeNull();
+  await act(async () => { finish({ complete: true, appids: [requiemManifest.appid] }); });
+  expect(screen.getByTestId("page").textContent).toBe("3764200:3764200");
+});
+
+it("skips unreadable Steam entries without hiding healthy rows", async () => {
+  vi.stubGlobal("collectionStore", { allAppsCollection: { allApps: [
+    { get appid() { throw Error("unreadable id"); } },
+    { appid: 10, app_type: 1, get local_per_client_data() { throw Error("unreadable flag"); } },
+    { appid: 11, app_type: 1, local_per_client_data: { installed: true }, get display_name() { throw Error("unreadable name"); } },
+    { appid: 12, app_type: 1, local_per_client_data: { installed: true }, display_name: "Healthy game" },
+  ] } });
+  await act(async () => { render(<EscaladoresSection />); });
+  expect(screen.getByText("Healthy game")).toBeTruthy();
+  expect(readSelectorContext().selector).toMatchObject({ unreadable: 3, steam_rows: 1 });
 });

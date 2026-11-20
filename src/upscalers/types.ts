@@ -42,7 +42,6 @@ export interface UpscalerJob {
 }
 
 export interface UpscalersOverview {
-  installed_steam?: { appids: number[]; complete: boolean };
   gpu: string;
   device?: string;
   display: [number, number] | null;

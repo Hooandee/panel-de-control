@@ -97,12 +97,8 @@ function isPublicSteamGame(ov: Overview): boolean {
 }
 
 function lookupOverview(appid: number): Overview | undefined {
-  try {
-    const ov = w.appStore?.GetAppOverviewByAppID?.(appid);
-    return ov?.appid === appid ? ov : undefined;
-  } catch {
-    return undefined;
-  }
+  const ov = w.appStore?.GetAppOverviewByAppID?.(appid);
+  return ov?.appid === appid ? ov : undefined;
 }
 
 export interface SelectorSteamMetadata {
@@ -114,41 +110,61 @@ export interface SelectorSteamMetadata {
 /** Complement Steam's installed flags with positive installer evidence for known games. */
 export function readUpscalersSelection(confirmedAppids: readonly number[]) {
   const collection = new Map<number, Overview>();
+  const unreadableIds = new Set<number>();
+  let unreadableCollection = 0;
   try {
     const all: Overview[] = w.collectionStore?.allAppsCollection?.allApps ?? [];
     for (const ov of all) {
-      if (ov && typeof ov.appid === "number") collection.set(ov.appid, ov);
+      try {
+        const appid = ov?.appid;
+        if (typeof appid === "number") collection.set(appid, ov);
+      } catch {
+        unreadableCollection++;
+      }
     }
   } catch {
-    // Manifest-backed games can still resolve through appStore.
+    unreadableCollection++;
   }
-  const rows = new Map<number, Overview>();
-  for (const ov of collection.values()) {
-    if (isListedInstall(ov)) rows.set(ov.appid, ov);
+  const rows = new Map<number, { game: GameEntry; steam?: SelectorSteamMetadata }>();
+  const addRow = (appid: number, ov: Overview, inCollection?: Overview) => {
+    const game = overviewToEntry(ov);
+    let steam: SelectorSteamMetadata | undefined;
+    if (isPublicSteamGame(ov)) {
+      const installed = (inCollection ?? ov).local_per_client_data?.installed;
+      steam = { appid, collection: inCollection !== undefined,
+        local: typeof installed === "boolean" ? installed ? "true" : "false" : "missing" };
+    }
+    rows.set(appid, { game, steam });
+  };
+  for (const [appid, ov] of collection) {
+    try {
+      if (isListedInstall(ov)) addRow(appid, ov, ov);
+    } catch {
+      unreadableIds.add(appid);
+    }
   }
   let no_metadata = 0;
   let not_game = 0;
   for (const appid of new Set(confirmedAppids)) {
-    if (!Number.isSafeInteger(appid) || appid <= 0 || appid >= 2 ** 31) continue;
-    const inCollection = collection.get(appid);
-    const ov = inCollection?.app_type === undefined ? lookupOverview(appid) ?? inCollection : inCollection;
-    if (!ov || ov.app_type === undefined) {
-      no_metadata++;
-    } else if (!isPublicSteamGame(ov)) {
-      not_game++;
-    } else {
-      rows.set(appid, ov);
+    if (!Number.isSafeInteger(appid) || appid <= 0 || appid >= 2 ** 31 || rows.get(appid)?.steam) continue;
+    try {
+      const inCollection = collection.get(appid);
+      const ov = inCollection?.app_type === undefined ? lookupOverview(appid) ?? inCollection : inCollection;
+      if (!ov || ov.app_type === undefined) {
+        no_metadata++;
+      } else if (!isPublicSteamGame(ov)) {
+        not_game++;
+      } else {
+        addRow(appid, ov, inCollection);
+      }
+    } catch {
+      unreadableIds.add(appid);
     }
   }
-  const steam: SelectorSteamMetadata[] = [];
-  for (const ov of rows.values()) {
-    if (!isPublicSteamGame(ov)) continue;
-    const inCollection = collection.get(ov.appid);
-    const installed = (inCollection ?? ov).local_per_client_data?.installed;
-    steam.push({ appid: ov.appid, collection: inCollection !== undefined,
-      local: typeof installed === "boolean" ? installed ? "true" : "false" : "missing" });
-  }
-  return { games: Array.from(rows.values(), overviewToEntry), steam, no_metadata, not_game };
+  const entries = [...rows.values()];
+  const steam = entries.flatMap((row) => row.steam ? [row.steam] : []);
+  const unreadable = unreadableCollection + unreadableIds.size;
+  return { games: entries.map((row) => row.game), steam, no_metadata, not_game, unreadable };
 }
 
 /** Every game in the library, installed or not, plus non-Steam shortcuts; tools excluded. Ids and names only. Never throws. */

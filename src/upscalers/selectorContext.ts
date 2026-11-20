@@ -10,6 +10,7 @@ interface SelectorSnapshot {
   filtered: number;
   no_metadata: number;
   not_game: number;
+  unreadable: number;
   samples: SelectorSample[];
 }
 
@@ -27,6 +28,6 @@ export function publishSelectorContext(next: SelectorSnapshot | null) {
     recordUiEvent("upscalers", "selector", { status }, false);
     return;
   }
-  const { complete, steam_rows, shortcut_rows, filtered, no_metadata, not_game } = next;
-  recordUiEvent("upscalers", "selector", { status, complete, steam_rows, shortcut_rows, filtered, no_metadata, not_game });
+  const { complete, steam_rows, shortcut_rows, filtered, no_metadata, not_game, unreadable } = next;
+  recordUiEvent("upscalers", "selector", { status, complete, steam_rows, shortcut_rows, filtered, no_metadata, not_game, unreadable });
 }
