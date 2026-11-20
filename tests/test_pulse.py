@@ -436,3 +436,19 @@ def test_pulse_reads_online_cpus_and_gpu_level(tmp_path):
     sample = system_sample(str(tmp_path))
     assert sample["performance"]["cpus_online"] == "0-3,6"
     assert sample["gpu"]["level"] == "manual"
+
+
+def test_smt_readback_survives_forced_reboot_in_bundle(tmp_path):
+    cpu = tmp_path / "sys/devices/system/cpu"
+    (cpu / "smt").mkdir(parents=True)
+    pulse_dir = str(tmp_path / "pulse")
+    beat = Pulse(pulse_dir, sample=lambda: system_sample(str(tmp_path)), current_boot=lambda: "first")
+    for active in ("0", "1", "unknown"):
+        (cpu / "smt/active").write_text(active)
+        beat.tick()
+    _pulse(pulse_dir, boot="next").set_aside_previous()
+    bundle = report_collector.build_bundle(
+        app="pdc", categories=[], text="", environment={}, capabilities={}, state={}, stores={}, logs=[],
+        journal={"pulse": report(pulse_dir)})
+    samples = bundle["journal"]["pulse"]["unclean"][0]["samples"]
+    assert [sample["smt_active"] for sample in samples] == [False, True, None]

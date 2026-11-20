@@ -1,3 +1,4 @@
+import json
 import os
 import types
 
@@ -1669,3 +1670,34 @@ def test_controller_lifecycle_no_entries_and_command_failure_remain_distinct():
     out = kernel_logs(broken, extra=extra)
     assert out["controller_lifecycle_capture"]["status"] == "unavailable"
     assert out["controller_lifecycle"] is None
+
+
+def test_bundle_keeps_only_observed_sleep_events_by_boot():
+    messages = [
+        "[main][INFO]: CEF has disconnected...",
+        "[CSS_Loader] Connected to Steam Browser",
+        "[main][INFO]: Loading Decky frontend!",
+        "pdc-sleep-cores rc=1 smt_active=unknown",
+        "unrelated /home/private-user",
+    ]
+
+    def run(cmd):
+        if "--output-fields=MESSAGE" not in cmd:
+            return None
+        if "-1" not in cmd:
+            return "-- No entries --"
+        return "\n".join(json.dumps({
+            "__REALTIME_TIMESTAMP": str(1_000_000 * index), "MESSAGE": message,
+            "_HOSTNAME": "private-host", "_BOOT_ID": "private-boot",
+        }) for index, message in enumerate(messages, start=1))
+
+    bundle = build_bundle(app="pdc", categories=[], text="", environment={}, capabilities={},
+                          state={}, stores={}, logs=[], kernel=kernel_logs(run))
+    assert bundle["kernel"]["previous_boot_sleep_userspace"] == [
+        {"t": 1, "event": "cef_disconnected"},
+        {"t": 2, "event": "steam_browser_connected"},
+        {"t": 3, "event": "decky_frontend_loading"},
+        {"t": 4, "event": "sleep_core_guard", "ok": False, "smt_active": None},
+    ]
+    assert bundle["kernel"]["sleep_userspace"] == []
+    assert kernel_logs(lambda cmd: None)["sleep_userspace"] is None

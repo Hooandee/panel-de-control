@@ -599,6 +599,45 @@ _LOADER_LIFECYCLE_GREP = (
     "Loaded Panel|Failed to (start|unload)|Loop exited|socket_guard"
 )
 
+_SLEEP_USERSPACE_MESSAGES = {
+    "[main][INFO]: CEF has disconnected...": {"event": "cef_disconnected"},
+    "[CSS_Loader] Connected to Steam Browser": {"event": "steam_browser_connected"},
+    "[main][INFO]: Loading Decky frontend!": {"event": "decky_frontend_loading"},
+}
+for _rc in (0, 1):
+    for _state, _active in (("0", False), ("1", True), ("unknown", None)):
+        _SLEEP_USERSPACE_MESSAGES[f"pdc-sleep-cores rc={_rc} smt_active={_state}"] = {
+            "event": "sleep_core_guard", "ok": _rc == 0, "smt_active": _active,
+        }
+
+_SLEEP_USERSPACE_LIMIT = 24
+_SLEEP_USERSPACE_ARGS = [
+    "-u", "plugin_loader", "-u", "panel-de-control-sleep-cores.service",
+    "-o", "json", "--output-fields=MESSAGE",
+    "--grep", "^(?:" + "|".join(map(re.escape, _SLEEP_USERSPACE_MESSAGES)) + ")$",
+    "-n", str(_SLEEP_USERSPACE_LIMIT), "--no-pager",
+]
+
+
+def _sleep_userspace_events(text: str | None) -> list[dict] | None:
+    if text is None or text.startswith("[exit "):
+        return None
+    if text.strip() in ("", "-- No entries --"):
+        return []
+    events = []
+    for line in text.splitlines()[:_SLEEP_USERSPACE_LIMIT]:
+        try:
+            row = json.loads(line)
+            event = _SLEEP_USERSPACE_MESSAGES[row["MESSAGE"]]
+            stamp = row["__REALTIME_TIMESTAMP"]
+            if not isinstance(stamp, str) or not re.fullmatch(r"[0-9]{1,18}", stamp):
+                continue
+        except (ValueError, TypeError, KeyError):
+            continue
+        events.append({"t": int(stamp) / 1_000_000, **event})
+    return sorted(events, key=lambda row: row["t"]) or None
+
+
 # Split-lock traps from Steam's HTTP threads fill a whole tail on some kernels. journalctl
 # built without PCRE2 rejects --grep: those commands run again unfiltered.
 _KERNEL_NOISE_FREE = "^(?!.*(split lock detection|handle_bus_lock))"
@@ -672,6 +711,8 @@ _KERNEL_CMDS = {
     "previous_boot_earlyoom": [
         "/usr/bin/journalctl", "-b", "-1", "-t", "earlyoom", "-n", "30", "--no-pager",
     ],
+    "sleep_userspace": ["/usr/bin/journalctl", "-b", *_SLEEP_USERSPACE_ARGS],
+    "previous_boot_sleep_userspace": ["/usr/bin/journalctl", "-b", "-1", *_SLEEP_USERSPACE_ARGS],
     "sleep_inhibitors": ["/usr/bin/systemd-inhibit", "--list", "--no-pager"],
     "pm_wakeup_irq": ["/usr/bin/cat", "/sys/power/pm_wakeup_irq"],
 }
@@ -751,7 +792,9 @@ def kernel_logs(
                 text = run(cmd[:at - 1] + cmd[at + 1:])
         except Exception:  # noqa: BLE001
             text = None
-        if key == "controller_lifecycle":
+        if key in ("sleep_userspace", "previous_boot_sleep_userspace"):
+            out[key] = _sleep_userspace_events(text)
+        elif key == "controller_lifecycle":
             redacted = redact_text(text, home=home, hostname=hostname) if text else ""
             encoded = redacted.encode("utf-8")
             byte_limit = min(cap, _IP_LIFECYCLE_BYTES)
