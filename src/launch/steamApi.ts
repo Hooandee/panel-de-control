@@ -104,7 +104,8 @@ function lookupOverview(appid: number): Overview | undefined {
 export interface SelectorSteamMetadata {
   appid: number;
   collection: boolean;
-  local: "true" | "false" | "missing";
+  manifest: boolean;
+  local: "true" | "false" | "missing" | "unreadable";
 }
 
 /** Complement Steam's installed flags with positive installer evidence for known games. */
@@ -125,14 +126,21 @@ export function readUpscalersSelection(confirmedAppids: readonly number[]) {
   } catch {
     unreadableCollection++;
   }
+  const manifests = new Set(confirmedAppids);
   const rows = new Map<number, { game: GameEntry; steam?: SelectorSteamMetadata }>();
   const addRow = (appid: number, ov: Overview, inCollection?: Overview) => {
     const game = overviewToEntry(ov);
     let steam: SelectorSteamMetadata | undefined;
     if (isPublicSteamGame(ov)) {
-      const installed = (inCollection ?? ov).local_per_client_data?.installed;
-      steam = { appid, collection: inCollection !== undefined,
-        local: typeof installed === "boolean" ? installed ? "true" : "false" : "missing" };
+      let local: SelectorSteamMetadata["local"] = "missing";
+      try {
+        const installed = (inCollection ?? ov).local_per_client_data?.installed;
+        if (typeof installed === "boolean") local = installed ? "true" : "false";
+      } catch {
+        unreadableIds.add(appid);
+        local = "unreadable";
+      }
+      steam = { appid, collection: inCollection !== undefined, manifest: manifests.has(appid), local };
     }
     rows.set(appid, { game, steam });
   };
@@ -145,7 +153,7 @@ export function readUpscalersSelection(confirmedAppids: readonly number[]) {
   }
   let no_metadata = 0;
   let not_game = 0;
-  for (const appid of new Set(confirmedAppids)) {
+  for (const appid of manifests) {
     if (!Number.isSafeInteger(appid) || appid <= 0 || appid >= 2 ** 31 || rows.get(appid)?.steam) continue;
     try {
       const inCollection = collection.get(appid);
@@ -153,6 +161,7 @@ export function readUpscalersSelection(confirmedAppids: readonly number[]) {
       if (!ov || ov.app_type === undefined) {
         no_metadata++;
       } else if (!isPublicSteamGame(ov)) {
+        if (ov.app_type === APP_TYPE_TOOL) rows.delete(appid);
         not_game++;
       } else {
         addRow(appid, ov, inCollection);

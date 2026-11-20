@@ -63,6 +63,9 @@ metrics show up, where and in what colors.
 🚀 **Launch options.** Each game's launch options turned into toggles with a plain explanation.
 FSR4, HDR, scaling and more, but only what your Proton version supports.
 
+🎮 **Upscalers.** Pick an installed game to configure upscaling and frame generation. The list
+also recognizes games installed in other Steam library folders.
+
 🧹 **Cleanup.** See how much space your games' Shader Cache and prefixes take up and get it back in
 a moment.
 

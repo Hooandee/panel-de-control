@@ -64,11 +64,34 @@ def report_actions(actions) -> list[dict]:
     return result
 
 
+def _selector_snapshot(value: dict) -> dict:
+    result = {key: value[key] for key in ("steam_rows", "shortcut_rows", "filtered", "no_metadata", "not_game", "unreadable", "recovered")
+              if type(value.get(key)) is int and 0 <= value[key] <= 1_000_000}
+    if type(value.get("observed_at")) is int and 0 <= value["observed_at"] <= 4_294_967_295:
+        result["observed_at"] = value["observed_at"]
+    if "complete" in value and (value["complete"] is None or type(value["complete"]) is bool):
+        result["complete"] = value["complete"]
+    if value.get("compatibility") in ("pending", "ready", "partial"):
+        result["compatibility"] = value["compatibility"]
+    result["samples"] = []
+    samples = value.get("samples")
+    for sample in samples[:12] if isinstance(samples, list) else ():
+        if (isinstance(sample, dict) and type(sample.get("appid")) is int and 0 < sample["appid"] < 2**31
+                and type(sample.get("collection")) is bool and type(sample.get("manifest")) is bool
+                and sample.get("local") in ("true", "false", "missing", "unreadable") and sample.get("row") in ("visible", "unavailable")):
+            result["samples"].append({key: sample[key] for key in ("appid", "collection", "manifest", "local", "row")})
+    return result
+
+
 def frontend_context(value) -> dict:
     value = value if isinstance(value, dict) else {}
     running = value.get("running")
     result = {key: value[key][:40] for key in ("collected_at", "status") if isinstance(value.get(key), str)}
     result["status"] = result.get("status") if result.get("status") in ("available", "unavailable") else "unavailable"
+    if value.get("selector_status") in ("unopened", "failed", "observed"):
+        result["selector_status"] = value["selector_status"]
+        if value["selector_status"] == "observed" and isinstance(value.get("selector"), dict):
+            result["selector"] = _selector_snapshot(value["selector"])
     badges = value.get("badges") if isinstance(value.get("badges"), dict) else {}
     result["badges"] = {
         "covers": badges.get("covers") if isinstance(badges.get("covers"), bool) else None,

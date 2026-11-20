@@ -18,7 +18,7 @@ vi.mock("../components/FocusableCard", () => ({ FocusableCard: ({ children }: an
 vi.mock("../components/GameCover", () => ({ GameCover: () => null }));
 vi.mock("../upscalers/BulkPanel", () => ({ BulkPanel: () => null }));
 vi.mock("../upscalers/overlays", () => ({
-  IN_GAME_MODES: [], publishOverview: vi.fn(), readInGameMode: () => "start", setUpscalersSectionOpen: vi.fn(), writeInGameMode: vi.fn(), readCoverBadges: () => true, writeCoverBadges: vi.fn(),
+  IN_GAME_MODES: [], reportedAppids: () => [], publishOverview: vi.fn(), readInGameMode: () => "start", setUpscalersSectionOpen: vi.fn(), writeInGameMode: vi.fn(), readCoverBadges: () => true, writeCoverBadges: vi.fn(),
 }));
 vi.mock("../upscalers/pageMemory", () => ({ showGame: vi.fn(), takeHeldPage: () => null }));
 vi.mock("../upscalers/GameView", () => ({
@@ -29,6 +29,7 @@ vi.mock("../upscalers/GameView", () => ({
 }));
 
 import { openUpscalersFor } from "../upscalers/deepLink";
+import { upscalersReportContext } from "../report/upscalersContext";
 import { readSelectorContext } from "../upscalers/selectorContext";
 import { EscaladoresSection } from "./EscaladoresSection";
 
@@ -118,8 +119,9 @@ it.each(["absent", "false", "missing"] as const)("lists a confirmed Steam instal
   vi.mocked(api.getUpscalersSelectorInstalls).mockResolvedValueOnce({ complete: true, appids: [requiemManifest.appid] });
   await act(async () => { render(<EscaladoresSection />); });
   expect(screen.getByText(requiemManifest.name)).toBeTruthy();
-  expect(readSelectorContext().selector?.samples[0]).toEqual({
-    appid: requiemManifest.appid, collection: collection !== "absent",
+  const report = await upscalersReportContext();
+  expect(report.selector?.samples[0]).toEqual({
+    appid: requiemManifest.appid, collection: collection !== "absent", manifest: true,
     local: collection === "false" ? "false" : "missing", row: "visible",
   });
   await act(async () => { openUpscalersFor(requiemManifest.appid); });
@@ -156,7 +158,7 @@ it("counts rejected manifest candidates without sampling tools or mismatched Ste
   expect(screen.queryByText("Tool")).toBeNull();
   expect(screen.queryByText("Other game")).toBeNull();
   expect(readSelectorContext().selector).toMatchObject({
-    complete: false, filtered: 2, no_metadata: 1, not_game: 1, samples: [{ appid: 1 }, { appid: 2 }],
+    complete: false, filtered: 0, no_metadata: 1, not_game: 1, samples: [{ appid: 1 }, { appid: 2 }],
   });
 });
 

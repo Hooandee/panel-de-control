@@ -4,7 +4,10 @@ import { recordUiEvent } from "../system/uiEvents";
 type SelectorSample = SelectorSteamMetadata & { row: "visible" | "unavailable" };
 
 interface SelectorSnapshot {
-  complete: boolean;
+  observed_at: number;
+  complete: boolean | null;
+  compatibility: "ready" | "pending" | "partial";
+  recovered: number;
   steam_rows: number;
   shortcut_rows: number;
   filtered: number;
@@ -28,6 +31,6 @@ export function publishSelectorContext(next: SelectorSnapshot | null) {
     recordUiEvent("upscalers", "selector", { status }, false);
     return;
   }
-  const { complete, steam_rows, shortcut_rows, filtered, no_metadata, not_game, unreadable } = next;
-  recordUiEvent("upscalers", "selector", { status, complete, steam_rows, shortcut_rows, filtered, no_metadata, not_game, unreadable });
+  const { samples: _samples, ...counts } = next;
+  recordUiEvent("upscalers", "selector", { status, ...counts });
 }

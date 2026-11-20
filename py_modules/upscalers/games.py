@@ -121,10 +121,9 @@ def set_steam_libraries(paths) -> None:
         _steam_reported.update(dict.fromkeys(folders))
 
 
-def _lenient_index(index: Path) -> list[str]:
+def _lenient_index(raw: bytes) -> list[str]:
     """Paths from an index the strict reader refused (repeated keys, stray bytes): Steam itself still loads it."""
-    with open(index, "rb") as source:
-        text = source.read(vdf.MAX_BYTES).decode("utf-8", errors="replace")
+    text = raw[:vdf.MAX_BYTES].decode("utf-8", errors="replace")
     found = re.findall(r'"path"\s+"((?:\\.|[^"\\])*)"', text, re.I)
     found += re.findall(r'"\d+"\s+"(/(?:\\.|[^"\\])*)"', text)
     return [re.sub(r'\\([\\"])', r"\1", value) for value in found]
@@ -175,7 +174,7 @@ def _discover(home: str) -> list[Path]:
         return list(found)
 
 
-def _libraries(home: str, counts: Counter) -> dict[Path, str]:
+def _libraries(home: str, counts: Counter, live_folders: tuple[str, ...] | None = None) -> dict[Path, str]:
     """Each library Steam vouches for, with where it came from: the Steam folder itself, its index (read leniently
     when the strict reader refuses it) and the folders Steam lists live. One entry per real folder."""
     sources: dict[Path, str] = {}
@@ -195,7 +194,10 @@ def _libraries(home: str, counts: Counter) -> dict[Path, str]:
         add(root, "root")
         index = root / "steamapps/libraryfolders.vdf"
         try:
-            folders = vdf.read_text(index).get("libraryfolders")
+            raw = _regular_bytes(index, vdf.MAX_BYTES)
+            if len(raw) > vdf.MAX_BYTES:
+                raise ValueError("oversized_vdf")
+            folders = vdf.parse_text(raw).get("libraryfolders")
             if not isinstance(folders, dict):
                 raise ValueError("malformed_vdf")
         except FileNotFoundError:
@@ -207,10 +209,7 @@ def _libraries(home: str, counts: Counter) -> dict[Path, str]:
         except ValueError:
             counts["invalid_index"] += 1
             folders = {}
-            try:
-                lenient = _lenient_index(index)
-            except OSError:
-                lenient = []
+            lenient = _lenient_index(raw)
             counts["lenient_path"] += len(lenient)
             for raw in lenient:
                 add(_library_path(raw), "lenient_index")
@@ -225,8 +224,11 @@ def _libraries(home: str, counts: Counter) -> dict[Path, str]:
                 continue
             counts["path_object" if isinstance(entry, dict) else "direct_path"] += 1
             add(path, "index")
-    with _libraries_lock:
-        reported = list(_steam_reported)
+    if live_folders is None:
+        with _libraries_lock:
+            reported = list(_steam_reported)
+    else:
+        reported = [path for raw in live_folders if (path := _library_path(raw)) is not None]
     for path in reported:
         if _real(path) not in sources:
             counts["steam_unindexed"] += 1
@@ -403,6 +405,62 @@ def _lenient_manifest(manifest: Path) -> dict:
     return state
 
 
+def _install_root(apps: Path, state: dict) -> Path | None:
+    installdir = state.get("installdir")
+    if not isinstance(installdir, str) or installdir in ("", ".", "..") or "/" in installdir or "\0" in installdir:
+        return None
+    return apps / "common" / installdir
+
+
+def _regular_bytes(path: str | Path, limit: int, *, nofollow: bool = False) -> bytes:
+    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | (os.O_NOFOLLOW if nofollow else 0))
+    with os.fdopen(fd, "rb") as source:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError("not_regular")
+        return source.read(limit + 1)
+
+
+def _selector_manifest(path: str, appid: str) -> bool:
+    limit = 128 * 1024
+    raw = _regular_bytes(path, limit, nofollow=True)
+    if len(raw) > limit:
+        raise ValueError("oversized_manifest")
+    state = vdf.parse_text(raw).get("appstate")
+    if not isinstance(state, dict) or state.get("appid") != appid:
+        raise ValueError("invalid_appid")
+    root = _install_root(Path(path).parent, state)
+    return state.get("stateflags") == str(STATE_FULLY_INSTALLED) and root is not None and root.is_dir()
+
+
+def selector_installs(home: str, live_folders: tuple[str, ...] = ()) -> dict:
+    """Positive evidence only. A partial inventory can still recover games from reachable libraries."""
+    appids: set[int] = set()
+    counts = Counter()
+    deadline = time.monotonic() + 0.35
+    libraries = _libraries(home, counts, live_folders)
+    complete = bool(libraries) and not any(counts[key] for key in
+        ("unavailable_library", "unreadable_index", "invalid_index", "invalid_entry", "missing_index"))
+    remaining = 1024
+    for library in libraries:
+        try:
+            with os.scandir(library / "steamapps") as entries:
+                for entry in entries:
+                    if remaining == 0 or time.monotonic() >= deadline:
+                        return {"appids": sorted(appids), "complete": False}
+                    match = re.fullmatch(r"appmanifest_([1-9][0-9]{0,9})\.acf", entry.name)
+                    if not match or int(match[1]) >= 2**31:
+                        continue
+                    remaining -= 1
+                    try:
+                        if _selector_manifest(entry.path, match[1]):
+                            appids.add(int(match[1]))
+                    except (OSError, ValueError):
+                        complete = False
+        except OSError:
+            complete = False
+    return {"appids": sorted(appids), "complete": complete}
+
+
 def _manifest_game(library: Path, appid: str, contained: bool = False) -> tuple[str, Installed | None]:
     apps = library / "steamapps"
     manifest = apps / f"appmanifest_{appid}.acf"
@@ -419,10 +477,9 @@ def _manifest_game(library: Path, appid: str, contained: bool = False) -> tuple[
             return "manifest_unreadable", None
     if not isinstance(state, dict) or state.get("appid", appid) != appid:
         return "manifest_invalid", None
-    installdir = state.get("installdir")
-    if not isinstance(installdir, str) or installdir in ("", ".", "..") or "/" in installdir or "\0" in installdir:
+    root = _install_root(apps, state)
+    if root is None:
         return "manifest_invalid", None
-    root = apps / "common" / installdir
     if contained and (root.is_symlink() or not _real(root).is_relative_to(_real(apps / "common"))):
         return "folder_outside", None
     try:

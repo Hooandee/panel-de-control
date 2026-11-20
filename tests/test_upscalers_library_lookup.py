@@ -315,3 +315,34 @@ def test_lenient_manifest_reads_only_top_level_fields(tmp_path, steam_install):
     )
 
     assert service.game(APPID)["name"] == GAME_NAME
+
+
+def test_selector_confirms_fully_installed_manifest_in_accessible_secondary_library(tmp_path, steam_install):
+    service, apps = steam_install
+    secondary = tmp_path / "second"
+    missing = tmp_path / "missing"
+    folder = secondary / "steamapps"
+    (folder / "common" / "Resident Evil Requiem").mkdir(parents=True)
+    _write_index(apps, f'"0" {{ "path" "{apps.parent}" }} "1" {{ "path" "{secondary}" }} "2" {{ "path" "{missing}" }}')
+    for appid, flags, directory in [("3764200", 4, "Resident Evil Requiem"), ("10", 1024, "Resident Evil Requiem"),
+                                    ("20", 4, "Removed"), ("30", 4, "..")]:
+        (folder / f"appmanifest_{appid}.acf").write_text(
+            f'"AppState" {{ "appid" "{appid}" "StateFlags" "{flags}" "installdir" "{directory}" }}'
+        )
+
+    from upscalers import games
+
+    assert games.selector_installs(service.home) == {"appids": [3764200], "complete": False}
+    _write_index(apps, f'"0" {{ "path" "{apps.parent}" }}')
+    assert games.selector_installs(service.home, (str(secondary),)) == {"appids": [3764200], "complete": True}
+
+
+def test_selector_skips_nonregular_index_and_partial_manifest_without_waiting(steam_install):
+    import os
+    from upscalers import games
+
+    service, apps = steam_install
+    os.mkfifo(apps / "libraryfolders.vdf")
+    os.mkfifo(apps / "appmanifest_20.acf")
+    _install(apps)
+    assert games.selector_installs(service.home) == {"appids": [int(APPID)], "complete": False}

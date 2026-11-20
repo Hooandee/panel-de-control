@@ -31,7 +31,7 @@ export const EscaladoresSection: FC = () => {
   const [failed, setFailed] = useState(false);
   const [held] = useState(takeHeldPage);
   const [selectedAppid, setSelectedAppid] = useState<number | null>(() => held?.appid ?? null);
-  const [compatResult, setCompatResult] = useState<{ appids: string; compat: Record<string, GameCompat> } | null>(null);
+  const [compatResult, setCompatResult] = useState<{ appids: string; partial: boolean; compat: Record<string, GameCompat> } | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -98,7 +98,11 @@ export const EscaladoresSection: FC = () => {
     const batches = Array.from({ length: Math.ceil(ids.length / 400) }, (_, index) => ids.slice(index * 400, index * 400 + 400));
     const libraries = steamLibraryFolders();
     Promise.all(batches.map((batch) => getUpscalersCompat(batch, libraries).catch(() => ({}))))
-      .then((parts) => { if (alive) setCompatResult({ appids, compat: Object.assign({}, ...parts) }); });
+      .then((parts) => {
+        if (!alive) return;
+        const compat = Object.assign({}, ...parts);
+        setCompatResult({ appids, partial: ids.some((id) => !compat[id]), compat });
+      });
     return () => { alive = false; };
   }, [appids]);
   // Store shortcuts with no installed game behind them (Unifideck lists a whole library) have nothing to scale.
@@ -125,16 +129,19 @@ export const EscaladoresSection: FC = () => {
     const shortcut_rows = listed.filter((game) => game.isNonSteam).length;
     const { no_metadata, not_game, unreadable } = selection;
     publishSelectorContext({
-      complete: inventory?.complete === true,
+      observed_at: Math.floor(Date.now() / 1000),
+      complete: inventory?.complete ?? null,
+      compatibility: !appids ? "ready" : !compatRead ? "pending" : compatResult?.partial ? "partial" : "ready",
+      recovered: selection.steam.filter((app) => app.manifest && (!app.collection || app.local !== "true")).length,
       steam_rows: listed.length - shortcut_rows,
       shortcut_rows,
-      filtered: (compatRead ? games.length - listed.length : 0) + no_metadata + not_game + unreadable,
+      filtered: games.filter((game) => compat[String(game.liveAppid)]?.unavailable).length,
       no_metadata,
       not_game,
       unreadable,
       samples,
     });
-  }, [overview, failed, selected, games, listed, compatRead, selection, inventory]);
+  }, [overview, failed, selected, games, listed, appids, compatRead, compatResult, compat, selection, inventory]);
 
   return (
     <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
