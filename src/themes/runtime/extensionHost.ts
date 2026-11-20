@@ -216,6 +216,7 @@ interface RuntimeSelection {
 
 interface ActiveRuntime {
   stop: () => void;
+  themeName: string;
   key: string;
   structure: string;
   /** True while the runtime holds an options subscription: it follows value changes itself instead of being remounted. */
@@ -506,6 +507,7 @@ export class ThemeExtensionRuntimeHost {
   private readonly log: (code: ExtensionLogCode) => void;
   private descriptors: readonly ThemeExtensionDescriptor[] | null = null;
   private descriptorRequest: Promise<void> | null = null;
+  private retryDescriptorRefresh = false;
   private snapshot: CssLoaderSnapshot = { status: "missing", themes: [] };
   private readonly payloads = new Map<string, ThemeExtensionPayload>();
   private readonly ambient: AmbientChannelProvider | undefined;
@@ -516,6 +518,8 @@ export class ThemeExtensionRuntimeHost {
   private readonly payloadRequests = new Map<string, Promise<ThemeExtensionPayload>>();
   private readonly active = new Map<string, ActiveRuntime>();
   private readonly pending = new Map<string, number>();
+  private installing: string | undefined;
+  private readonly heldThemes = new Map<string, { selection: RuntimeSelection | undefined }>();
   private readonly surfaces = new Map<string, ThemeExtensionSurface>();
   private readonly classifying = new Set<string>();
   private readonly unclassifiable = new Set<string>();
@@ -571,10 +575,35 @@ export class ThemeExtensionRuntimeHost {
     this.log = log;
   }
 
-  reconcile(snapshot: CssLoaderSnapshot): void {
+  reconcile(snapshot: CssLoaderSnapshot, installing?: string): void {
     if (this.disposed) return;
+    const previous = this.installing;
+    if (installing !== previous) {
+      this.installing = installing;
+      if (installing !== undefined) {
+        const selection = this.candidates().find((candidate) => candidate.theme.name === installing);
+        this.heldThemes.set(installing, {
+          selection: selection && this.surfaces.has(selection.key) ? selection : undefined,
+        });
+        for (const [fingerprint, runtime] of this.active) {
+          if (runtime.themeName === installing) this.stop(fingerprint);
+        }
+        if (selection) this.pending.delete(selection.fingerprint);
+      }
+      if (previous !== undefined) void this.releaseInstalledTheme(previous);
+    }
     this.applySnapshot(snapshot);
     this.options?.update(snapshot);
+  }
+
+  private async releaseInstalledTheme(themeName: string): Promise<void> {
+    const hold = this.heldThemes.get(themeName);
+    if (this.descriptorRequest) await this.descriptorRequest;
+    if (this.disposed || this.heldThemes.get(themeName) !== hold) return;
+    await this.refreshDescriptors();
+    if (this.disposed || this.heldThemes.get(themeName) !== hold) return;
+    this.heldThemes.delete(themeName);
+    this.reconcileSelection();
   }
 
   private applySnapshot(snapshot: CssLoaderSnapshot): void {
@@ -585,10 +614,8 @@ export class ThemeExtensionRuntimeHost {
       this.stop();
       return;
     }
-    if (this.descriptors === null) {
-      void this.refreshDescriptors();
-      return;
-    }
+    if (this.descriptors === null || this.retryDescriptorRefresh) void this.refreshDescriptors();
+    if (this.descriptors === null) return;
     this.reconcileSelection();
   }
 
@@ -598,12 +625,18 @@ export class ThemeExtensionRuntimeHost {
     const request = this.client.list().then((descriptors) => {
       if (this.disposed) return;
       this.descriptors = descriptors;
+      this.retryDescriptorRefresh = false;
       this.reconcileSelection();
     }).catch(() => {
       if (this.disposed) return;
-      this.descriptors = null;
-      this.invalidatePending();
-      this.stop();
+      if (this.heldThemes.size > 0 || this.retryDescriptorRefresh) {
+        this.descriptors = this.descriptors?.filter((descriptor) => !this.heldThemes.has(descriptor.cssLoaderName)) ?? null;
+        this.retryDescriptorRefresh = true;
+      } else {
+        this.descriptors = null;
+        this.invalidatePending();
+        this.stop();
+      }
       this.log("extension_list_failed");
     });
     this.descriptorRequest = request;
@@ -636,6 +669,9 @@ export class ThemeExtensionRuntimeHost {
       }
     }
     const desired = this.desired(candidates);
+    for (const [fingerprint, selection] of desired) {
+      if (this.heldThemes.has(selection.theme.name)) desired.delete(fingerprint);
+    }
     for (const [fingerprint, runtime] of [...this.active]) {
       if (desired.has(fingerprint)) continue;
       const successor = runtime.followsOptions()
@@ -669,6 +705,7 @@ export class ThemeExtensionRuntimeHost {
     const selections: RuntimeSelection[] = [];
     for (const theme of this.snapshot.themes) {
       if (!theme.enabled) continue;
+      if (this.heldThemes.has(theme.name)) continue;
       const matches = this.descriptors.filter((descriptor) => (
         descriptor.cssLoaderName === theme.name && descriptor.version === theme.version
       ));
@@ -676,6 +713,10 @@ export class ThemeExtensionRuntimeHost {
       const [descriptor] = matches;
       const key = descriptorKey(descriptor);
       selections.push({ descriptor, theme, key, fingerprint: `${key}\0${themeFingerprint(theme)}` });
+    }
+    // Preserve the updating theme's surface ownership while its runtime is stopped.
+    for (const { selection } of this.heldThemes.values()) {
+      if (selection) selections.push(selection);
     }
     return selections;
   }
@@ -735,7 +776,7 @@ export class ThemeExtensionRuntimeHost {
   }
 
   private retire(cssLoaderName: string, keep: string): void {
-    if (!this.retireTheme || this.retiring.has(cssLoaderName)) return;
+    if (!this.retireTheme || this.retiring.has(cssLoaderName) || this.heldThemes.has(cssLoaderName) || this.heldThemes.has(keep)) return;
     this.retiring.add(cssLoaderName);
     void this.retireTheme(cssLoaderName, keep)
       .then((retired) => { if (!retired) this.log("keyboard_theme_retire_failed"); })
@@ -747,12 +788,12 @@ export class ThemeExtensionRuntimeHost {
     this.classifying.add(selection.key);
     try {
       const payload = await this.load(selection.descriptor);
-      if (this.disposed) return;
+      if (this.disposed || this.heldThemes.has(selection.theme.name)) return;
       const extension = this.evaluate(payload.source);
       if (extension.abiVersion !== payload.abiVersion) throw new Error("Theme extension ABI does not match its receipt");
       this.surfaces.set(selection.key, surfaceOf(extension));
     } catch (error) {
-      if (this.disposed) return;
+      if (this.disposed || this.heldThemes.has(selection.theme.name)) return;
       this.unclassifiable.add(selection.key);
       this.log(error instanceof ThemeExtensionPayloadMismatchError
         ? "extension_payload_mismatch"
@@ -866,6 +907,7 @@ export class ThemeExtensionRuntimeHost {
       stop = () => { try { release(); } finally { scope.releaseAll(); } };
       this.active.set(selection.fingerprint, {
         stop,
+        themeName: selection.theme.name,
         key: selection.key,
         structure: runtimeStructure(selection.theme),
         followsOptions: options ? options.follows : () => false,
@@ -909,9 +951,9 @@ export class ThemeExtensionRuntimeHost {
   }
 
   private isCurrent(fingerprint: string, generation: number): boolean {
-    return !this.disposed
-      && this.pending.get(fingerprint) === generation
-      && this.desired(this.candidates()).has(fingerprint);
+    if (this.disposed || this.pending.get(fingerprint) !== generation) return false;
+    const selection = this.desired(this.candidates()).get(fingerprint);
+    return selection !== undefined && !this.heldThemes.has(selection.theme.name);
   }
 
   private invalidatePending(): void {

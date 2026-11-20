@@ -445,6 +445,8 @@ class ThemeRemoteService:
         archive_path: str,
         themes_root: str | Path,
         receipts_path: str | Path,
+        *,
+        catalog_id: str | None = None,
     ) -> dict[str, object]:
         with self._lock:
             self._require_running()
@@ -473,6 +475,8 @@ class ThemeRemoteService:
             if match is None:
                 raise ThemeRemoteError("unknown_archive", "Archive is not a published early build")
             release, artifact = match
+            if catalog_id is not None and release.catalog_id != catalog_id:
+                raise ThemeRemoteError("identity_mismatch", "Archive belongs to a different theme")
             compatibility = _compatibility(release, self._runtime_versions())
             if compatibility != "compatible":
                 raise ThemeRemoteError(compatibility.replace("-", "_"), "Early theme is incompatible with the running environment")

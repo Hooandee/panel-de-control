@@ -2518,17 +2518,22 @@ class Plugin(AmbientRpc):
         downloads = os.path.join(home, "Downloads")
         return downloads if os.path.isdir(downloads) else home
 
-    async def prepare_early_theme_install(self, archive_path: str) -> dict:
+    async def prepare_early_theme_install(self, archive_path: str, catalog_id: str | None = None) -> dict:
         """Installs a theme zip the user picked, only if it is byte for byte a published early build."""
         self._init()
         if not isinstance(archive_path, str) or not archive_path or len(archive_path) > 4096:
             return {"ok": False, "code": "invalid_archive"}
+        if catalog_id is not None and (
+            not isinstance(catalog_id, str) or _SAFE_THEME_ID.fullmatch(catalog_id) is None
+        ):
+            return {"ok": False, "code": "unsupported_theme"}
 
         def prepare() -> dict:
             return self._remote_themes().prepare_early_install(
                 archive_path,
                 self._themes_root(),
                 self._theme_receipts_path(),
+                catalog_id=catalog_id,
             )
 
         try:

@@ -135,6 +135,7 @@ export interface ThemesClientSnapshot {
   refreshing: boolean;
   snapshot: CssLoaderSnapshot;
   operation: ThemesOperation | null;
+  runtimeInstallHold: string | null;
   recoveryBlocked: boolean;
   recoveryKeptCurrent: boolean;
   error: string | null;
@@ -251,12 +252,17 @@ function blocksThemeRecovery(error: unknown): boolean {
   );
 }
 
+class VerifiedThemeInstallFailure {
+  constructor(readonly error: unknown, readonly snapshot: CssLoaderReadySnapshot) {}
+}
+
 export class ThemesClient {
   private current: ThemesClientSnapshot = {
     loading: true,
     refreshing: false,
     snapshot: { status: "missing", themes: [] },
     operation: null,
+    runtimeInstallHold: null,
     recoveryBlocked: false,
     recoveryKeptCurrent: false,
     error: null,
@@ -356,6 +362,7 @@ export class ThemesClient {
       if (request === this.requestSequence) {
         this.update({
           snapshot,
+          ...(recoveryError === undefined ? { runtimeInstallHold: null } : {}),
           recoveryBlocked: recoveryError === undefined
             ? false
             : this.current.recoveryBlocked || blocksThemeRecovery(recoveryError),
@@ -466,8 +473,16 @@ export class ThemesClient {
       { kind: "installing", themeId },
       async () => {
         const before = await this.dependencies.adapter.requireReady();
+        this.update({ runtimeInstallHold: card.release.cssLoaderName });
         this.recoveryChecked = false;
-        const installed = await this.dependencies.installer.prepare(source);
+        let installed: ThemeInstallResult;
+        try {
+          installed = await this.dependencies.installer.prepare(source);
+        } catch (prepareError) {
+          const recovered = await this.reconcilePendingRecovery();
+          if (recovered) throw new VerifiedThemeInstallFailure(prepareError, recovered);
+          throw prepareError;
+        }
         try {
           if (
             installed.themeId !== card.release.catalogId
@@ -497,8 +512,9 @@ export class ThemesClient {
               `Theme installation rollback failed: ${errorMessage(rollbackError)}`,
             );
           }
+          let restored: CssLoaderReadySnapshot;
           try {
-            await this.dependencies.adapter.restoreThemeSnapshot(before, [card.release.cssLoaderName]);
+            restored = await this.dependencies.adapter.restoreThemeSnapshot(before, [card.release.cssLoaderName]);
           } catch (restoreError) {
             throw new ThemeInstallError(
               "rollback_verification_failed",
@@ -507,7 +523,7 @@ export class ThemesClient {
           }
           await this.dependencies.installer.acknowledgeRollback(installed.transaction);
           this.recoveryChecked = true;
-          throw installError;
+          throw new VerifiedThemeInstallFailure(installError, restored);
         }
       },
     );
@@ -845,11 +861,14 @@ export class ThemesClient {
     return managedThemeReleases(this.current.publication);
   }
 
-  private publishSnapshot(request: number, snapshot: CssLoaderSnapshot): void {
+  private publishSnapshot(request: number, snapshot: CssLoaderSnapshot, installed = false): void {
     if (request !== this.requestSequence) return;
     const sectionHandoff = this.pendingSectionHandoff;
     this.pendingSectionHandoff = null;
-    this.update({ snapshot, error: null, errorCode: null, sectionHandoff });
+    this.update({
+      snapshot, error: null, errorCode: null, sectionHandoff,
+      ...(installed ? { runtimeInstallHold: null } : {}),
+    });
   }
 
   private reconcileRefreshTimer(): void {
@@ -924,15 +943,20 @@ export class ThemesClient {
     const observe = operation.kind === "installing" || operation.kind === "activating"
       ? beginThemeObservation(operation.kind) : undefined;
     try {
-      await this.reconcilePendingRecovery();
-      this.publishSnapshot(request, await run());
+      const recovered = await this.reconcilePendingRecovery();
+      if (recovered && this.current.runtimeInstallHold !== null) {
+        this.update({ snapshot: recovered, runtimeInstallHold: null });
+      }
+      this.publishSnapshot(request, await run(), operation.kind === "installing");
       observe?.(true);
       return true;
-    } catch (operationError) {
+    } catch (failure) {
       observe?.(false);
+      const verified = failure instanceof VerifiedThemeInstallFailure ? failure : undefined;
+      const operationError = verified ? verified.error : failure;
       let reconciled: CssLoaderSnapshot;
       try {
-        reconciled = await this.dependencies.adapter.inspect();
+        reconciled = verified?.snapshot ?? await this.dependencies.adapter.inspect();
       } catch (inspectionError) {
         reconciled = {
           status: "error",
@@ -943,6 +967,8 @@ export class ThemesClient {
       if (request === this.requestSequence) {
         this.update({
           snapshot: reconciled,
+          ...(operation.kind === "installing" && this.recoveryChecked && reconciled.status === "ready"
+            ? { runtimeInstallHold: null } : {}),
           recoveryBlocked: this.current.recoveryBlocked || blocksThemeRecovery(operationError),
           ...this.failurePatch(operation.kind, operationError),
         });
