@@ -1,3 +1,4 @@
+import { beginThemeObservation } from "./themeInteractionJournal";
 import { ThemeActivationError, ThemeActivator } from "./activation";
 import {
   CssLoaderAdapter,
@@ -920,11 +921,15 @@ export class ThemesClient {
       recoveryKeptCurrent: false,
       sectionHandoff: null,
     });
+    const observe = operation.kind === "installing" || operation.kind === "activating"
+      ? beginThemeObservation(operation.kind) : undefined;
     try {
       await this.reconcilePendingRecovery();
       this.publishSnapshot(request, await run());
+      observe?.(true);
       return true;
     } catch (operationError) {
+      observe?.(false);
       let reconciled: CssLoaderSnapshot;
       try {
         reconciled = await this.dependencies.adapter.inspect();

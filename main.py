@@ -16357,6 +16357,10 @@ journal.trace_calls(
         "get_theme_storage", "set_theme_storage", "force_close_game", "pause_theme_game", "resume_theme_game",
     }),
     automatic=frozenset({"load_theme_extension"}),
-    hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers", "add_upscaler_mod"}),
+    hidden_arguments=frozenset({
+        "submit_report", "set_aside_theme_leftovers", "add_upscaler_mod", "prepare_early_theme_install",
+        "commit_theme_install", "rollback_theme_install", "acknowledge_theme_install_rollback",
+        "begin_theme_activation", "settle_theme_activation", "acknowledge_theme_activation",
+    }),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

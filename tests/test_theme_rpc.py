@@ -683,6 +683,37 @@ def test_report_counts_unreadable_theme_folders_without_naming_them(theme_rpc):
     assert "Private Broken Name" not in str(diagnostics)
 
 
+def test_theme_interaction_survives_a_restart_and_a_late_report(theme_rpc, tmp_path, monkeypatch):
+    import time
+    from pdc_report.collector import build_bundle
+
+    main, plugin, _ = theme_rpc
+    directory = str(tmp_path / "journal")
+    yesterday = time.time() - 2 * 86400
+    diary = main.journal.Journal(directory, clock=lambda: yesterday)
+    monkeypatch.setattr(main.journal, "active", diary)
+    detail = json.dumps({"attempt": 1, "operation": "installing", "phase": "input_frame",
+                         "surface": "main", "elapsedMs": 750, "focusChanged": True})
+    diary.start()
+    try:
+        asyncio.run(plugin.prepare_early_theme_install("/private-picker-folder/theme.zip"))
+        asyncio.run(plugin.begin_theme_activation({"private-profile-name": "private-value"}))
+        asyncio.run(plugin.settle_theme_activation("private-transaction"))
+        assert asyncio.run(plugin.record_ui_event("themes", "theme_interaction", detail, True))
+    finally:
+        diary.stop()
+    monkeypatch.setattr(main.journal, "active", main.journal.Journal(directory))
+    bundle = build_bundle(app="Panel de Control", categories=["themes"], text="", environment={},
+                          capabilities={}, state={}, stores={}, logs=[], journal=plugin._journal_report())
+    records = bundle["journal"]["older"]
+    for rpc in ("prepare_early_theme_install", "begin_theme_activation", "settle_theme_activation"):
+        assert any(r["m"] == rpc and r.get("a") is None for r in records)
+    assert "private-" not in json.dumps(bundle)
+    entry, = (r for r in records if r["m"] == "theme_interaction")
+    assert (entry["s"], entry["m"], entry["area"]) == ("ui", "theme_interaction", "themes")
+    assert json.loads(entry["detail"]) == json.loads(detail)
+
+
 def test_ui_diagnostics_reach_the_log_and_report_without_free_text_in_the_report(theme_rpc):
     _, plugin, fake = theme_rpc
     warnings = []

@@ -5,6 +5,7 @@ import { PanelThemeInstaller, ThemeInstallError } from "./panelThemeInstaller";
 import { parseEarlyPublication, type PublishedThemeRelease, type ThemePublicationState } from "./remotePublication";
 import { createRemotePublicationClient } from "./remotePublicationClient";
 import { deriveThemeCards } from "./state";
+import { configureThemeInteractionJournal } from "./themeInteractionJournal";
 import { ThemesClient, type ThemesDependencies } from "./themesClient";
 
 const TEXT = { es: "Tema", en: "Theme", it: "Tema" };
@@ -86,14 +87,21 @@ describe("early access themes", () => {
     await client.refresh();
     await client.refreshPublication();
 
-    await expect(client.install("early-theme")).resolves.toBe(false);
-    await expect(client.installEarly("early-theme")).resolves.toBe(true);
-    expect(prepare).toHaveBeenCalledWith({ kind: "early-archive", catalogId: "early-theme", archivePath: "/home/deck/Downloads/early.zip" });
-    expect(reloadTheme).toHaveBeenCalledWith("Early Theme", "0.2.0", READY);
-    expect(commit).toHaveBeenCalledWith("t");
+    const phases: string[] = [];
+    const stop = configureThemeInteractionJournal(() => [], async (_area, _action, detail) => {
+      phases.push(JSON.parse(detail).phase);
+    });
+    try {
+      await expect(client.install("early-theme")).resolves.toBe(false);
+      await expect(client.installEarly("early-theme")).resolves.toBe(true);
+      expect(prepare).toHaveBeenCalledWith({ kind: "early-archive", catalogId: "early-theme", archivePath: "/home/deck/Downloads/early.zip" });
+      expect(reloadTheme).toHaveBeenCalledWith("Early Theme", "0.2.0", READY);
+      expect(commit).toHaveBeenCalledWith("t");
 
-    pickEarlyArchive.mockResolvedValueOnce(null);
-    await expect(client.installEarly("early-theme")).resolves.toBe(false);
-    expect(prepare).toHaveBeenCalledTimes(1);
+      pickEarlyArchive.mockResolvedValueOnce(null);
+      await expect(client.installEarly("early-theme")).resolves.toBe(false);
+      expect(prepare).toHaveBeenCalledTimes(1);
+      expect(phases).toEqual(["started", "completed", "observation_unavailable"]);
+    } finally { stop(); }
   });
 });
