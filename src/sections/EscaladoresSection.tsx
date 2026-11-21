@@ -1,34 +1,35 @@
 import { LuCircleCheck, LuClock, LuSlidersHorizontal, LuTriangleAlert } from "react-icons/lu";
 import { Focusable } from "@decky/ui";
-import { useCallback, useEffect, useMemo, useState, type FC, type ComponentProps } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ComponentProps } from "react";
 
-import { getUpscalersCompat, getUpscalersOverview, type GameCompat } from "../api";
+import { getUpscalersOverview, getUpscalersSelectorInstalls } from "../api";
 import { FocusableCard } from "../components/FocusableCard";
 import { GameCover } from "../components/GameCover";
 import { useI18n } from "../i18n";
-import { listInstalledGames, type GameEntry } from "../launch/steamApi";
+import { readUpscalersSelection } from "../launch/steamApi";
 import { onUpscalersGameRequest, takePendingUpscalersGame } from "../upscalers/deepLink";
 import { theme } from "../theme";
 import { BulkPanel } from "../upscalers/BulkPanel";
 import { GameView } from "../upscalers/GameView";
 import { IN_GAME_MODES, publishOverview, readCoverBadges, readInGameMode, setUpscalersSectionOpen, writeCoverBadges, writeInGameMode, type InGameMode } from "../upscalers/overlays";
-import { Fold, Label, SegmentRow } from "../upscalers/parts";
 import { badgeLabel, fallbackLine } from "../upscalers/model";
-import { MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
+import { Fold, Label, MOTION_CSS, SegmentRow, Skeleton, statusColor } from "../upscalers/parts";
+import { publishSelectorContext, publishSelectorFailure } from "../upscalers/selectorContext";
 import { steamLibraryFolders } from "../upscalers/steamLibraries";
 import { showGame, takeHeldPage, type PageDraft } from "../upscalers/pageMemory";
 import type { UpscalerChoice, UpscalersOverview } from "../upscalers/types";
+import { useGameCompatibility } from "../upscalers/useGameCompatibility";
 
 const NavigationGroup = Focusable as FC<ComponentProps<typeof Focusable> & { childFocusDisabled?: boolean }>;
 
 export const EscaladoresSection: FC = () => {
   const { t } = useI18n();
   const [overview, setOverview] = useState<UpscalersOverview | null>(null);
+  const [inventory, setInventory] = useState<{ appids: number[]; complete: boolean } | null>(null);
   const [failed, setFailed] = useState(false);
   const [held] = useState(takeHeldPage);
-  const [selected, setSelected] = useState<GameEntry | null>(() => held ? listInstalledGames().find((g) => g.liveAppid === held.appid) ?? null : null);
-  const [compat, setCompat] = useState<Record<string, GameCompat>>({});
-  const [compatRead, setCompatRead] = useState(false);
+  const [selectedAppid, setSelectedAppid] = useState<number | null>(() => held?.appid ?? null);
+  const overviewRequest = useRef(0);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -37,59 +38,71 @@ export const EscaladoresSection: FC = () => {
   const [covers, setCovers] = useState(readCoverBadges);
 
   const refresh = useCallback(async () => {
+    const request = ++overviewRequest.current;
     try {
       const next = await getUpscalersOverview();
+      if (request !== overviewRequest.current) return;
       setOverview(next);
       publishOverview(next);
       setFailed(false);
     } catch {
-      setFailed(true);
+      if (request === overviewRequest.current) setFailed(true);
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    return () => { overviewRequest.current++; };
+  }, [refresh]);
+  useEffect(() => {
+    let alive = true;
+    getUpscalersSelectorInstalls(steamLibraryFolders())
+      .then((result) => { if (alive) setInventory(result); })
+      .catch(() => { if (alive) setInventory({ appids: [], complete: false }); });
+    return () => { alive = false; };
+  }, []);
   useEffect(() => {
     setUpscalersSectionOpen(true);
     return () => setUpscalersSectionOpen(false);
   }, []);
   const closeGame = useCallback(() => {
     showGame(null);
-    setSelected(null);
+    setSelectedAppid(null);
   }, []);
 
+  const selection = useMemo(() => readUpscalersSelection(inventory?.appids ?? []), [overview, inventory]);
+  const games = useMemo(() => {
+    const installs = overview?.installs ?? {};
+    return [...selection.games]
+      .sort((a, b) => Number(String(b.liveAppid) in installs) - Number(String(a.liveAppid) in installs) || b.lastPlayed - a.lastPlayed);
+  }, [overview, selection]);
+  const selected = games.find((game) => game.liveAppid === selectedAppid);
+
   useEffect(() => {
+    if (!overview) return;
     const open = () => {
-      const appid = takePendingUpscalersGame();
-      const game = appid === null ? null : listInstalledGames().find((g) => g.liveAppid === appid);
-      if (game) setSelected(game);
+      const hasGame = (appid: number) => games.some((game) => game.liveAppid === appid);
+      const appid = takePendingUpscalersGame((id) => inventory !== null || hasGame(id));
+      if (appid !== null && hasGame(appid)) setSelectedAppid(appid);
     };
     open();
     return onUpscalersGameRequest(open);
-  }, []);
+  }, [overview, games, inventory]);
 
-  const games = useMemo(() => {
-    const installs = overview?.installs ?? {};
-    return listInstalledGames()
-      .sort((a, b) => Number(String(b.liveAppid) in installs) - Number(String(a.liveAppid) in installs) || b.lastPlayed - a.lastPlayed);
-  }, [overview]);
+  const { compat, checked, status } = useGameCompatibility(games, !!overview);
+  const listed = useMemo(() => games.filter((game) => {
+    const id = String(game.liveAppid);
+    return checked?.has(id) ? !compat[id]?.unavailable : !game.isNonSteam;
+  }), [games, compat, checked]);
 
-  const appids = games.map((g) => String(g.liveAppid)).join(",");
   useEffect(() => {
-    if (!appids) return;
-    let alive = true;
-    const ids = appids.split(",");
-    // The backend answers at most 400 games per call; a whole store library can be longer.
-    const batches = Array.from({ length: Math.ceil(ids.length / 400) }, (_, index) => ids.slice(index * 400, index * 400 + 400));
-    const libraries = steamLibraryFolders();
-    Promise.all(batches.map((batch) => getUpscalersCompat(batch, libraries).catch(() => ({}))))
-      .then((parts) => { if (alive) setCompat(Object.assign({}, ...parts)); })
-      .finally(() => { if (alive) setCompatRead(true); });
-    return () => { alive = false; };
-  }, [appids]);
-  // Store shortcuts with no installed game behind them (Unifideck lists a whole library) have nothing to scale.
-  // Shortcuts wait for that answer, so a library-only entry never shows up and then vanishes under the focus.
-  const listed = useMemo(() => games.filter((g) => compatRead ? !compat[String(g.liveAppid)]?.unavailable : !g.isNonSteam),
-    [games, compat, compatRead]);
+    if (!overview) {
+      if (failed) publishSelectorFailure();
+    } else if (!selected) {
+      const filtered = games.filter((game) => compat[String(game.liveAppid)]?.unavailable).length;
+      publishSelectorContext(selection, listed, inventory?.complete ?? null, status, filtered);
+    }
+  }, [overview, failed, selected, games, listed, status, compat, selection, inventory]);
 
   return (
     <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
@@ -150,7 +163,7 @@ export const EscaladoresSection: FC = () => {
             const scaler = install ? (fallback ? (fallback.observed ?? t("up.fallback.coverNone", { from: fallback.requested })) : badgeLabel(build, install.options?.model, install.build).full) : engines?.mako?.spatial ? makoName : null;
             const active = scaler === makoName && frameGen?.startsWith(makoName) ? frameGen : [scaler, frameGen].filter(Boolean).join(" - ");
             return (
-              <FocusableCard key={game.instanceKey} onActivate={() => setSelected(game)}>
+              <FocusableCard key={game.instanceKey} onActivate={() => setSelectedAppid(game.liveAppid)}>
                 <GameCover urls={game.coverUrls} name={game.name} width={30} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

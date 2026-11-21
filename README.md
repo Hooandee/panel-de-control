@@ -62,6 +62,9 @@ salen, dónde y con qué colores.
 🚀 **Parámetros.** Las opciones de lanzamiento de cada juego convertidas en interruptores con su
 explicación. FSR4, HDR, escalado y compañía, pero solo lo que tu versión de Proton soporta.
 
+🎮 **Escaladores.** Elige un juego instalado para configurar su escalado y la generación de frames.
+La lista también reconoce juegos instalados en otras bibliotecas de Steam.
+
 🧹 **Limpieza.** Descubre cuánto ocupan la Shader Cache y los prefijos de tus juegos y recupera
 espacio en un momento.
 
