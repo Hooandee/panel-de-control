@@ -7,7 +7,7 @@ type Compatibility = Record<string, GameCompat>;
 const empty: Compatibility = {};
 
 export function useGameCompatibility(games: GameEntry[], enabled: boolean) {
-  const requests = useRef(new Map<string, Promise<Compatibility>>());
+  const requests = useRef(new Map<string, Promise<GameCompat | undefined>>());
   const lastFolders = useRef("");
   const [result, setResult] = useState<{ ids: Set<string>; compat: Compatibility } | null>(null);
   const key = enabled ? games.map((game) => String(game.liveAppid)).sort().join(",") : "";
@@ -28,12 +28,15 @@ export function useGameCompatibility(games: GameEntry[], enabled: boolean) {
     for (let i = 0; i < missing.length; i += 400) {
       const batch = missing.slice(i, i + 400);
       const request = getUpscalersCompat(batch, folders).catch(() => empty);
-      for (const id of batch) cache.set(id, request);
+      for (const id of batch) cache.set(id, request.then((rows) => rows[id]));
     }
-    Promise.all(new Set(cache.values())).then((parts) => {
+    Promise.all([...cache].map(async ([id, request]) => [id, await request] as const)).then((rows) => {
       if (!active) return;
-      const compat = Object.assign({}, ...parts);
-      for (const id of ids) if (!compat[id]) cache.delete(id);
+      const compat: Compatibility = {};
+      for (const [id, row] of rows) {
+        if (row) compat[id] = row;
+        else cache.delete(id);
+      }
       setResult({ ids, compat });
     });
     return () => { active = false; };

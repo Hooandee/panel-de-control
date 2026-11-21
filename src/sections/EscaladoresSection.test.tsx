@@ -165,6 +165,25 @@ it("counts rejected manifest candidates without sampling tools or mismatched Ste
   expect((await upscalersReportContext()).selector).toHaveProperty("omissions", [{ appid: 51, reason: "no_metadata" }]);
 });
 
+it("drops the old compatibility of an entry removed and added back to the collection", async () => {
+  const api = await import("../api");
+  vi.mocked(api.getUpscalersCompat).mockResolvedValueOnce({
+    "1": { native: false, inputs: [], unavailable: "unifideck_not_installed" }, "2": { native: true, inputs: [] },
+  });
+  await act(async () => { render(<EscaladoresSection />); });
+  expect(screen.queryByText("A")).toBeNull();
+  games[0].installed = false;
+  try {
+    await act(async () => { fireEvent.click(screen.getByText("Refresh")); });
+  } finally {
+    games[0].installed = true;
+  }
+  vi.mocked(api.getUpscalersCompat).mockResolvedValueOnce({});
+  await act(async () => { fireEvent.click(screen.getByText("Refresh")); });
+  expect(screen.getByText("A")).toBeTruthy();
+  expect(readSelectorContext().selector).toMatchObject({ compatibility: "partial", filtered: 0 });
+});
+
 it("keeps an overview failure distinct from an observed empty selector", async () => {
   const api = await import("../api");
   vi.mocked(api.getUpscalersOverview).mockRejectedValueOnce(new Error("RPC unavailable"));
