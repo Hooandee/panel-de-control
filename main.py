@@ -1465,15 +1465,18 @@ class Plugin(AmbientRpc):
         folders = tuple(path for path in (libraries[:32] if isinstance(libraries, list) else ()) if isinstance(path, str))
         pending = getattr(self, "_selector_inventory", None)
         if pending is None or pending[1].done():
-            task = asyncio.get_running_loop().run_in_executor(None, upscaler_games.selector_installs, _user_home(), folders)
-            self._selector_inventory = (folders, task)
+            loop = asyncio.get_running_loop()
+            confirmed: set[int] = set()
+            task = loop.run_in_executor(None, upscaler_games.selector_installs, _user_home(), folders,
+                                        lambda appid: loop.call_soon_threadsafe(confirmed.add, appid))
+            self._selector_inventory = (folders, task, confirmed)
         else:
-            previous_folders, task = pending
+            previous_folders, task, confirmed = pending
             if previous_folders != folders:
                 return {"appids": [], "complete": False}
         # A disconnected mount can stall a filesystem call in the kernel. Never queue a second scan behind it.
         done, _ = await asyncio.wait({task}, timeout=0.6)
-        return task.result() if done else {"appids": [], "complete": False}
+        return task.result() if done else {"appids": sorted(confirmed), "complete": False}
 
     async def get_upscalers_compat(self, appids: list[str], libraries: list | None = None) -> dict:
         folders = libraries if isinstance(libraries, list) else None

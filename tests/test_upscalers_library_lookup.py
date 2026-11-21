@@ -346,3 +346,22 @@ def test_selector_skips_nonregular_index_and_partial_manifest_without_waiting(st
     os.mkfifo(apps / "appmanifest_20.acf")
     _install(apps)
     assert games.selector_installs(service.home) == {"appids": [int(APPID)], "complete": False}
+
+
+def test_selector_reports_matches_before_checking_the_next_drive(tmp_path, steam_install, monkeypatch):
+    from upscalers import games
+
+    service, apps = steam_install
+    _install(apps)
+    secondary = tmp_path / "secondary"
+    _write_index(apps, f'"1" {{ "path" "{secondary}" }}')
+    confirmed = []
+    has_apps = games._has_steamapps
+
+    def check(path):
+        if path == secondary:
+            assert confirmed == [int(APPID)]
+        return has_apps(path)
+
+    monkeypatch.setattr(games, "_has_steamapps", check)
+    assert games.selector_installs(service.home, on_confirmed=confirmed.append) == {"appids": [int(APPID)], "complete": False}

@@ -80,6 +80,11 @@ def _selector_snapshot(value: dict) -> dict:
                 and type(sample.get("collection")) is bool and type(sample.get("manifest")) is bool
                 and sample.get("local") in ("true", "false", "missing", "unreadable") and sample.get("row") in ("visible", "unavailable")):
             result["samples"].append({key: sample[key] for key in ("appid", "collection", "manifest", "local", "row")})
+    omissions = value.get("omissions")
+    if isinstance(omissions, list):
+        result["omissions"] = [{"appid": item["appid"], "reason": item["reason"]} for item in omissions[:12]
+                               if isinstance(item, dict) and type(item.get("appid")) is int and 0 < item["appid"] < 2**31
+                               and item.get("reason") in ("no_metadata", "unreadable")]
     return result
 
 

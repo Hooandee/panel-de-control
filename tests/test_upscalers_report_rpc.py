@@ -84,9 +84,10 @@ def test_selector_trace_survives_final_bundle_without_private_fields(plugin, mon
     monkeypatch.setattr(plugin, "_init", lambda: None)
     row = {"appid": 3764200, "collection": True, "manifest": True, "local": "missing", "row": "visible"}
     selector = {"complete": False, "compatibility": "ready", "steam_rows": 1, "shortcut_rows": 1, "filtered": 0,
-                "no_metadata": 0, "not_game": 0, "recovered": 1, "samples": [row]}
+                "no_metadata": 0, "not_game": 0, "recovered": 1, "samples": [row], "omissions": [{"appid": 20, "reason": "no_metadata"}]}
     context = {"upscalers": {"status": "available", "selector_status": "observed",
                "selector": {**selector, "folder": "/private/library",
+                            "omissions": [*selector["omissions"], {"appid": 3000000123, "reason": "unreadable"}],
                             "samples": [{**row, "account": "private"}, {**row, "appid": 3000000123}]}}}
     bundle = asyncio.run(plugin._build_report_bundle(["upscalers"], "", str(tmp_path), None, context))
     frontend = bundle["state"]["upscalers"]["frontend"]
@@ -101,8 +102,9 @@ def test_slow_selector_inventory_does_not_block_or_queue_more_scans(plugin, monk
     release = threading.Event()
     calls = []
 
-    def stalled(_home, folders):
+    def stalled(_home, folders, on_confirmed):
         calls.append(folders)
+        on_confirmed(3764200)
         release.wait(3)
         return {"appids": [3764200], "complete": True}
 
@@ -114,5 +116,5 @@ def test_slow_selector_inventory_does_not_block_or_queue_more_scans(plugin, monk
         finally:
             release.set()
 
-    assert asyncio.run(read()) == [{"appids": [], "complete": False}] * 2
+    assert asyncio.run(read()) == [{"appids": [3764200], "complete": False}] * 2
     assert calls == [("/library",)]

@@ -7,6 +7,7 @@ import stat
 import threading
 import time
 from collections import Counter
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -174,24 +175,9 @@ def _discover(home: str) -> list[Path]:
         return list(found)
 
 
-def _libraries(home: str, counts: Counter, live_folders: tuple[str, ...] | None = None) -> dict[Path, str]:
-    """Each library Steam vouches for, with where it came from: the Steam folder itself, its index (read leniently
-    when the strict reader refuses it) and the folders Steam lists live. One entry per real folder."""
-    sources: dict[Path, str] = {}
-
-    def add(path: Path | None, source: str) -> None:
-        if path is None:
-            return
-        real = _real(path)
-        if real in sources:
-            return
-        if _has_steamapps(real):
-            sources[real] = source
-        else:
-            counts["unavailable_library"] += 1
-
+def _library_candidates(home: str, counts: Counter, live_folders: tuple[str, ...] | None) -> Iterator[tuple[Path, str]]:
     for root in steam_roots(home):
-        add(root, "root")
+        yield root, "root"
         index = root / "steamapps/libraryfolders.vdf"
         try:
             raw = _regular_bytes(index, vdf.MAX_BYTES)
@@ -211,8 +197,10 @@ def _libraries(home: str, counts: Counter, live_folders: tuple[str, ...] | None 
             folders = {}
             lenient = _lenient_index(raw)
             counts["lenient_path"] += len(lenient)
-            for raw in lenient:
-                add(_library_path(raw), "lenient_index")
+            for candidate in lenient:
+                path = _library_path(candidate)
+                if path is not None:
+                    yield path, "lenient_index"
         else:
             counts["read_index"] += 1
         for key, entry in folders.items():
@@ -223,27 +211,39 @@ def _libraries(home: str, counts: Counter, live_folders: tuple[str, ...] | None 
                 counts["invalid_entry"] += 1
                 continue
             counts["path_object" if isinstance(entry, dict) else "direct_path"] += 1
-            add(path, "index")
+            yield path, "index"
     if live_folders is None:
         with _libraries_lock:
             reported = list(_steam_reported)
     else:
         reported = [path for raw in live_folders if (path := _library_path(raw)) is not None]
     for path in reported:
-        if _real(path) not in sources:
+        yield path, "steam"
+
+
+def _available_libraries(home: str, counts: Counter, live_folders: tuple[str, ...] | None = None) -> Iterator[tuple[Path, str]]:
+    seen = set()
+    for path, source in _library_candidates(home, counts, live_folders):
+        real = _real(path)
+        if real in seen:
+            continue
+        if source == "steam":
             counts["steam_unindexed"] += 1
-        add(path, "steam")
-    counts["available"] = len(sources)
-    return sources
+        if _has_steamapps(real):
+            seen.add(real)
+            yield real, source
+        else:
+            counts["unavailable_library"] += 1
+    counts["available"] = len(seen)
 
 
 def library_paths(home: str, counts: Counter | None = None) -> list[Path]:
-    return list(_libraries(home, Counter() if counts is None else counts))
+    return [path for path, _ in _available_libraries(home, Counter() if counts is None else counts)]
 
 
 def library_summary(home: str) -> dict:
     counts = Counter()
-    sources = _libraries(home, counts)
+    sources = dict(_available_libraries(home, counts))
     return {**counts, "sources": dict(Counter(sources.values()))}
 
 
@@ -413,9 +413,9 @@ def _install_root(apps: Path, state: dict) -> Path | None:
 
 
 def _regular_bytes(path: str | Path, limit: int, *, nofollow: bool = False) -> bytes:
-    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | (os.O_NOFOLLOW if nofollow else 0))
-    with os.fdopen(fd, "rb") as source:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
+    flags = os.O_NONBLOCK | (os.O_NOFOLLOW if nofollow else 0)
+    with open(path, "rb", opener=lambda name, mode: os.open(name, mode | flags)) as source:
+        if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
             raise OSError("not_regular")
         return source.read(limit + 1)
 
@@ -432,16 +432,14 @@ def _selector_manifest(path: str, appid: str) -> bool:
     return state.get("stateflags") == str(STATE_FULLY_INSTALLED) and root is not None and root.is_dir()
 
 
-def selector_installs(home: str, live_folders: tuple[str, ...] = ()) -> dict:
+def selector_installs(home: str, live_folders: tuple[str, ...] = (), on_confirmed: Callable[[int], None] | None = None) -> dict:
     """Positive evidence only. A partial inventory can still recover games from reachable libraries."""
     appids: set[int] = set()
     counts = Counter()
     deadline = time.monotonic() + 0.35
-    libraries = _libraries(home, counts, live_folders)
-    complete = bool(libraries) and not any(counts[key] for key in
-        ("unavailable_library", "unreadable_index", "invalid_index", "invalid_entry", "missing_index"))
+    complete = True
     remaining = 1024
-    for library in libraries:
+    for library, _ in _available_libraries(home, counts, live_folders):
         try:
             with os.scandir(library / "steamapps") as entries:
                 for entry in entries:
@@ -453,12 +451,17 @@ def selector_installs(home: str, live_folders: tuple[str, ...] = ()) -> dict:
                     remaining -= 1
                     try:
                         if _selector_manifest(entry.path, match[1]):
-                            appids.add(int(match[1]))
+                            appid = int(match[1])
+                            if appid not in appids:
+                                appids.add(appid)
+                                if on_confirmed is not None:
+                                    on_confirmed(appid)
                     except (OSError, ValueError):
                         complete = False
         except OSError:
             complete = False
-    return {"appids": sorted(appids), "complete": complete}
+    errors = ("unavailable_library", "unreadable_index", "invalid_index", "invalid_entry", "missing_index")
+    return {"appids": sorted(appids), "complete": complete and bool(counts["available"]) and not any(counts[key] for key in errors)}
 
 
 def _manifest_game(library: Path, appid: str, contained: bool = False) -> tuple[str, Installed | None]:
@@ -504,7 +507,7 @@ def find_installed(home: str, appid: str, lookup: Counter | None = None) -> Inst
     if not appid.isdecimal():
         return None
     counts = Counter() if lookup is None else lookup
-    trusted = _libraries(home, counts)
+    trusted = dict(_available_libraries(home, counts))
     known = False
     for library, source in trusted.items():
         outcome, installed = _manifest_game(library, appid)

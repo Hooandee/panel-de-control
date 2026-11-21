@@ -1,8 +1,8 @@
 import { LuCircleCheck, LuClock, LuSlidersHorizontal, LuTriangleAlert } from "react-icons/lu";
 import { Focusable } from "@decky/ui";
-import { useCallback, useEffect, useMemo, useState, type FC, type ComponentProps } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ComponentProps } from "react";
 
-import { getUpscalersCompat, getUpscalersOverview, getUpscalersSelectorInstalls, type GameCompat } from "../api";
+import { getUpscalersOverview, getUpscalersSelectorInstalls } from "../api";
 import { FocusableCard } from "../components/FocusableCard";
 import { GameCover } from "../components/GameCover";
 import { useI18n } from "../i18n";
@@ -12,15 +12,13 @@ import { theme } from "../theme";
 import { BulkPanel } from "../upscalers/BulkPanel";
 import { GameView } from "../upscalers/GameView";
 import { IN_GAME_MODES, publishOverview, readCoverBadges, readInGameMode, setUpscalersSectionOpen, writeCoverBadges, writeInGameMode, type InGameMode } from "../upscalers/overlays";
-import { Fold, Label, SegmentRow } from "../upscalers/parts";
 import { badgeLabel, fallbackLine } from "../upscalers/model";
-import { MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
-import { publishSelectorContext } from "../upscalers/selectorContext";
+import { Fold, Label, MOTION_CSS, SegmentRow, Skeleton, statusColor } from "../upscalers/parts";
+import { publishSelectorContext, publishSelectorFailure } from "../upscalers/selectorContext";
 import { steamLibraryFolders } from "../upscalers/steamLibraries";
 import { showGame, takeHeldPage, type PageDraft } from "../upscalers/pageMemory";
 import type { UpscalerChoice, UpscalersOverview } from "../upscalers/types";
-
-const NO_COMPAT: Record<string, GameCompat> = {};
+import { useGameCompatibility } from "../upscalers/useGameCompatibility";
 
 const NavigationGroup = Focusable as FC<ComponentProps<typeof Focusable> & { childFocusDisabled?: boolean }>;
 
@@ -31,7 +29,7 @@ export const EscaladoresSection: FC = () => {
   const [failed, setFailed] = useState(false);
   const [held] = useState(takeHeldPage);
   const [selectedAppid, setSelectedAppid] = useState<number | null>(() => held?.appid ?? null);
-  const [compatResult, setCompatResult] = useState<{ appids: string; partial: boolean; compat: Record<string, GameCompat> } | null>(null);
+  const overviewRequest = useRef(0);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -40,17 +38,22 @@ export const EscaladoresSection: FC = () => {
   const [covers, setCovers] = useState(readCoverBadges);
 
   const refresh = useCallback(async () => {
+    const request = ++overviewRequest.current;
     try {
       const next = await getUpscalersOverview();
+      if (request !== overviewRequest.current) return;
       setOverview(next);
       publishOverview(next);
       setFailed(false);
     } catch {
-      setFailed(true);
+      if (request === overviewRequest.current) setFailed(true);
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    return () => { overviewRequest.current++; };
+  }, [refresh]);
   useEffect(() => {
     let alive = true;
     getUpscalersSelectorInstalls(steamLibraryFolders())
@@ -86,62 +89,20 @@ export const EscaladoresSection: FC = () => {
     return onUpscalersGameRequest(open);
   }, [overview, games, inventory]);
 
-  const appids = overview ? games.map((g) => String(g.liveAppid)).join(",") : "";
-  const compatRead = compatResult?.appids === appids;
-  const compat = compatResult?.compat ?? NO_COMPAT;
-  const compatIds = useMemo(() => new Set(compatResult?.appids.split(",")), [compatResult]);
-  useEffect(() => {
-    if (!appids) return;
-    let alive = true;
-    const ids = appids.split(",");
-    // The backend answers at most 400 games per call; a whole store library can be longer.
-    const batches = Array.from({ length: Math.ceil(ids.length / 400) }, (_, index) => ids.slice(index * 400, index * 400 + 400));
-    const libraries = steamLibraryFolders();
-    Promise.all(batches.map((batch) => getUpscalersCompat(batch, libraries).catch(() => ({}))))
-      .then((parts) => {
-        if (!alive) return;
-        const compat = Object.assign({}, ...parts);
-        setCompatResult({ appids, partial: ids.some((id) => !compat[id]), compat });
-      });
-    return () => { alive = false; };
-  }, [appids]);
-  // Store shortcuts with no installed game behind them (Unifideck lists a whole library) have nothing to scale.
-  // Shortcuts wait for that answer, so a library-only entry never shows up and then vanishes under the focus.
+  const { compat, checked, status } = useGameCompatibility(games, !!overview);
   const listed = useMemo(() => games.filter((game) => {
     const id = String(game.liveAppid);
-    return compatIds.has(id) ? !compat[id]?.unavailable : !game.isNonSteam;
-  }), [games, compat, compatIds]);
+    return checked?.has(id) ? !compat[id]?.unavailable : !game.isNonSteam;
+  }), [games, compat, checked]);
 
   useEffect(() => {
-    if (failed) {
-      publishSelectorContext(null);
-      return;
+    if (!overview) {
+      if (failed) publishSelectorFailure();
+    } else if (!selected) {
+      const filtered = games.filter((game) => compat[String(game.liveAppid)]?.unavailable).length;
+      publishSelectorContext(selection, listed, inventory?.complete ?? null, status, filtered);
     }
-    if (!overview || selected) return;
-    const listedIds = new Set(listed.map((game) => game.liveAppid));
-    const priority = (sample: (typeof selection.steam)[number]) =>
-      Number(!listedIds.has(sample.appid) || !sample.collection || sample.local !== "true");
-    const samples = [...selection.steam]
-      .sort((a, b) => priority(b) - priority(a))
-      .slice(0, 12)
-      .map((sample) => ({ ...sample,
-        row: listedIds.has(sample.appid) ? "visible" as const : "unavailable" as const }));
-    const shortcut_rows = listed.filter((game) => game.isNonSteam).length;
-    const { no_metadata, not_game, unreadable } = selection;
-    publishSelectorContext({
-      observed_at: Math.floor(Date.now() / 1000),
-      complete: inventory?.complete ?? null,
-      compatibility: !appids ? "ready" : !compatRead ? "pending" : compatResult?.partial ? "partial" : "ready",
-      recovered: selection.steam.filter((app) => app.manifest && (!app.collection || app.local !== "true")).length,
-      steam_rows: listed.length - shortcut_rows,
-      shortcut_rows,
-      filtered: games.filter((game) => compat[String(game.liveAppid)]?.unavailable).length,
-      no_metadata,
-      not_game,
-      unreadable,
-      samples,
-    });
-  }, [overview, failed, selected, games, listed, appids, compatRead, compatResult, compat, selection, inventory]);
+  }, [overview, failed, selected, games, listed, status, compat, selection, inventory]);
 
   return (
     <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>

@@ -151,6 +151,7 @@ export function readUpscalersSelection(confirmedAppids: readonly number[]) {
       unreadableIds.add(appid);
     }
   }
+  const omitted = new Map<number, "no_metadata" | "unreadable">();
   let no_metadata = 0;
   let not_game = 0;
   for (const appid of manifests) {
@@ -160,6 +161,7 @@ export function readUpscalersSelection(confirmedAppids: readonly number[]) {
       const ov = inCollection?.app_type === undefined ? lookupOverview(appid) ?? inCollection : inCollection;
       if (!ov || ov.app_type === undefined) {
         no_metadata++;
+        if (!rows.has(appid)) omitted.set(appid, "no_metadata");
       } else if (!isPublicSteamGame(ov)) {
         if (ov.app_type === APP_TYPE_TOOL) rows.delete(appid);
         not_game++;
@@ -168,12 +170,13 @@ export function readUpscalersSelection(confirmedAppids: readonly number[]) {
       }
     } catch {
       unreadableIds.add(appid);
+      if (!rows.has(appid)) omitted.set(appid, "unreadable");
     }
   }
   const entries = [...rows.values()];
   const steam = entries.flatMap((row) => row.steam ? [row.steam] : []);
   const unreadable = unreadableCollection + unreadableIds.size;
-  return { games: entries.map((row) => row.game), steam, no_metadata, not_game, unreadable };
+  return { games: entries.map((row) => row.game), steam, no_metadata, not_game, unreadable, omitted };
 }
 
 /** Every game in the library, installed or not, plus non-Steam shortcuts; tools excluded. Ids and names only. Never throws. */

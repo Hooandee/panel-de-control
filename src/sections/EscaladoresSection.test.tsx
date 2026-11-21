@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -16,9 +16,9 @@ vi.mock("../api", () => ({
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock("../components/FocusableCard", () => ({ FocusableCard: ({ children }: any) => <div>{children}</div> }));
 vi.mock("../components/GameCover", () => ({ GameCover: () => null }));
-vi.mock("../upscalers/BulkPanel", () => ({ BulkPanel: () => null }));
+vi.mock("../upscalers/BulkPanel", () => ({ BulkPanel: ({ onChanged }: { onChanged: () => void }) => <button onClick={onChanged}>Refresh</button> }));
 vi.mock("../upscalers/overlays", () => ({
-  IN_GAME_MODES: [], reportedAppids: () => [], publishOverview: vi.fn(), readInGameMode: () => "start", setUpscalersSectionOpen: vi.fn(), writeInGameMode: vi.fn(), readCoverBadges: () => true, writeCoverBadges: vi.fn(),
+  IN_GAME_MODES: [], reportedAppids: vi.fn(() => []), publishOverview: vi.fn(), readInGameMode: () => "start", setUpscalersSectionOpen: vi.fn(), writeInGameMode: vi.fn(), readCoverBadges: () => true, writeCoverBadges: vi.fn(),
 }));
 vi.mock("../upscalers/pageMemory", () => ({ showGame: vi.fn(), takeHeldPage: () => null }));
 vi.mock("../upscalers/GameView", () => ({
@@ -105,26 +105,26 @@ it("asks for compatibility in batches the backend accepts", async () => {
   games.splice(2, extra.length);
 });
 
-const requiemManifest = { appid: 3764200, state_flags: 4, name: "Resident Evil Requiem", source: "steam_manifest" };
+const requiem = { appid: 3764200, name: "Resident Evil Requiem" };
 
 it.each(["absent", "false", "missing"] as const)("lists a confirmed Steam install with collection state %s", async (collection) => {
   const api = await import("../api");
-  const steamOverview = { appid: requiemManifest.appid, display_name: requiemManifest.name, app_type: 1 };
+  const steamOverview = { appid: requiem.appid, display_name: requiem.name, app_type: 1 };
   if (collection !== "absent") {
     vi.stubGlobal("collectionStore", { allAppsCollection: { allApps: [
       { ...steamOverview, local_per_client_data: collection === "false" ? { installed: false } : {} },
     ] } });
   }
   vi.stubGlobal("appStore", { GetAppOverviewByAppID: () => steamOverview });
-  vi.mocked(api.getUpscalersSelectorInstalls).mockResolvedValueOnce({ complete: true, appids: [requiemManifest.appid] });
+  vi.mocked(api.getUpscalersSelectorInstalls).mockResolvedValueOnce({ complete: true, appids: [requiem.appid] });
   await act(async () => { render(<EscaladoresSection />); });
-  expect(screen.getByText(requiemManifest.name)).toBeTruthy();
+  expect(screen.getByText(requiem.name)).toBeTruthy();
   const report = await upscalersReportContext();
   expect(report.selector?.samples[0]).toEqual({
-    appid: requiemManifest.appid, collection: collection !== "absent", manifest: true,
+    appid: requiem.appid, collection: collection !== "absent", manifest: true,
     local: collection === "false" ? "false" : "missing", row: "visible",
   });
-  await act(async () => { openUpscalersFor(requiemManifest.appid); });
+  await act(async () => { openUpscalersFor(requiem.appid); });
   expect(screen.getByTestId("page").textContent).toBe("3764200:3764200");
 });
 
@@ -134,32 +134,35 @@ it("keeps an installed native shortcut alongside a confirmed Steam install", asy
     { appid: 3000000123, display_name: "External shortcut", app_type: 1073741824 },
   ] } });
   vi.stubGlobal("appStore", { GetAppOverviewByAppID: () => ({
-    appid: requiemManifest.appid, display_name: requiemManifest.name, app_type: 8,
+    appid: requiem.appid, display_name: requiem.name, app_type: 8,
   }) });
-  vi.mocked(api.getUpscalersSelectorInstalls).mockResolvedValueOnce({ complete: true, appids: [requiemManifest.appid] });
+  vi.mocked(api.getUpscalersSelectorInstalls).mockResolvedValueOnce({ complete: true, appids: [requiem.appid] });
   vi.mocked(api.getUpscalersCompat).mockResolvedValueOnce({
     "3000000123": { inputs: [], native: true, unavailable: null },
   } as never);
   await act(async () => { render(<EscaladoresSection />); });
-  expect(screen.getByText(requiemManifest.name)).toBeTruthy();
+  expect(screen.getByText(requiem.name)).toBeTruthy();
   expect(screen.getByText("External shortcut")).toBeTruthy();
   expect(screen.getByText("up.list.linux")).toBeTruthy();
   expect(readSelectorContext().selector).toMatchObject({ steam_rows: 1, shortcut_rows: 1,
-    samples: [{ appid: requiemManifest.appid }] });
+    samples: [{ appid: requiem.appid }] });
 });
 
 it("counts rejected manifest candidates without sampling tools or mismatched Steam entries", async () => {
   const api = await import("../api");
+  const { reportedAppids } = await import("../upscalers/overlays");
+  vi.mocked(reportedAppids).mockReturnValueOnce(["50", "51"]);
   vi.stubGlobal("appStore", { GetAppOverviewByAppID: (appid: number) =>
     appid === 50 ? { appid, app_type: 4, display_name: "Tool" }
       : { appid: 99, app_type: 1, display_name: "Other game" } });
-  vi.mocked(api.getUpscalersSelectorInstalls).mockResolvedValueOnce({ complete: false, appids: [50, 51] });
+  vi.mocked(api.getUpscalersSelectorInstalls).mockResolvedValueOnce({ complete: false, appids: [50, 51, 52] });
   await act(async () => { render(<EscaladoresSection />); });
   expect(screen.queryByText("Tool")).toBeNull();
   expect(screen.queryByText("Other game")).toBeNull();
   expect(readSelectorContext().selector).toMatchObject({
-    complete: false, filtered: 0, no_metadata: 1, not_game: 1, samples: [{ appid: 1 }, { appid: 2 }],
+    complete: false, filtered: 0, no_metadata: 2, not_game: 1, samples: [{ appid: 1 }, { appid: 2 }],
   });
+  expect((await upscalersReportContext()).selector).toHaveProperty("omissions", [{ appid: 51, reason: "no_metadata" }]);
 });
 
 it("keeps an overview failure distinct from an observed empty selector", async () => {
@@ -170,18 +173,40 @@ it("keeps an overview failure distinct from an observed empty selector", async (
   expect(readSelectorContext()).toEqual({ selector: null, selector_status: "failed" });
 });
 
+it("keeps reporting visible rows when a refresh fails and ignores older replies", async () => {
+  const api = await import("../api");
+  await act(async () => { render(<EscaladoresSection />); });
+  let rejectOlder!: (error: Error) => void;
+  vi.mocked(api.getUpscalersOverview).mockReturnValueOnce(new Promise((_, reject) => { rejectOlder = reject; }));
+  await act(async () => { fireEvent.click(screen.getByText("Refresh")); });
+  await act(async () => { fireEvent.click(screen.getByText("Refresh")); });
+  await act(async () => { rejectOlder(Error("stale")); });
+  expect(screen.queryByText("load.error")).toBeNull();
+
+  vi.mocked(api.getUpscalersOverview).mockRejectedValueOnce(Error("unavailable"));
+  await act(async () => { fireEvent.click(screen.getByText("Refresh")); });
+  expect(screen.getByText("load.error")).toBeTruthy();
+  expect(screen.getByText("A")).toBeTruthy();
+  expect(readSelectorContext()).toMatchObject({ selector_status: "observed", selector: { steam_rows: 2 } });
+});
+
 it("shows the normal list while the manifest RPC waits and opens its pending game on arrival", async () => {
   const api = await import("../api");
-  let finish: (result: { complete: boolean; appids: number[] }) => void = () => undefined;
+  vi.mocked(api.getUpscalersCompat).mockClear();
+  let finishCompat!: (result: {}) => void;
+  vi.mocked(api.getUpscalersCompat).mockReturnValueOnce(new Promise((resolve) => { finishCompat = resolve; }));
+  let finish!: (result: { complete: boolean; appids: number[] }) => void;
   vi.mocked(api.getUpscalersSelectorInstalls).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
   vi.stubGlobal("appStore", { GetAppOverviewByAppID: () => ({
-    appid: requiemManifest.appid, display_name: requiemManifest.name, app_type: 1,
+    appid: requiem.appid, display_name: requiem.name, app_type: 1,
   }) });
-  await act(async () => { openUpscalersFor(requiemManifest.appid); render(<EscaladoresSection />); });
+  await act(async () => { openUpscalersFor(requiem.appid); render(<EscaladoresSection />); });
   expect(screen.getByText("A")).toBeTruthy();
   expect(screen.queryByTestId("page")).toBeNull();
-  await act(async () => { finish({ complete: true, appids: [requiemManifest.appid] }); });
+  await act(async () => { finish({ complete: true, appids: [requiem.appid] }); });
   expect(screen.getByTestId("page").textContent).toBe("3764200:3764200");
+  expect(vi.mocked(api.getUpscalersCompat).mock.calls.map(([ids]) => ids)).toEqual([["1", "2"], ["3764200"]]);
+  await act(async () => { finishCompat({}); });
 });
 
 it("skips unreadable Steam entries without hiding healthy rows", async () => {
