@@ -1754,6 +1754,32 @@ def test_reapply_offloads_charge_limit_before_scheduling_reconcile(
     assert backend.set_requests == [80]
 
 
+def test_sleep_invalidates_a_queued_charge_reapply_until_a_fresh_intent(tmp_path, monkeypatch):
+    backend = _RecordingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings.update(charge_limit_enabled=True, charge_limit_percent=80)
+    suspended = 0.0
+    monkeypatch.setattr(sys.modules["main"], "read_suspend_time", lambda: suspended)
+    blocker = threading.Event()
+
+    async def scenario():
+        nonlocal suspended
+        p._offload(blocker.wait)
+        try:
+            p._reapply_all(on_ac=True)
+            suspended = 42.6
+        finally:
+            blocker.set()
+        await p._offload_call(lambda: None)
+        assert backend.set_requests == []
+        assert p._charge_limit_reconcile_task is None
+        await p.set_charge_limit(True, 75)
+        assert backend.set_requests == [75]
+
+    asyncio.run(scenario())
+
+
 def test_scheduler_reports_fixed_backend_as_unverifiable(tmp_path, monkeypatch):
     backend = _FixedChargeLimit()
     p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)

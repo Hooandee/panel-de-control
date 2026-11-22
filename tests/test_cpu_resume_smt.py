@@ -168,3 +168,65 @@ def test_manual_override_does_not_leak_into_another_game(tmp_path, monkeypatch):
         assert profiles.effective('42')['cores'] == 6
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("detected", [True, False], ids=["token", "suspend-clock"])
+def test_queued_profile_cannot_park_threads_after_wake(tmp_path, monkeypatch, detected):
+    import threading
+
+    plugin, smt = _plugin(tmp_path, monkeypatch)
+    import main
+    suspended = 0.0
+    monkeypatch.setattr(main, "read_suspend_time", lambda: None if detected else suspended)
+    unblock = threading.Event()
+
+    async def scenario():
+        nonlocal suspended
+        plugin._offload(unblock.wait)
+        try:
+            plugin._apply_cpu()
+            # The sleep service leaves all threads online before the worker resumes.
+            smt.set(True)
+            plugin._cores.set(8)
+            suspended += 42.6
+            if detected:
+                plugin._on_resume_detected(42.6)
+        finally:
+            unblock.set()
+        await plugin._offload_call(lambda: None)
+        assert smt.enabled() and plugin._cores.active() == 8
+        if not detected:
+            plugin._on_resume_detected(42.6)
+        await _apply(plugin)
+        plugin._release_resume_hold(plugin._resume_token)
+        await plugin._offload_call(lambda: None)
+        assert not smt.enabled() and plugin._cores.active() == 4
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("frequency_fails", [False, True], ids=["apply", "rollback"])
+def test_wake_during_frequency_apply_keeps_threads_online(tmp_path, monkeypatch, frequency_fails):
+    from cpu.frequency import CpuFrequencyResult
+
+    plugin, smt = _plugin(tmp_path, monkeypatch)
+    import main
+    suspended = 0.0
+    monkeypatch.setattr(main, "read_suspend_time", lambda: suspended)
+    set_auto = plugin._cpu_frequency.set_auto
+
+    def wake_during_apply():
+        nonlocal suspended
+        assert smt.enabled() and plugin._cores.active() == 8
+        suspended = 42.6
+        if frequency_fails:
+            return CpuFrequencyResult(
+                False, "failed", None, None, {"attempted": False, "ok": None},
+                "write_failed", 0,
+            )
+        return set_auto()
+
+    monkeypatch.setattr(plugin._cpu_frequency, "set_auto", wake_during_apply)
+    asyncio.run(_apply(plugin))
+    assert smt.enabled() and plugin._cores.active() == 8
+    assert smt.writes == [True]
