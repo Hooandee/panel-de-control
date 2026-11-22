@@ -72,3 +72,49 @@ def test_plugin_close_stops_lossless_log_monitor(plugin, tmp_path, monkeypatch):
     assert not worker.is_alive()
     engine.status()
     assert not worker.is_alive()
+
+
+def test_selector_trace_survives_final_bundle_without_private_fields(plugin, monkeypatch, tmp_path):
+    from test_steam_cleaner_rpc import stub_other_report_sources
+    from upscalers.service import UpscalerService
+
+    stub_other_report_sources(plugin, monkeypatch)
+    service = UpscalerService(str(tmp_path / "home"), str(tmp_path / "state"), "rdna2")
+    monkeypatch.setattr(plugin, "_upscalers", lambda: service)
+    monkeypatch.setattr(plugin, "_init", lambda: None)
+    row = {"appid": 3764200, "collection": True, "manifest": True, "local": "missing", "row": "visible"}
+    selector = {"complete": False, "compatibility": "ready", "steam_rows": 1, "shortcut_rows": 1, "filtered": 0,
+                "no_metadata": 0, "not_game": 0, "recovered": 1, "manifest_rejected": {"not_installed": 2}, "samples": [row], "omissions": [{"appid": 20, "reason": "no_metadata"}]}
+    context = {"upscalers": {"status": "available", "selector_status": "observed",
+               "selector": {**selector, "folder": "/private/library", "manifest_rejected": {"not_installed": 2, "/private": 1},
+                            "omissions": [*selector["omissions"], {"appid": 3000000123, "reason": "unreadable"}],
+                            "samples": [{**row, "account": "private"}, {**row, "appid": 3000000123}]}}}
+    bundle = asyncio.run(plugin._build_report_bundle(["upscalers"], "", str(tmp_path), None, context))
+    frontend = bundle["state"]["upscalers"]["frontend"]
+    assert frontend["selector_status"] == "observed"
+    assert frontend["selector"] == selector
+
+
+def test_slow_selector_inventory_does_not_block_or_queue_more_scans(plugin, monkeypatch):
+    import threading
+    from upscalers import games
+
+    release = threading.Event()
+    calls = []
+
+    def stalled(_home, folders, on_confirmed):
+        calls.append(folders)
+        on_confirmed(3764200)
+        release.wait(3)
+        return {"appids": [3764200], "complete": True}
+
+    monkeypatch.setattr(games, "selector_installs", stalled)
+
+    async def read():
+        try:
+            return await asyncio.gather(*(plugin.get_upscalers_selector_installs(["/library"]) for _ in range(2)))
+        finally:
+            release.set()
+
+    assert asyncio.run(read()) == [{"appids": [3764200], "complete": False}] * 2
+    assert calls == [("/library",)]

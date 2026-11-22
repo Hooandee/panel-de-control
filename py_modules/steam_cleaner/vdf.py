@@ -10,6 +10,10 @@ def read_text(path):
         raw = source.read(MAX_BYTES + 1)
     if len(raw) > MAX_BYTES:
         raise ValueError("oversized_vdf")
+    return parse_text(raw)
+
+
+def parse_text(raw):
     text = raw.decode("utf-8-sig")
     tokens = []
     position = 0

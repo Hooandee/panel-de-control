@@ -10,8 +10,9 @@ const listeners = new Set<() => void>();
 let pending: number | null = null;
 
 /** The game the next Escaladores mount should open, consumed once. */
-export function takePendingUpscalersGame(): number | null {
+export function takePendingUpscalersGame(accept: (appid: number) => boolean = () => true): number | null {
   const appid = pending;
+  if (appid !== null && !accept(appid)) return null;
   pending = null;
   return appid;
 }
