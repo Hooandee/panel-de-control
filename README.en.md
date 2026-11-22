@@ -70,11 +70,7 @@ a moment.
 that keeps going while you play. More on it below.
 
 ✨ **Themes.** Change how Steam looks from top to bottom with themes you install and update right
-from Panel. Early-access themes carry an Early label and install from a zip. If Steam freezes
-while updating an Early theme, open its details once Steam responds and deactivate it. Under
-**Install from file**, choose the new zip or the original zip for an earlier version still in the
-catalog. Activate the theme after installation. If its details are inaccessible, you can also
-deactivate the theme under **… → CSS Loader**.
+from Panel. Themes in early access show an Early label and install from their zip.
 
 🎮 **Controllers.** Button remapping that works with Handheld Daemon and InputPlumber. Still
 in beta.
