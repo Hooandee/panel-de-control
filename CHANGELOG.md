@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.94.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.1...panel-de-control-v0.94.2) (2026-11-22)
+
+
+### Bug Fixes
+
+* prevent premature CPU and charger profile writes after sleep ([#1449](https://github.com/Hooandee/panel-de-control/issues/1449)) ([c90a977](https://github.com/Hooandee/panel-de-control/commit/c90a97799e09011fb54698a812aa48e0c8d4ed78))
+* **themes:** stop the active theme before replacing its files ([#1451](https://github.com/Hooandee/panel-de-control/issues/1451)) ([8b0a941](https://github.com/Hooandee/panel-de-control/commit/8b0a94198ad0f2a360f896fc6740d7a4a09b22b7))
+* **upscalers:** recover installed Steam games missing from the selector ([#1450](https://github.com/Hooandee/panel-de-control/issues/1450)) ([01f6add](https://github.com/Hooandee/panel-de-control/commit/01f6add43dacb72abad094bf07bbac974026b279))
+
 ## [0.94.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.0...panel-de-control-v0.94.1) (2026-11-19)
 
 
