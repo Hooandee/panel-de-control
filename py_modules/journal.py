@@ -372,6 +372,8 @@ def _is_key_record(record: dict) -> bool:
     if record.get("l") in ("W", "E", "C") or record.get("s") in _KEY_SOURCES:
         return True
     message = record.get("m")
+    if record.get("s") == "ui" and record.get("area") == "themes" and message == "theme_interaction":
+        return True
     return isinstance(message, str) and any(key in message for key in _KEY_MESSAGES)
 
 

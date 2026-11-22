@@ -2519,17 +2519,22 @@ class Plugin(AmbientRpc):
         downloads = os.path.join(home, "Downloads")
         return downloads if os.path.isdir(downloads) else home
 
-    async def prepare_early_theme_install(self, archive_path: str) -> dict:
+    async def prepare_early_theme_install(self, archive_path: str, catalog_id: str | None = None) -> dict:
         """Installs a theme zip the user picked, only if it is byte for byte a published early build."""
         self._init()
         if not isinstance(archive_path, str) or not archive_path or len(archive_path) > 4096:
             return {"ok": False, "code": "invalid_archive"}
+        if catalog_id is not None and (
+            not isinstance(catalog_id, str) or _SAFE_THEME_ID.fullmatch(catalog_id) is None
+        ):
+            return {"ok": False, "code": "unsupported_theme"}
 
         def prepare() -> dict:
             return self._remote_themes().prepare_early_install(
                 archive_path,
                 self._themes_root(),
                 self._theme_receipts_path(),
+                catalog_id=catalog_id,
             )
 
         try:
@@ -16383,6 +16388,10 @@ journal.trace_calls(
         "get_theme_storage", "set_theme_storage", "force_close_game", "pause_theme_game", "resume_theme_game",
     }),
     automatic=frozenset({"load_theme_extension"}),
-    hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers", "add_upscaler_mod"}),
+    hidden_arguments=frozenset({
+        "submit_report", "set_aside_theme_leftovers", "add_upscaler_mod", "prepare_early_theme_install",
+        "commit_theme_install", "rollback_theme_install", "acknowledge_theme_install_rollback",
+        "begin_theme_activation", "settle_theme_activation", "acknowledge_theme_activation",
+    }),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

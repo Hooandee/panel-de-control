@@ -92,6 +92,7 @@ import {
   createProductionThemesDependencies,
 } from "./themes/themesClient";
 import { configureThemeEarlyCheckHost, configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
+import { configureThemeInteractionJournal } from "./themes/themeInteractionJournal";
 import { configureThemeHealthHost } from "./themes/themeCleanupHost";
 import { getThemesClient } from "./themes/useThemes";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
@@ -184,6 +185,13 @@ export default definePlugin(() => {
     read: () => parseSectionHandoffs(readString("pdc:themeSectionHandoffs")),
     write: (handoffs) => writeString("pdc:themeSectionHandoffs", JSON.stringify(handoffs)),
   });
+  const stopThemeInteractionJournal = configureThemeInteractionJournal(() => {
+    try {
+      const main = findSP()?.document;
+      if (main) return [{ doc: main, surface: "main" }];
+    } catch {}
+    return [];
+  }, recordUiEvent, onQamDocument);
   const themesClient = getThemesClient(createProductionThemesDependencies());
   let qamRuntime: ReturnType<typeof startPluginQamRuntime> | null = null;
   let dismounted = false;
@@ -352,6 +360,7 @@ export default definePlugin(() => {
       releaseArtworkHost();
       releaseVidaArtworkHost();
       stopQamCoverWatch();
+      stopThemeInteractionJournal();
       releaseThemeInstallHost();
       releaseThemeActivationJournalHost();
       releaseThemePublicationHost();
