@@ -2,7 +2,7 @@ import { LuCircleCheck, LuClock, LuSlidersHorizontal, LuTriangleAlert } from "re
 import { Focusable } from "@decky/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ComponentProps } from "react";
 
-import { getUpscalersOverview, getUpscalersSelectorInstalls } from "../api";
+import { getUpscalersOverview, getUpscalersSelectorInstalls, type SelectorInventory } from "../api";
 import { FocusableCard } from "../components/FocusableCard";
 import { GameCover } from "../components/GameCover";
 import { useI18n } from "../i18n";
@@ -25,7 +25,7 @@ const NavigationGroup = Focusable as FC<ComponentProps<typeof Focusable> & { chi
 export const EscaladoresSection: FC = () => {
   const { t } = useI18n();
   const [overview, setOverview] = useState<UpscalersOverview | null>(null);
-  const [inventory, setInventory] = useState<{ appids: number[]; complete: boolean } | null>(null);
+  const [inventory, setInventory] = useState<SelectorInventory | null>(null);
   const [failed, setFailed] = useState(false);
   const [held] = useState(takeHeldPage);
   const [selectedAppid, setSelectedAppid] = useState<number | null>(() => held?.appid ?? null);
@@ -56,10 +56,17 @@ export const EscaladoresSection: FC = () => {
   }, [refresh]);
   useEffect(() => {
     let alive = true;
-    getUpscalersSelectorInstalls(steamLibraryFolders())
-      .then((result) => { if (alive) setInventory(result); })
-      .catch(() => { if (alive) setInventory({ appids: [], complete: false }); });
-    return () => { alive = false; };
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const read = (again: boolean) => getUpscalersSelectorInstalls(steamLibraryFolders())
+      .catch((): SelectorInventory => ({ appids: [], complete: false }))
+      .then((result) => {
+        if (!alive) return;
+        setInventory((previous) => previous && previous.appids.length > result.appids.length ? previous : result);
+        // A slow drive can still be scanning: ask once more for what it confirms later.
+        if (again && !result.complete) retry = setTimeout(() => void read(false), 2500);
+      });
+    void read(true);
+    return () => { alive = false; clearTimeout(retry); };
   }, []);
   useEffect(() => {
     setUpscalersSectionOpen(true);
@@ -100,7 +107,7 @@ export const EscaladoresSection: FC = () => {
       if (failed) publishSelectorFailure();
     } else if (!selected) {
       const filtered = games.filter((game) => compat[String(game.liveAppid)]?.unavailable).length;
-      publishSelectorContext(selection, listed, inventory?.complete ?? null, status, filtered);
+      publishSelectorContext(selection, listed, inventory?.complete ?? null, status, filtered, inventory?.rejected);
     }
   }, [overview, failed, selected, games, listed, status, compat, selection, inventory]);
 

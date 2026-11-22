@@ -73,6 +73,10 @@ def _selector_snapshot(value: dict) -> dict:
         result["complete"] = value["complete"]
     if value.get("compatibility") in ("pending", "ready", "partial"):
         result["compatibility"] = value["compatibility"]
+    rejected = value.get("manifest_rejected")
+    if isinstance(rejected, dict):
+        result["manifest_rejected"] = {key: rejected[key] for key in ("not_installed", "no_folder", "invalid", "unreadable")
+                                       if type(rejected.get(key)) is int and 0 <= rejected[key] <= 1_000_000}
     result["samples"] = []
     samples = value.get("samples")
     for sample in samples[:12] if isinstance(samples, list) else ():

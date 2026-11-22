@@ -324,17 +324,21 @@ def test_selector_confirms_fully_installed_manifest_in_accessible_secondary_libr
     folder = secondary / "steamapps"
     (folder / "common" / "Resident Evil Requiem").mkdir(parents=True)
     _write_index(apps, f'"0" {{ "path" "{apps.parent}" }} "1" {{ "path" "{secondary}" }} "2" {{ "path" "{missing}" }}')
+    (folder / "common" / "Updating").mkdir()
     for appid, flags, directory in [("3764200", 4, "Resident Evil Requiem"), ("10", 1024, "Resident Evil Requiem"),
-                                    ("20", 4, "Removed"), ("30", 4, "..")]:
+                                    ("20", 4, "Removed"), ("30", 4, ".."), ("418370", 516, "Updating"),
+                                    ("40", "x", "Updating")]:
         (folder / f"appmanifest_{appid}.acf").write_text(
             f'"AppState" {{ "appid" "{appid}" "StateFlags" "{flags}" "installdir" "{directory}" }}'
         )
 
     from upscalers import games
 
-    assert games.selector_installs(service.home) == {"appids": [3764200], "complete": False}
+    rejected = {"not_installed": 1, "no_folder": 2, "invalid": 1}
+    assert games.selector_installs(service.home) == {"appids": [418370, 3764200], "complete": False, "rejected": rejected}
     _write_index(apps, f'"0" {{ "path" "{apps.parent}" }}')
-    assert games.selector_installs(service.home, (str(secondary),)) == {"appids": [3764200], "complete": True}
+    assert games.selector_installs(service.home, (str(secondary),)) == {
+        "appids": [418370, 3764200], "complete": True, "rejected": rejected}
 
 
 def test_selector_skips_nonregular_index_and_partial_manifest_without_waiting(steam_install):
@@ -345,7 +349,7 @@ def test_selector_skips_nonregular_index_and_partial_manifest_without_waiting(st
     os.mkfifo(apps / "libraryfolders.vdf")
     os.mkfifo(apps / "appmanifest_20.acf")
     _install(apps)
-    assert games.selector_installs(service.home) == {"appids": [int(APPID)], "complete": False}
+    assert games.selector_installs(service.home) == {"appids": [int(APPID)], "complete": False, "rejected": {"unreadable": 1}}
 
 
 def test_selector_reports_matches_before_checking_the_next_drive(tmp_path, steam_install, monkeypatch):
@@ -364,4 +368,4 @@ def test_selector_reports_matches_before_checking_the_next_drive(tmp_path, steam
         return has_apps(path)
 
     monkeypatch.setattr(games, "_has_steamapps", check)
-    assert games.selector_installs(service.home, on_confirmed=confirmed.append) == {"appids": [int(APPID)], "complete": False}
+    assert games.selector_installs(service.home, on_confirmed=confirmed.append)["appids"] == [int(APPID)]

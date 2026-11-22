@@ -420,7 +420,8 @@ def _regular_bytes(path: str | Path, limit: int, *, nofollow: bool = False) -> b
         return source.read(limit + 1)
 
 
-def _selector_manifest(path: str, appid: str) -> bool:
+def _selector_manifest(path: str, appid: str) -> str | None:
+    """None when the manifest proves an installed game, else why it does not."""
     limit = 128 * 1024
     raw = _regular_bytes(path, limit, nofollow=True)
     if len(raw) > limit:
@@ -428,40 +429,57 @@ def _selector_manifest(path: str, appid: str) -> bool:
     state = vdf.parse_text(raw).get("appstate")
     if not isinstance(state, dict) or state.get("appid") != appid:
         raise ValueError("invalid_appid")
+    try:
+        flags = int(state.get("stateflags", ""))
+    except ValueError:
+        return "invalid"
+    # An installed game keeps this bit while Steam updates, validates or queues it.
+    if not flags & STATE_FULLY_INSTALLED:
+        return "not_installed"
     root = _install_root(Path(path).parent, state)
-    return state.get("stateflags") == str(STATE_FULLY_INSTALLED) and root is not None and root.is_dir()
+    return None if root is not None and root.is_dir() else "no_folder"
 
 
 def selector_installs(home: str, live_folders: tuple[str, ...] = (), on_confirmed: Callable[[int], None] | None = None) -> dict:
     """Positive evidence only. A partial inventory can still recover games from reachable libraries."""
     appids: set[int] = set()
     counts = Counter()
-    deadline = time.monotonic() + 0.35
+    rejected = Counter()
+    deadline = time.monotonic() + 3.0
     complete = True
     remaining = 1024
+
+    def result(done: bool) -> dict:
+        return {"appids": sorted(appids), "complete": done, "rejected": dict(rejected)}
+
     for library, _ in _available_libraries(home, counts, live_folders):
         try:
             with os.scandir(library / "steamapps") as entries:
                 for entry in entries:
                     if remaining == 0 or time.monotonic() >= deadline:
-                        return {"appids": sorted(appids), "complete": False}
+                        return result(False)
                     match = re.fullmatch(r"appmanifest_([1-9][0-9]{0,9})\.acf", entry.name)
                     if not match or int(match[1]) >= 2**31:
                         continue
                     remaining -= 1
                     try:
-                        if _selector_manifest(entry.path, match[1]):
-                            appid = int(match[1])
-                            if appid not in appids:
-                                appids.add(appid)
-                                if on_confirmed is not None:
-                                    on_confirmed(appid)
+                        reason = _selector_manifest(entry.path, match[1])
                     except (OSError, ValueError):
+                        rejected["unreadable"] += 1
                         complete = False
+                        continue
+                    if reason is not None:
+                        rejected[reason] += 1
+                        continue
+                    appid = int(match[1])
+                    if appid not in appids:
+                        appids.add(appid)
+                        if on_confirmed is not None:
+                            on_confirmed(appid)
         except OSError:
             complete = False
     errors = ("unavailable_library", "unreadable_index", "invalid_index", "invalid_entry", "missing_index")
-    return {"appids": sorted(appids), "complete": complete and bool(counts["available"]) and not any(counts[key] for key in errors)}
+    return result(complete and bool(counts["available"]) and not any(counts[key] for key in errors))
 
 
 def _manifest_game(library: Path, appid: str, contained: bool = False) -> tuple[str, Installed | None]:

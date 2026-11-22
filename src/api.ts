@@ -1401,7 +1401,8 @@ export const setDuoArtwork = callable<[number, import("./themes/artwork").GameAr
 export const getThemeArtwork = callable<[store: import("./themes/artwork").ThemeArtworkStore], Record<string, import("./themes/artwork").GameArtwork>>("get_theme_artwork");
 export const setThemeArtwork = callable<[store: import("./themes/artwork").ThemeArtworkStore, appId: number, artwork: import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_theme_artwork");
 
-export const getUpscalersSelectorInstalls = callable<[libraries: string[]], { appids: number[]; complete: boolean }>("get_upscalers_selector_installs");
+export interface SelectorInventory { appids: number[]; complete: boolean; rejected?: Record<string, number> }
+export const getUpscalersSelectorInstalls = callable<[libraries: string[]], SelectorInventory>("get_upscalers_selector_installs");
 export const getUpscalersOverview = callable<[], UpscalersOverview>("get_upscalers_overview");
 export interface GameCompat { native: boolean; inputs: string[]; preferred?: string; unavailable?: string }
 export const getUpscalersCompat = callable<[appids: string[], libraries?: string[]], Record<string, GameCompat>>("get_upscalers_compat");

@@ -84,9 +84,9 @@ def test_selector_trace_survives_final_bundle_without_private_fields(plugin, mon
     monkeypatch.setattr(plugin, "_init", lambda: None)
     row = {"appid": 3764200, "collection": True, "manifest": True, "local": "missing", "row": "visible"}
     selector = {"complete": False, "compatibility": "ready", "steam_rows": 1, "shortcut_rows": 1, "filtered": 0,
-                "no_metadata": 0, "not_game": 0, "recovered": 1, "samples": [row], "omissions": [{"appid": 20, "reason": "no_metadata"}]}
+                "no_metadata": 0, "not_game": 0, "recovered": 1, "manifest_rejected": {"not_installed": 2}, "samples": [row], "omissions": [{"appid": 20, "reason": "no_metadata"}]}
     context = {"upscalers": {"status": "available", "selector_status": "observed",
-               "selector": {**selector, "folder": "/private/library",
+               "selector": {**selector, "folder": "/private/library", "manifest_rejected": {"not_installed": 2, "/private": 1},
                             "omissions": [*selector["omissions"], {"appid": 3000000123, "reason": "unreadable"}],
                             "samples": [{**row, "account": "private"}, {**row, "appid": 3000000123}]}}}
     bundle = asyncio.run(plugin._build_report_bundle(["upscalers"], "", str(tmp_path), None, context))

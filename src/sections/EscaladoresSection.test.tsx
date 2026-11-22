@@ -239,3 +239,23 @@ it("skips unreadable Steam entries without hiding healthy rows", async () => {
   expect(screen.getByText("Healthy game")).toBeTruthy();
   expect(readSelectorContext().selector).toMatchObject({ unreadable: 3, steam_rows: 1 });
 });
+
+it("asks a slow inventory once more and lists the game it confirms later", async () => {
+  vi.useFakeTimers();
+  try {
+    const api = await import("../api");
+    vi.stubGlobal("appStore", { GetAppOverviewByAppID: () => ({ appid: requiem.appid, display_name: requiem.name, app_type: 1 }) });
+    vi.mocked(api.getUpscalersSelectorInstalls).mockClear()
+      .mockResolvedValueOnce({ complete: false, appids: [] })
+      .mockResolvedValueOnce({ complete: false, appids: [requiem.appid], rejected: { not_installed: 1 } });
+    await act(async () => { render(<EscaladoresSection />); });
+    expect(screen.queryByText(requiem.name)).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+    expect(screen.getByText(requiem.name)).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(api.getUpscalersSelectorInstalls).toHaveBeenCalledTimes(2);
+    expect(readSelectorContext().selector).toMatchObject({ manifest_rejected: { not_installed: 1 } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
