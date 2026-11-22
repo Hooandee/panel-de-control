@@ -2,12 +2,41 @@
 
 ## [0.94.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.1...panel-de-control-v0.94.2) (2026-11-22)
 
+### Español
 
-### Bug Fixes
+* **Al despertar, el perfil de CPU ya no se aplica antes de tiempo:** Si usabas menos núcleos o el SMT desactivado, al volver de la suspensión el equipo podía congelarse o reiniciarse porque el perfil se aplicaba demasiado pronto. Ahora espera a que el equipo termine de despertar. Lo mismo pasa con el TDP y el límite de carga cuando enchufas o desenchufas el cargador justo al despertar.
+* **Actualizar un tema que estás usando ya no bloquea Steam:** Al instalar la versión nueva de un tema activo, Steam podía quedarse sin responder. Ahora el tema se para antes de cambiar sus archivos y vuelve a arrancar con la versión nueva.
+* **Escaladores muestra todos tus juegos instalados:** Algunos juegos de Steam no salían en la lista de Escaladores aunque estaban instalados, sobre todo mientras Steam los actualizaba o si un disco tardaba en responder. Ahora aparecen igualmente.
 
-* prevent premature CPU and charger profile writes after sleep ([#1449](https://github.com/Hooandee/panel-de-control/issues/1449)) ([c90a977](https://github.com/Hooandee/panel-de-control/commit/c90a97799e09011fb54698a812aa48e0c8d4ed78))
-* **themes:** stop the active theme before replacing its files ([#1451](https://github.com/Hooandee/panel-de-control/issues/1451)) ([8b0a941](https://github.com/Hooandee/panel-de-control/commit/8b0a94198ad0f2a360f896fc6740d7a4a09b22b7))
-* **upscalers:** recover installed Steam games missing from the selector ([#1450](https://github.com/Hooandee/panel-de-control/issues/1450)) ([01f6add](https://github.com/Hooandee/panel-de-control/commit/01f6add43dacb72abad094bf07bbac974026b279))
+### English
+
+* **Waking up no longer applies your CPU profile too early:** If you used fewer cores or turned SMT off, coming back from sleep could freeze or restart the device because the profile was applied too soon. It now waits until the device has finished waking up. The same goes for TDP and the charge limit when you plug or unplug the charger right after waking.
+* **Updating a theme you're using no longer freezes Steam:** Installing a new version of an active theme could leave Steam unresponsive. The theme now stops before its files change and starts again with the new version.
+* **Upscalers shows all your installed games:** Some Steam games didn't show up in the Upscalers list even though they were installed, mostly while Steam was updating them or when a drive was slow to respond. They now show up anyway.
+
+### Italiano
+
+* **Al risveglio il profilo CPU non si applica più troppo presto:** Se usavi meno core o lo SMT disattivato, al ritorno dalla sospensione il dispositivo poteva bloccarsi o riavviarsi perché il profilo veniva applicato troppo presto. Ora aspetta che il dispositivo abbia finito di svegliarsi. Lo stesso vale per il TDP e il limite di carica quando colleghi o scolleghi il caricatore subito dopo il risveglio.
+* **Aggiornare un tema che stai usando non blocca più Steam:** Installare la nuova versione di un tema attivo poteva lasciare Steam senza risposta. Ora il tema si ferma prima di cambiare i suoi file e riparte con la nuova versione.
+* **Upscaler mostra tutti i tuoi giochi installati:** Alcuni giochi di Steam non comparivano nella lista di Upscaler anche se erano installati, soprattutto mentre Steam li aggiornava o se un disco rispondeva lentamente. Ora compaiono comunque.
+
+### Deutsch
+
+* **Beim Aufwachen greift dein CPU-Profil nicht mehr zu früh:** Wenn du weniger Kerne genutzt oder SMT ausgeschaltet hattest, konnte das Gerät nach dem Ruhezustand einfrieren oder neu starten, weil das Profil zu früh angewendet wurde. Jetzt wartet es, bis das Gerät ganz aufgewacht ist. Das gilt auch für TDP und Ladelimit, wenn du direkt nach dem Aufwachen das Ladegerät ansteckst oder abziehst.
+* **Ein Theme zu aktualisieren, das du gerade nutzt, friert Steam nicht mehr ein:** Die neue Version eines aktiven Themes zu installieren, konnte Steam hängen lassen. Jetzt stoppt das Theme, bevor sich seine Dateien ändern, und startet danach mit der neuen Version.
+* **Upscaler zeigt alle deine installierten Spiele:** Manche Steam-Spiele fehlten in der Liste von Upscaler, obwohl sie installiert waren, vor allem während Steam sie aktualisierte oder wenn ein Laufwerk langsam antwortete. Jetzt erscheinen sie trotzdem.
+
+### Português (Brasil)
+
+* **Ao acordar, o perfil de CPU não é mais aplicado cedo demais:** Se você usava menos núcleos ou o SMT desligado, ao voltar da suspensão o aparelho podia travar ou reiniciar porque o perfil era aplicado cedo demais. Agora ele espera o aparelho terminar de acordar. O mesmo vale para o TDP e o limite de carga quando você conecta ou desconecta o carregador logo depois de acordar.
+* **Atualizar um tema que você está usando não trava mais o Steam:** Instalar a versão nova de um tema ativo podia deixar o Steam sem responder. Agora o tema para antes de trocar os arquivos e volta a funcionar com a versão nova.
+* **Upscalers mostra todos os seus jogos instalados:** Alguns jogos da Steam não apareciam na lista do Upscalers mesmo instalados, principalmente enquanto o Steam os atualizava ou quando um disco demorava para responder. Agora eles aparecem mesmo assim.
+
+### Français
+
+* **Au réveil, votre profil CPU ne s'applique plus trop tôt :** Si vous utilisiez moins de cœurs ou le SMT désactivé, l'appareil pouvait se figer ou redémarrer en sortant de veille parce que le profil s'appliquait trop tôt. Il attend maintenant que l'appareil ait fini de se réveiller. C'est pareil pour le TDP et la limite de charge quand vous branchez ou débranchez le chargeur juste après le réveil.
+* **Mettre à jour un thème que vous utilisez ne bloque plus Steam :** Installer la nouvelle version d'un thème actif pouvait laisser Steam sans réponse. Le thème s'arrête maintenant avant que ses fichiers changent et redémarre avec la nouvelle version.
+* **Upscalers affiche tous vos jeux installés :** Certains jeux Steam n'apparaissaient pas dans la liste d'Upscalers alors qu'ils étaient installés, surtout pendant que Steam les mettait à jour ou quand un disque tardait à répondre. Ils apparaissent maintenant quand même.
 
 ## [0.94.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.0...panel-de-control-v0.94.1) (2026-11-19)
 
