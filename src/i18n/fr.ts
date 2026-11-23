@@ -628,6 +628,7 @@ export const fr: Record<string, string> = {
   "up.steamMachine.helix": "En 4K sur la Steam Machine, HelixSR tourne à moins de la moitié des FPS de FSR 4 avec OptiScaler et remplit presque la mémoire vidéo : le jeu peut planter",
   "up.steamMachine.native": "En 4K sur la Steam Machine, la qualité Native remplit presque la mémoire vidéo et le jeu peut planter. Équilibré ou Performance laissent de la marge",
   "up.notice.dlssRemoved": "Depuis sa dernière mise à jour, ce jeu ne propose plus DLSS et OptiScaler ne peut pas remplacer sa mise à l'échelle. Une solution est en cours de recherche",
+  "up.notice.rdr2Dx12": "Red Dead Redemption 2 s'ouvre en Vulkan, où il se ferme quand FSR 2 est activé avec l'upscaler. Dans Paramètres → Graphismes, mettez l'API graphique sur DirectX 12 et activez FidelityFX Super Resolution 2.0",
   "up.notice.warframeDx12": "Warframe s'ouvre en DirectX 11, où il se ferme avec l'upscaler. Dans son launcher, ouvrez Settings et mettez Graphics API sur DirectX 12, puis dans Options → Video du jeu, mettez Upscaling Method sur DLSS",
   "up.notice.dx11Launch": "Ce jeu se lance en DirectX 11. Pour que FSR 4 fonctionne, choisissez DLSS dans ses réglages graphiques",
   "up.helix.pick.fsr": "Dans le jeu, choisissez AMD FSR. La qualité se règle dans son menu",

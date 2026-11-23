@@ -96,6 +96,7 @@ export function gameOutputHeight(history: readonly Pick<HistoryEntry, "facts">[]
 /** Games whose page says something up front: a lost input, or a launch mode Panel sets for them. */
 const GAME_NOTICES: Record<string, string> = {
   "230410": "up.notice.warframeDx12",
+  "1174180": "up.notice.rdr2Dx12",
   "3564740": "up.notice.dlssRemoved",
   "4732690": "up.notice.dx11Launch",
 };
