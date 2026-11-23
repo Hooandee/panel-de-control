@@ -36,7 +36,7 @@ export const AdvancedColor: FC<Props> = ({ state, onChange }) => {
           <span>{label}</span>
           <span style={{ marginLeft: "auto", color: theme.color.textPrimary, fontWeight: 700 }}>{shown}</span>
         </div>
-        <ContainedSlider value={value} min={min} max={max} step={min < 0 ? 5 : 1} scale={0.75}
+        <ContainedSlider value={value} min={min} max={max} step={1} scale={0.75}
           onChange={(v) => onChange({ [key]: v })} />
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--pdc-display-caption, 10px)", color: theme.color.textMuted, marginTop: -2 }}>
           <span>{ends[0]}</span>

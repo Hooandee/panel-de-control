@@ -5,6 +5,7 @@ import {
   AMBIGUOUS,
   detectSelections,
   buildLaunchOptions,
+  ownedTokens,
   isPillAvailable,
   frequentPills,
   pillVisible,
@@ -37,6 +38,15 @@ describe("detectSelections", () => {
 });
 
 describe("buildLaunchOptions", () => {
+  it("treats MANGOHUD=1 as the MangoHud pill: kept while on, removed when off", () => {
+    const base = parse("MANGOHUD=1 mangohud gamemoderun %command% -novid");
+    expect(detectSelections(parse("MANGOHUD=1 %command%")).mangohud).toBe(true);
+    expect(buildLaunchOptions(parse("MANGOHUD=1 %command%"), { mangohud: true })).toBe("MANGOHUD=1 %command%");
+    expect(buildLaunchOptions(base, { gamemode: true, noVideo: true })).toBe("gamemoderun %command% -novid");
+    expect(buildLaunchOptions(parse("MANGOHUD=0 %command%"), {})).toBe("MANGOHUD=0 %command%");
+    expect(ownedTokens({ mangohud: true })).toContain("MANGOHUD=1");
+  });
+
   it("adds a wrapper to a bare game, introducing %command%", () => {
     const out = buildLaunchOptions(parse(""), { mangohud: true });
     expect(out).toBe("mangohud %command%");
