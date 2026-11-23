@@ -305,8 +305,9 @@ class FirmwareAttrBackend(TDPBackend):
         # Lenovo firmware pins its own rails at <=20 % battery and ignores (or EBUSYs)
         # both the write and the rollback. If no rail kept a value this transaction
         # wrote, nothing of Panel's is left behind and the lock would only hide TDP.
-        # Models that re-arm "custom" or hand off to a named profile keep their lock.
-        if self._custom_rearm_enabled or self._handoff_profile is not None:
+        # 83L3 also drops back to its own 30/15/20 mid-game. Models that re-arm on
+        # unapplied writes or hand off to a named profile keep their lock.
+        if self._rearm_custom_on_unapplied_writes or self._handoff_profile is not None:
             return False
         if not targets or self._snapshot_mismatches(
             surfaces, snapshot, profile, compare_values=False,
