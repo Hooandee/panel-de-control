@@ -95,6 +95,20 @@ it("saves quality and sharpness with one button", async () => {
   expect(configureUpscaler).toHaveBeenCalledWith("777", expect.objectContaining({ quality: "balanced" }));
 });
 
+it("hands the render size back to the game's own preset", async () => {
+  // PDC-XKSZ (#1452): with Panel's Native every preset in the game and in OptiScaler's menu rendered at 1.0.
+  state.detail = installed();
+  state.advancedRows = true;
+  try {
+    await act(async () => { render(<GameView {...props} />); });
+    await act(async () => { fireEvent.click(screen.getByText("up.quality.useGame")); });
+    await act(async () => { fireEvent.click(screen.getByText("up.save")); });
+    expect(configureUpscaler).toHaveBeenCalledWith("777", expect.objectContaining({ quality: null }));
+  } finally {
+    state.advancedRows = false;
+  }
+});
+
 it("says a change waits for a restart right under the scaler, also after leaving the page", async () => {
   state.running = { liveAppid: 777 };
   state.detail = installed();

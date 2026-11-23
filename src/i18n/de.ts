@@ -529,6 +529,8 @@ export const de: Record<string, string> = {
   "up.quality.inGame": "Die Qualität wird im Spiel gewählt",
   "up.quality.useInput": "Wähle {input} im Spiel, um sie hier zu ändern",
   "up.fg.notRecommended": "Diese Kombination funktioniert möglicherweise nicht mit diesem Spiel.",
+  "up.quality.useGame": "Qualität des Spiels verwenden",
+  "up.quality.useGameCaption": "Die Voreinstellung des Spiels und das OptiScaler-Menü bestimmen die Auflösung",
   "up.quality.game": "Die des Spiels",
   "up.section.version": "Version",
   "up.section.quality": "Qualität",

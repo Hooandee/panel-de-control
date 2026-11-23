@@ -529,6 +529,8 @@ export const ptBR: Record<string, string> = {
   "up.quality.inGame": "A qualidade é escolhida no jogo",
   "up.quality.useInput": "Escolha {input} no jogo para mudá-la aqui",
   "up.fg.notRecommended": "Esta combinação pode não funcionar neste jogo.",
+  "up.quality.useGame": "Usar a qualidade do jogo",
+  "up.quality.useGameCaption": "A predefinição do jogo e o menu do OptiScaler definem a resolução",
   "up.quality.game": "A do jogo",
   "up.section.version": "Versão",
   "up.section.quality": "Qualidade",

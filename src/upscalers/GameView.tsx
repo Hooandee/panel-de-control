@@ -718,6 +718,11 @@ export const GameView: FC<{
             onChange={(quality) => changeChoice({ ...choice, quality })}
             options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: height === undefined ? undefined : `${renderHeight(height, q)}p` }))}
           />
+          {/* OptiScaler's ratio override off: the game's own preset (and OptiScaler's menu) set the render size. */}
+          {qualityMode.mode === "panel" && <ListCard>
+            <ListRow first label={t("up.quality.useGame")} caption={t("up.quality.useGameCaption")} on={choice.quality === null}
+              onPress={() => changeChoice({ ...choice, quality: choice.quality === null ? "native" : null })} />
+          </ListCard>}
         </>
       )}
       {detail && !pendingModel && !spatial && !detail.native && !externalHelix && (qualityMode.mode === "game" || replacesFsr) && <Note>{t("up.quality.inGame")}</Note>}
