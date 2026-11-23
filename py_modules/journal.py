@@ -568,8 +568,14 @@ class LoopWatchdog:
         return "".join(traceback.format_stack(frame)[-12:])[-3000:]
 
     def _busy_threads(self) -> list[str]:
-        """Where the other threads are: a loop stuck on a plain sysfs read is waiting for the GIL
-        that one of them holds."""
+        """Threads not parked on a lock, queue or selector, and where they are: a loop stuck on a
+        plain sysfs read is usually waiting for the GIL one of them holds."""
+        try:
+            return self._threads_not_parked()
+        except Exception:  # noqa: BLE001 - the watchdog must outlive a frame it cannot format
+            return []
+
+    def _threads_not_parked(self) -> list[str]:
         names = {thread.ident: thread.name for thread in threading.enumerate()}
         busy = []
         for ident, frame in sys._current_frames().items():
