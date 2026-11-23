@@ -628,7 +628,7 @@ export const it: Record<string, string> = {
   "up.steamMachine.helix": "In 4K sulla Steam Machine, HelixSR va a meno della metà degli FPS di FSR 4 con OptiScaler e riempie quasi la memoria video: il gioco può chiudersi",
   "up.steamMachine.native": "In 4K sulla Steam Machine, la qualità Nativa riempie quasi la memoria video e il gioco può chiudersi. Bilanciato o Prestazioni lasciano margine",
   "up.notice.dlssRemoved": "Dall'ultimo aggiornamento questo gioco non offre più DLSS e OptiScaler non può sostituirne l'upscaling. Si sta cercando una soluzione",
-  "up.notice.warframeDx12": "Warframe si apre in DirectX 11, dove si chiude con l'upscaler. Nel suo launcher apri Settings e imposta Graphics API su DirectX 12, poi scegli DLSS come upscaling del gioco",
+  "up.notice.warframeDx12": "Warframe si apre in DirectX 11, dove si chiude con l'upscaler. Nel suo launcher apri Settings e imposta Graphics API su DirectX 12, poi in Options → Video del gioco imposta Upscaling Method su DLSS",
   "up.notice.dx11Launch": "Questo gioco si avvia in DirectX 11. Perché FSR 4 funzioni, scegli DLSS nelle impostazioni grafiche",
   "up.helix.pick.fsr": "Nel gioco, scegli AMD FSR. La qualità si sceglie nel suo menu",
   "up.error.helixsr_no_fsr": "Questo gioco non ha FSR 3.1, quindi HLX FSR 4 non ha niente da sostituire",
