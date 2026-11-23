@@ -1002,9 +1002,8 @@ class UpscalerService:
                 sources[relative] = seed
                 owned.add(relative)
             manifest = self._apply(target, sources, ini.apply(base_ini, overrides),
-                                   getattr(automatic, "configuration", {}) if automatic else {}, owned=owned)
-            if recipe and recipe.protect_dlls:
-                _read_only_libraries(target, manifest)
+                                   getattr(automatic, "configuration", {}) if automatic else {}, owned=owned,
+                                   protect=bool(recipe and recipe.protect_dlls))
 
         now = time.time()
         entry["install"] = {
@@ -1376,15 +1375,17 @@ class UpscalerService:
         if self.logger:
             self.logger.info(f"HelixSR taken out without its bridge ({reason}); Panel's record of it cleared")
 
-    def _apply(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None, owned=()) -> dict:
+    def _apply(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None, owned=(),
+               protect: bool = False) -> dict:
         names = [*sources, *(["OptiScaler.ini", *_GENERATED] if ini_text is not None else [])]
         try:
             with self.scaler_transitions.mutation(target, names):
-                return self._apply_files(target, sources, ini_text, configuration, owned)
+                return self._apply_files(target, sources, ini_text, configuration, owned, protect)
         except scaler_transition.TransitionError as error:
             raise UpscalerError(str(error)) from None
 
-    def _apply_files(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None, owned=()) -> dict:
+    def _apply_files(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None, owned=(),
+                     protect: bool = False) -> dict:
         meta = target / games.MANIFEST_DIR
         if meta.is_symlink():
             raise UpscalerError("unsafe_folder")
@@ -1416,8 +1417,12 @@ class UpscalerService:
             self._remove_files(target, configuration)
             raise
         manifest.pop("incomplete")
+        if protect:
+            manifest["read_only"] = True
         atomic_json_save(journal, manifest)
         ownership.own_like(target, [*(target / f for f in manifest["files"]), *(target / d for d in manifest["dirs"]), meta])
+        if protect:
+            _read_only_libraries(target, manifest)
         return manifest
 
     @staticmethod
@@ -1911,7 +1916,10 @@ class UpscalerService:
             if saved.exists() and not (target / relative).exists():
                 os.replace(saved, target / relative)
                 if manifest.get("read_only"):
-                    (target / relative).chmod((target / relative).stat().st_mode | 0o200)
+                    try:
+                        (target / relative).chmod((target / relative).stat().st_mode | 0o200)
+                    except OSError:
+                        pass
         for directory in sorted(manifest.get("dirs", []), key=len, reverse=True):
             try:
                 (target / directory).rmdir()
@@ -2441,16 +2449,20 @@ def _with_leftovers(result: dict, left: dict | None) -> dict:
 
 
 def _read_only_libraries(target: Path, manifest: dict) -> None:
-    """Panel's libraries and the game's backed-up originals, which a purging launcher would also delete."""
-    meta = target / games.MANIFEST_DIR
-    manifest["read_only"] = True
-    atomic_json_save(str(meta / "manifest.json"), manifest)
-    backup = meta / "backup"
-    paths = [target / relative for relative in manifest["files"]]
+    """Panel's own libraries and the game's backed-up originals, which a purging launcher would also delete.
+
+    A library Panel put over one of the game's stays writable: the game's updater may still need to replace it.
+    """
+    backup = target / games.MANIFEST_DIR / "backup"
+    replaced = set(manifest.get("backups", []))
+    paths = [target / relative for relative in manifest["files"] if relative not in replaced]
     paths += [path for path in backup.rglob("*")] if backup.is_dir() and not backup.is_symlink() else []
     for path in paths:
-        if path.suffix.lower() == ".dll" and path.is_file() and not path.is_symlink():
-            path.chmod(path.stat().st_mode & ~0o222)
+        try:
+            if path.suffix.lower() == ".dll" and path.is_file() and not path.is_symlink():
+                path.chmod(path.stat().st_mode & ~0o222)
+        except OSError:
+            pass
 
 
 def _recipe_proxy(recipe) -> str | None:

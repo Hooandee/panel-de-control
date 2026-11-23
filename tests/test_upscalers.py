@@ -1242,11 +1242,13 @@ def test_recipe_keeps_libraries_a_launcher_purges(steam, fake_catalog, proc, mon
     service.install(APPID, {"build": "fsr-test"})
     _, game = steam
     target = Path(service.game(APPID)["install"]["target"])
-    ours = [path for path in target.rglob("*.dll") if path.name != "nvngx_dlss.dll"]
+    # The game's own files stay writable, also where Panel's copy replaced one: the game's updater may need them.
+    writable = {target / "nvngx_dlss.dll", target / "amd_fidelityfx_upscaler_dx12.dll"}
+    ours = [path for path in target.rglob("*.dll") if path not in writable]
     assert {"winmm.dll", "D3D12Core.dll"} <= {path.name for path in ours}
     assert ".pdc-upscaler" in {part for path in ours for part in path.parts}
     assert all(not path.stat().st_mode & 0o222 for path in ours)
-    assert (target / "nvngx_dlss.dll").stat().st_mode & 0o200
+    assert all(path.stat().st_mode & 0o200 for path in writable)
     assert (target / "OptiScaler.ini").stat().st_mode & 0o200
     service.uninstall(APPID)
     assert {path.name for path in target.rglob("*.dll")} == {"nvngx_dlss.dll", "amd_fidelityfx_upscaler_dx12.dll"}
@@ -1255,6 +1257,19 @@ def test_recipe_keeps_libraries_a_launcher_purges(steam, fake_catalog, proc, mon
     service.install(APPID, {"build": "fsr-test"})
     service.install(APPID, {"build": "fsr-test"})
     assert (target / "winmm.dll").is_file()
+
+
+def test_protected_install_still_rolls_back_with_its_scaler_transition(steam, fake_catalog, proc, monkeypatch):
+    # A switch to OptiScaler that fails at launch options rolls back; read-only libraries must not look like a game update.
+    without_bundled_recipes(monkeypatch)
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="winmm.dll", protect_dlls=True))
+    service = _service(steam, fake_catalog, proc)
+    checkpoint = service.begin_scaler_transition(APPID)
+    service.install(APPID, {"build": "fsr-test"})
+    service.finish_scaler_transition(APPID, checkpoint["token"], True)
+    assert service.game(APPID)["install"] is None
+    _, game = steam
+    assert not list(game.rglob("winmm.dll"))
 
 
 def test_warframe_loads_optiscaler_before_its_launcher_can_purge_it():

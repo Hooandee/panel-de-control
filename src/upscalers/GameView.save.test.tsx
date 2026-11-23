@@ -101,9 +101,25 @@ it("hands the render size back to the game's own preset", async () => {
   state.advancedRows = true;
   try {
     await act(async () => { render(<GameView {...props} />); });
+    await act(async () => { fireEvent.click(screen.getByText("up.quality.balanced")); });
     await act(async () => { fireEvent.click(screen.getByText("up.quality.useGame")); });
     await act(async () => { fireEvent.click(screen.getByText("up.save")); });
-    expect(configureUpscaler).toHaveBeenCalledWith("777", expect.objectContaining({ quality: null }));
+    expect(configureUpscaler).toHaveBeenLastCalledWith("777", expect.objectContaining({ quality: null }));
+    // Off again, Panel's own choice comes back rather than Native.
+    await act(async () => { fireEvent.click(screen.getByText("up.quality.useGame")); });
+    await act(async () => { fireEvent.click(screen.getByText("up.save")); });
+    expect(configureUpscaler).toHaveBeenLastCalledWith("777", expect.objectContaining({ quality: "balanced" }));
+  } finally {
+    state.advancedRows = false;
+  }
+});
+
+it("does not offer the game's quality where REFramework sets it on exit", async () => {
+  state.detail = { ...installed(), recipe_info: { ...installed().recipe_info, quality_on_exit: true } } as unknown as GameDetail;
+  state.advancedRows = true;
+  try {
+    await act(async () => { render(<GameView {...props} />); });
+    expect(screen.queryByText("up.quality.useGame")).toBeNull();
   } finally {
     state.advancedRows = false;
   }

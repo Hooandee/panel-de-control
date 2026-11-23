@@ -220,3 +220,18 @@ def test_fsr4_provider_query_alone_does_not_name_what_runs(tmp_path, created):
     assert live['provider_version'] is None
     assert live.get('provider_model') is None
     assert live['provider_confidence'] != 'log_provider'
+
+
+@pytest.mark.parametrize('tail', [
+    '[I] Creating new FSR 3.1 upscaler\n',
+    "[I] Creating new FSR 3.X upscaler\n[E] Can't process Vulkan textures!\n",
+])
+def test_fsr4_provider_is_not_claimed_when_an_older_fsr_runs(tmp_path, tail):
+    service, _ = make_service(tmp_path, FSR4_LOG.read_text() + tail)
+    assert service.live('292030')['provider_version'] is None
+
+
+def test_only_the_upscaler_effect_names_the_fsr4_provider(tmp_path):
+    other = '[I] FSR4DriverDll::QueryProvider amdxcffx64.dll provider for 20000: 4.0.9 *, id: 1, struct version: 2\n'
+    service, _ = make_service(tmp_path, FSR4_LOG.read_text() + other + '[I] Creating new FSR 3.X upscaler\n')
+    assert service.live('292030')['provider_version'] == '4.1.1'
