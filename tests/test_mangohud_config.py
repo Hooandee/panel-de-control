@@ -679,3 +679,19 @@ def test_horizontal_row_keeps_every_metric_the_user_chose():
     lines = to_directives(_REPORT_1158, {"pdc_tdp": "12W", "pdc_power": "8W"})
     assert "fan=1" in lines
     assert "custom_text=TDP 12W" in lines
+
+
+def test_omitted_metrics_are_disabled_and_never_emitted():
+    model = {
+        "enabled": True,
+        "items": [
+            {"kind": "metric", "id": "fps"},
+            {"kind": "metric", "id": "gpu_power"},
+            {"kind": "metric", "id": "cpu_power"},
+        ],
+    }
+    lines = to_directives(model, omit=("gpu_power", "cpu_power"))
+    assert "gpu_power=1" not in lines and "cpu_power=1" not in lines
+    assert "gpu_power=0" in lines and "cpu_power=0" in lines
+    assert "fps=1" in lines
+    assert "gpu_power=1" in to_directives(model)

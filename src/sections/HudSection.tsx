@@ -304,12 +304,13 @@ export const HudSection: FC = () => {
   const rows = listRows(m.items);
   const activePreset = matchingPresetKey(m.items, presets);
 
+  const unavailable = state.unavailableMetrics ?? [];
   const addEntries = (groupKey: string, ids: MetricId[]): AddEntry[] => {
     if (isBlockGroup(groupKey)) {
       return hasBlock(m.items, groupKey) ? [] : [{ kind: "block", group: groupKey }];
     }
     return ids
-      .filter((id) => !hasMetric(m.items, id))
+      .filter((id) => !hasMetric(m.items, id) && !unavailable.includes(id))
       .map((id) => ({ kind: "metric", id }));
   };
 
@@ -406,7 +407,7 @@ export const HudSection: FC = () => {
               borderLeft: `2px solid rgba(${theme.color.accentRgb},0.35)`,
             }}
           >
-            {blockMetricIds(r.group).map((id) => {
+            {blockMetricIds(r.group).filter((id) => !unavailable.includes(id)).map((id) => {
               const required = isRequiredBlockMetric(id);
               return (
                 <BlockMetricOption
@@ -660,7 +661,7 @@ export const HudSection: FC = () => {
             const isSel = selected === key;
             const isBlock = r.kind === "block";
             const editable = hasLocalEditor(r);
-            const blockIds = isBlock ? blockMetricIds(r.group) : [];
+            const blockIds = isBlock ? blockMetricIds(r.group).filter((id) => !unavailable.includes(id)) : [];
             const active = blockIds.filter((id) => hasMetric(m.items, id)).length;
             const title = (
               <>

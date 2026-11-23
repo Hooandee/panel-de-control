@@ -133,6 +133,8 @@ export interface HudState {
   conflict: HudConflict | null;
   model: HudModel;
   values: Partial<Record<MetricId, string>>;
+  /** Metrics this machine cannot read (MangoHud would draw a constant 0). */
+  unavailableMetrics?: MetricId[];
   /** Running game this model belongs to; null on the desktop. */
   appid: string | null;
   /** True while that game applies the global HUD (also true without a game). */
