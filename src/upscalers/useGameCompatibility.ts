@@ -9,8 +9,10 @@ const empty: Compatibility = {};
 export function useGameCompatibility(games: GameEntry[], enabled: boolean) {
   const requests = useRef(new Map<string, Promise<GameCompat | undefined>>());
   const lastFolders = useRef("");
+  const shortcuts = useRef(new Set<string>());
   const [result, setResult] = useState<{ ids: Set<string>; compat: Compatibility } | null>(null);
   const key = enabled ? games.map((game) => String(game.liveAppid)).sort().join(",") : "";
+  shortcuts.current = new Set(games.filter((game) => game.isNonSteam).map((game) => String(game.liveAppid)));
 
   useEffect(() => {
     const ids = new Set(key ? key.split(",") : []);
@@ -23,22 +25,38 @@ export function useGameCompatibility(games: GameEntry[], enabled: boolean) {
     if (!ids.size) return;
 
     let active = true;
+    // Shortcuts ask first and alone: Steam libraries can take long to read, and a shortcut waits only for its own answer.
     const missing = [...ids].filter((id) => !cache.has(id));
-    // The backend accepts at most 400 AppIDs per request.
-    for (let i = 0; i < missing.length; i += 400) {
-      const batch = missing.slice(i, i + 400);
+    const batches: string[][] = [];
+    for (const group of [missing.filter((id) => shortcuts.current.has(id)), missing.filter((id) => !shortcuts.current.has(id))]) {
+      // The backend accepts at most 400 AppIDs per request.
+      for (let i = 0; i < group.length; i += 400) batches.push(group.slice(i, i + 400));
+    }
+    for (const batch of batches) {
       const request = getUpscalersCompat(batch, folders).catch(() => empty);
       for (const id of batch) cache.set(id, request.then((rows) => rows[id]));
     }
-    Promise.all([...cache].map(async ([id, request]) => [id, await request] as const)).then((rows) => {
+
+    const answered = new Map<string, GameCompat | undefined>();
+    let queued = false;
+    const publish = () => {
+      queued = false;
       if (!active) return;
       const compat: Compatibility = {};
-      for (const [id, row] of rows) {
-        if (row) compat[id] = row;
-        else cache.delete(id);
-      }
-      setResult({ ids, compat });
-    });
+      for (const [id, row] of answered) if (row) compat[id] = row;
+      setResult({ ids: new Set(answered.keys()), compat });
+    };
+    for (const [id, request] of cache) {
+      void request.then((row) => {
+        if (!active) return;
+        answered.set(id, row);
+        if (!row) cache.delete(id);
+        if (!queued) {
+          queued = true;
+          queueMicrotask(publish);
+        }
+      });
+    }
     return () => { active = false; };
   }, [key]);
 

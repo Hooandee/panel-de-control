@@ -85,13 +85,38 @@ it("holds shortcuts back until it knows whether a game is behind them", async ()
   const api = await import("../api");
   games.push({ installed: false, liveAppid: 3, instanceKey: "3", name: "Shortcut", coverUrls: [], lastPlayed: 0, isNonSteam: true });
   let answer: (value: unknown) => void = () => undefined;
-  vi.mocked(api.getUpscalersCompat).mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }) as never);
-  await act(async () => { render(<EscaladoresSection />); });
-  expect(screen.queryByText("Shortcut")).toBeNull();
-  expect(screen.getByText("A")).toBeTruthy();
-  await act(async () => { answer({ "3": { inputs: ["DLSS"], native: false } }); });
-  expect(screen.getByText("Shortcut")).toBeTruthy();
-  games.pop();
+  vi.mocked(api.getUpscalersCompat).mockImplementation((ids) => ids.includes("3")
+    ? new Promise((resolve) => { answer = resolve; }) as never : Promise.resolve({}));
+  try {
+    await act(async () => { render(<EscaladoresSection />); });
+    expect(screen.queryByText("Shortcut")).toBeNull();
+    expect(screen.getByText("A")).toBeTruthy();
+    await act(async () => { answer({ "3": { inputs: ["DLSS"], native: false } }); });
+    expect(screen.getByText("Shortcut")).toBeTruthy();
+  } finally {
+    games.pop();
+    vi.mocked(api.getUpscalersCompat).mockImplementation(async () => ({}));
+  }
+});
+
+it("lists shortcuts as soon as their own check answers, however slow the Steam games are", async () => {
+  const api = await import("../api");
+  games.push(
+    { installed: false, liveAppid: 3, instanceKey: "3", name: "Shortcut", coverUrls: [], lastPlayed: 0, isNonSteam: true },
+    { installed: false, liveAppid: 4, instanceKey: "4", name: "Store shortcut", coverUrls: [], lastPlayed: 0, isNonSteam: true },
+  );
+  vi.mocked(api.getUpscalersCompat).mockImplementation((ids) => ids.includes("1")
+    ? new Promise(() => undefined) as never
+    : Promise.resolve({ "3": { inputs: [], native: true }, "4": { inputs: [], native: false, unavailable: "unifideck_not_installed" } }) as never);
+  try {
+    await act(async () => { render(<EscaladoresSection />); });
+    expect(screen.getByText("Shortcut")).toBeTruthy();
+    expect(screen.queryByText("Store shortcut")).toBeNull();
+    expect(screen.getByText("A")).toBeTruthy();
+  } finally {
+    games.splice(2, 2);
+    vi.mocked(api.getUpscalersCompat).mockImplementation(async () => ({}));
+  }
 });
 
 it("asks for compatibility in batches the backend accepts", async () => {

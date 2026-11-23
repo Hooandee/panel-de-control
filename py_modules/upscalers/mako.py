@@ -264,8 +264,14 @@ class Mako:
                     return self.status()
             version = version or default_version
             self._safe(prefix)
+            # A prefix with no valid install record is a leftover of an interrupted install or of wiped plugin data:
+            # it lives in Panel's own namespace, so it is replaced instead of refusing every later install.
+            orphan = False
             if prefix.exists() and not upgrading:
-                raise MakoError('mako_conflict')
+                if record.get('files'):
+                    raise MakoError('mako_conflict')
+                orphan = True
+                LOG.warning('MAKO action=install code=orphan_prefix line=%s', line)
             prefix.parent.mkdir(parents=True, exist_ok=True)
             staging = Path(tempfile.mkdtemp(prefix='.mako-', dir=prefix.parent))
             published = False
@@ -310,7 +316,7 @@ class Mako:
                         self._validate(config.read_text(), prefix=staging)
                 if before_commit:
                     before_commit()
-                if upgrading:
+                if upgrading or orphan:
                     prefix.rename(backup)
                 staging.rename(prefix)
                 published = True
@@ -340,7 +346,7 @@ class Mako:
                         LOG.warning("MAKO action=install code=staging_cleanup_failed")
                 if backup.exists() and committed:
                     try:
-                        shutil.rmtree(backup)
+                        shutil.rmtree(backup) if backup.is_dir() else backup.unlink()
                     except OSError:
                         LOG.warning("MAKO action=update code=backup_cleanup_failed")
             return self.status()

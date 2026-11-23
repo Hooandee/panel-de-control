@@ -312,6 +312,38 @@ def test_watchdog_reports_a_stuck_loop_once_and_its_recovery(tmp_path):
     assert records == [("loop", "blocked"), ("loop", "recovered")]
 
 
+def test_watchdog_names_the_thread_working_while_the_loop_is_stuck(tmp_path):
+    import threading
+
+    from journal import LoopWatchdog
+
+    now = [100.0]
+    j = Journal(str(tmp_path), clock=lambda: 1_790_000_000.0)
+    j.start()
+    dog = LoopWatchdog(j, limit_s=3.0, clock=lambda: now[0])
+    stop = threading.Event()
+    started = threading.Event()
+
+    def walk_game_folder():
+        started.set()
+        while not stop.is_set():
+            sum(range(1000))
+
+    worker = threading.Thread(target=walk_game_folder, name="upscalers_0")
+    worker.start()
+    started.wait()
+    try:
+        now[0] = 104.0
+        dog.check()
+    finally:
+        stop.set()
+        worker.join()
+        j.stop()
+    blocked = _lines(str(tmp_path))[0]
+    assert blocked["m"] == "blocked"
+    assert any(line.startswith("upscalers_0: ") and "walk_game_folder" in line for line in blocked["busy"])
+
+
 def test_transitions_are_stored_structured_without_fixed_values(tmp_path):
     import logging as logging_module
 

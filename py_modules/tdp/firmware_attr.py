@@ -69,6 +69,8 @@ class FirmwareAttrBackend(TDPBackend):
     (lenovo-wmi-other), MSI (msi-wmi-platform): ppt_pl1_spl/ppt_pl2_sppt/ppt_pl3_fppt
     with current_value (watts) + min_value/max_value. Never raises."""
 
+    reports_live_max = True
+
     low_battery_hold_strategy = "primary"
 
     def __init__(
@@ -95,6 +97,7 @@ class FirmwareAttrBackend(TDPBackend):
         rearm_custom_on_ignored_writes=False,
         rearm_custom_on_unapplied_writes=False,
         firmware_handoff_profile=None,
+        firmware_fallback_rails=None,
         write_max_ac=None,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
@@ -125,6 +128,7 @@ class FirmwareAttrBackend(TDPBackend):
         self._last_custom_rearm = None
         self._rollback_rearmed = False
         self._handoff_profile = firmware_handoff_profile
+        self._firmware_fallback_rails = _normalise_rail_values(firmware_fallback_rails)
         self._handoff = None
         self._custom_return_pending = False
         self._last_write_error = None
@@ -305,13 +309,21 @@ class FirmwareAttrBackend(TDPBackend):
         # Lenovo firmware pins its own rails at <=20 % battery and ignores (or EBUSYs)
         # both the write and the rollback. If no rail kept a value this transaction
         # wrote, nothing of Panel's is left behind and the lock would only hide TDP.
-        # Models that re-arm "custom" or hand off to a named profile keep their lock.
-        if self._custom_rearm_enabled or self._handoff_profile is not None:
+        # Models that re-arm on unapplied writes or hand off to a named profile keep
+        # their lock.
+        if self._rearm_custom_on_unapplied_writes or self._handoff_profile is not None:
             return False
         if not targets or self._snapshot_mismatches(
             surfaces, snapshot, profile, compare_values=False,
         ):
             return False
+        # 83L3 drops back to its own rails mid-game; they may share a value with the target.
+        fallback = self._firmware_fallback_rails
+        if fallback and all(
+            fallback.get(rail) is not None and self._read_int(path) == fallback[rail]
+            for _surface, rail, path in surfaces
+        ):
+            return True
         for _surface, _rail, path in surfaces:
             target = targets.get(path)
             if target is None:

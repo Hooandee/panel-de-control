@@ -1,6 +1,8 @@
 import os
 import inspect
 
+import pytest
+
 from device_registry import detect
 from device_profiles import DEVICE_TABLE
 from tdp.firmware_attr import FirmwareAttrBackend
@@ -1541,3 +1543,77 @@ def test_restart_recovery_without_saved_targets_stays_locked(tmp_path, monkeypat
 
     assert b.recover_runtime_transaction()["ok"] is False
     assert b.ready() is False
+
+
+def _gos_83l3_dropping_to_firmware_defaults(tmp_path, safety_lock_path, start=14):
+    # Mid-transaction the firmware drops back to its own 30/15/20 in "custom" and
+    # ignores the rollback.
+    from device_quirks import legion_go_s_83l3_firmware_attr_quirks
+
+    root = str(tmp_path)
+    dmi = tmp_path / "sys/class/dmi/id"
+    dmi.mkdir(parents=True)
+    (dmi / "sys_vendor").write_text("LENOVO")
+    (dmi / "product_name").write_text("83L3")
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", start, 5, 33)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", start, 5, 33)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", start, 5, 35)
+    _mk_profile(root, cur="custom")
+    device = detect(product_name="83L3")
+    backend = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        TdpLimits.from_profile(device),
+        root=root,
+        profile_name="lenovo-wmi-gamezone",
+        safety_lock_path=safety_lock_path,
+        **legion_go_s_83l3_firmware_attr_quirks(device, root),
+    )
+    return backend
+
+
+@pytest.mark.parametrize(("start", "target"), [(14, 13), (14, 15), (16, 15), (14, 20)])
+def test_gos_83l3_firmware_defaults_mid_game_keep_tdp_available(
+    tmp_path, monkeypatch, start, target,
+):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    safety_lock_path = str(tmp_path / "run" / "firmware-tdp.lock")
+    backend = _gos_83l3_dropping_to_firmware_defaults(tmp_path, safety_lock_path, start)
+    original_capture = backend._capture_transaction
+
+    def capture_then_firmware_resets(surfaces):
+        captured = original_capture(surfaces)
+        _pin_rails(backend, monkeypatch, (30, 15, 20))
+        return captured
+
+    monkeypatch.setattr(backend, "_capture_transaction", capture_then_firmware_resets)
+
+    result = backend.set_levels(target, target, target, ac=False)
+
+    assert result.ok is False
+    assert result.failure_kind == "target_not_applied"
+    assert "firmware holds rails" in result.detail
+    assert backend.ready() is True
+    assert not os.path.exists(safety_lock_path)
+
+
+@pytest.mark.parametrize("target", [13, 15])
+def test_gos_83l3_restart_recovery_releases_firmware_defaults(
+    tmp_path, monkeypatch, target,
+):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    safety_lock_path = str(tmp_path / "run" / "firmware-tdp.lock")
+    labels = [f"firmware-attr:lenovo-wmi-other/{rail}" for rail in ("pl1", "pl2", "pl3")]
+    RuntimeSafetyLock(safety_lock_path).persist_payload({
+        "state": "rollback_failed",
+        "detail": "rollback failed",
+        "snapshot": dict(zip(labels, (14, 14, 14))),
+        "targets": dict(zip(labels, (target,) * 3)),
+        "profile": "custom",
+    })
+    backend = _gos_83l3_dropping_to_firmware_defaults(tmp_path, safety_lock_path)
+    _pin_rails(backend, monkeypatch, (30, 15, 20))
+    assert backend.ready() is False
+
+    assert backend.recover_runtime_transaction()["ok"] is True
+    assert backend.ready() is True
+    assert not os.path.exists(safety_lock_path)

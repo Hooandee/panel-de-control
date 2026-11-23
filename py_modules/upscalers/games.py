@@ -85,6 +85,8 @@ def steam_roots(home: str) -> list[Path]:
 # Where removable drives and extra disks get mounted; a Steam library sits at most a few folders below.
 MOUNT_ROOTS = ("/run/media", "/media", "/mnt")
 DISCOVERY_DEPTH = 3
+# Steam appids are 31-bit; a shortcut's id is a 32-bit hash, so no library can hold a manifest for it.
+STEAM_APPID_LIMIT = 2**31
 DISCOVERY_TTL_S = 60.0
 # A share that stops answering hangs whoever lists it; discovery never walks into one.
 NETWORK_FS = ("nfs", "nfs4", "cifs", "smb3", "smbfs", "9p", "davfs", "fuse.sshfs", "fuse.rclone", "afs", "ceph", "glusterfs", "autofs")
@@ -459,7 +461,7 @@ def selector_installs(home: str, live_folders: tuple[str, ...] = (), on_confirme
                     if remaining == 0 or time.monotonic() >= deadline:
                         return result(False)
                     match = re.fullmatch(r"appmanifest_([1-9][0-9]{0,9})\.acf", entry.name)
-                    if not match or int(match[1]) >= 2**31:
+                    if not match or int(match[1]) >= STEAM_APPID_LIMIT:
                         continue
                     remaining -= 1
                     try:
@@ -524,6 +526,8 @@ def find_installed(home: str, appid: str, lookup: Counter | None = None) -> Inst
     on a mounted drive, so a stale copy never wins over the install Steam knows."""
     if not appid.isdecimal():
         return None
+    if len(appid) > 10 or int(appid) >= STEAM_APPID_LIMIT:
+        return find_shortcut(home, appid)
     counts = Counter() if lookup is None else lookup
     trusted = dict(_available_libraries(home, counts))
     known = False
@@ -750,7 +754,11 @@ def running_under(root: Path, proc: str = "/proc") -> bool:
 EMBEDDED = {"fsr2": (b"ffxFsr2ContextCreate",), "fsr31": (b"ffxFsr3UpscalerContextCreate",), "xess": (b"xessD3D12CreateContext",)}
 
 
-_EMBEDDED_CHUNK = 4 * 1024 * 1024
+# A cached exe scans at full speed and each `in` holds the GIL: every sysfs read the event loop makes
+# then waits behind it. Small chunks and a short pause every few keep the loop answering.
+_EMBEDDED_CHUNK = 256 * 1024
+_EMBEDDED_PAUSE_EVERY = 4
+_EMBEDDED_PAUSE_S = 0.001
 _EMBEDDED_OVERLAP = max(len(n) for needles in EMBEDDED.values() for n in needles) - 1
 _embedded_cache: dict[str, tuple[tuple[int, int], frozenset[str]]] = {}
 _embedded_lock = threading.Lock()
@@ -772,6 +780,7 @@ def embedded_upscalers(exe: Path) -> set[str]:
     try:
         with open(exe, "rb") as handle:
             tail = b""
+            chunks = 0
             while pending:
                 chunk = handle.read(_EMBEDDED_CHUNK)
                 if not chunk:
@@ -781,6 +790,9 @@ def embedded_upscalers(exe: Path) -> set[str]:
                     found.add(kind)
                     del pending[kind]
                 tail = window[-_EMBEDDED_OVERLAP:]
+                chunks += 1
+                if chunks % _EMBEDDED_PAUSE_EVERY == 0:
+                    time.sleep(_EMBEDDED_PAUSE_S)
     except OSError:
         return set()
     with _embedded_lock:

@@ -126,7 +126,7 @@ from gpu.clock import select_gpu_clock
 from gpu.profiles import GpuProfileStore
 from gpu.power_cap import AmdGpuPowerCap
 from power.reader import PowerReader
-from power.rapl import RaplPackagePower
+from power.rapl import RaplPackagePower, package_energy_user_readable as rapl_user_readable
 from desktop.mode import (
     effective_desktop_mode,
     migrate_desktop_defaults,
@@ -258,7 +258,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "hud": (
         ("get_hud_state", (
             "capability", "applyStatus", "conflict", "model.enabled", "model.layout",
-            "model.position", "model.items",
+            "model.position", "model.items", "unavailableMetrics",
         )),
     ),
     "params": (("_support_launch_state", None),),
@@ -269,7 +269,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         ("_theme_report_diagnostics", (
             "early_themes", "installed", "other_active_themes", "other_active_targets", "activation_phase",
             "activation_quarantined",
-            "recent_failures", "health",
+            "recent_failures", "health", "catalog",
         )),
         ("_support_custom_artwork", None),
         ("_support_duo_artwork", None),
@@ -480,6 +480,17 @@ def _current_boot_id():
             return source.read().strip() or None
     except OSError:
         return None
+
+
+def _rail_live_max(observation, surface):
+    """Live maxima of all three rails, or None: a partial reading is unknown."""
+    rails = (getattr(observation, "surfaces", None) or {}).get(surface, {})
+    maxima = {
+        rail: int(reading.max_w)
+        for rail in ("pl1", "pl2", "pl3")
+        if (reading := rails.get(rail)) is not None and reading.max_w is not None
+    }
+    return maxima if len(maxima) == 3 else None
 
 
 def _user_home() -> str:
@@ -773,6 +784,8 @@ class Plugin(AmbientRpc):
         self._low_battery_below = None
         self._low_battery_hold_cached_reassert_s = None
         self._low_battery_hold_last_failure = None
+        self._primary_tdp_live_max_seen = None
+        self._tdp_rewrite_after_hold_release = False
         self._low_battery_hold_recovery_pending = bool(
             getattr(self._low_battery_hold_backend, "safety_locked", False)
         )
@@ -2237,7 +2250,14 @@ class Plugin(AmbientRpc):
             "unreadable_theme_folders": self._unreadable_theme_folders(),
             **inventory,
             "health": self._theme_health_summary(),
+            "catalog": self._theme_catalog_summary(),
         }
+
+    def _theme_catalog_summary(self) -> dict:
+        try:
+            return self._remote_themes().diagnostics()
+        except Exception as error:  # noqa: BLE001
+            return {"unavailable": type(error).__name__}
 
     def _theme_health_summary(self) -> dict:
         try:
@@ -7921,8 +7941,8 @@ class Plugin(AmbientRpc):
             or read_on_ac()
         ):
             return
-        # The firmware caps power on low battery and may keep that cap until reboot;
-        # neither is the machine's own power.
+        # The firmware caps power on low battery and may keep that cap after the
+        # battery recovers; neither is the machine's own power.
         percent = (self._battery.read() or {}).get("percent")
         latched = self._settings.get("low_battery_hold_latched_boot")
         if (
@@ -8248,6 +8268,7 @@ class Plugin(AmbientRpc):
     def _remember_tdp_observation(self, observation):
         self._tdp_observation = observation
         self._tdp_observation_at = _monotonic()
+        self._remember_primary_tdp_live_max(observation)
         return observation
 
     def _apply_tdp_targets(self, target, on_ac, auto_tdp):
@@ -8275,11 +8296,14 @@ class Plugin(AmbientRpc):
                 on_ac,
             )
 
-        return trace_tdp_operation(
+        result = trace_tdp_operation(
             self._tdp_backend, "apply", apply,
             target=target, on_ac=on_ac, auto_tdp=auto_tdp,
             observation_before=self._tdp_observation.as_dict(),
         )
+        if getattr(result, "ok", False):
+            self._tdp_rewrite_after_hold_release = False
+        return result
 
     @staticmethod
     def _probe_tdp_live_max(command):
@@ -8479,6 +8503,7 @@ class Plugin(AmbientRpc):
             )
             return result
         if sidecar is not None:
+            self._refresh_primary_tdp_live_max()
             hold = self._low_battery_hold_decision(command.on_ac)
             if hold.active:
                 result = self._apply_low_battery_sidecar(
@@ -8800,19 +8825,33 @@ class Plugin(AmbientRpc):
         requested = self._effective_levels(self._current_appid, on_ac)[0]
         if int(requested.get("pl1", 0)) <= cap["pl1"]:
             return False
+        live_max = self._primary_tdp_live_max_seen
+        if live_max:
+            # The firmware may lift its low-battery cap within the same boot: the last
+            # live maxima it reported decide; only without them does the latch decide.
+            return all(live_max[rail] <= int(watts) for rail, watts in cap.items())
         boot = _current_boot_id()
-        # The firmware keeps its low-battery cap until the next boot, even on the charger.
-        if boot and self._settings.get("low_battery_hold_latched_boot") == boot:
-            return True
-        observation = getattr(self, "_tdp_observation", None)
-        surfaces = getattr(observation, "surfaces", None) or {}
-        rails = surfaces.get(self._tdp_backend.name, {})
-        return bool(rails) and all(
-            (reading := rails.get(rail)) is not None
-            and reading.max_w is not None
-            and int(reading.max_w) <= int(watts)
-            for rail, watts in cap.items()
-        )
+        return bool(boot and self._settings.get("low_battery_hold_latched_boot") == boot)
+
+    def _remember_primary_tdp_live_max(self, observation):
+        live_max = _rail_live_max(observation, self._tdp_backend.name)
+        if live_max:
+            self._primary_tdp_live_max_seen = live_max
+
+    def _refresh_primary_tdp_live_max(self):
+        # While the ryzenadj hold drives the SoC, only the firmware attributes still
+        # show whether the low-battery cap is in force. Worker threads only.
+        if not (
+            self._settings.get("low_battery_tdp_hold") is True
+            and getattr(self._low_battery_hold_backend, "unverified_hold_restore", None)
+            and getattr(self._tdp_backend, "reports_live_max", False)
+        ):
+            return
+        try:
+            observation = self._tdp_backend.observe()
+        except Exception:  # noqa: BLE001
+            return
+        self._remember_primary_tdp_live_max(observation)
 
     def _remember_low_battery_primary_result(self, hold, result):
         if hold is None:
@@ -8839,9 +8878,9 @@ class Plugin(AmbientRpc):
 
     def _release_low_battery_hold(self):
         backend = getattr(self, "_low_battery_hold_backend", None)
+        was_active = self._low_battery_sidecar_active()
         needs_release = backend is not None and (
-            self._low_battery_sidecar_active()
-            or getattr(backend, "safety_locked", False)
+            was_active or getattr(backend, "safety_locked", False)
         )
         if not needs_release:
             self._low_battery_hold_last_write_at = None
@@ -8861,6 +8900,10 @@ class Plugin(AmbientRpc):
             self._low_battery_hold_last_write_at = None
             self._low_battery_hold_recovery_pending = False
             self._low_battery_hold_last_failure = None
+            if was_active:
+                # The hold's limits stay in the SoC while the firmware attributes it
+                # never touched may already read the target: rewrite them once.
+                self._tdp_rewrite_after_hold_release = True
         else:
             self._low_battery_hold_recovery_pending = True
             self._low_battery_hold_last_failure = "restore_failed"
@@ -9172,6 +9215,8 @@ class Plugin(AmbientRpc):
             self._tdp_reconcile_memory = ReconcileMemory()
             return
         command = self._capture_tdp_command("guard", bump=False)
+        if self._low_battery_sidecar_active():
+            self._refresh_primary_tdp_live_max()
         hold = self._low_battery_hold_decision()
         self._low_battery_hold_cached_reassert_s = hold.reassert_s
         self._watch_low_battery_threshold(now, command, hold)
@@ -9250,6 +9295,9 @@ class Plugin(AmbientRpc):
             return
         if outcome.action != "apply" and self._consume_powerd_restart():
             action = "powerd-restart-reassert"
+            outcome = replace(outcome, action="apply")
+        if outcome.action != "apply" and self._tdp_rewrite_after_hold_release:
+            action = "low-battery-hold-released"
             outcome = replace(outcome, action="apply")
         if outcome.action != "apply" and self._gpu_split_reassert_due(now):
             action = "gpu-split-reassert"
@@ -10958,6 +11006,18 @@ class Plugin(AmbientRpc):
         """The HUD model the running game applies: its own, or the global one."""
         return self._hud.effective(self._current_appid)
 
+    def _hud_unavailable_metrics(self) -> tuple:
+        """MangoHud rows that would read a constant 0 W on this machine: Intel handhelds have
+        no GPU power sensor, and their CPU power needs the root-only RAPL counter. Generic
+        and desktop hosts may carry a discrete GPU MangoHud does read, so they keep both."""
+        device = self._device
+        if getattr(device, "vendor", "amd") != "intel" or getattr(device, "is_generic", False) \
+                or getattr(device, "key", "") == "desktop_pc":
+            return ()
+        if rapl_user_readable():
+            return ("gpu_power",)
+        return ("gpu_power", "cpu_power")
+
     def _hud_state(self, *, cap=None, model=None) -> dict:
         cap = self._detect_hud() if cap is None else cap
         model = self._hud_model() if model is None else model
@@ -10995,6 +11055,7 @@ class Plugin(AmbientRpc):
             ),
             "model": model,
             "values": dict(self._pdc_preview_values),
+            "unavailableMetrics": list(self._hud_unavailable_metrics()),
             "appid": self._current_appid,
             "followsGlobal": self._hud.is_following_global(self._current_appid),
             "hasGameProfile": (
@@ -11206,6 +11267,7 @@ class Plugin(AmbientRpc):
                 owner=self._hud_owner,
                 replace_conflict=replace_conflict,
                 trusted_root=self._hud_home,
+                omit=self._hud_unavailable_metrics(),
             )
         except mangohud_ownership.HudOwnershipConflict as conflict:
             self._record_hud_conflict(cap["presetsPath"], conflict)
@@ -11535,6 +11597,7 @@ class Plugin(AmbientRpc):
                     values,
                     owner=self._hud_owner,
                     trusted_root=self._hud_home,
+                    omit=self._hud_unavailable_metrics(),
                 )
             except mangohud_ownership.HudOwnershipConflict as conflict:
                 self._record_hud_conflict(self._pdc_presets_path, conflict)

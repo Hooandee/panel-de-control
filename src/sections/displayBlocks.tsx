@@ -61,7 +61,7 @@ const ColorBlock: FC = () => {
               {state.saturation}%
             </span>
           </div>
-          <ContainedSlider value={state.saturation} min={0} max={200} step={5}
+          <ContainedSlider value={state.saturation} min={0} max={200} step={1}
             scale={0.75} onChange={color.onSaturation} />
         </div>
       </PanelSectionRow>

@@ -39,9 +39,10 @@ def apply_hud(
     owner=None,
     replace_conflict=False,
     trusted_root=None,
+    omit=(),
 ):
     """Write the model to presets.conf atomically and return exact file readback."""
-    desired = build_presets_conf(model, values)
+    desired = build_presets_conf(model, values, omit)
     result = ownership.write_managed(
         path,
         desired,

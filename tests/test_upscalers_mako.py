@@ -442,3 +442,29 @@ def test_mako4_upgrade_skips_paused_mako5_profiles(setup, monkeypatch, tmp_path)
     manager.install(cache, asset=mako.ASSET, version='4.6.1')
     assert manager.status()['version'] == '4.6.1'
     assert not any('mako-fg' in content for content in validated)
+
+
+@pytest.mark.parametrize('line', [4, 5])
+def test_install_replaces_prefix_left_without_install_record(setup, line, monkeypatch):
+    manager, cache, _, _ = setup
+    if line == 5:
+        monkeypatch.setattr(mako, 'ASSET5', mako.ASSET)
+        monkeypatch.setattr(mako, 'PAYLOAD5', mako.PAYLOAD)
+    prefix = manager.prefix5 if line == 5 else manager.prefix
+    write(prefix / 'bin/stale-from-wiped-state')
+    assert manager.status()['installed'] is False
+    manager.install(cache, line=line)
+    assert (manager.status()['v5'] if line == 5 else manager.status())['installed'] is True
+    assert not (prefix / 'bin/stale-from-wiped-state').exists()
+    assert not [path for path in prefix.parent.iterdir() if path.name.startswith('.mako-')]
+
+
+def test_install_still_refuses_symlinked_prefix(setup, tmp_path):
+    manager, cache, _, _ = setup
+    elsewhere = tmp_path / 'elsewhere'
+    elsewhere.mkdir()
+    manager.prefix.parent.mkdir(parents=True)
+    manager.prefix.symlink_to(elsewhere)
+    with pytest.raises(mako.MakoError, match='mako_conflict'):
+        manager.install(cache)
+    assert list(elsewhere.iterdir()) == []

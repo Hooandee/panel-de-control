@@ -260,6 +260,9 @@ class ThemeRemoteService:
         self._cache_error_logger = cache_error_logger
         self._clock = clock
         self._memory: _CachedCatalog | None = None
+        self._last_check: tuple[str, str | None, float] | None = None
+        # The catalog last shown to the user, including the disk copy served while offline.
+        self._served: _CachedCatalog | None = None
         self._early: tuple[ThemeEarlyCatalog, float] | None = None
         self._lock = threading.Lock()
         self._stopping = False
@@ -270,6 +273,42 @@ class ThemeRemoteService:
             raise ThemeRemoteError("lifecycle_stopping", "Theme service is stopping")
 
     def check_releases(self, force: bool = False) -> dict[str, object]:
+        try:
+            result = self._check_releases(force)
+        except Exception as error:
+            with self._lock:
+                self._last_check = ("error", type(error).__name__, float(self._clock()))
+            raise
+        status = result.get("status")
+        code = result.get("code")
+        with self._lock:
+            self._last_check = (
+                str(status),
+                code if isinstance(code, str) else None,
+                float(self._clock()),
+            )
+        return result
+
+    def diagnostics(self) -> dict[str, object]:
+        """Last catalog check since this process started and the versions it published; never touches the network."""
+        with self._lock:
+            last = self._last_check
+            memory = self._memory or self._served
+        now = float(self._clock())
+        report: dict[str, object] = {"checked": last is not None}
+        if last is not None:
+            report["status"] = last[0]
+            if last[1] is not None:
+                report["code"] = last[1]
+            report["checked_ago_s"] = max(0, int(now - last[2]))
+        if memory is not None:
+            report["published"] = {
+                release.css_loader_name: release.version for release in memory.catalog.themes
+            }
+            report["catalog_age_s"] = max(0, int(now - memory.checked_at))
+        return report
+
+    def _check_releases(self, force: bool = False) -> dict[str, object]:
         if self._channel is None:
             return {"status": "disabled"}
         with self._lock:
@@ -596,6 +635,8 @@ class ThemeRemoteService:
         cached = memory if memory is not None else self._load_persisted()
         if cached is None:
             return failure
+        with self._lock:
+            self._served = cached
         result = self._success(cached.catalog, cached.checked_at)
         result.update({"status": "cached", "code": code, "retryable": True})
         return result

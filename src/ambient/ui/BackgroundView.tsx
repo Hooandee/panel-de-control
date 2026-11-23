@@ -156,6 +156,7 @@ export const BackgroundView: FC<{ snapshot: AmbientSnapshot; runtime: AmbientRun
           />
           <Hint>{t(`ambient.bg.gameArt.desc.${bg.gameArt}`)}</Hint>
           <ToggleRow label={t("ambient.game.trailers")} description={t("ambient.game.trailers.desc")} checked={bg.gameTrailers} onChange={(gameTrailers) => update((b) => ({ ...b, gameTrailers }))} />
+          {snapshot.decision.background === "theme" && snapshot.coveredBy.length > 0 && <Hint>{t("ambient.game.trailers.covered")}</Hint>}
 
           <Caption>{t("ambient.filters.title")}</Caption>
           <Hint>{t("ambient.filters.desc")}</Hint>
