@@ -204,7 +204,6 @@ _REPORT_SERVICE_URL = os.environ.get(
     "PDC_REPORT_URL", "https://bug-collector-khaki.vercel.app/api/report"
 )
 _SUPPORT_SAMPLE_INTERVAL_S = 30
-_GIL_SWITCH_INTERVAL_S = 0.001
 _SCREEN_LEASE_S = 15.0
 _ECO_INPUT_POLL_S = 0.25
 _ECO_INPUT_REPORT_S = 1.0
@@ -15758,10 +15757,6 @@ class Plugin(AmbientRpc):
             decky.logger.info("Startup stopped: plugin is shutting down")
 
     async def _startup(self) -> None:
-        # The loop reads sysfs file by file and each read hands the GIL away; with the default
-        # 5 ms switch interval a worker walking a game folder or a library holds it back for
-        # seconds and every section waits on the stalled loop.
-        sys.setswitchinterval(_GIL_SWITCH_INTERVAL_S)
         self._start_journal()
         self._init()
         # Single-worker executor for subprocess-backed applies (gamescopectl /
