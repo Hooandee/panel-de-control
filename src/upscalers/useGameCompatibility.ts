@@ -26,7 +26,7 @@ export function useGameCompatibility(games: GameEntry[], enabled: boolean) {
 
     let active = true;
     // Shortcuts ask first and alone: Steam libraries can take long to read, and a shortcut waits only for its own answer.
-    const missing = [...ids].filter((id) => !cache.has(id)).sort((a, b) => Number(shortcuts.current.has(b)) - Number(shortcuts.current.has(a)));
+    const missing = [...ids].filter((id) => !cache.has(id));
     const batches: string[][] = [];
     for (const group of [missing.filter((id) => shortcuts.current.has(id)), missing.filter((id) => !shortcuts.current.has(id))]) {
       // The backend accepts at most 400 AppIDs per request.

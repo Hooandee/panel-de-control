@@ -2353,7 +2353,7 @@ class UpscalerService:
             try:
                 report = self.diagnose(appid)
             except Exception as error:
-                report = {"appid": appid, "error": type(error).__name__}
+                report = {**recorded, "error": type(error).__name__}
             report["elapsed_ms"] = round((time.monotonic() - game_started) * 1000)
             result["games"][slot] = report
         sections = (

@@ -66,7 +66,8 @@ def test_report_keeps_other_games_when_one_diagnostic_fails(steam, fake_catalog,
         return original(home, appid, entry, installed)
     monkeypatch.setattr(diagnostics, 'game_report', report)
     result = service.report()['games']
-    assert {k: v for k, v in result[0].items() if k != 'elapsed_ms'} == {'appid': 'bad', 'error': 'OSError'}
+    assert result[0]['appid'] == 'bad' and result[0]['error'] == 'OSError'
+    assert result[0]['history'] and 'private detail' not in json.dumps(result[0])
     assert result[1]['appid'] == 'good'
 
 

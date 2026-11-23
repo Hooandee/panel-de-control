@@ -526,7 +526,7 @@ def find_installed(home: str, appid: str, lookup: Counter | None = None) -> Inst
     on a mounted drive, so a stale copy never wins over the install Steam knows."""
     if not appid.isdecimal():
         return None
-    if int(appid) >= STEAM_APPID_LIMIT:
+    if len(appid) > 10 or int(appid) >= STEAM_APPID_LIMIT:
         return find_shortcut(home, appid)
     counts = Counter() if lookup is None else lookup
     trusted = dict(_available_libraries(home, counts))

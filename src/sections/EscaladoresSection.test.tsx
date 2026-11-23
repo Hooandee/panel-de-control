@@ -87,13 +87,16 @@ it("holds shortcuts back until it knows whether a game is behind them", async ()
   let answer: (value: unknown) => void = () => undefined;
   vi.mocked(api.getUpscalersCompat).mockImplementation((ids) => ids.includes("3")
     ? new Promise((resolve) => { answer = resolve; }) as never : Promise.resolve({}));
-  await act(async () => { render(<EscaladoresSection />); });
-  expect(screen.queryByText("Shortcut")).toBeNull();
-  expect(screen.getByText("A")).toBeTruthy();
-  await act(async () => { answer({ "3": { inputs: ["DLSS"], native: false } }); });
-  expect(screen.getByText("Shortcut")).toBeTruthy();
-  games.pop();
-  vi.mocked(api.getUpscalersCompat).mockImplementation(async () => ({}));
+  try {
+    await act(async () => { render(<EscaladoresSection />); });
+    expect(screen.queryByText("Shortcut")).toBeNull();
+    expect(screen.getByText("A")).toBeTruthy();
+    await act(async () => { answer({ "3": { inputs: ["DLSS"], native: false } }); });
+    expect(screen.getByText("Shortcut")).toBeTruthy();
+  } finally {
+    games.pop();
+    vi.mocked(api.getUpscalersCompat).mockImplementation(async () => ({}));
+  }
 });
 
 it("lists shortcuts as soon as their own check answers, however slow the Steam games are", async () => {

@@ -570,12 +570,6 @@ class LoopWatchdog:
     def _busy_threads(self) -> list[str]:
         """Threads not parked on a lock, queue or selector, and where they are: a loop stuck on a
         plain sysfs read is usually waiting for the GIL one of them holds."""
-        try:
-            return self._threads_not_parked()
-        except Exception:  # noqa: BLE001 - the watchdog must outlive a frame it cannot format
-            return []
-
-    def _threads_not_parked(self) -> list[str]:
         names = {thread.ident: thread.name for thread in threading.enumerate()}
         busy = []
         for ident, frame in sys._current_frames().items():
@@ -583,14 +577,17 @@ class LoopWatchdog:
                 continue
             if os.path.basename(frame.f_code.co_filename) in _IDLE_MODULES:
                 continue
-            where = " < ".join(f"{os.path.basename(f.filename)}:{f.lineno} {f.name}"
-                               for f in reversed(traceback.extract_stack(frame)[-4:]))
+            stack = traceback.StackSummary.extract(traceback.walk_stack(frame), limit=4, lookup_lines=False)
+            where = " < ".join(f"{os.path.basename(f.filename)}:{f.lineno} {f.name}" for f in stack)
             busy.append(f"{names.get(ident, ident)}: {where}"[:400])
-        return busy[:6]
+        return busy[:12]
 
     def _watch(self) -> None:
         while not self._stop.wait(self._beat_s):
-            self.check()
+            try:
+                self.check()
+            except Exception:  # noqa: BLE001 - the watchdog must outlive a frame it cannot format
+                pass
 
 
 _TRANSITION = re.compile(r"^(?P<name>[A-Z][A-Za-z -]{1,40} transition) (?P<event>\{.*\})$", re.S)
