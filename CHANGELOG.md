@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.95.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.3...panel-de-control-v0.95.0) (2026-11-23)
+
+
+### Features
+
+* **themes:** mark QAM controls for theme styling ([#1482](https://github.com/Hooandee/panel-de-control/issues/1482)) ([a3e6fa5](https://github.com/Hooandee/panel-de-control/commit/a3e6fa58613b7583da9d8f8f04c19fa1b0c17c43))
+
+
+### Bug Fixes
+
+* **upscalers:** Warframe support and fixes from Escaladores reports ([#1483](https://github.com/Hooandee/panel-de-control/issues/1483)) ([87ef4f1](https://github.com/Hooandee/panel-de-control/commit/87ef4f1364b0eddb69fb40444899e018f62b381d))
+
 ## [0.94.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.2...panel-de-control-v0.94.3) (2026-11-23)
 
 
