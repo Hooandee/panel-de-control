@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.95.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.3...panel-de-control-v0.95.0) (2026-11-23)
+
+
+### Español
+
+* **Warframe ya funciona con Escaladores:** Al abrir el juego, su lanzador borraba los archivos del escalador y la instalación salía rota cada vez. Ahora Panel de Control los protege y los carga de una forma que Warframe sí acepta. En la ficha del juego verás cómo pasarlo a DirectX 12 y elegir DLSS, que es como funciona.
+* **Red Dead Redemption 2 pasa solo a DirectX 12:** En Vulkan, que es como arranca por defecto, el juego se cerraba al activar FSR 2 con el escalador. Ahora Panel de Control lo cambia a DirectX 12 al instalar el escalador y lo deja como estaba al quitarlo.
+* **Puedes dejar que el juego decida la calidad:** Con el nuevo interruptor Usar la calidad del juego, el preset de calidad del juego y el menú de OptiScaler vuelven a cambiar la resolución. Antes la calidad de Panel de Control los anulaba.
+* **Resident Evil Village tiene su propio escalado:** Ahora se instala igual que en los otros Resident Evil, con su versión de REFramework, y solo hace falta descargar el plugin que se indica en la ficha.
+* **La descarga de un mod ya no se queda esperando para siempre:** Si el archivo no llega a Descargas en 15 minutos, la ficha te lo dice para que lo vuelvas a descargar o lo elijas a mano.
+* **Los temas pueden dar estilo a más controles:** Algunos botones y desplegables de Panel de Control ya se pueden personalizar desde los temas.
+
+### English
+
+* **Warframe now works with Upscalers:** When the game started, its launcher deleted the upscaler files and the install came out broken every time. Panel de Control now protects them and loads them in a way Warframe accepts. The game's page shows how to switch it to DirectX 12 and pick DLSS, which is how it works.
+* **Red Dead Redemption 2 switches to DirectX 12 on its own:** In Vulkan, its default, the game quit when FSR 2 was turned on with the upscaler. Panel de Control now switches it to DirectX 12 when installing the upscaler and puts it back when removing it.
+* **You can let the game decide the quality:** With the new Use the game's quality switch, the game's quality preset and OptiScaler's menu change the resolution again. Before, Panel de Control's quality overrode them.
+* **Resident Evil Village gets its own upscaling:** It now installs like the other Resident Evil games, with its own REFramework build, and you only need to download the plugin shown on its page.
+* **A mod download no longer waits forever:** If the file doesn't reach Downloads within 15 minutes, the page tells you so you can download it again or pick it by hand.
+* **Themes can style more controls:** Some Panel de Control buttons and folds can now be customised by themes.
+
+### Italiano
+
+* **Warframe ora funziona con Upscaler:** All'avvio del gioco, il suo launcher cancellava i file dell'upscaler e l'installazione risultava rotta ogni volta. Ora Panel de Control li protegge e li carica in un modo che Warframe accetta. Nella scheda del gioco trovi come passarlo a DirectX 12 e scegliere DLSS, che è come funziona.
+* **Red Dead Redemption 2 passa da solo a DirectX 12:** In Vulkan, che è l'impostazione predefinita, il gioco si chiudeva attivando FSR 2 con l'upscaler. Ora Panel de Control lo passa a DirectX 12 quando installi l'upscaler e lo rimette com'era quando lo togli.
+* **Puoi lasciare che sia il gioco a decidere la qualità:** Con il nuovo interruttore Usa la qualità del gioco, il preset di qualità del gioco e il menu di OptiScaler tornano a cambiare la risoluzione. Prima la qualità di Panel de Control li annullava.
+* **Resident Evil Village ha il suo upscaling:** Ora si installa come negli altri Resident Evil, con la sua versione di REFramework, e basta scaricare il plugin indicato nella scheda.
+* **Il download di una mod non resta più in attesa all'infinito:** Se il file non arriva in Download entro 15 minuti, la scheda te lo dice così puoi riscaricarlo o sceglierlo a mano.
+* **I temi possono personalizzare più controlli:** Alcuni pulsanti e menu a comparsa di Panel de Control ora si possono personalizzare dai temi.
+
+### Deutsch
+
+* **Warframe funktioniert jetzt mit Upscaler:** Beim Start löschte der Launcher des Spiels die Upscaler-Dateien, und die Installation war jedes Mal kaputt. Jetzt schützt Panel de Control sie und lädt sie so, dass Warframe sie annimmt. Auf der Seite des Spiels steht, wie du auf DirectX 12 umstellst und DLSS wählst, denn so funktioniert es.
+* **Red Dead Redemption 2 wechselt von selbst zu DirectX 12:** Unter Vulkan, der Standardeinstellung, beendete sich das Spiel, sobald FSR 2 mit dem Upscaler aktiviert wurde. Jetzt stellt Panel de Control beim Installieren des Upscalers auf DirectX 12 um und setzt es beim Entfernen zurück.
+* **Du kannst die Qualität dem Spiel überlassen:** Mit dem neuen Schalter Qualität des Spiels verwenden ändern die Qualitätsvoreinstellung des Spiels und das OptiScaler-Menü wieder die Auflösung. Vorher hat die Qualität von Panel de Control sie überschrieben.
+* **Resident Evil Village bekommt sein eigenes Upscaling:** Es wird jetzt wie die anderen Resident-Evil-Spiele installiert, mit seiner eigenen REFramework-Version, und du musst nur das auf seiner Seite genannte Plugin herunterladen.
+* **Ein Mod-Download wartet nicht mehr ewig:** Kommt die Datei nicht innerhalb von 15 Minuten in Downloads an, sagt dir die Seite Bescheid, damit du sie erneut herunterlädst oder von Hand auswählst.
+* **Themes können mehr Bedienelemente gestalten:** Einige Schaltflächen und Klappbereiche von Panel de Control lassen sich jetzt über Themes anpassen.
+
+### Português (Brasil)
+
+* **Warframe agora funciona com o Upscalers:** Ao abrir o jogo, o launcher dele apagava os arquivos do upscaler e a instalação ficava quebrada toda vez. Agora o Panel de Control protege esses arquivos e os carrega de um jeito que o Warframe aceita. Na página do jogo você vê como passar para DirectX 12 e escolher DLSS, que é como funciona.
+* **Red Dead Redemption 2 muda sozinho para DirectX 12:** Em Vulkan, que é o padrão, o jogo fechava ao ativar o FSR 2 com o upscaler. Agora o Panel de Control muda para DirectX 12 ao instalar o upscaler e volta como estava ao removê-lo.
+* **Você pode deixar o jogo decidir a qualidade:** Com o novo botão Usar a qualidade do jogo, a predefinição de qualidade do jogo e o menu do OptiScaler voltam a mudar a resolução. Antes, a qualidade do Panel de Control se sobrepunha a eles.
+* **Resident Evil Village tem seu próprio upscaling:** Agora ele é instalado como os outros Resident Evil, com sua própria versão do REFramework, e só é preciso baixar o plugin indicado na página.
+* **O download de um mod não fica mais esperando para sempre:** Se o arquivo não chegar em Downloads em 15 minutos, a página avisa para você baixar de novo ou escolher na mão.
+* **Os temas podem personalizar mais controles:** Alguns botões e seções recolhíveis do Panel de Control agora podem ser personalizados pelos temas.
+
+### Français
+
+* **Warframe fonctionne maintenant avec Upscalers :** Au lancement du jeu, son launcher supprimait les fichiers de l'upscaler et l'installation était cassée à chaque fois. Panel de Control les protège maintenant et les charge d'une façon que Warframe accepte. La page du jeu indique comment passer en DirectX 12 et choisir DLSS, car c'est ainsi qu'il fonctionne.
+* **Red Dead Redemption 2 passe tout seul en DirectX 12 :** En Vulkan, son réglage par défaut, le jeu se fermait quand FSR 2 était activé avec l'upscaler. Panel de Control le passe maintenant en DirectX 12 à l'installation de l'upscaler et le remet comme avant quand vous le retirez.
+* **Vous pouvez laisser le jeu décider de la qualité :** Avec le nouvel interrupteur Utiliser la qualité du jeu, le préréglage de qualité du jeu et le menu d'OptiScaler changent de nouveau la résolution. Avant, la qualité de Panel de Control les remplaçait.
+* **Resident Evil Village a son propre upscaling :** Il s'installe maintenant comme les autres Resident Evil, avec sa propre version de REFramework, et il suffit de télécharger le plugin indiqué sur sa page.
+* **Le téléchargement d'un mod n'attend plus indéfiniment :** Si le fichier n'arrive pas dans Téléchargements en 15 minutes, la page vous le signale pour que vous le téléchargiez de nouveau ou le choisissiez à la main.
+* **Les thèmes peuvent personnaliser plus de contrôles :** Certains boutons et volets de Panel de Control peuvent maintenant être personnalisés par les thèmes.
+
 ## [0.94.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.2...panel-de-control-v0.94.3) (2026-11-23)
 
 
