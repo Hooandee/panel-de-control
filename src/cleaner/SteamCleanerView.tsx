@@ -32,6 +32,7 @@ const CleanerAction: FC<{
   const activate = () => { if (!disabled) onActivate(); };
   return (
     <Focusable
+      data-pdc-part="surface-action"
       ref={ref}
       data-preferred-focus={preferredFocus || undefined}
       role={checked === undefined ? "button" : "checkbox"}

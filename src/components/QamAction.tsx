@@ -9,6 +9,7 @@ interface Props {
   checked?: boolean;
   expanded?: boolean;
   label?: string;
+  part?: string;
   style?: CSSProperties;
   children: ReactNode;
 }
@@ -21,6 +22,7 @@ export const QamAction: FC<Props> = ({
   checked,
   expanded,
   label,
+  part,
   style,
   children,
 }) => {
@@ -53,6 +55,7 @@ export const QamAction: FC<Props> = ({
     <Focusable
       noFocusRing={noFocusRing}
       aria-label={label}
+      data-pdc-part={part}
       aria-pressed={isCheckbox ? undefined : pressed}
       aria-checked={checked}
       aria-expanded={expanded}

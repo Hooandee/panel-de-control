@@ -215,7 +215,7 @@ export function PickerButton<T extends string>({ label, value, options, onChange
   </div>;
   return (
     <Focusable flow-children="column" style={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", opacity: disabled ? 0.45 : 1 }}>
-      <Focusable ref={trigger} role="button" aria-label={label} aria-expanded={open} aria-disabled={disabled}
+      <Focusable data-pdc-part="surface-action" ref={trigger} role="button" aria-label={label} aria-expanded={open} aria-disabled={disabled}
         onActivate={toggle} onClick={toggle} onCancel={open ? (event) => { event.stopPropagation(); close(); } : undefined}
         style={{ width: "100%", minWidth: 0, cursor: "pointer" }}>
         <div style={{ ...theme.card, boxSizing: "border-box", width: "100%", padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", alignItems: "center", gap: theme.space.xs }}>
@@ -320,6 +320,7 @@ export const ListRow: FC<{
 
 export const Fold: FC<{ label: string; open: boolean; onToggle: () => void }> = ({ label, open, onToggle }) => (
   <Focusable
+    data-pdc-part="disclosure"
     aria-expanded={open}
     onActivate={onToggle}
     onClick={onToggle}

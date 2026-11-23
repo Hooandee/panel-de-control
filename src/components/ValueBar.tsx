@@ -36,6 +36,7 @@ export const ValueBar: FC<ValueBarProps> = ({
 
   return (
     <div
+      data-pdc-part="value-card"
       style={{
         ...theme.card,
         padding: theme.space.md,

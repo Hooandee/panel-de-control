@@ -24,6 +24,7 @@ export const CleanerButton: FC<{
   useRefocusWhenRemoved(ref);
   const activate = () => { if (!disabled) onActivate(); };
   return <Focusable
+    data-pdc-part="surface-action"
     ref={ref}
     role={role ?? (checked === undefined ? "button" : "checkbox")}
     aria-label={label}
