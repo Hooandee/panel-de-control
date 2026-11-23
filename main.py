@@ -269,7 +269,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         ("_theme_report_diagnostics", (
             "early_themes", "installed", "other_active_themes", "other_active_targets", "activation_phase",
             "activation_quarantined",
-            "recent_failures", "health",
+            "recent_failures", "health", "catalog",
         )),
         ("_support_custom_artwork", None),
         ("_support_duo_artwork", None),
@@ -2237,7 +2237,14 @@ class Plugin(AmbientRpc):
             "unreadable_theme_folders": self._unreadable_theme_folders(),
             **inventory,
             "health": self._theme_health_summary(),
+            "catalog": self._theme_catalog_summary(),
         }
+
+    def _theme_catalog_summary(self) -> dict:
+        try:
+            return self._remote_themes().diagnostics()
+        except Exception as error:  # noqa: BLE001
+            return {"unavailable": type(error).__name__}
 
     def _theme_health_summary(self) -> dict:
         try:

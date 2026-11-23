@@ -827,3 +827,25 @@ def test_early_install_never_uses_the_persisted_early_list(tmp_path: Path, monke
         remote.prepare_early_install(str(picked), tmp_path / "themes", tmp_path / "r.json")
 
     assert error.value.code == "offline"
+
+
+def test_diagnostics_report_last_check_and_published_versions_without_network() -> None:
+    clock = Clock()
+    transport = FakeTransport(catalog(release(version="0.1.3")))
+    remote = service(transport, clock=clock)
+
+    assert remote.diagnostics() == {"checked": False}
+    remote.check_releases()
+    clock.value += 42
+    transport.result = ThemeTransportError("offline", "offline")
+    remote.check_releases(force=True)
+
+    assert remote.diagnostics() == {
+        "checked": True,
+        "status": "cached",
+        "code": "offline",
+        "checked_ago_s": 0,
+        "published": {"Example Theme": "0.1.3"},
+        "catalog_age_s": 42,
+    }
+    assert transport.paths == [CATALOG_PATH, CATALOG_PATH]
