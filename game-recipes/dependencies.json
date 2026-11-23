@@ -207,6 +207,13 @@
       "dinput8.dll": "dinput8.dll"
     }
   },
+  "refw-pdup-re8": {
+    "kind": "game_files",
+    "asset": "refw-pdup-re8",
+    "files": {
+      "dinput8.dll": "dinput8.dll"
+    }
+  },
   "refw-pdup-dmc5": {
     "kind": "game_files",
     "asset": "refw-pdup-dmc5",

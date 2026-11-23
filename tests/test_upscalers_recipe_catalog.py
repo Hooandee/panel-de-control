@@ -97,7 +97,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 16
+    assert recipe.catalog_version == 17
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
@@ -392,5 +392,19 @@ def test_baldurs_gate_3_skips_its_launcher_into_d3d11_and_asks_for_dlss():
 
 
 def test_every_reframework_recipe_runs_optiscalers_overlay_menu():
-    for appid in ('2050650', '883710', '952060', '418370', '601150'):
+    for appid in ('2050650', '883710', '952060', '418370', '601150', '1196590'):
         assert recipes.recipe_for(appid, platform='linux', arch='x86_64').ini['Menu.OverlayMenu'] == 'true', appid
+
+
+def test_village_gets_the_puredark_route_instead_of_a_mod_to_find():
+    # PDC-S34S / PDC-JXY8 (#1372, #1443): Village (re8.exe) got generic REFramework, OptiScaler never saw an upscaler,
+    # and the "needs a mod" card only opened the OptiScaler wiki.
+    catalog = rc.load()
+    game = catalog.match('1196590', 'optiscaler', 'linux', 'x86_64')
+    assert game is not None and game.exe == 're8.exe'
+    order = catalog.dependency_order(game.dependencies)
+    assert [(d.id, d.kind) for d in order] == [('refw-pdup-re8', 'game_files'), ('puredark-upscaler-base', 'user_files')]
+    asset = catalog.assets['refw-pdup-re8']
+    assert (asset.size, asset.sha256) == (13397060, '27e8fffe7df10d2f905facdf9a03f733def6140c197db3a4a3d651aab5cbeaf7')
+    recipe = recipes.recipe_for('1196590', platform='linux', arch='x86_64')
+    assert recipe.reframework_upscaler and not recipe.optiscaler_fg and recipe.optiscaler_root_files == ('libxess.dll',)
