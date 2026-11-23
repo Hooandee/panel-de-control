@@ -750,7 +750,11 @@ def running_under(root: Path, proc: str = "/proc") -> bool:
 EMBEDDED = {"fsr2": (b"ffxFsr2ContextCreate",), "fsr31": (b"ffxFsr3UpscalerContextCreate",), "xess": (b"xessD3D12CreateContext",)}
 
 
-_EMBEDDED_CHUNK = 4 * 1024 * 1024
+# A cached exe scans at full speed and each `in` holds the GIL: every sysfs read the event loop makes
+# then waits behind it. Small chunks and a short pause every few keep the loop answering.
+_EMBEDDED_CHUNK = 256 * 1024
+_EMBEDDED_PAUSE_EVERY = 4
+_EMBEDDED_PAUSE_S = 0.001
 _EMBEDDED_OVERLAP = max(len(n) for needles in EMBEDDED.values() for n in needles) - 1
 _embedded_cache: dict[str, tuple[tuple[int, int], frozenset[str]]] = {}
 _embedded_lock = threading.Lock()
@@ -772,6 +776,7 @@ def embedded_upscalers(exe: Path) -> set[str]:
     try:
         with open(exe, "rb") as handle:
             tail = b""
+            chunks = 0
             while pending:
                 chunk = handle.read(_EMBEDDED_CHUNK)
                 if not chunk:
@@ -781,6 +786,9 @@ def embedded_upscalers(exe: Path) -> set[str]:
                     found.add(kind)
                     del pending[kind]
                 tail = window[-_EMBEDDED_OVERLAP:]
+                chunks += 1
+                if chunks % _EMBEDDED_PAUSE_EVERY == 0:
+                    time.sleep(_EMBEDDED_PAUSE_S)
     except OSError:
         return set()
     with _embedded_lock:
