@@ -83,6 +83,7 @@ export const ColorPicker: FC<{ label: string; value: string; onChange: (hex: str
       showModal(<ColorModal label={label} initial={value} onChange={onChange} />);
     }}
     label={label}
+    part="swatch"
     style={{
       width: size, height: size, flexShrink: 0, borderRadius: 6, cursor: "pointer",
       background: `#${value}`, boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,

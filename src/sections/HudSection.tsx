@@ -74,6 +74,7 @@ const OutlineBtn: FC<{
   children: ReactNode;
 }> = ({ onClick, expanded, children }) => (
   <QamAction
+    part={expanded === undefined ? undefined : "disclosure"}
     onPress={onClick}
     expanded={expanded}
     style={{
@@ -198,6 +199,7 @@ const RowAction: FC<{
   children: ReactNode;
 }> = ({ label, disabled, onPress, children }) => (
   <QamAction
+    part="icon-action"
     label={label}
     disabled={disabled}
     onPress={onPress}
@@ -697,6 +699,7 @@ export const HudSection: FC = () => {
                 <RemovableRow style={{ display: "flex", alignItems: "center", gap: theme.space.xs }}>
                   {editable ? (
                     <QamAction
+                      part="disclosure"
                       onPress={() => setSelected(isSel ? null : key)}
                       expanded={isSel}
                       style={{
@@ -795,6 +798,7 @@ export const HudSection: FC = () => {
                 return (
                   <QamAction
                     key={id}
+                    part="icon-action"
                     label={t(`hud.position.${id}`)}
                     onPress={() => patch({ position: id })}
                     pressed={active}

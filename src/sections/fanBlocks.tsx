@@ -173,6 +173,7 @@ const CurveBlock: FC = () => {
                 {t("fans.curve.title")}
               </span>
               <Focusable
+                data-pdc-part="icon-action"
                 style={{ display: "flex", alignItems: "center", padding: 4, borderRadius: theme.radius.sm, color: theme.color.textMuted, cursor: "pointer" }}
                 onActivate={() => openFanCurveModal(liveTemp, curve.refresh)}
                 onClick={() => openFanCurveModal(liveTemp, curve.refresh)}

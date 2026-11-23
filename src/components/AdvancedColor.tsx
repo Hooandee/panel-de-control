@@ -73,6 +73,7 @@ export const AdvancedColor: FC<Props> = ({ state, onChange }) => {
 
       {/* Manual per-channel white balance — the nerdiest control, one level down. */}
       <Focusable
+        data-pdc-part="disclosure"
         style={{
           display: "flex", alignItems: "center", gap: 6, marginTop: theme.space.sm,
           padding: "6px 2px", cursor: "pointer",

@@ -125,7 +125,7 @@ export const EscaladoresSection: FC = () => {
             <>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <Label>{t("up.games")}</Label>
-                <Focusable role="button" aria-expanded={optionsOpen} onActivate={() => setOptionsOpen(!optionsOpen)} onClick={() => setOptionsOpen(!optionsOpen)}
+                <Focusable data-pdc-part="disclosure" role="button" aria-expanded={optionsOpen} onActivate={() => setOptionsOpen(!optionsOpen)} onClick={() => setOptionsOpen(!optionsOpen)}
                   style={{ display: "flex", alignItems: "center", gap: 6, padding: 8, color: theme.color.textPrimary, fontSize: theme.font.caption }}>
                   <LuSlidersHorizontal size={16} />{t("up.list.options")}
                 </Focusable>

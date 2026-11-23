@@ -40,6 +40,7 @@ export const HudDisclosure: FC<Props> = ({
       }}
     >
       <QamAction
+        part="disclosure"
         onPress={toggle}
         expanded={open}
         style={{
