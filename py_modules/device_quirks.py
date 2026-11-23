@@ -117,6 +117,7 @@ def legion_go_s_83l3_firmware_attr_quirks(device, root: str = "/") -> dict:
         "readback_settle_delays": (0.05, 0.10, 0.20, 0.40),
         "named_profile_owns_rails": True,
         "rearm_custom_on_ignored_writes": True,
+        "firmware_fallback_rails": {"pl1": 30, "pl2": 15, "pl3": 20},
     }
 
 
