@@ -310,7 +310,7 @@ def test_partial_report_keeps_what_was_read_before_a_stuck_game(steam, fake_cata
         service.report(partial=partial)
     except KeyboardInterrupt:
         pass
-    assert [g['appid'] for g in partial['games']] == ['fast']
+    assert [(g['appid'], g.get('scanned', True)) for g in partial['games']] == [('fast', True), ('stuck', False)]
     assert partial['reading'] == 'stuck'
     assert partial['gpu'] == service.gpu
 
