@@ -595,6 +595,7 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
         "installed": [],
         "other_active_themes": 0,
         "other_active_targets": {},
+        "catalog": {"checked": False},
         "health": {
             "folders": {},
             "cleanup": {"available": False, "moved": 0, "disabled": 0},
