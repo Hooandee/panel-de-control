@@ -1,5 +1,80 @@
 # Changelog
 
+## [0.94.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.2...panel-de-control-v0.94.3) (2026-11-23)
+
+
+### Español
+
+* **Escaladores enseña enseguida los juegos que no son de Steam:** Los accesos directos que añades a Steam tardaban mucho en salir en Escaladores, o no salían, porque esperaban a que se revisara toda tu biblioteca. Ahora aparecen en cuanto están listos.
+* **Panel ya no se queda colgado mientras Escaladores revisa tus juegos:** Al abrir Escaladores, Potencia y otras secciones podían quedarse cargando varios segundos. Ahora Panel sigue respondiendo mientras revisa los juegos.
+* **Mako se instala aunque quedara una instalación a medias:** Si una instalación anterior de Mako se había cortado, activarlo daba fallo una y otra vez. Ahora Panel limpia lo que quedó y lo instala.
+* **El TDP de la Legion Go S ya no desaparece a mitad de partida:** En algunos modelos el TDP dejaba de estar disponible jugando y no volvía hasta reiniciar. Además, cuando se levanta el límite por batería baja, tu TDP se vuelve a aplicar sin tener que apagar la pantalla.
+* **El HUD ya no enseña el consumo de CPU y GPU a 0 W en equipos Intel:** Esas lecturas siempre marcaban 0 porque el sistema no las da. Ahora se ocultan.
+* **Ambiente avisa cuando no puede poner tráileres:** Si el fondo lo pone tu tema, los tráileres de los juegos no se ven. Ahora Ambiente te lo dice y te deja usar su fondo.
+* **Los ajustes de color de Pantalla van de uno en uno:** Antes saltaban de cinco en cinco y costaba afinar.
+* **Quitar MangoHud en Parámetros lo quita de verdad:** Al desmarcarlo, a veces la superposición seguía apareciendo. Ahora la opción controla también la variable que lo activaba.
+* **Loop muestra las horas de los juegos que no son de Steam:** En el Inicio de Loop salían como nunca jugados. Actualiza Loop desde Temas para verlo.
+
+### English
+
+* **Upscalers shows non-Steam games right away:** Shortcuts you add to Steam took a long time to show up in Upscalers, or never did, because they waited for your whole library to be checked. They now appear as soon as they're ready.
+* **Panel no longer hangs while Upscalers checks your games:** Opening Upscalers could leave Power and other sections loading for several seconds. Panel now keeps responding while it checks the games.
+* **Mako installs even after an interrupted install:** If an earlier Mako install was cut short, turning it on failed every time. Panel now cleans up what was left and installs it.
+* **The Legion Go S TDP no longer disappears mid-game:** On some models the TDP became unavailable while playing and didn't come back until a restart. Also, once the low-battery limit is lifted, your TDP is applied again without turning the screen off.
+* **The HUD no longer shows CPU and GPU power at 0 W on Intel devices:** Those readings always showed 0 because the system doesn't provide them. They're now hidden.
+* **Ambient tells you when it can't play trailers:** If your theme draws the background, game trailers don't show. Ambient now tells you and lets you use its own background.
+* **Display colour settings move one step at a time:** They used to jump in steps of five, which made fine-tuning hard.
+* **Turning MangoHud off in Parameters really turns it off:** After unticking it, the overlay sometimes kept showing up. The option now also controls the variable that turned it on.
+* **Loop shows the playtime of non-Steam games:** On Loop's Home they showed up as never played. Update Loop from Themes to see it.
+
+### Italiano
+
+* **Upscaler mostra subito i giochi non Steam:** Le scorciatoie che aggiungi a Steam ci mettevano tanto a comparire in Upscaler, o non comparivano, perché aspettavano il controllo di tutta la libreria. Ora compaiono appena sono pronte.
+* **Panel non si blocca più mentre Upscaler controlla i tuoi giochi:** Aprendo Upscaler, Potenza e altre sezioni potevano restare a caricare per diversi secondi. Ora Panel continua a rispondere mentre controlla i giochi.
+* **Mako si installa anche dopo un'installazione interrotta:** Se un'installazione precedente di Mako si era interrotta, attivarlo falliva ogni volta. Ora Panel ripulisce ciò che era rimasto e lo installa.
+* **Il TDP della Legion Go S non sparisce più a metà partita:** Su alcuni modelli il TDP smetteva di essere disponibile mentre giocavi e tornava solo riavviando. Inoltre, quando viene tolto il limite per batteria scarica, il tuo TDP viene riapplicato senza dover spegnere lo schermo.
+* **L'HUD non mostra più il consumo di CPU e GPU a 0 W sui dispositivi Intel:** Quelle letture segnavano sempre 0 perché il sistema non le fornisce. Ora sono nascoste.
+* **Atmosfera avvisa quando non può mostrare i trailer:** Se lo sfondo lo disegna il tuo tema, i trailer dei giochi non si vedono. Ora Atmosfera te lo dice e ti lascia usare il suo sfondo.
+* **Le regolazioni del colore in Schermo vanno di uno in uno:** Prima saltavano di cinque in cinque ed era difficile regolarle con precisione.
+* **Togliere MangoHud in Parametri lo toglie davvero:** Dopo averlo deselezionato, a volte l'overlay continuava a comparire. Ora l'opzione controlla anche la variabile che lo attivava.
+* **Loop mostra le ore dei giochi non Steam:** Nella Home di Loop risultavano mai giocati. Aggiorna Loop da Temi per vederle.
+
+### Deutsch
+
+* **Upscaler zeigt Nicht-Steam-Spiele sofort:** Verknüpfungen, die du zu Steam hinzufügst, brauchten lange, bis sie in Upscaler erschienen, oder tauchten gar nicht auf, weil sie auf die Prüfung deiner ganzen Bibliothek warteten. Jetzt erscheinen sie, sobald sie bereit sind.
+* **Panel hängt nicht mehr, während Upscaler deine Spiele prüft:** Beim Öffnen von Upscaler konnten Leistung und andere Bereiche mehrere Sekunden lang laden. Jetzt reagiert Panel weiter, während es die Spiele prüft.
+* **Mako lässt sich auch nach einer abgebrochenen Installation installieren:** Wenn eine frühere Mako-Installation abgebrochen war, schlug das Einschalten jedes Mal fehl. Jetzt räumt Panel die Reste auf und installiert es.
+* **Der TDP der Legion Go S verschwindet nicht mehr mitten im Spiel:** Bei manchen Modellen war der TDP beim Spielen plötzlich nicht mehr verfügbar und kam erst nach einem Neustart zurück. Außerdem wird dein TDP wieder angewendet, sobald die Begrenzung bei niedrigem Akku aufgehoben ist, ohne dass du den Bildschirm ausschalten musst.
+* **Das HUD zeigt auf Intel-Geräten keinen CPU- und GPU-Verbrauch von 0 W mehr:** Diese Werte standen immer auf 0, weil das System sie nicht liefert. Jetzt werden sie ausgeblendet.
+* **Ambiente sagt Bescheid, wenn es keine Trailer abspielen kann:** Wenn dein Theme den Hintergrund zeichnet, sind Spieltrailer nicht zu sehen. Jetzt sagt Ambiente dir das und lässt dich seinen eigenen Hintergrund nutzen.
+* **Die Farbregler unter Bildschirm gehen in Einerschritten:** Vorher sprangen sie in Fünferschritten, und Feineinstellung war schwer.
+* **MangoHud unter Startoptionen auszuschalten, schaltet es wirklich aus:** Nach dem Abwählen tauchte das Overlay manchmal trotzdem auf. Jetzt steuert die Option auch die Variable, die es eingeschaltet hat.
+* **Loop zeigt die Spielzeit von Nicht-Steam-Spielen:** Auf dem Home von Loop galten sie als nie gespielt. Aktualisiere Loop unter Themes, um sie zu sehen.
+
+### Português (Brasil)
+
+* **Upscalers mostra na hora os jogos que não são da Steam:** Os atalhos que você adiciona ao Steam demoravam muito para aparecer no Upscalers, ou nem apareciam, porque esperavam a verificação da biblioteca inteira. Agora aparecem assim que ficam prontos.
+* **O Panel não trava mais enquanto o Upscalers verifica seus jogos:** Ao abrir o Upscalers, Potência e outras seções podiam ficar carregando por vários segundos. Agora o Panel continua respondendo enquanto verifica os jogos.
+* **O Mako instala mesmo depois de uma instalação interrompida:** Se uma instalação anterior do Mako tinha sido cortada, ativar dava erro toda vez. Agora o Panel limpa o que sobrou e instala.
+* **O TDP do Legion Go S não some mais no meio da partida:** Em alguns modelos o TDP deixava de estar disponível durante o jogo e só voltava reiniciando. Além disso, quando o limite de bateria baixa é liberado, seu TDP volta a ser aplicado sem precisar desligar a tela.
+* **O HUD não mostra mais o consumo de CPU e GPU em 0 W em aparelhos Intel:** Essas leituras sempre marcavam 0 porque o sistema não as fornece. Agora ficam ocultas.
+* **O Ambiente avisa quando não consegue mostrar trailers:** Se o fundo é desenhado pelo seu tema, os trailers dos jogos não aparecem. Agora o Ambiente avisa e deixa você usar o fundo dele.
+* **Os ajustes de cor em Tela vão de um em um:** Antes pulavam de cinco em cinco e era difícil ajustar com precisão.
+* **Desligar o MangoHud em Opções de inicialização desliga de verdade:** Depois de desmarcar, às vezes a sobreposição continuava aparecendo. Agora a opção controla também a variável que o ativava.
+* **O Loop mostra as horas dos jogos que não são da Steam:** Na tela inicial do Loop eles apareciam como nunca jogados. Atualize o Loop em Temas para ver.
+
+### Français
+
+* **Upscalers affiche tout de suite les jeux non Steam :** Les raccourcis que vous ajoutez à Steam mettaient longtemps à apparaître dans Upscalers, voire jamais, parce qu'ils attendaient la vérification de toute votre bibliothèque. Ils apparaissent maintenant dès qu'ils sont prêts.
+* **Panel ne se fige plus pendant qu'Upscalers vérifie vos jeux :** En ouvrant Upscalers, Puissance et d'autres sections pouvaient rester en chargement plusieurs secondes. Panel continue maintenant de répondre pendant la vérification des jeux.
+* **Mako s'installe même après une installation interrompue :** Si une installation précédente de Mako avait été coupée, l'activer échouait à chaque fois. Panel nettoie maintenant ce qui restait et l'installe.
+* **Le TDP de la Legion Go S ne disparaît plus en pleine partie :** Sur certains modèles, le TDP n'était plus disponible en jeu et ne revenait qu'après un redémarrage. En plus, quand la limite de batterie faible est levée, votre TDP est de nouveau appliqué sans avoir à éteindre l'écran.
+* **Le HUD n'affiche plus la consommation CPU et GPU à 0 W sur les appareils Intel :** Ces valeurs affichaient toujours 0 parce que le système ne les fournit pas. Elles sont maintenant masquées.
+* **Ambiance prévient quand les bandes-annonces ne peuvent pas s'afficher :** Si le fond est dessiné par votre thème, les bandes-annonces des jeux ne s'affichent pas. Ambiance vous le dit maintenant et vous laisse utiliser son propre fond.
+* **Les réglages de couleur d'Écran avancent d'un cran à la fois :** Avant, ils sautaient de cinq en cinq et c'était difficile d'affiner.
+* **Désactiver MangoHud dans Lancement le désactive vraiment :** Après l'avoir décoché, la surimpression continuait parfois de s'afficher. L'option contrôle maintenant aussi la variable qui l'activait.
+* **Loop affiche le temps de jeu des jeux non Steam :** Sur l'accueil de Loop, ils apparaissaient comme jamais joués. Mettez Loop à jour depuis Thèmes pour le voir.
+
 ## [0.94.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.1...panel-de-control-v0.94.2) (2026-11-22)
 
 ### Español
