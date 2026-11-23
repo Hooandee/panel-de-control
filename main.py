@@ -8490,8 +8490,7 @@ class Plugin(AmbientRpc):
             )
             return result
         if sidecar is not None:
-            if self._low_battery_sidecar_active():
-                self._refresh_primary_tdp_live_max()
+            self._refresh_primary_tdp_live_max()
             hold = self._low_battery_hold_decision(command.on_ac)
             if hold.active:
                 result = self._apply_low_battery_sidecar(

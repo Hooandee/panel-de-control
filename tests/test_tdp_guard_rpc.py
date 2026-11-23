@@ -2931,6 +2931,25 @@ def test_legion_go_s_hold_latched_without_live_maxima_waits_for_reboot(
     assert plugin._tdp_backend.set_levels_calls == 1
 
 
+def test_legion_go_s_latched_restart_reads_the_firmware_before_holding(
+    plugin,
+    monkeypatch,
+):
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 40, "pl2": 43, "pl3": 53},
+    )
+    sidecar.active = False
+    sidecar.safety_locked = False
+    sidecar.calls.clear()
+    plugin._primary_tdp_live_max_seen = None
+    plugin._tdp_observation = TdpObservation(readable=False)
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("lifecycle", on_ac=True))
+
+    assert sidecar.calls == []
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
 def test_legion_go_s_hold_latched_with_partial_maxima_keeps_the_hold(
     plugin,
     monkeypatch,
