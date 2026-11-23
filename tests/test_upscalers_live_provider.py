@@ -197,3 +197,26 @@ def test_d3d11_backend_creation_does_not_identify_the_game_input(tmp_path, befor
 def test_unattributed_context_names_do_not_prove_input(tmp_path, marker):
     service, _ = make_service(tmp_path, f'[D] {marker}\n')
     assert 'input' not in service.verify('292030')['facts']
+
+
+FSR4_LOG = Path(__file__).parent / 'fixtures/upscalers/fsr4_lite_provider_gow_rdna2.log'
+
+
+def test_fsr4_provider_from_the_log_names_the_version_behind_the_fsr31_entry(tmp_path):
+    # PDC-K4XG (#1411): God of War Ragnarök on a Deck LCD ran FSR 4 Lite through the `FSR 3.X` entry point.
+    service, install = make_service(tmp_path, FSR4_LOG.read_text() + '[I] Creating new FSR 3.X upscaler\n')
+    live = service.live('292030')
+    assert (live['provider_family'], live['provider_version'], live['provider_model']) == ('fsr', '4.1.1', 'Lite')
+    assert live['provider_confidence'] == 'log_provider'
+    observed = diagnostics.snapshot(install)['observed']
+    assert (observed['provider_version'], observed['provider_model']) == ('4.1.1', 'Lite')
+
+
+@pytest.mark.parametrize('created', ['', '[I] init successful for XeSS, upscaler changed\n'])
+def test_fsr4_provider_query_alone_does_not_name_what_runs(tmp_path, created):
+    # OptiScaler queries the FSR 4 provider while loading, before (and whether or not) FSR runs.
+    service, _ = make_service(tmp_path, FSR4_LOG.read_text() + created)
+    live = service.live('292030')
+    assert live['provider_version'] is None
+    assert live.get('provider_model') is None
+    assert live['provider_confidence'] != 'log_provider'

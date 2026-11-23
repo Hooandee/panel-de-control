@@ -30,6 +30,9 @@ _FACTS = (
     ("fg_context", re.compile(r"(FSRFG_Dx12::CreateContext D3D12_CreateContext result: 0|XeFG context created)")),
     ("upscaler", re.compile(r"init successful for (.+?), upscaler changed")),
     ("fg", re.compile(r"(D3D12_Configure Enabled: true, result: (?:0\b|FFX_API_RETURN_OK)|SetEnabled: true, result: \w*SUCCESS|Nukem.{0,40}(?:initialized|loaded))", re.I)),
+    # Queried while loading, whether or not FSR runs later: only names what an FSR feature runs.
+    ("fsr4_model", re.compile(r"Upscaler support - fsr4: ([a-z0-9 ]+?)(?: \(forced\))?,")),
+    ("fsr4_provider", re.compile(r"QueryProvider \S+ provider for \d+: (4\.\d+\.\d+) \*")),
     ("initial_resolution", re.compile(r"Render Resolution:\s*(\d{2,5})x(\d{2,5}),\s*Display Resolution\s*(\d{2,5})x(\d{2,5})")),
 )
 # OptiScaler cannot hand a Vulkan game's textures to FSR 4 (D3D12 only) and drops to an older FSR.
@@ -118,11 +121,18 @@ def provider_observation(facts: dict) -> dict:
             if re.fullmatch(candidate + r"(?:[234]1?| [234](?:\.[0-9x]+)*(?:/4)?(?: lite)?)?", token):
                 family = candidate
                 break
+    # OptiScaler's FSR entry points (`fsr31`, `FSR 3.X`, `FSR 3.X/4`) run the FSR 4 provider it selected.
+    version = facts.get("fsr4_provider") if family == "fsr" else None
+    model = _FSR4_MODELS.get(str(facts.get("fsr4_model") or "")) if version else None
     return {"provider_family": family,
             "provider_name": {"fsr": "FSR", "dlss": "DLSS", "xess": "XeSS"}.get(family),
-            "provider_version": None,
+            "provider_version": version,
+            "provider_model": model,
             "provider_source": "optiscaler_log" if available else "unavailable",
-            "provider_confidence": "family_only" if family else "unknown"}
+            "provider_confidence": "log_provider" if version else "family_only" if family else "unknown"}
+
+
+_FSR4_MODELS = {"int8 lite": "Lite", "int8": "INT8", "fp8": "FP8"}
 
 
 _OLD_FSR = re.compile(r"FSR (?:(2)\.(\d+)|(3)\.(\d+))(?:\.\d+)?")

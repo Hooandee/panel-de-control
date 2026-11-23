@@ -1,0 +1,8 @@
+[23:01:33.569054] [W] OptiScaler v10.0.0-dev ([serial]) (20261117_124833) loaded
+[23:01:33.651738] [I] CheckWorkingMode OptiScaler working as dxgi.dll, system dll loaded
+[23:01:33.793167] [I] [serial]::Hook Hooked FSR 4 preset selection of amd_fidelityfx_upscaler_dx12.dll at [serial]
+                          Upscaler support - fsr4: int8 lite (forced), dlss: false
+[23:01:37.411389] [I] [serial] Adapter Desc: AMD VANGOGH
+[23:01:38.943268] [I] [serial]::Hook Hooked FSR 4 preset selection of [serial].dll at [serial]
+[23:01:38.979315] [I] [serial]::QueryProvider [serial].dll provider for 10000: 4.1.1 *, id: [serial], struct version: 2
+[23:01:41.398386] [W] GetQualityOverrideRatio Unknown quality: -1
