@@ -1003,6 +1003,8 @@ class UpscalerService:
                 owned.add(relative)
             manifest = self._apply(target, sources, ini.apply(base_ini, overrides),
                                    getattr(automatic, "configuration", {}) if automatic else {}, owned=owned)
+            if recipe and recipe.protect_dlls:
+                _read_only_libraries(target, manifest)
 
         now = time.time()
         entry["install"] = {
@@ -1908,6 +1910,8 @@ class UpscalerService:
             saved = meta / "backup" / relative
             if saved.exists() and not (target / relative).exists():
                 os.replace(saved, target / relative)
+                if manifest.get("read_only"):
+                    (target / relative).chmod((target / relative).stat().st_mode | 0o200)
         for directory in sorted(manifest.get("dirs", []), key=len, reverse=True):
             try:
                 (target / directory).rmdir()
@@ -2434,6 +2438,19 @@ def _with_leftovers(result: dict, left: dict | None) -> dict:
     if stale:
         result["env"] = {**stale, **result.get("env", {})}
     return result
+
+
+def _read_only_libraries(target: Path, manifest: dict) -> None:
+    """Panel's libraries and the game's backed-up originals, which a purging launcher would also delete."""
+    meta = target / games.MANIFEST_DIR
+    manifest["read_only"] = True
+    atomic_json_save(str(meta / "manifest.json"), manifest)
+    backup = meta / "backup"
+    paths = [target / relative for relative in manifest["files"]]
+    paths += [path for path in backup.rglob("*")] if backup.is_dir() and not backup.is_symlink() else []
+    for path in paths:
+        if path.suffix.lower() == ".dll" and path.is_file() and not path.is_symlink():
+            path.chmod(path.stat().st_mode & ~0o222)
 
 
 def _recipe_proxy(recipe) -> str | None:

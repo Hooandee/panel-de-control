@@ -1233,6 +1233,35 @@ def test_recipe_proxy_and_args_apply_unless_the_user_picked(steam, fake_catalog,
     assert result["overrides"] == ["version=n,b"]
 
 
+def test_recipe_keeps_libraries_a_launcher_purges(steam, fake_catalog, proc, monkeypatch):
+    # Warframe's launcher deletes every unknown .dll beside the game at each start ("Purging vestigial") and logs
+    # "Purging failed (0x00000005)" for read-only ones, which then survive.
+    without_bundled_recipes(monkeypatch)
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="winmm.dll", protect_dlls=True))
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    _, game = steam
+    target = Path(service.game(APPID)["install"]["target"])
+    ours = [path for path in target.rglob("*.dll") if path.name != "nvngx_dlss.dll"]
+    assert {"winmm.dll", "D3D12Core.dll"} <= {path.name for path in ours}
+    assert ".pdc-upscaler" in {part for path in ours for part in path.parts}
+    assert all(not path.stat().st_mode & 0o222 for path in ours)
+    assert (target / "nvngx_dlss.dll").stat().st_mode & 0o200
+    assert (target / "OptiScaler.ini").stat().st_mode & 0o200
+    service.uninstall(APPID)
+    assert {path.name for path in target.rglob("*.dll")} == {"nvngx_dlss.dll", "amd_fidelityfx_upscaler_dx12.dll"}
+    # The game's own file comes back as it was, writable for the game's updates.
+    assert (target / "amd_fidelityfx_upscaler_dx12.dll").stat().st_mode & 0o200
+    service.install(APPID, {"build": "fsr-test"})
+    service.install(APPID, {"build": "fsr-test"})
+    assert (target / "winmm.dll").is_file()
+
+
+def test_warframe_loads_optiscaler_before_its_launcher_can_purge_it():
+    recipe = recipes.recipe_for("230410")
+    assert recipe.proxy == "winmm.dll" and recipe.protect_dlls
+
+
 def test_recipe_proxy_panel_cannot_install_is_left_out(steam, fake_catalog, proc, monkeypatch):
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll"))
     service = _service(steam, fake_catalog, proc)
