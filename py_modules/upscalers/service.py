@@ -2343,12 +2343,15 @@ class UpscalerService:
                 break
             game_started = time.monotonic()
             result["reading"] = appid
+            # Panel's own record of the game is published before the disk reads, so a slow card still sends it.
+            slot = len(result["games"])
+            result["games"].append(diagnostics.recorded_state(appid, self.state["games"].get(appid, {})))
             try:
                 report = self.diagnose(appid)
             except Exception as error:
                 report = {"appid": appid, "error": type(error).__name__}
             report["elapsed_ms"] = round((time.monotonic() - game_started) * 1000)
-            result["games"].append(report)
+            result["games"][slot] = report
         sections = (
             # What the user was offered on this GPU, so a "not supported" complaint shows what Panel showed.
             ("builds", lambda: [diagnostics.fields(row, ("id", "supported", "may_fallback"))

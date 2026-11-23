@@ -528,6 +528,13 @@ def _report_history(history):
     return result
 
 
+def recorded_state(appid: str, entry: dict) -> dict:
+    """Panel's own record of a game, read from memory only: no folder, log or Steam file is touched."""
+    return {"appid": appid, "scanned": False, "actions": report_actions(entry.get("actions")),
+            "previous": entry.get("previous"), "install": _report_install(entry.get("install")),
+            "history": _report_history(entry.get("history"))}
+
+
 def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
     install = entry.get("install") if isinstance(entry.get("install"), dict) else None
     installed = installed or games.find_installed(home, appid)

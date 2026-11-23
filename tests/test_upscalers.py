@@ -2,6 +2,7 @@ import json
 import hashlib
 import os
 import shlex
+import threading
 import time
 from pathlib import Path
 
@@ -2140,3 +2141,31 @@ def test_a_recipe_prepares_the_mod_it_needs_without_the_user(steam, fake_catalog
     assert (target / "ERSS2/ERSS-FG.toml").read_bytes() == b'OverlayToggleKey = "Home"\n\n[Renderer]\nScalingMode = "None"\nIsHDR = true\n'
     assert not (target / "ERSS-FG.dll").exists()
     assert service_module._launch_result({}) == {}
+
+
+def test_report_publishes_the_recorded_game_before_the_slow_disk_reads(steam, fake_catalog, proc, monkeypatch):
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    started, release = threading.Event(), threading.Event()
+    real = service.diagnose
+
+    def slow(appid):
+        started.set()
+        release.wait(5)
+        return real(appid)
+
+    monkeypatch.setattr(service, "diagnose", slow)
+    partial: dict = {}
+    worker = threading.Thread(target=service.report, kwargs={"partial": partial})
+    worker.start()
+    try:
+        assert started.wait(5)
+        recorded = partial["games"][0]
+        assert recorded["appid"] == APPID and recorded["scanned"] is False
+        assert recorded["install"]["build"] == "fsr-test"
+        assert recorded["history"][-1]["build"] == "fsr-test"
+    finally:
+        release.set()
+        worker.join(5)
+    assert partial["games"][0].get("scanned") is not False
+    assert partial["games"][0]["elapsed_ms"] >= 0
