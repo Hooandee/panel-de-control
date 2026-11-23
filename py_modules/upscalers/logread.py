@@ -39,6 +39,9 @@ _FACTS = (
 _TEXTURE_FAILURE = re.compile(r"CreateSharedTexture Failed to get memory Win32 handle|Can't process Vulkan textures")
 _CLOCK = re.compile(r"\[(\d{2}):(\d{2}):(\d{2})\.\d+\]")
 _ERROR = re.compile(r"\[(?:E|C)\]\s")
+# The function that logged an error, without OptiScaler's anonymous-namespace prefix.
+_ERROR_SOURCE = re.compile(r"\[(?:E|C)\]\s+(?:`anonymous-namespace'::)?([A-Za-z_][\w:]{0,60})")
+ERROR_SOURCES = 6
 
 
 def read(target: Path, since: float | None = None) -> dict:
@@ -66,6 +69,7 @@ def read(target: Path, since: float | None = None) -> dict:
         facts["stale"] = True
         return facts
     errors = 0
+    sources: dict[str, int] = {}
     for line in text.splitlines():
         for key, pattern in _FACTS:
             match = pattern.search(line)
@@ -88,6 +92,8 @@ def read(target: Path, since: float | None = None) -> dict:
                 facts[key] = next(g for g in match.groups() if g is not None).strip()[:120]
         if _ERROR.search(line):
             errors += 1
+            if source := _ERROR_SOURCE.search(line):
+                sources[source[1]] = sources.get(source[1], 0) + 1
         if _TEXTURE_FAILURE.search(line):
             facts["texture_failure"] = True
     # OptiFG starts generating as soon as its context exists and logs no activation until toggled;
@@ -98,6 +104,8 @@ def read(target: Path, since: float | None = None) -> dict:
     facts.pop("fg_input", None)
     facts["resolution_source"] = "initialization_only" if "initial_resolution" in facts else "unavailable"
     facts["errors"] = errors
+    if sources:
+        facts["error_sources"] = dict(sorted(sources.items(), key=lambda item: -item[1])[:ERROR_SOURCES])
     return facts
 
 

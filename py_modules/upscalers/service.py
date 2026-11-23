@@ -676,7 +676,7 @@ class UpscalerService:
             helix_removed = _is_helix(install)
             if helix_removed:
                 # HelixSR comes out before the switch: a failed switch leaves the game's own FSR, not HelixSR.
-                entry["previous"] = diagnostics.snapshot(install)
+                entry["previous"] = diagnostics.snapshot(install, excerpt=True)
                 try:
                     self._drop(install, installed.root)
                 except OSError as error:
@@ -1287,7 +1287,7 @@ class UpscalerService:
         old = entry.get("install")
         if not isinstance(old, dict):
             return None
-        entry["previous"] = diagnostics.snapshot(old)
+        entry["previous"] = diagnostics.snapshot(old, excerpt=True)
         self._drop(old, installed.root)
         if old.get("launcher"):
             try:
@@ -1800,7 +1800,7 @@ class UpscalerService:
         self._update_job(phase="restore")
         if _is_helix(install) and installed is None:
             raise UpscalerError("not_installed")
-        entry["previous"] = diagnostics.snapshot(install)
+        entry["previous"] = diagnostics.snapshot(install, excerpt=True)
         kept = self._drop(install, installed.root if installed else Path(install["target"]))
         if install.get("launcher") and installed:
             try:

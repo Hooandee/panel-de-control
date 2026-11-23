@@ -248,9 +248,13 @@ def solution(plan) -> dict | None:
     return result
 
 
-def snapshot(install) -> dict:
+def snapshot(install, excerpt: bool = False) -> dict:
+    """`excerpt` keeps the log lines too, for an install about to go: its log goes with it."""
     try:
-        return _snapshot(install)
+        result = _snapshot(install)
+        if excerpt and isinstance(install, dict) and install.get("engine", "optiscaler") == "optiscaler" and install.get("target"):
+            result["log_excerpt"] = _log_excerpt(Path(install["target"]))
+        return result
     except Exception as error:
         return {"at": time.time(), "observed": {"result": "unknown", "error": type(error).__name__}}
 
@@ -283,6 +287,9 @@ def _snapshot(install) -> dict:
         facts = logread.read(Path(install.get("target", "")), since=verification_since(install))
         verdict = logread.verdict(facts)
     observed = fields(facts, ("present", "stale", "modified", "upscaler", "input", "fg", "errors", "unverifiable"))
+    if isinstance(facts.get("error_sources"), dict):
+        observed["error_sources"] = {str(name)[:64]: count for name, count in list(facts["error_sources"].items())[:logread.ERROR_SOURCES]
+                                     if type(count) is int}
     observed.update(result=verdict, source="game_log" if engine not in ("dll", "proton") else "unavailable",
                     injector_version=facts.get("version"),
                     **logread.provider_observation(facts if engine == "optiscaler" else {}))

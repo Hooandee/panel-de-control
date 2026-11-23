@@ -37,6 +37,23 @@ def test_removed_install_keeps_previous_observation(steam, fake_catalog, proc):
     assert report['actions'][-1]['state'] == 'done'
 
 
+def test_removed_install_keeps_the_log_lines_that_explain_it(steam, fake_catalog, proc):
+    # PDC-7EKZ (#1459): 1049 OptiScaler errors and 14 fps, but the user uninstalled before reporting and only counts were left.
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {'build': 'fsr-test'})
+    target = Path(service.game(APPID)['install']['target'])
+    errors = ['[10:00:01.000] [E] StreamlineHooks::streamlineLogCallback [streamline][error] failed'] * 3
+    errors += ["[10:00:02.000] [E] `anonymous-namespace'::FindCreateModel Expected one model creation call"]
+    (target / 'OptiScaler.log').write_text('[10:00:00.000] [I] Creating new FSR 3.X upscaler\n' + '\n'.join(errors) + '\n')
+    service.begin('uninstall', APPID)
+    service.run(service.uninstall, APPID)
+    previous = service.report()['games'][0]['previous']
+    assert previous['observed']['errors'] == 4
+    assert previous['observed']['error_sources'] == {'StreamlineHooks::streamlineLogCallback': 3, 'FindCreateModel': 1}
+    assert any('FindCreateModel' in line for line in previous['log_excerpt'])
+    assert 'log_excerpt' not in service.report()['games'][0]['current']
+
+
 def test_active_and_job_precede_report_limit(steam, fake_catalog, proc):
     service = _service(steam, fake_catalog, proc)
     for i in range(15):
