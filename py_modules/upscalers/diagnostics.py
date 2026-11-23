@@ -513,6 +513,8 @@ def _report_install(install):
     result['solution'] = solution(install.get('solution'))
     result['recipe_dependencies'] = [verb for verb in install.get('recipe_dependencies', [])[:16]
                                      if isinstance(verb, str) and re.fullmatch(r'[a-z0-9-]{1,80}', verb)]
+    result['game_config'] = [fields(entry, ('tag', 'value', 'before', 'state')) for entry in install.get('game_config', [])[:4]
+                             if isinstance(entry, dict)]
     result['native_dlls'] = [name for name in install.get('native_dlls', [])[:16]
                              if isinstance(name, str) and name.lower().removesuffix('.dll') in _LAUNCH_DLLS]
     return result

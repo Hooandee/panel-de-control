@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rage__fwuiSystemSettingsCollection>
+  <version value="40" />
+  <configSource>kSettingsConfig_Auto</configSource>
+  <graphics>
+    <dlssIndex value="0" />
+    <dlssQuality value="5" />
+    <dlssSharpen value="0.350000" />
+    <fsr2Index value="0" />
+    <fsr2Sharpen value="0.350000" />
+    <taa>kSettingLevel_Medium</taa>
+    <ssdoTAABlendEnabled value="true" />
+  </graphics>
+  <video>
+    <adapterIndex value="0" />
+  </video>
+  <API>kSettingAPI_Vulkan</API>
+</rage__fwuiSystemSettingsCollection>

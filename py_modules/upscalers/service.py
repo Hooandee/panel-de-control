@@ -14,7 +14,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, recipe_catalog, recipes, scaler_transition, user_deps, user_mods, wiki
+from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, game_config, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, recipe_catalog, recipes, scaler_transition, user_deps, user_mods, wiki
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -1029,6 +1029,8 @@ class UpscalerService:
             "args": list(recipe.args) if recipe else [],
             "added_args": [],
         }
+        if recipe and recipe.game_config:
+            entry["install"]["game_config"] = game_config.apply(game_config.prefix_user(self.home, installed), recipe.game_config)
         # What an earlier install put in the launch options is still there, and still Panel's to take out.
         fresh = entry["install"]
         fresh["added_args"] = [arg for arg in previous.get("added_args", []) if arg in fresh["args"]]
@@ -1333,6 +1335,7 @@ class UpscalerService:
 
     def _drop(self, install: dict, root: Path) -> list[str]:
         """Take an install out of the game, whichever engine put it there."""
+        game_config.restore(install.get("game_config"))
         if install.get("engine") == "proton":
             return []
         if not _is_helix(install):

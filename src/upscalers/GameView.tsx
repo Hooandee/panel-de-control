@@ -542,7 +542,9 @@ export const GameView: FC<{
   const lumaInput = !!detail?.recipe_info?.luma_detected || !!detail?.recipe_info?.automatic?.includes("Luma");
   const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown && !lumaInput
     ? INPUT_NAMES[recommendedInputKey] : null;
-  const notice = detail && !detail.native ? gameNotice(detail.identity?.steam_appid ?? appid) : null;
+  // A notice on a setting Panel already wrote into the game's config has nothing left to ask.
+  const configSet = !!detail?.install?.game_config?.length && detail.install.game_config.every((c) => c.state === "set" || c.state === "already");
+  const notice = detail && !detail.native && !configSet ? gameNotice(detail.identity?.steam_appid ?? appid) : null;
   const strain = detail && !detail.native && !spatial ? steamMachineStrain(overview.device, gameOutputHeight(detail?.history ?? [], overview.display), selected, choice.quality) : null;
   const recipeBlocked = !!solution?.blocked_reason || (optiscalerRecipe && !solution && !!detail?.recipe_info?.blocked);
   const automaticLuma = optiscalerRecipe && !detail?.recipe_info?.luma_detected && !!detail?.recipe_info?.automatic?.includes("Luma");
