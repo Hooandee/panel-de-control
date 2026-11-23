@@ -186,9 +186,9 @@ const controlLabel = themed(() => ({
   color: theme.color.textMuted,
 } as const));
 
-const HudLivePreview: FC<{ model: HudModel }> = ({ model }) => {
+const HudLivePreview: FC<{ model: HudModel; unavailable?: readonly MetricId[] }> = ({ model, unavailable }) => {
   const values = useHudValues();
-  return <HudPreview model={model} values={values} />;
+  return <HudPreview model={model} values={values} unavailable={unavailable} />;
 };
 
 const RowAction: FC<{
@@ -506,7 +506,7 @@ export const HudSection: FC = () => {
               {t("hud.experimental.badge")}
             </ExperimentalBadge>
           </div>
-          <HudLivePreview model={m} />
+          <HudLivePreview model={m} unavailable={state.unavailableMetrics} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.sm }}>
             <SectionLabel>{t("hud.title")}</SectionLabel>
             <span

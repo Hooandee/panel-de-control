@@ -405,6 +405,7 @@ function previewValue(id: MetricId, model: HudModel): string {
 export function previewRows(
   model: HudModel,
   values: Partial<Record<MetricId, string>> = {},
+  unavailable: readonly MetricId[] = [],
 ): PreviewRow[] {
   const rows: PreviewRow[] = [];
   const c = (key: ColorKey) => `#${model.colors[key]}`;
@@ -421,6 +422,7 @@ export function previewRows(
       rows.push({ kind: "line", key: `t:${it.id}:${i}`, label: "", value: it.text, labelColor: c("text"), valueColor: c("text"), fontRole: "auxiliary" });
       return;
     }
+    if (unavailable.includes(it.id)) return;
     if (it.id === "frame_timing") {
       rows.push({ kind: "graph", key: `m:${it.id}`, color: c("frametime") });
       return;

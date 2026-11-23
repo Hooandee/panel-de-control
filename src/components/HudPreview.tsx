@@ -33,9 +33,10 @@ function valueParts(value: string): { main: string; unit: string } {
 const HudPreviewComponent: FC<{
   model: HudModel;
   values?: Partial<Record<MetricId, string>>;
-}> = ({ model, values }) => {
+  unavailable?: readonly MetricId[];
+}> = ({ model, values, unavailable }) => {
   const { t } = useI18n();
-  const rows = useMemo(() => previewRows(model, values), [model, values]);
+  const rows = useMemo(() => previewRows(model, values, unavailable), [model, values, unavailable]);
   const clips = useMemo(() => previewWouldClip(model, rows), [model, rows]);
   const top = model.position.startsWith("top");
   const left = model.position.endsWith("left");
