@@ -1,5 +1,6 @@
 """Everything needed to explain a failing upscaler install from the support bundle alone."""
 
+import copy
 import math
 import os
 import platform
@@ -531,7 +532,7 @@ def _report_history(history):
 def recorded_state(appid: str, entry: dict) -> dict:
     """Panel's own record of a game, read from memory only: no folder, log or Steam file is touched."""
     return {"appid": appid, "scanned": False, "actions": report_actions(entry.get("actions")),
-            "previous": entry.get("previous"), "install": _report_install(entry.get("install")),
+            "previous": copy.deepcopy(entry.get("previous")), "install": _report_install(entry.get("install")),
             "history": _report_history(entry.get("history"))}
 
 

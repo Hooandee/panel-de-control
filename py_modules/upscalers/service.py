@@ -2345,7 +2345,11 @@ class UpscalerService:
             result["reading"] = appid
             # Panel's own record of the game is published before the disk reads, so a slow card still sends it.
             slot = len(result["games"])
-            result["games"].append(diagnostics.recorded_state(appid, self.state["games"].get(appid, {})))
+            try:
+                recorded = diagnostics.recorded_state(appid, self.state["games"].get(appid, {}))
+            except Exception:  # noqa: BLE001 — the full read below still runs
+                recorded = {"appid": appid, "scanned": False}
+            result["games"].append(recorded)
             try:
                 report = self.diagnose(appid)
             except Exception as error:

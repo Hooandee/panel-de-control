@@ -266,7 +266,9 @@ class Mako:
             self._safe(prefix)
             # A prefix with no valid install record is a leftover of an interrupted install or of wiped plugin data:
             # it lives in Panel's own namespace, so it is replaced instead of refusing every later install.
-            orphan = prefix.exists() and not upgrading
+            orphan = prefix.exists() and not upgrading and not record.get('files')
+            if prefix.exists() and not upgrading and not orphan:
+                raise MakoError('mako_conflict')
             if orphan:
                 LOG.warning('MAKO action=install code=orphan_prefix line=%s', line)
             prefix.parent.mkdir(parents=True, exist_ok=True)
