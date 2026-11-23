@@ -551,7 +551,7 @@ def _enable_lines(item, values, locale="es", pad=False):
     return lines
 
 
-def to_directives(model, values=None):
+def to_directives(model, values=None, omit=()):
     """The MangoHud directive lines for the full HUD. Because a preset merges over
     parser defaults, disabled real metrics are normally written as `=0`; renderers that
     ignore that value and empty horizontal callbacks are omitted. Enabled metrics are emitted in item order
@@ -559,7 +559,11 @@ def to_directives(model, values=None):
     `values` (id -> value string) bakes their live value into the row."""
     model = coerce_model(model)
     horizontal = model["layout"] == "horizontal"
-    enabled = {it["id"] for it in model["items"] if it["kind"] == "metric"}
+    omit = frozenset(omit)
+    enabled = {
+        it["id"] for it in model["items"]
+        if it["kind"] == "metric" and it["id"] not in omit
+    }
     lines = _style_lines(model)
     for mid in _DIRECTIVE:
         if mid in enabled or mid in _OMIT_WHEN_OFF:
@@ -569,6 +573,8 @@ def to_directives(model, values=None):
         lines.append(f"{_DIRECTIVE[mid]}=0")
     for item in model["items"]:
         if item["kind"] == "metric":
+            if item["id"] in omit:
+                continue
             lines.extend(_enable_lines(item, values, model["locale"], pad=horizontal))
         elif item["kind"] == "separator":
             lines.append(f"custom_text={_SEPARATOR_TEXT}")
@@ -579,7 +585,7 @@ def to_directives(model, values=None):
     return lines
 
 
-def directives_for_level(model, level, values=None):
+def directives_for_level(model, level, values=None, omit=()):
     """The directives for a given Steam overlay level: 0 = off, 1 = minimal (fps
     only, styled), 2..4 = the user's full HUD. `values` bakes the pdc metric values."""
     model = coerce_model(model)
@@ -588,11 +594,11 @@ def directives_for_level(model, level, values=None):
     if level == 1:
         minimal = dict(model)
         minimal["items"] = [{"kind": "metric", "id": "fps"}]
-        return to_directives(minimal, values)
-    return to_directives(model, values)
+        return to_directives(minimal, values, omit)
+    return to_directives(model, values, omit)
 
 
-def build_presets_conf(model, values=None):
+def build_presets_conf(model, values=None, omit=()):
     """The presets.conf text Steam reads for its 5 overlay levels:
     0 = off, 1 = minimal FPS, 2..4 = the user's full HUD. `values` (pdc id -> value
     string) bakes the live plugin-state values into the pdc rows.
@@ -604,6 +610,6 @@ def build_presets_conf(model, values=None):
     out = []
     for level in range(5):
         out.append(f"[preset {level}]")
-        out.extend(directives_for_level(model, level, values))
+        out.extend(directives_for_level(model, level, values, omit))
         out.append("")
     return "\n".join(out).rstrip() + "\n"

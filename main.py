@@ -126,7 +126,7 @@ from gpu.clock import select_gpu_clock
 from gpu.profiles import GpuProfileStore
 from gpu.power_cap import AmdGpuPowerCap
 from power.reader import PowerReader
-from power.rapl import RaplPackagePower
+from power.rapl import RaplPackagePower, package_energy_user_readable as rapl_user_readable
 from desktop.mode import (
     effective_desktop_mode,
     migrate_desktop_defaults,
@@ -10965,6 +10965,15 @@ class Plugin(AmbientRpc):
         """The HUD model the running game applies: its own, or the global one."""
         return self._hud.effective(self._current_appid)
 
+    def _hud_unavailable_metrics(self) -> tuple:
+        """MangoHud rows that would read a constant 0 W on this machine: Intel has no
+        GPU power sensor, and its CPU power needs the root-only RAPL counter."""
+        if getattr(self._device, "vendor", "amd") != "intel":
+            return ()
+        if rapl_user_readable():
+            return ("gpu_power",)
+        return ("gpu_power", "cpu_power")
+
     def _hud_state(self, *, cap=None, model=None) -> dict:
         cap = self._detect_hud() if cap is None else cap
         model = self._hud_model() if model is None else model
@@ -11002,6 +11011,7 @@ class Plugin(AmbientRpc):
             ),
             "model": model,
             "values": dict(self._pdc_preview_values),
+            "unavailableMetrics": list(self._hud_unavailable_metrics()),
             "appid": self._current_appid,
             "followsGlobal": self._hud.is_following_global(self._current_appid),
             "hasGameProfile": (
@@ -11213,6 +11223,7 @@ class Plugin(AmbientRpc):
                 owner=self._hud_owner,
                 replace_conflict=replace_conflict,
                 trusted_root=self._hud_home,
+                omit=self._hud_unavailable_metrics(),
             )
         except mangohud_ownership.HudOwnershipConflict as conflict:
             self._record_hud_conflict(cap["presetsPath"], conflict)
@@ -11542,6 +11553,7 @@ class Plugin(AmbientRpc):
                     values,
                     owner=self._hud_owner,
                     trusted_root=self._hud_home,
+                    omit=self._hud_unavailable_metrics(),
                 )
             except mangohud_ownership.HudOwnershipConflict as conflict:
                 self._record_hud_conflict(self._pdc_presets_path, conflict)

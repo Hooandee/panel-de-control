@@ -1767,3 +1767,41 @@ def test_disabling_the_hud_for_one_game_does_not_touch_the_global_one(tmp_path, 
     assert st["model"]["enabled"] is False
     assert p._hud.load()["enabled"] is True
     assert not os.path.exists(presets)
+
+
+@pytest.mark.parametrize(
+    "vendor,readable,expected",
+    [
+        ("intel", False, ["gpu_power", "cpu_power"]),
+        ("intel", True, ["gpu_power"]),
+        ("amd", False, []),
+    ],
+)
+def test_hud_hides_native_power_rows_the_machine_cannot_read(
+    tmp_path, monkeypatch, vendor, readable, expected
+):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, str(tmp_path / "presets.conf"))
+    p._init()
+    p._device = types.SimpleNamespace(vendor=vendor)
+    monkeypatch.setattr(main, "rapl_user_readable", lambda: readable)
+    st = asyncio.run(p.get_hud_state())
+    assert st["unavailableMetrics"] == expected
+
+
+def test_hud_never_writes_unreadable_power_rows_to_presets(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    presets = str(tmp_path / "presets.conf")
+    _fake_overlay(main, monkeypatch, presets)
+    p._init()
+    p._device = types.SimpleNamespace(vendor="intel")
+    monkeypatch.setattr(main, "rapl_user_readable", lambda: False)
+    model = {"enabled": True, "items": [
+        {"kind": "metric", "id": "fps"},
+        {"kind": "metric", "id": "gpu_power"},
+        {"kind": "metric", "id": "cpu_power"},
+    ]}
+    asyncio.run(p.set_hud_config(model))
+    text = open(presets).read()
+    assert "fps=1" in text
+    assert "gpu_power=1" not in text and "cpu_power=1" not in text

@@ -73,6 +73,15 @@ describe("previewRows", () => {
     }
   });
 
+  it("leaves out metrics the machine cannot read", () => {
+    const rows = previewRows(
+      { ...DEFAULT_MODEL, items: metrics("cpu", "cpu_power", "gpu", "gpu_power") },
+      {},
+      ["cpu_power", "gpu_power"],
+    );
+    expect(rows.map((r) => (r.kind === "group" ? r.cells : null))).toEqual([["41%"], ["74%"]]);
+  });
+
   it("keeps non-mergeable metrics (fps, ram) as their own lines", () => {
     const rows = previewRows({ ...DEFAULT_MODEL, items: metrics("fps", "ram") });
     expect(rows.map((r) => r.kind)).toEqual(["line", "line"]);

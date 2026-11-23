@@ -102,3 +102,21 @@ def test_a_stale_sample_is_not_averaged_over_a_long_pause(tmp_path):
     _energy(path, 3_610_000_000)
     clock["now"] = 3602.0
     assert reader.read() == 5.0
+
+
+def test_package_energy_readability_follows_the_file_mode(tmp_path):
+    from power.rapl import package_energy_user_readable
+
+    path = _domain(str(tmp_path), energy=5)
+    energy = os.path.join(path, "energy_uj")
+    os.chmod(energy, 0o400)
+    assert package_energy_user_readable(str(tmp_path)) is False
+    os.chmod(energy, 0o444)
+    assert package_energy_user_readable(str(tmp_path)) is True
+
+
+def test_package_energy_readability_is_false_without_a_package_domain(tmp_path):
+    from power.rapl import package_energy_user_readable
+
+    _domain(str(tmp_path), name="core", energy=5)
+    assert package_energy_user_readable(str(tmp_path)) is False

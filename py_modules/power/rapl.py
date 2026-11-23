@@ -1,6 +1,25 @@
 import glob
 import os
+import stat
 import time
+
+
+def package_energy_user_readable(root="/"):
+    """True when the RAPL package `energy_uj` counter is world-readable, i.e. MangoHud
+    (running as the user) can read CPU power itself."""
+    pattern = os.path.join(root, "sys/class/powercap/intel-rapl:*")
+    for path in sorted(glob.glob(pattern)):
+        if os.path.basename(path).count(":") != 1:
+            continue
+        try:
+            with open(os.path.join(path, "name")) as handle:
+                if not handle.read().strip().startswith("package"):
+                    continue
+            mode = os.stat(os.path.join(path, "energy_uj")).st_mode
+        except OSError:
+            continue
+        return bool(mode & stat.S_IROTH)
+    return False
 
 
 class RaplPackagePower:
