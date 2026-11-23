@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.2...panel-de-control-v0.94.3) (2026-11-23)
+
+
+### Bug Fixes
+
+* Escaladores responsiveness, Legion Go S TDP recovery, HUD and report fixes ([#1479](https://github.com/Hooandee/panel-de-control/issues/1479)) ([064770c](https://github.com/Hooandee/panel-de-control/commit/064770cf2d375afa3c22240f5dac14777f6f65ca))
+
 ## [0.94.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.1...panel-de-control-v0.94.2) (2026-11-22)
 
 ### Español
