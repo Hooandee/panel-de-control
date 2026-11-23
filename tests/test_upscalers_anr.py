@@ -195,3 +195,27 @@ def test_a_recipe_that_forces_d3d11_the_unity_way_rules_anr_out():
     plan = solution_plan.resolve("rdna3", {"inputs": DLSSG, "apis": [], "streamline": 2}, endfield, generation=10)
     assert plan["effective_api"] == "d3d11"
     assert "anr" not in ((plan["offered_fg_plan"] or {}).get("routes") or {})
+
+
+ANR_HEAD = [
+    "[00:18:32.033] [info] capabilities: ours, MultiFrameCountMax 5",
+    "[00:18:32.191] [info] NVIDIA DLSS-G not used (user build): NVIDIA's NGX is left to the game",
+    "[00:22:08.461] [info] frame generation feature: 3840x2160, backbuffer format 24, render 0x0, dynamic resolution 0",
+    "[00:22:08.461] [info] model size large: model_size = large",
+    "[00:22:08.462] [info] GPU: AMD Radeon Graphics (RADV NAVI33), Vulkan 1.4",
+    "[00:22:08.463] [info] GPU path table: rdna3 (amd), coopmat offered, order portable, dp4a, packed",
+]
+
+
+def test_report_keeps_the_anr_header_the_pacing_tail_pushes_out(anr_setup):
+    # PDC-HF3B (#1425): a black bar under Onimusha with ANR on; the 60-line tail was all pacing, without the
+    # feature's output size. Lines from a real ANR log on the Steam Machine.
+    service, game = anr_setup
+    service.begin("install", APPID)
+    service.install(APPID, {"build": "new", "fg": "on", "fg_route": "anr"})
+    steps = [f"[00:22:08.5{i:02d}] [info] step: the portable program's kernel k{i:04x} compute pipeline" for i in range(40)]
+    pacing = [f"[00:23:{i % 60:02d}.000] [info] pacing: 30 real frames, evaluates ours 60" for i in range(200)]
+    _write(game / PROVIDER / "nr_fg-2.log", "\n".join(ANR_HEAD[:3] + steps + ANR_HEAD[3:] + pacing) + "\n")
+    log = diagnostics.game_report(service.home, APPID, service.state["games"][APPID])["anr_log"]
+    assert log["head"] == ANR_HEAD
+    assert all("pacing" in line for line in log["tail"])

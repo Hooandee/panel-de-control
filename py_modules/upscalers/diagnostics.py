@@ -604,7 +604,22 @@ def _anr_log(target: Path) -> dict:
         logs = []
     provider = folder / "nvngx_dlssg.dll"
     return {"provider": provider.is_file() and not provider.is_symlink(), "logs": len(logs),
-            "newest_at": logs[-1][0] if logs else None, "tail": _tail(logs[-1][1]) if logs else []}
+            "newest_at": logs[-1][0] if logs else None, "head": _anr_head(logs[-1][1]) if logs else [],
+            "tail": _tail(logs[-1][1]) if logs else []}
+
+
+# ANR's start-up says what it generates for (output size, format, GPU path); its pacing lines soon fill the tail.
+_ANR_HEAD = re.compile(r"\] \[(?:info|warn|warning|error)\] (?!step:|pacing:|slow evaluate)")
+ANR_HEAD_LINES = 20
+
+
+def _anr_head(path: Path) -> list[str]:
+    try:
+        with open(path, "rb") as handle:
+            lines = handle.read(32 * 1024).decode("utf-8", "replace").splitlines()
+    except OSError:
+        return []
+    return [line[:LINE_CHARS] for line in lines if _ANR_HEAD.search(line) and "DLSS-G provider in" not in line][:ANR_HEAD_LINES]
 
 
 # Files that load code into a game besides the game itself: whose they are is the first support question.
