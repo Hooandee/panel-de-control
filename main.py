@@ -482,6 +482,15 @@ def _current_boot_id():
         return None
 
 
+def _rail_live_max(observation, surface):
+    rails = (getattr(observation, "surfaces", None) or {}).get(surface, {})
+    return {
+        rail: int(reading.max_w)
+        for rail, reading in rails.items()
+        if reading is not None and reading.max_w is not None
+    } or None
+
+
 def _user_home() -> str:
     return getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
 
@@ -773,6 +782,8 @@ class Plugin(AmbientRpc):
         self._low_battery_below = None
         self._low_battery_hold_cached_reassert_s = None
         self._low_battery_hold_last_failure = None
+        self._primary_tdp_live_max_seen = None
+        self._tdp_rewrite_after_hold_release = False
         self._low_battery_hold_recovery_pending = bool(
             getattr(self._low_battery_hold_backend, "safety_locked", False)
         )
@@ -8486,6 +8497,7 @@ class Plugin(AmbientRpc):
             )
             return result
         if sidecar is not None:
+            self._refresh_primary_tdp_live_max()
             hold = self._low_battery_hold_decision(command.on_ac)
             if hold.active:
                 result = self._apply_low_battery_sidecar(
@@ -8807,18 +8819,32 @@ class Plugin(AmbientRpc):
         requested = self._effective_levels(self._current_appid, on_ac)[0]
         if int(requested.get("pl1", 0)) <= cap["pl1"]:
             return False
+        live_max = self._primary_tdp_live_max()
+        if live_max and all(rail in live_max for rail in cap):
+            # The firmware lifts its low-battery cap on its own (a suspend did it on the
+            # charger): its live maxima, not the boot it was first seen in, decide.
+            return all(live_max[rail] <= int(watts) for rail, watts in cap.items())
         boot = _current_boot_id()
-        # The firmware keeps its low-battery cap until the next boot, even on the charger.
-        if boot and self._settings.get("low_battery_hold_latched_boot") == boot:
-            return True
+        return bool(boot and self._settings.get("low_battery_hold_latched_boot") == boot)
+
+    def _primary_tdp_live_max(self):
+        if self._low_battery_sidecar_active():
+            return getattr(self, "_primary_tdp_live_max_seen", None)
         observation = getattr(self, "_tdp_observation", None)
-        surfaces = getattr(observation, "surfaces", None) or {}
-        rails = surfaces.get(self._tdp_backend.name, {})
-        return bool(rails) and all(
-            (reading := rails.get(rail)) is not None
-            and reading.max_w is not None
-            and int(reading.max_w) <= int(watts)
-            for rail, watts in cap.items()
+        return _rail_live_max(observation, self._tdp_backend.name) or getattr(
+            self, "_primary_tdp_live_max_seen", None
+        )
+
+    def _refresh_primary_tdp_live_max(self):
+        # While the ryzenadj hold drives the SoC, only the firmware attributes still
+        # show whether the low-battery cap is in force. Worker threads only.
+        observe = getattr(self._tdp_backend, "observe", None)
+        try:
+            observation = observe() if callable(observe) else None
+        except Exception:  # noqa: BLE001
+            observation = None
+        self._primary_tdp_live_max_seen = _rail_live_max(
+            observation, self._tdp_backend.name,
         )
 
     def _remember_low_battery_primary_result(self, hold, result):
@@ -8878,7 +8904,8 @@ class Plugin(AmbientRpc):
         if sidecar is None:
             return False
         if not hold.active:
-            if self._low_battery_sidecar_active():
+            was_active = self._low_battery_sidecar_active()
+            if was_active:
                 decky.logger.info(
                     "Low-battery TDP hold releasing reason=%s battery=%s",
                     hold.reason,
@@ -8888,6 +8915,9 @@ class Plugin(AmbientRpc):
                 self._tdp_status = "rejected"
                 self._tdp_reason = "low_battery_hold_restore_failed"
                 return True
+            # The release leaves ryzenadj's 15/15/20 W in the SoC while the untouched
+            # firmware attributes may already read the target.
+            self._tdp_rewrite_after_hold_release = was_active
             return False
         last_write = self._low_battery_hold_last_write_at
         if last_write is not None and now - last_write < float(hold.reassert_s):
@@ -9179,6 +9209,8 @@ class Plugin(AmbientRpc):
             self._tdp_reconcile_memory = ReconcileMemory()
             return
         command = self._capture_tdp_command("guard", bump=False)
+        if self._low_battery_sidecar_active():
+            self._refresh_primary_tdp_live_max()
         hold = self._low_battery_hold_decision()
         self._low_battery_hold_cached_reassert_s = hold.reassert_s
         self._watch_low_battery_threshold(now, command, hold)
@@ -9258,6 +9290,12 @@ class Plugin(AmbientRpc):
         if outcome.action != "apply" and self._consume_powerd_restart():
             action = "powerd-restart-reassert"
             outcome = replace(outcome, action="apply")
+        if outcome.action != "apply" and getattr(
+            self, "_tdp_rewrite_after_hold_release", False
+        ):
+            action = "low-battery-hold-released"
+            outcome = replace(outcome, action="apply")
+        self._tdp_rewrite_after_hold_release = False
         if outcome.action != "apply" and self._gpu_split_reassert_due(now):
             action = "gpu-split-reassert"
             outcome = replace(outcome, action="apply")

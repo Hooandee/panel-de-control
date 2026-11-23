@@ -2861,15 +2861,10 @@ def test_legion_go_s_firmware_cap_hold_stays_off_when_the_setting_is_off(
     assert sidecar.calls == []
 
 
-def test_legion_go_s_hold_latched_on_battery_stays_on_the_charger_until_reboot(
-    plugin,
-    monkeypatch,
-):
+def _latch_low_battery_hold(plugin, monkeypatch, live_max):
     import main as main_module
 
-    sidecar = _legion_go_s_capped_on_charger(
-        plugin, monkeypatch, {"pl1": 33, "pl2": 33, "pl3": 35},
-    )
+    sidecar = _legion_go_s_capped_on_charger(plugin, monkeypatch, live_max)
     monkeypatch.setattr(main_module, "_current_boot_id", lambda: "boot-a")
     monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
     monkeypatch.setattr(
@@ -2879,16 +2874,125 @@ def test_legion_go_s_hold_latched_on_battery_stays_on_the_charger_until_reboot(
     )
     plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=False))
     assert plugin._settings["low_battery_hold_latched_boot"] == "boot-a"
-
     monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": True)
+    return sidecar
+
+
+def test_legion_go_s_hold_latched_on_battery_covers_the_cap_on_the_charger(
+    plugin,
+    monkeypatch,
+):
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 15, "pl2": 15, "pl3": 20},
+    )
+
     plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+
     assert len(sidecar.calls) == 2
     assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_legion_go_s_hold_latched_releases_once_the_firmware_lifts_its_cap(
+    plugin,
+    monkeypatch,
+):
+    # PDC-YS5B (83N6, S0CN24WW): on the charger the firmware kept 15/15/20 W maxima
+    # until a suspend, then reported 40/43/53 W in the same boot and took 25 W.
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 40, "pl2": 43, "pl3": 53},
+    )
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+
+    assert len(sidecar.calls) == 1
+    assert sidecar.releases == 1
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_legion_go_s_hold_latched_without_live_maxima_waits_for_reboot(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 15, "pl2": 15, "pl3": 20},
+    )
+    monkeypatch.setattr(
+        plugin._tdp_backend, "observe", lambda: TdpObservation(readable=False),
+    )
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+    assert len(sidecar.calls) == 2
 
     monkeypatch.setattr(main_module, "_current_boot_id", lambda: "boot-b")
     plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
     assert len(sidecar.calls) == 2
     assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_legion_go_s_latched_restart_reads_the_firmware_before_holding(
+    plugin,
+    monkeypatch,
+):
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 40, "pl2": 43, "pl3": 53},
+    )
+    sidecar.active = False
+    sidecar.safety_locked = False
+    sidecar.calls.clear()
+    plugin._primary_tdp_live_max_seen = None
+    plugin._tdp_observation = TdpObservation(readable=False)
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("lifecycle", on_ac=True))
+
+    assert sidecar.calls == []
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_legion_go_s_hold_latched_with_partial_maxima_keeps_the_hold(
+    plugin,
+    monkeypatch,
+):
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 15, "pl2": 15, "pl3": 20},
+    )
+    backend = plugin._tdp_backend
+    monkeypatch.setattr(backend, "observe", lambda: TdpObservation(
+        readable=True,
+        surfaces={backend.name: {
+            "pl1": RailReading(15, 5, 15),
+            "pl2": RailReading(15, 5, 15),
+            "pl3": RailReading(20, 5, None),
+        }},
+    ))
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+
+    assert len(sidecar.calls) == 2
+    assert backend.set_levels_calls == 0
+
+
+def test_guard_rewrites_the_primary_rails_when_the_hold_releases(
+    plugin,
+    monkeypatch,
+):
+    # ryzenadj's release leaves 15/15/20 W in the SoC; firmware attributes the hold
+    # never touched may already read the target, so the guard must write anyway.
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 40, "pl2": 43, "pl3": 53},
+    )
+    sidecar.active = True
+    backend = plugin._tdp_backend
+    backend._levels.update({"pl1": 25, "pl2": 30, "pl3": 35})
+    _reset_guard_memory(plugin)
+    plugin._tdp_observation = backend.observe()
+
+    plugin._tdp_guard_tick(now=500.0)
+
+    assert sidecar.releases == 1
+    assert backend.set_levels_calls == 1
+    assert plugin._tdp_history[-1]["action"] == "low-battery-hold-released"
 
 
 def test_guard_rewrites_the_level_once_after_armada_powerd_restarts(plugin):
