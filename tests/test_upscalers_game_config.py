@@ -13,7 +13,7 @@ def _prefix_settings(steam, text):
     library = game.parents[2]
     path = library / 'steamapps/compatdata' / APPID / 'pfx/drive_c/users/steamuser' / SETTINGS
     path.parent.mkdir(parents=True)
-    path.write_text(text)
+    path.write_bytes(text if isinstance(text, bytes) else text.encode())
     return path
 
 
@@ -24,26 +24,27 @@ def _rdr2_recipe(monkeypatch):
 def test_install_switches_red_dead_to_directx12_and_uninstall_puts_vulkan_back(steam, fake_catalog, proc, monkeypatch):
     # PDC-Z63N (#1470): RDR2 starts in Vulkan, where FSR 2 with OptiScaler quits the game; DirectX 12 runs.
     _rdr2_recipe(monkeypatch)
-    original = SYSTEM_XML.read_text()
+    original = SYSTEM_XML.read_bytes()
     path = _prefix_settings(steam, original)
     service = _service(steam, fake_catalog, proc)
     service.install(APPID, {'build': 'fsr-test'})
-    text = path.read_text()
-    assert '<API>kSettingAPI_DX12</API>' in text and text.replace('kSettingAPI_DX12', 'kSettingAPI_Vulkan') == original
+    text = path.read_bytes()
+    assert b'<API>kSettingAPI_DX12</API>' in text and text.replace(b'kSettingAPI_DX12', b'kSettingAPI_Vulkan') == original
     assert [entry['state'] for entry in service.game(APPID)['install']['game_config']] == ['set']
     service.install(APPID, {'build': 'fsr-test'})
     service.uninstall(APPID)
-    assert path.read_text() == original
+    assert path.read_bytes() == original
 
 
 def test_a_setting_the_user_changed_since_stays_theirs(steam, fake_catalog, proc, monkeypatch):
     _rdr2_recipe(monkeypatch)
-    path = _prefix_settings(steam, SYSTEM_XML.read_text())
+    path = _prefix_settings(steam, SYSTEM_XML.read_bytes())
     service = _service(steam, fake_catalog, proc)
     service.install(APPID, {'build': 'fsr-test'})
-    path.write_text(path.read_text().replace('kSettingAPI_DX12', 'kSettingAPI_Vulkan').replace('value="40"', 'value="41"'))
+    changed = path.read_bytes().replace(b'kSettingAPI_DX12', b'kSettingAPI_Vulkan').replace(b'<fsr2Index value="0" />', b'<fsr2Index value="1" />')
+    path.write_bytes(changed)
     service.uninstall(APPID)
-    assert '<API>kSettingAPI_Vulkan</API>' in path.read_text() and 'value="41"' in path.read_text()
+    assert path.read_bytes() == changed
 
 
 def test_without_the_games_settings_yet_nothing_is_written(steam, fake_catalog, proc, monkeypatch):

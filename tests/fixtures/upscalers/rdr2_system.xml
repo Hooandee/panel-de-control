@@ -1,18 +1,108 @@
 <?xml version="1.0" encoding="UTF-8"?>
+
 <rage__fwuiSystemSettingsCollection>
-  <version value="40" />
+  <version value="37" />
   <configSource>kSettingsConfig_Auto</configSource>
   <graphics>
+    <tessellation>kSettingLevel_High</tessellation>
+    <shadowQuality>kSettingLevel_Ultra</shadowQuality>
+    <farShadowQuality>kSettingLevel_Medium</farShadowQuality>
+    <reflectionQuality>kSettingLevel_Low</reflectionQuality>
+    <mirrorQuality>kSettingLevel_High</mirrorQuality>
+    <ssao>kSettingLevel_Medium</ssao>
+    <textureQuality>kSettingLevel_Ultra</textureQuality>
+    <particleQuality>kSettingLevel_Medium</particleQuality>
+    <waterQuality>kSettingLevel_Medium</waterQuality>
+    <volumetricsQuality>kSettingLevel_Medium</volumetricsQuality>
+    <lightingQuality>kSettingLevel_Medium</lightingQuality>
+    <ambientLightingQuality>kSettingLevel_High</ambientLightingQuality>
+    <anisotropicFiltering value="2" />
     <dlssIndex value="0" />
     <dlssQuality value="5" />
     <dlssSharpen value="0.350000" />
     <fsr2Index value="0" />
     <fsr2Sharpen value="0.350000" />
     <taa>kSettingLevel_Medium</taa>
-    <ssdoTAABlendEnabled value="true" />
+    <fxaaEnabled value="false" />
+    <msaa value="0" />
+    <graphicsQualityPreset value="0.500000" />
+    <hdr value="true" />
+    <hdr10PlusGaming value="false" />
+    <hdrIntensity value="100" />
+    <hdrPeakBrightness value="1000" />
+    <hdrFilmicMode value="true" />
+    <gamma value="15" />
+    <hdrSettingsMigrated value="true" />
   </graphics>
+  <advancedGraphics>
+    <API>kSettingAPI_Vulkan</API>
+    <locked value="true" />
+    <asyncComputeEnabled value="false" />
+    <transferQueuesEnabled value="true" />
+    <shadowSoftShadows>kSettingLevel_Ultra</shadowSoftShadows>
+    <motionBlur value="true" />
+    <motionBlurLimit value="16.000000" />
+    <particleLightingQuality>kSettingLevel_Medium</particleLightingQuality>
+    <waterReflectionSSR value="true" />
+    <waterRefractionQuality>kSettingLevel_Medium</waterRefractionQuality>
+    <waterReflectionQuality>kSettingLevel_Medium</waterReflectionQuality>
+    <waterSimulationQuality value="2" />
+    <waterLightingQuality>kSettingLevel_High</waterLightingQuality>
+    <furDisplayQuality>kSettingLevel_Medium</furDisplayQuality>
+    <maxTexUpgradesPerFrame value="5" />
+    <shadowGrassShadows>kSettingLevel_Medium</shadowGrassShadows>
+    <shadowParticleShadows value="true" />
+    <shadowLongShadows value="true" />
+    <directionalShadowsAlpha value="false" />
+    <worldHeightShadowQuality value="0.330000" />
+    <directionalScreenSpaceShadowQuality value="0.330000" />
+    <ambientMaskVolumesHighPrecision value="true" />
+    <scatteringVolumeQuality>kSettingLevel_Medium</scatteringVolumeQuality>
+    <volumetricsRaymarchQuality>kSettingLevel_Medium</volumetricsRaymarchQuality>
+    <volumetricsLightingQuality>kSettingLevel_Medium</volumetricsLightingQuality>
+    <volumetricsRaymarchResolutionUnclamped value="false" />
+    <terrainShadowQuality>kSettingLevel_Medium</terrainShadowQuality>
+    <damageModelsDisabled value="false" />
+    <decalQuality>kSettingLevel_High</decalQuality>
+    <ssaoFullScreenEnabled value="false" />
+    <ssaoType value="0" />
+    <ssdoSampleCount value="4" />
+    <ssdoUseDualRadii value="false" />
+    <ssdoResolution>kSettingLevel_Low</ssdoResolution>
+    <ssdoTAABlendEnabled value="true" />
+    <ssroSampleCount value="2" />
+    <snowGlints value="true" />
+    <POMQuality>kSettingLevel_High</POMQuality>
+    <probeRelightEveryFrame value="false" />
+    <scalingMode>kSettingScale_Mode1o1</scalingMode>
+    <reflectionMSAA value="0" />
+    <lodScale value="1.000000" />
+    <grassLod value="1.000000" />
+    <pedLodBias value="0.000000" />
+    <vehicleLodBias value="0.000000" />
+    <sharpenIntensity value="1.000000" />
+    <treeQuality>kSettingLevel_Medium</treeQuality>
+    <deepsurfaceQuality>kSettingLevel_High</deepsurfaceQuality>
+    <treeTessellationEnabled value="false" />
+  </advancedGraphics>
   <video>
     <adapterIndex value="0" />
+    <outputIndex value="0" />
+    <resolutionIndex value="18" />
+    <screenWidth value="2048" />
+    <screenHeight value="1152" />
+    <resolutionIndexWindowed value="16" />
+    <screenWidthWindowed value="2048" />
+    <screenHeightWindowed value="1152" />
+    <refreshRateIndex value="1" />
+    <refreshRateNumerator value="212" />
+    <refreshRateDenominator value="1" />
+    <windowed value="0" />
+    <vSync value="1" />
+    <tripleBuffered value="true" />
+    <ReflexSettings>kSettingReflex_Off</ReflexSettings>
+    <pauseOnFocusLoss value="false" />
+    <constrainMousePointer value="false" />
   </video>
-  <API>kSettingAPI_Vulkan</API>
+  <videoCardDescription>AMD AMD Radeon Graphics (RADV NAVI33)</videoCardDescription>
 </rage__fwuiSystemSettingsCollection>

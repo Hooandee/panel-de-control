@@ -124,10 +124,11 @@ it("does not offer the game's quality where REFramework sets it on exit", async 
   }
 });
 
-it.each([["set", false], ["missing", true]] as const)("asks to switch RDR2 to DirectX 12 only while Panel could not (%s)", async (configState, shown) => {
+it.each([["set", false], ["missing", true], [null, false]] as const)("asks to switch RDR2 to DirectX 12 only while Panel could not (%s)", async (configState, shown) => {
   // PDC-Z63N (#1470): Panel writes RDR2's API itself; before its first launch the game has no settings file yet.
   const detail = installed() as any;
-  state.detail = { ...detail, install: { ...detail.install, game_config: [{ tag: "API", state: configState }] } };
+  state.detail = { ...detail, recipe_info: { ...detail.recipe_info, game_config: true },
+    install: configState ? { ...detail.install, game_config: [{ tag: "API", state: configState }] } : null };
   await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1174180 } as unknown as GameEntry} />); });
   expect(!!screen.queryByText("up.notice.rdr2Dx12")).toBe(shown);
 });

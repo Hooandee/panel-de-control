@@ -33,14 +33,15 @@ def _read(path: Path) -> str | None:
     try:
         if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_BYTES:
             return None
-        return path.read_text(encoding="utf-8")
+        # Bytes, not text mode: the game's CRLF line ends stay as they are.
+        return path.read_bytes().decode("utf-8")
     except (OSError, UnicodeDecodeError):
         return None
 
 
 def _write(path: Path, text: str) -> None:
     temporary = path.with_name(f".{path.name}.pdc")
-    temporary.write_text(text, encoding="utf-8")
+    temporary.write_bytes(text.encode("utf-8"))
     os.chmod(temporary, path.stat().st_mode & 0o777)
     os.replace(temporary, path)
     ownership.own_like(path.parent, [path])

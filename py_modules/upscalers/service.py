@@ -2487,6 +2487,7 @@ def _recipe_info(recipe) -> dict | None:
             "page": recipe.page, "settings": dict(recipe.wiki_settings), "suggestions": dict(recipe.wiki_suggestions),
             "recommended_input": recipe.recommended_input,
             "game_settings": [{"setting": setting, "value": value} for setting, value in getattr(recipe, "game_settings", ())],
+            "game_config": bool(getattr(recipe, "game_config", ())),
             "anr_settings": [{"setting": setting, "value": value} for setting, value in getattr(recipe, "anr_settings", ())],
             # REFramework rewrites its own config when the game closes: its quality only changes with the game closed.
             "quality_on_exit": bool(getattr(recipe, "reframework_upscaler", False)),
