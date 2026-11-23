@@ -849,3 +849,20 @@ def test_diagnostics_report_last_check_and_published_versions_without_network() 
         "catalog_age_s": 42,
     }
     assert transport.paths == [CATALOG_PATH, CATALOG_PATH]
+
+
+def test_diagnostics_report_the_disk_catalog_served_offline_at_boot() -> None:
+    clock = Clock()
+    clock.value = 100.0
+    remote = service(
+        FakeTransport(ThemeTransportError("offline", "offline")),
+        cache=MemoryCache(cached_record(catalog(release(version="0.1.3")), checked_at=40.0)),
+        clock=clock,
+    )
+
+    remote.check_releases()
+
+    report = remote.diagnostics()
+    assert report["status"] == "cached" and report["code"] == "offline"
+    assert report["published"] == {"Example Theme": "0.1.3"}
+    assert report["catalog_age_s"] == 60

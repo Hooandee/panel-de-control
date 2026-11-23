@@ -258,7 +258,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "hud": (
         ("get_hud_state", (
             "capability", "applyStatus", "conflict", "model.enabled", "model.layout",
-            "model.position", "model.items",
+            "model.position", "model.items", "unavailableMetrics",
         )),
     ),
     "params": (("_support_launch_state", None),),
@@ -11004,9 +11004,12 @@ class Plugin(AmbientRpc):
         return self._hud.effective(self._current_appid)
 
     def _hud_unavailable_metrics(self) -> tuple:
-        """MangoHud rows that would read a constant 0 W on this machine: Intel has no
-        GPU power sensor, and its CPU power needs the root-only RAPL counter."""
-        if getattr(self._device, "vendor", "amd") != "intel":
+        """MangoHud rows that would read a constant 0 W on this machine: Intel handhelds have
+        no GPU power sensor, and their CPU power needs the root-only RAPL counter. Generic
+        and desktop hosts may carry a discrete GPU MangoHud does read, so they keep both."""
+        device = self._device
+        if getattr(device, "vendor", "amd") != "intel" or getattr(device, "is_generic", False) \
+                or getattr(device, "key", "") == "desktop_pc":
             return ()
         if rapl_user_readable():
             return ("gpu_power",)
