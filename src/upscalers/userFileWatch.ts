@@ -1,6 +1,7 @@
 import { Navigation } from "@decky/ui";
 
 import { addUpscalerMod, addUpscalerUserFile, getUpscalerModCandidates, getUpscalerUserFileCandidates } from "../api";
+import { recordUiEvent } from "../system/uiEvents";
 import { upscalerErrorCode } from "./errorCode";
 import { holdPage } from "./pageMemory";
 import type { GameDetail, UserFile } from "./types";
@@ -36,7 +37,20 @@ let pressed = 0;
 const reinstall = new Set<string>();
 const listeners = new Set<(event: UserFileWatchEvent) => void>();
 
+// Steam's browser closes the QAM and unmounts the cards: how a wait failed has to outlive them.
+const failures = new Map<string, string>();
+
+export const watchFailure = (appid: string, dependency: string): string | null => failures.get(`${appid}:${dependency}`) ?? null;
+
+export const forgetWatchFailure = (appid: string, dependency: string): void => { failures.delete(`${appid}:${dependency}`); };
+
 function emit(event: UserFileWatchEvent): void {
+  const key = `${event.appid}:${event.dependency}`;
+  if (event.type === "failed") failures.set(key, event.code);
+  else if (event.type === "watching" || event.type === "adopted") failures.delete(key);
+  // Never the file's path.
+  recordUiEvent("upscalers", "file_watch", { appid: event.appid, dependency: event.dependency, event: event.type,
+    ...(event.type === "failed" ? { code: event.code } : {}) }, event.type !== "failed");
   for (const listener of listeners) listener(event);
 }
 
@@ -75,7 +89,8 @@ async function tick(): Promise<void> {
   const current = watch;
   if (!current || current.busy) return;
   if (Date.now() > current.until) {
-    cancelUserFileWatch();
+    stop();
+    emit({ type: "failed", appid: current.appid, dependency: current.dependency, code: "watch_expired" });
     return;
   }
   current.busy = true;

@@ -95,6 +95,44 @@ it("saves quality and sharpness with one button", async () => {
   expect(configureUpscaler).toHaveBeenCalledWith("777", expect.objectContaining({ quality: "balanced" }));
 });
 
+it("hands the render size back to the game's own preset", async () => {
+  // PDC-XKSZ (#1452)
+  state.detail = installed();
+  state.advancedRows = true;
+  try {
+    await act(async () => { render(<GameView {...props} />); });
+    await act(async () => { fireEvent.click(screen.getByText("up.quality.balanced")); });
+    await act(async () => { fireEvent.click(screen.getByText("up.quality.useGame")); });
+    await act(async () => { fireEvent.click(screen.getByText("up.save")); });
+    expect(configureUpscaler).toHaveBeenLastCalledWith("777", expect.objectContaining({ quality: null }));
+    await act(async () => { fireEvent.click(screen.getByText("up.quality.useGame")); });
+    await act(async () => { fireEvent.click(screen.getByText("up.save")); });
+    expect(configureUpscaler).toHaveBeenLastCalledWith("777", expect.objectContaining({ quality: "balanced" }));
+  } finally {
+    state.advancedRows = false;
+  }
+});
+
+it("does not offer the game's quality where REFramework sets it on exit", async () => {
+  state.detail = { ...installed(), recipe_info: { ...installed().recipe_info, quality_on_exit: true } } as unknown as GameDetail;
+  state.advancedRows = true;
+  try {
+    await act(async () => { render(<GameView {...props} />); });
+    expect(screen.queryByText("up.quality.useGame")).toBeNull();
+  } finally {
+    state.advancedRows = false;
+  }
+});
+
+it.each([["set", false], ["missing", true], [null, false]] as const)("asks to switch RDR2 to DirectX 12 only while Panel could not (%s)", async (configState, shown) => {
+  // PDC-Z63N (#1470): Panel writes RDR2's API itself; before its first launch the game has no settings file yet.
+  const detail = installed() as any;
+  state.detail = { ...detail, recipe_info: { ...detail.recipe_info, game_config: true },
+    install: configState ? { ...detail.install, game_config: [{ tag: "API", state: configState }] } : null };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1174180 } as unknown as GameEntry} />); });
+  expect(!!screen.queryByText("up.notice.rdr2Dx12")).toBe(shown);
+});
+
 it("says a change waits for a restart right under the scaler, also after leaving the page", async () => {
   state.running = { liveAppid: 777 };
   state.detail = installed();

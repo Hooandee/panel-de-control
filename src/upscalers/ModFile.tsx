@@ -41,6 +41,7 @@ onUserFileWatch((event) => {
 });
 
 const errorKey = (code: string) => code === "busy" ? "up.error.busy"
+  : code === "watch_expired" ? "up.error.watch_expired"
   : code === "mod_password" ? "up.error.mod_password"
   : code === "mod_password_wrong" ? "up.error.mod_password_wrong"
   : code === "mod_conflict" ? "up.error.mod_conflict"

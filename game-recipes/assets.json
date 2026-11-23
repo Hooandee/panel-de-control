@@ -39,6 +39,14 @@
     "filename": "RE7.zip",
     "format": "zip"
   },
+  "refw-pdup-re8": {
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/RE8.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "27e8fffe7df10d2f905facdf9a03f733def6140c197db3a4a3d651aab5cbeaf7",
+    "size": 13397060,
+    "filename": "RE8.zip",
+    "format": "zip"
+  },
   "refw-pdup-dmc5": {
     "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/DMC5.zip",
     "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",

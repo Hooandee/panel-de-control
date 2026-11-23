@@ -14,7 +14,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, recipe_catalog, recipes, scaler_transition, user_deps, user_mods, wiki
+from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, game_config, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, recipe_catalog, recipes, scaler_transition, user_deps, user_mods, wiki
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -676,7 +676,7 @@ class UpscalerService:
             helix_removed = _is_helix(install)
             if helix_removed:
                 # HelixSR comes out before the switch: a failed switch leaves the game's own FSR, not HelixSR.
-                entry["previous"] = diagnostics.snapshot(install)
+                entry["previous"] = diagnostics.snapshot(install, excerpt=True)
                 try:
                     self._drop(install, installed.root)
                 except OSError as error:
@@ -1002,7 +1002,8 @@ class UpscalerService:
                 sources[relative] = seed
                 owned.add(relative)
             manifest = self._apply(target, sources, ini.apply(base_ini, overrides),
-                                   getattr(automatic, "configuration", {}) if automatic else {}, owned=owned)
+                                   getattr(automatic, "configuration", {}) if automatic else {}, owned=owned,
+                                   protect=bool(recipe and recipe.protect_dlls))
 
         now = time.time()
         entry["install"] = {
@@ -1028,6 +1029,8 @@ class UpscalerService:
             "args": list(recipe.args) if recipe else [],
             "added_args": [],
         }
+        if recipe and recipe.game_config:
+            entry["install"]["game_config"] = game_config.apply(game_config.prefix_user(self.home, installed), recipe.game_config)
         # What an earlier install put in the launch options is still there, and still Panel's to take out.
         fresh = entry["install"]
         fresh["added_args"] = [arg for arg in previous.get("added_args", []) if arg in fresh["args"]]
@@ -1285,7 +1288,7 @@ class UpscalerService:
         old = entry.get("install")
         if not isinstance(old, dict):
             return None
-        entry["previous"] = diagnostics.snapshot(old)
+        entry["previous"] = diagnostics.snapshot(old, excerpt=True)
         self._drop(old, installed.root)
         if old.get("launcher"):
             try:
@@ -1332,6 +1335,7 @@ class UpscalerService:
 
     def _drop(self, install: dict, root: Path) -> list[str]:
         """Take an install out of the game, whichever engine put it there."""
+        game_config.restore(install.get("game_config"))
         if install.get("engine") == "proton":
             return []
         if not _is_helix(install):
@@ -1374,15 +1378,17 @@ class UpscalerService:
         if self.logger:
             self.logger.info(f"HelixSR taken out without its bridge ({reason}); Panel's record of it cleared")
 
-    def _apply(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None, owned=()) -> dict:
+    def _apply(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None, owned=(),
+               protect: bool = False) -> dict:
         names = [*sources, *(["OptiScaler.ini", *_GENERATED] if ini_text is not None else [])]
         try:
             with self.scaler_transitions.mutation(target, names):
-                return self._apply_files(target, sources, ini_text, configuration, owned)
+                return self._apply_files(target, sources, ini_text, configuration, owned, protect)
         except scaler_transition.TransitionError as error:
             raise UpscalerError(str(error)) from None
 
-    def _apply_files(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None, owned=()) -> dict:
+    def _apply_files(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None, owned=(),
+                     protect: bool = False) -> dict:
         meta = target / games.MANIFEST_DIR
         if meta.is_symlink():
             raise UpscalerError("unsafe_folder")
@@ -1414,8 +1420,12 @@ class UpscalerService:
             self._remove_files(target, configuration)
             raise
         manifest.pop("incomplete")
+        if protect:
+            manifest["read_only"] = True
         atomic_json_save(journal, manifest)
         ownership.own_like(target, [*(target / f for f in manifest["files"]), *(target / d for d in manifest["dirs"]), meta])
+        if protect:
+            _read_only_libraries(target, manifest)
         return manifest
 
     @staticmethod
@@ -1798,7 +1808,7 @@ class UpscalerService:
         self._update_job(phase="restore")
         if _is_helix(install) and installed is None:
             raise UpscalerError("not_installed")
-        entry["previous"] = diagnostics.snapshot(install)
+        entry["previous"] = diagnostics.snapshot(install, excerpt=True)
         kept = self._drop(install, installed.root if installed else Path(install["target"]))
         if install.get("launcher") and installed:
             try:
@@ -1908,6 +1918,8 @@ class UpscalerService:
             saved = meta / "backup" / relative
             if saved.exists() and not (target / relative).exists():
                 os.replace(saved, target / relative)
+                if manifest.get("read_only"):
+                    _set_writable(target / relative, True)
         for directory in sorted(manifest.get("dirs", []), key=len, reverse=True):
             try:
                 (target / directory).rmdir()
@@ -2436,6 +2448,29 @@ def _with_leftovers(result: dict, left: dict | None) -> dict:
     return result
 
 
+def _read_only_libraries(target: Path, manifest: dict) -> None:
+    """Panel's own libraries and the game's backed-up originals, which a purging launcher would also delete.
+
+    A library Panel put over one of the game's stays writable: the game's updater may still need to replace it.
+    """
+    backup = target / games.MANIFEST_DIR / "backup"
+    paths = [target / name for name in manifest["files"] if name not in manifest["backups"]]
+    if backup.is_dir() and not backup.is_symlink():
+        paths += backup.rglob("*")
+    for path in paths:
+        if path.suffix.lower() == ".dll":
+            _set_writable(path, False)
+
+
+def _set_writable(path: Path, writable: bool) -> None:
+    try:
+        if path.is_file() and not path.is_symlink():
+            mode = path.stat().st_mode
+            path.chmod(mode | 0o200 if writable else mode & ~0o222)
+    except OSError:
+        pass
+
+
 def _recipe_proxy(recipe) -> str | None:
     if not recipe or recipe.proxy not in catalog.PROXIES:
         return None
@@ -2452,6 +2487,7 @@ def _recipe_info(recipe) -> dict | None:
             "page": recipe.page, "settings": dict(recipe.wiki_settings), "suggestions": dict(recipe.wiki_suggestions),
             "recommended_input": recipe.recommended_input,
             "game_settings": [{"setting": setting, "value": value} for setting, value in getattr(recipe, "game_settings", ())],
+            "game_config": bool(getattr(recipe, "game_config", ())),
             "anr_settings": [{"setting": setting, "value": value} for setting, value in getattr(recipe, "anr_settings", ())],
             # REFramework rewrites its own config when the game closes: its quality only changes with the game closed.
             "quality_on_exit": bool(getattr(recipe, "reframework_upscaler", False)),

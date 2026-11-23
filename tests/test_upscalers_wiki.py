@@ -50,12 +50,13 @@ def test_village_steam_title_finds_the_public_wiki_requirements():
     assert found["page"] == "Resident-Evil-8-Village"
     assert found["needs"] == ["reframework", "mod"]
     live = recipes.from_facts("1196590", found, "optiscaler-wiki@live")
-    for recipe in (recipes.recipe_for("1196590"), recipes.recipe_for("1196590", live)):
+    linux = {"platform": "linux", "arch": "x86_64"}
+    for recipe in (recipes.recipe_for("1196590", **linux), recipes.recipe_for("1196590", live, **linux)):
         assert recipe.needs == ("reframework", "mod")
         assert recipe.inputs == ("DLSS", "XeSS")
+        # The wiki's mod is the curated PureDark route: Panel brings REFramework, the user the Nexus plugin.
+        assert recipe.dependencies == ("refw-pdup-re8", "puredark-upscaler-base")
         assert auto_recipes.unresolved(recipe, {"inputs": {}}, None)
-        assert not recipe.dependencies and not recipe.files
-        assert recipe.effective_api is None and recipe.recommended_build is None
 
 
 def test_current_wiki_title_wins_over_the_village_alias():

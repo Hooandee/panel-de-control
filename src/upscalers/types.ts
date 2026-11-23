@@ -145,6 +145,8 @@ export interface GameDetail {
     status: UpscalerStatus;
     /** From the first launch after the quality last changed: whether the game asked OptiScaler for its size. */
     quality_check?: { result: "respected" | "ignored"; input: string | null; ratio: number } | null;
+    /** Settings Panel set in the game's own config (RDR2's API); "missing" until the game wrote that file. */
+    game_config?: { tag: string; state: "set" | "already" | "missing" | "failed" }[];
   } | null;
   history: HistoryEntry[];
   recipe: boolean;
@@ -211,6 +213,8 @@ export interface UserFileCandidate {
 export interface RecipeInfo {
   user_files?: UserFile[];
   game_settings?: { setting: string; value: string }[];
+  /** Panel sets a game setting itself on install (RDR2's API): the page only asks while it could not. */
+  game_config?: boolean;
   anr_settings?: { setting: string; value: string }[];
   fps_counter?: boolean;
   quality_on_exit?: boolean;

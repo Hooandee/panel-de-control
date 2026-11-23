@@ -30,12 +30,18 @@ _FACTS = (
     ("fg_context", re.compile(r"(FSRFG_Dx12::CreateContext D3D12_CreateContext result: 0|XeFG context created)")),
     ("upscaler", re.compile(r"init successful for (.+?), upscaler changed")),
     ("fg", re.compile(r"(D3D12_Configure Enabled: true, result: (?:0\b|FFX_API_RETURN_OK)|SetEnabled: true, result: \w*SUCCESS|Nukem.{0,40}(?:initialized|loaded))", re.I)),
+    # Queried while loading, whether or not FSR runs later: only names what an FSR feature runs.
+    ("fsr4_model", re.compile(r"Upscaler support - fsr4: ([a-z0-9 ]+?)(?: \(forced\))?,")),
+    ("fsr4_provider", re.compile(r"QueryProvider \S+ provider for 10000: (4\.\d+\.\d+) \*")),
     ("initial_resolution", re.compile(r"Render Resolution:\s*(\d{2,5})x(\d{2,5}),\s*Display Resolution\s*(\d{2,5})x(\d{2,5})")),
 )
 # OptiScaler cannot hand a Vulkan game's textures to FSR 4 (D3D12 only) and drops to an older FSR.
 _TEXTURE_FAILURE = re.compile(r"CreateSharedTexture Failed to get memory Win32 handle|Can't process Vulkan textures")
 _CLOCK = re.compile(r"\[(\d{2}):(\d{2}):(\d{2})\.\d+\]")
-_ERROR = re.compile(r"\[(?:E|C)\]\s")
+_FSR4_MODELS = {"int8 lite": "Lite", "int8": "INT8", "fp8": "FP8"}
+# An error line and, when it names one, the function that logged it (without OptiScaler's anonymous-namespace prefix).
+_ERROR = re.compile(r"\[(?:E|C)\]\s\s*(?:(?:`anonymous-namespace'::)?([A-Za-z_][\w:]{0,60}))?")
+ERROR_SOURCES = 6
 
 
 def read(target: Path, since: float | None = None) -> dict:
@@ -63,6 +69,7 @@ def read(target: Path, since: float | None = None) -> dict:
         facts["stale"] = True
         return facts
     errors = 0
+    sources: dict[str, int] = {}
     for line in text.splitlines():
         for key, pattern in _FACTS:
             match = pattern.search(line)
@@ -83,8 +90,10 @@ def read(target: Path, since: float | None = None) -> dict:
                 }
             else:
                 facts[key] = next(g for g in match.groups() if g is not None).strip()[:120]
-        if _ERROR.search(line):
+        if error := _ERROR.search(line):
             errors += 1
+            if error[1]:
+                sources[error[1]] = sources.get(error[1], 0) + 1
         if _TEXTURE_FAILURE.search(line):
             facts["texture_failure"] = True
     # OptiFG starts generating as soon as its context exists and logs no activation until toggled;
@@ -95,6 +104,8 @@ def read(target: Path, since: float | None = None) -> dict:
     facts.pop("fg_input", None)
     facts["resolution_source"] = "initialization_only" if "initial_resolution" in facts else "unavailable"
     facts["errors"] = errors
+    if sources:
+        facts["error_sources"] = dict(sorted(sources.items(), key=lambda item: -item[1])[:ERROR_SOURCES])
     return facts
 
 
@@ -118,11 +129,16 @@ def provider_observation(facts: dict) -> dict:
             if re.fullmatch(candidate + r"(?:[234]1?| [234](?:\.[0-9x]+)*(?:/4)?(?: lite)?)?", token):
                 family = candidate
                 break
+    # OptiScaler's FSR entry points (`fsr31`, `FSR 3.X`, `FSR 3.X/4`) run the FSR 4 provider it selected.
+    older = bool(_OLD_FSR.fullmatch(str(facts.get("upscaler") or "").strip()))
+    version = facts.get("fsr4_provider") if family == "fsr" and not older and not facts.get("texture_failure") else None
+    model = _FSR4_MODELS.get(str(facts.get("fsr4_model") or "")) if version else None
     return {"provider_family": family,
             "provider_name": {"fsr": "FSR", "dlss": "DLSS", "xess": "XeSS"}.get(family),
-            "provider_version": None,
+            "provider_version": version,
+            "provider_model": model,
             "provider_source": "optiscaler_log" if available else "unavailable",
-            "provider_confidence": "family_only" if family else "unknown"}
+            "provider_confidence": "log_provider" if version else "family_only" if family else "unknown"}
 
 
 _OLD_FSR = re.compile(r"FSR (?:(2)\.(\d+)|(3)\.(\d+))(?:\.\d+)?")

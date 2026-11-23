@@ -52,7 +52,7 @@ import { replaceForeignInstallation } from "./foreignReplacement";
 import {
   ActionButton, Fold, Label, ListCard, ListRow, Note, Notice, Row, SegmentRow, Skeleton, Spinner, statusColor,
 } from "./parts";
-import type { BuildInfo, GameDetail, UpscalerChoice, UpscalerJob, UpscalerStatus, UpscalersOverview, VerifyResult } from "./types";
+import type { BuildInfo, GameDetail, Quality, UpscalerChoice, UpscalerJob, UpscalerStatus, UpscalersOverview, VerifyResult } from "./types";
 import { upscalerErrorCode } from "./errorCode";
 
 const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR 3.1", fsr2: "FSR 2", xess: "XeSS" };
@@ -109,6 +109,7 @@ export const GameView: FC<{
   const [spatial, setSpatial] = useState(false);
   const [spatialInstalled, setSpatialInstalled] = useState(false);
   const spatialSelected = useRef(false);
+  const panelQuality = useRef<Quality>("native");
   useEffect(() => {
     let alive = true;
     spatialSelected.current = false;
@@ -526,6 +527,8 @@ export const GameView: FC<{
   const preferredBuild = builds.find((b) => b.id === preferred && b.available);
   const runs = badgeLabel(installedBuild, install?.options.model, install?.build ?? "").full;
   const uses = [...new Set(Object.keys(inputs).map((k) => INPUT_NAMES[k]).filter(Boolean))];
+  // Turning the game's quality off goes back to Panel's last quality, not to Native.
+  if (choice.quality && QUALITIES.includes(choice.quality)) panelQuality.current = choice.quality;
   const qualityName = (q: UpscalerChoice["quality"]) => (q ? t(`up.quality.${q}`) : t("up.quality.game"));
   const installedEngine = installedBuild?.engine ?? "optiscaler";
   const selectedEngine = selected?.engine ?? "optiscaler";
@@ -539,7 +542,10 @@ export const GameView: FC<{
   const lumaInput = !!detail?.recipe_info?.luma_detected || !!detail?.recipe_info?.automatic?.includes("Luma");
   const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown && !lumaInput
     ? INPUT_NAMES[recommendedInputKey] : null;
-  const notice = detail && !detail.native ? gameNotice(detail.identity?.steam_appid ?? appid) : null;
+  // A setting Panel writes into the game's config on install is only asked of the user when Panel could not write it.
+  const configPending = !detail?.recipe_info?.game_config
+    || !!detail.install?.game_config?.some((c) => c.state === "missing" || c.state === "failed");
+  const notice = detail && !detail.native && configPending ? gameNotice(detail.identity?.steam_appid ?? appid) : null;
   const strain = detail && !detail.native && !spatial ? steamMachineStrain(overview.device, gameOutputHeight(detail?.history ?? [], overview.display), selected, choice.quality) : null;
   const recipeBlocked = !!solution?.blocked_reason || (optiscalerRecipe && !solution && !!detail?.recipe_info?.blocked);
   const automaticLuma = optiscalerRecipe && !detail?.recipe_info?.luma_detected && !!detail?.recipe_info?.automatic?.includes("Luma");
@@ -718,6 +724,11 @@ export const GameView: FC<{
             onChange={(quality) => changeChoice({ ...choice, quality })}
             options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: height === undefined ? undefined : `${renderHeight(height, q)}p` }))}
           />
+          {/* Ratio override off: the game's preset and OptiScaler's menu set the size. Not under REFramework's PureDark path. */}
+          {qualityMode.mode === "panel" && !detail.recipe_info?.quality_on_exit && <ListCard>
+            <ListRow first label={t("up.quality.useGame")} caption={t("up.quality.useGameCaption")} on={choice.quality === null}
+              onPress={() => changeChoice({ ...choice, quality: choice.quality === null ? panelQuality.current : null })} />
+          </ListCard>}
         </>
       )}
       {detail && !pendingModel && !spatial && !detail.native && !externalHelix && (qualityMode.mode === "game" || replacesFsr) && <Note>{t("up.quality.inGame")}</Note>}

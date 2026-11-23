@@ -63,6 +63,10 @@ class Recipe:
     mod_settings: dict[str, dict[str, str]] = field(default_factory=dict)
     # Frame generation those settings turn on inside the mod, named in the in-game pill.
     mod_frame_generation: str | None = None
+    # The game's launcher deletes unknown libraries beside the exe at every start; read-only ones survive.
+    protect_dlls: bool = False
+    # (file under the prefix's user folder, XML element, text) set on install and put back on removal.
+    game_config: tuple[tuple[str, str, str], ...] = ()
 
 
 RECIPES: dict[str, Recipe] = {
@@ -96,6 +100,12 @@ RECIPES: dict[str, Recipe] = {
         Recipe("1182900", anr_settings=(("NVIDIA DLSS Frame Generation", "On (Sí)"),)),
         # Deep Rock Galactic asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.
         Recipe("548430", args=("-dx12",), anr_settings=(("Frame Generation", "On"),)),
+        # Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll;
+        # its launcher purges unknown .dll files at every start.
+        Recipe("230410", proxy="winmm.dll", protect_dlls=True),
+        # RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it.
+        Recipe("1174180", game_config=(("Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml", "API",
+                                        "kSettingAPI_DX12"),)),
         Recipe("2322010", anr_settings=(("Frame Generation (Generación de fotogramas)", "Nvidia DLSS-FG"),)),
     )
 }
