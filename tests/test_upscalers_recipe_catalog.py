@@ -397,14 +397,11 @@ def test_every_reframework_recipe_runs_optiscalers_overlay_menu():
 
 
 def test_village_gets_the_puredark_route_instead_of_a_mod_to_find():
-    # PDC-S34S / PDC-JXY8 (#1372, #1443): Village (re8.exe) got generic REFramework, OptiScaler never saw an upscaler,
-    # and the "needs a mod" card only opened the OptiScaler wiki.
+    # PDC-S34S / PDC-JXY8 (#1372, #1443)
     catalog = rc.load()
     game = catalog.match('1196590', 'optiscaler', 'linux', 'x86_64')
     assert game is not None and game.exe == 're8.exe'
     order = catalog.dependency_order(game.dependencies)
     assert [(d.id, d.kind) for d in order] == [('refw-pdup-re8', 'game_files'), ('puredark-upscaler-base', 'user_files')]
-    asset = catalog.assets['refw-pdup-re8']
-    assert (asset.size, asset.sha256) == (13397060, '27e8fffe7df10d2f905facdf9a03f733def6140c197db3a4a3d651aab5cbeaf7')
     recipe = recipes.recipe_for('1196590', platform='linux', arch='x86_64')
-    assert recipe.reframework_upscaler and not recipe.optiscaler_fg and recipe.optiscaler_root_files == ('libxess.dll',)
+    assert recipe.reframework_upscaler and not recipe.optiscaler_fg

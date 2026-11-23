@@ -415,7 +415,7 @@ export const InGameBadge: FC = () => {
   const observedName = live?.provider_name ?? (observedFamily ? PROVIDER_NAMES[observedFamily] : null);
   const observedProvider = otherProvider
     ? [observedName, live?.provider_version].filter(Boolean).join(" ")
-    // The FSR 4 provider a build ships (4.1.1 under the 4.1.2 Lite build) is evidence, not the build's name.
+    // The provider read from the log can differ from the build's version: it is evidence, not the build's name.
     : live?.provider_source === "optiscaler_log" && live.provider_confidence !== "log_provider" && live.provider_name && live.provider_version
       ? `${live.provider_name} ${live.provider_version}` : null;
   const fallback = live ? live.fallback ?? null : badge?.fallback ?? null;

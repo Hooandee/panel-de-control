@@ -1916,10 +1916,7 @@ class UpscalerService:
             if saved.exists() and not (target / relative).exists():
                 os.replace(saved, target / relative)
                 if manifest.get("read_only"):
-                    try:
-                        (target / relative).chmod((target / relative).stat().st_mode | 0o200)
-                    except OSError:
-                        pass
+                    _set_writable(target / relative, True)
         for directory in sorted(manifest.get("dirs", []), key=len, reverse=True):
             try:
                 (target / directory).rmdir()
@@ -2454,15 +2451,21 @@ def _read_only_libraries(target: Path, manifest: dict) -> None:
     A library Panel put over one of the game's stays writable: the game's updater may still need to replace it.
     """
     backup = target / games.MANIFEST_DIR / "backup"
-    replaced = set(manifest.get("backups", []))
-    paths = [target / relative for relative in manifest["files"] if relative not in replaced]
-    paths += [path for path in backup.rglob("*")] if backup.is_dir() and not backup.is_symlink() else []
+    paths = [target / name for name in manifest["files"] if name not in manifest["backups"]]
+    if backup.is_dir() and not backup.is_symlink():
+        paths += backup.rglob("*")
     for path in paths:
-        try:
-            if path.suffix.lower() == ".dll" and path.is_file() and not path.is_symlink():
-                path.chmod(path.stat().st_mode & ~0o222)
-        except OSError:
-            pass
+        if path.suffix.lower() == ".dll":
+            _set_writable(path, False)
+
+
+def _set_writable(path: Path, writable: bool) -> None:
+    try:
+        if path.is_file() and not path.is_symlink():
+            mode = path.stat().st_mode
+            path.chmod(mode | 0o200 if writable else mode & ~0o222)
+    except OSError:
+        pass
 
 
 def _recipe_proxy(recipe) -> str | None:

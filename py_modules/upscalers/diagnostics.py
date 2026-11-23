@@ -251,15 +251,12 @@ def solution(plan) -> dict | None:
 def snapshot(install, excerpt: bool = False) -> dict:
     """`excerpt` keeps the log lines too, for an install about to go: its log goes with it."""
     try:
-        result = _snapshot(install)
-        if excerpt and isinstance(install, dict) and install.get("engine", "optiscaler") == "optiscaler" and install.get("target"):
-            result["log_excerpt"] = _log_excerpt(Path(install["target"]))
-        return result
+        return _snapshot(install, excerpt)
     except Exception as error:
         return {"at": time.time(), "observed": {"result": "unknown", "error": type(error).__name__}}
 
 
-def _snapshot(install) -> dict:
+def _snapshot(install, excerpt: bool = False) -> dict:
     result = {"at": time.time(), "applied": None, "observed": {"result": "not_installed"}}
     if not isinstance(install, dict):
         return result
@@ -286,10 +283,11 @@ def _snapshot(install) -> dict:
     else:
         facts = logread.read(Path(install.get("target", "")), since=verification_since(install))
         verdict = logread.verdict(facts)
+        if excerpt and install.get("target"):
+            result["log_excerpt"] = _log_excerpt(Path(install["target"]))
     observed = fields(facts, ("present", "stale", "modified", "upscaler", "input", "fg", "errors", "unverifiable"))
-    if isinstance(facts.get("error_sources"), dict):
-        observed["error_sources"] = {str(name)[:64]: count for name, count in list(facts["error_sources"].items())[:logread.ERROR_SOURCES]
-                                     if type(count) is int}
+    if facts.get("error_sources"):
+        observed["error_sources"] = facts["error_sources"]
     observed.update(result=verdict, source="game_log" if engine not in ("dll", "proton") else "unavailable",
                     injector_version=facts.get("version"),
                     **logread.provider_observation(facts if engine == "optiscaler" else {}))
@@ -361,28 +359,25 @@ def _manifest_check(target: Path) -> dict:
             "backups": manifest.get("backups", [])}
 
 
-def _log_excerpt(target: Path) -> list[str]:
+def _chunk(path: Path, size: int, head: bool = False) -> list[str]:
     try:
-        with open(target / logread.LOG_NAME, "rb") as handle:
-            handle.seek(0, os.SEEK_END)
-            size = handle.tell()
-            handle.seek(max(0, size - logread.MAX_BYTES))
-            lines = handle.read().decode("utf-8", "replace").splitlines()
+        with open(path, "rb") as handle:
+            if not head:
+                handle.seek(0, os.SEEK_END)
+                handle.seek(max(0, handle.tell() - size))
+            return handle.read(size).decode("utf-8", "replace").splitlines()
     except OSError:
         return []
+
+
+def _log_excerpt(target: Path) -> list[str]:
+    lines = _chunk(target / logread.LOG_NAME, logread.MAX_BYTES)
     picked = [line[:LINE_CHARS] for line in lines if _NOTEWORTHY.search(line) and not _SKIP.search(line)]
     return picked[-LOG_LINES:]
 
 
 def _tail(path: Path) -> list[str]:
-    try:
-        with open(path, "rb") as handle:
-            handle.seek(0, os.SEEK_END)
-            handle.seek(max(0, handle.tell() - 64 * 1024))
-            lines = handle.read().decode("utf-8", "replace").splitlines()
-    except OSError:
-        return []
-    return [line[:LINE_CHARS] for line in lines[-LOG_LINES:]]
+    return [line[:LINE_CHARS] for line in _chunk(path, 64 * 1024)[-LOG_LINES:]]
 
 
 _LAUNCH_DLLS = {name.removesuffix('.dll').lower() for name in games.PROXY_NAMES} | {
@@ -614,11 +609,7 @@ ANR_HEAD_LINES = 20
 
 
 def _anr_head(path: Path) -> list[str]:
-    try:
-        with open(path, "rb") as handle:
-            lines = handle.read(32 * 1024).decode("utf-8", "replace").splitlines()
-    except OSError:
-        return []
+    lines = _chunk(path, 32 * 1024, head=True)
     return [line[:LINE_CHARS] for line in lines if _ANR_HEAD.search(line) and "DLSS-G provider in" not in line][:ANR_HEAD_LINES]
 
 

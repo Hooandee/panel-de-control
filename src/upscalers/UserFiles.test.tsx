@@ -75,7 +75,7 @@ it("downloads from the file page and shows it is waiting for Downloads", async (
 });
 
 it("still says the download never arrived when the card comes back after Steam's browser", async () => {
-  // PDC-JXY8 (#1443): Resident Evil Village's UpscalerBasePlugin card; Steam's browser unmounts it while waiting.
+  // PDC-JXY8 (#1443)
   vi.useFakeTimers();
   try {
     api.getUpscalerUserFileCandidates.mockResolvedValue({ folder: "/home/deck/Downloads", candidates: [] });

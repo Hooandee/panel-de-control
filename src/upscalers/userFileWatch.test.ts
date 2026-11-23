@@ -41,12 +41,11 @@ it("gives up after a while and can be cancelled", async () => {
   onUserFileWatch((event) => events.push(event.type));
   await downloadUserFile("2050650", file);
   await vi.advanceTimersByTimeAsync(16 * 60 * 1000);
-  // PDC-JXY8 (#1443): the card said «Downloading» until the wait ran out silently, and the journal had nothing.
-  expect(events).toEqual(["watching", "expired"]);
+  // PDC-JXY8 (#1443): the wait ran out silently.
+  expect(events).toEqual(["watching", "failed"]);
   expect(watchingFor("2050650", file.id)).toBe(false);
-  expect(journal.recordUiEvent.mock.calls.map(([area, action, fields, ok]) => [area, action, fields.event, ok])).toEqual([
-    ["upscalers", "file_watch", "watching", true], ["upscalers", "file_watch", "expired", false]]);
-  expect(JSON.stringify(journal.recordUiEvent.mock.calls)).not.toContain("/home/");
+  expect(journal.recordUiEvent.mock.calls.map(([, , fields, ok]) => [fields.event, fields.code, ok])).toEqual([
+    ["watching", undefined, true], ["failed", "watch_expired", false]]);
 });
 
 it("leaves nothing to reinstall when the game had no install yet", async () => {

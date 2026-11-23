@@ -527,7 +527,7 @@ export const GameView: FC<{
   const preferredBuild = builds.find((b) => b.id === preferred && b.available);
   const runs = badgeLabel(installedBuild, install?.options.model, install?.build ?? "").full;
   const uses = [...new Set(Object.keys(inputs).map((k) => INPUT_NAMES[k]).filter(Boolean))];
-  // Turning the game's quality off goes back to the size Panel had, not to Native.
+  // Turning the game's quality off goes back to Panel's last quality, not to Native.
   if (choice.quality && QUALITIES.includes(choice.quality)) panelQuality.current = choice.quality;
   const qualityName = (q: UpscalerChoice["quality"]) => (q ? t(`up.quality.${q}`) : t("up.quality.game"));
   const installedEngine = installedBuild?.engine ?? "optiscaler";
@@ -721,8 +721,7 @@ export const GameView: FC<{
             onChange={(quality) => changeChoice({ ...choice, quality })}
             options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: height === undefined ? undefined : `${renderHeight(height, q)}p` }))}
           />
-          {/* OptiScaler's ratio override off: the game's own preset (and OptiScaler's menu) set the render size. */}
-          {/* REFramework's PureDark path sets its own quality on exit: there the game's preset doesn't apply. */}
+          {/* Ratio override off: the game's preset and OptiScaler's menu set the size. Not under REFramework's PureDark path. */}
           {qualityMode.mode === "panel" && !detail.recipe_info?.quality_on_exit && <ListCard>
             <ListRow first label={t("up.quality.useGame")} caption={t("up.quality.useGameCaption")} on={choice.quality === null}
               onPress={() => changeChoice({ ...choice, quality: choice.quality === null ? panelQuality.current : null })} />

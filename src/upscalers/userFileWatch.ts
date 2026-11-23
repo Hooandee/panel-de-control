@@ -12,7 +12,6 @@ const LIMIT_MS = 15 * 60 * 1000;
 export type UserFileWatchEvent =
   | { type: "watching"; appid: string; dependency: string }
   | { type: "stopped"; appid: string; dependency: string }
-  | { type: "expired"; appid: string; dependency: string }
   | { type: "adopted"; appid: string; dependency: string; detail: GameDetail }
   | { type: "failed"; appid: string; dependency: string; code: string; path?: string };
 
@@ -38,10 +37,20 @@ let pressed = 0;
 const reinstall = new Set<string>();
 const listeners = new Set<(event: UserFileWatchEvent) => void>();
 
+// Steam's browser closes the QAM and unmounts the cards: how a wait failed has to outlive them.
+const failures = new Map<string, string>();
+
+export const watchFailure = (appid: string, dependency: string): string | null => failures.get(`${appid}:${dependency}`) ?? null;
+
+export const forgetWatchFailure = (appid: string, dependency: string): void => { failures.delete(`${appid}:${dependency}`); };
+
 function emit(event: UserFileWatchEvent): void {
-  // Where a download got to, for reports: never the file's path.
+  const key = `${event.appid}:${event.dependency}`;
+  if (event.type === "failed") failures.set(key, event.code);
+  else if (event.type === "watching" || event.type === "adopted") failures.delete(key);
+  // Never the file's path.
   recordUiEvent("upscalers", "file_watch", { appid: event.appid, dependency: event.dependency, event: event.type,
-    ...(event.type === "failed" ? { code: event.code } : {}) }, event.type !== "failed" && event.type !== "expired");
+    ...(event.type === "failed" ? { code: event.code } : {}) }, event.type !== "failed");
   for (const listener of listeners) listener(event);
 }
 
@@ -81,7 +90,7 @@ async function tick(): Promise<void> {
   if (!current || current.busy) return;
   if (Date.now() > current.until) {
     stop();
-    emit({ type: "expired", appid: current.appid, dependency: current.dependency });
+    emit({ type: "failed", appid: current.appid, dependency: current.dependency, code: "watch_expired" });
     return;
   }
   current.busy = true;

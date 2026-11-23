@@ -96,7 +96,7 @@ it("saves quality and sharpness with one button", async () => {
 });
 
 it("hands the render size back to the game's own preset", async () => {
-  // PDC-XKSZ (#1452): with Panel's Native every preset in the game and in OptiScaler's menu rendered at 1.0.
+  // PDC-XKSZ (#1452)
   state.detail = installed();
   state.advancedRows = true;
   try {
@@ -105,7 +105,6 @@ it("hands the render size back to the game's own preset", async () => {
     await act(async () => { fireEvent.click(screen.getByText("up.quality.useGame")); });
     await act(async () => { fireEvent.click(screen.getByText("up.save")); });
     expect(configureUpscaler).toHaveBeenLastCalledWith("777", expect.objectContaining({ quality: null }));
-    // Off again, Panel's own choice comes back rather than Native.
     await act(async () => { fireEvent.click(screen.getByText("up.quality.useGame")); });
     await act(async () => { fireEvent.click(screen.getByText("up.save")); });
     expect(configureUpscaler).toHaveBeenLastCalledWith("777", expect.objectContaining({ quality: "balanced" }));

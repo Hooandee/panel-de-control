@@ -203,7 +203,7 @@ FSR4_LOG = Path(__file__).parent / 'fixtures/upscalers/fsr4_lite_provider_gow_rd
 
 
 def test_fsr4_provider_from_the_log_names_the_version_behind_the_fsr31_entry(tmp_path):
-    # PDC-K4XG (#1411): God of War Ragnarök on a Deck LCD ran FSR 4 Lite through the `FSR 3.X` entry point.
+    # PDC-K4XG (#1411)
     service, install = make_service(tmp_path, FSR4_LOG.read_text() + '[I] Creating new FSR 3.X upscaler\n')
     live = service.live('292030')
     assert (live['provider_family'], live['provider_version'], live['provider_model']) == ('fsr', '4.1.1', 'Lite')

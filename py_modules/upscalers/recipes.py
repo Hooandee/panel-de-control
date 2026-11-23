@@ -98,9 +98,8 @@ RECIPES: dict[str, Recipe] = {
         Recipe("1182900", anr_settings=(("NVIDIA DLSS Frame Generation", "On (Sí)"),)),
         # Deep Rock Galactic asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.
         Recipe("548430", args=("-dx12",), anr_settings=(("Frame Generation", "On"),)),
-        # Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll.
-        # Its launcher purges unknown .dll files at every start. Under Proton it defaults to DirectX 11, where the
-        # game quits once DLSS reaches OptiScaler; DirectX 12 (launcher settings) runs.
+        # Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll;
+        # its launcher purges unknown .dll files at every start.
         Recipe("230410", proxy="winmm.dll", protect_dlls=True),
         Recipe("2322010", anr_settings=(("Frame Generation (Generación de fotogramas)", "Nvidia DLSS-FG"),)),
     )

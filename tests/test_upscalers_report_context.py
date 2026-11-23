@@ -38,7 +38,7 @@ def test_removed_install_keeps_previous_observation(steam, fake_catalog, proc):
 
 
 def test_removed_install_keeps_the_log_lines_that_explain_it(steam, fake_catalog, proc):
-    # PDC-7EKZ (#1459): 1049 OptiScaler errors and 14 fps, but the user uninstalled before reporting and only counts were left.
+    # PDC-7EKZ (#1459)
     service = _service(steam, fake_catalog, proc)
     service.install(APPID, {'build': 'fsr-test'})
     target = Path(service.game(APPID)['install']['target'])

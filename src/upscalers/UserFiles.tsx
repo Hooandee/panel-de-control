@@ -7,20 +7,13 @@ import { upscalerErrorCode } from "./errorCode";
 import { holdPage } from "./pageMemory";
 import { ListCard, ListRow, Note } from "./parts";
 import type { GameDetail, UserFile, UserFileCandidate } from "./types";
-import { cancelUserFileWatch, downloadUserFile, onUserFileWatch, watchingFor } from "./userFileWatch";
+import { cancelUserFileWatch, downloadUserFile, forgetWatchFailure, onUserFileWatch, watchFailure, watchingFor } from "./userFileWatch";
 
 const EXTENSIONS = ["zip", "7z", "rar", "dll"];
 
 const shortPage = (url: string) => url.replace(/^https:\/\/(www\.)?/, "");
 
-// Steam's browser closes the QAM and unmounts the card: how the download wait ended has to outlive it.
-const watchError = new Map<string, string>();
-onUserFileWatch((event) => {
-  const key = `${event.appid}:${event.dependency}`;
-  if (event.type === "failed") watchError.set(key, event.code === "user_file_wrong" ? "up.error.user_file_wrong" : "up.error.user_file_unreadable");
-  else if (event.type === "expired") watchError.set(key, "up.error.watch_expired");
-  else if (event.type === "watching" || event.type === "adopted") watchError.delete(key);
-});
+const failureKey = (code: string) => code === "user_file_wrong" || code === "watch_expired" ? `up.error.${code}` : "up.error.user_file_unreadable";
 
 /** Files only the user can download, right under the upscaler: what is missing, which version is in, and where the
  *  file already in Downloads can be picked up with one press. */
@@ -41,8 +34,8 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
   const [found, setFound] = useState<UserFileCandidate[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(() => {
-    const key = watchError.get(`${appid}:${file.id}`);
-    return key ? t(key) : null;
+    const code = watchFailure(appid, file.id);
+    return code ? t(failureKey(code)) : null;
   });
   const missing = file.state === "missing";
   const [waiting, setWaiting] = useState(() => watchingFor(appid, file.id));
@@ -51,8 +44,8 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
     if (event.appid !== appid || event.dependency !== file.id) return;
     setWaiting(event.type === "watching");
     if (event.type === "adopted") onDetail(event.detail);
-    const failure = watchError.get(`${appid}:${file.id}`);
-    if (failure) setError(t(failure));
+    const code = watchFailure(appid, file.id);
+    if (code) setError(t(failureKey(code)));
   }), [appid, file.id, onDetail, t]);
 
   useEffect(() => {
@@ -66,11 +59,12 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
   const run = async (action: () => Promise<GameDetail>) => {
     setBusy(true);
     setError(null);
+    forgetWatchFailure(appid, file.id);
     try {
       onDetail(await action());
     } catch (failure) {
       const code = upscalerErrorCode(failure);
-      setError(t(code === "busy" ? "up.error.busy" : code === "user_file_wrong" ? "up.error.user_file_wrong" : "up.error.user_file_unreadable"));
+      setError(t(code === "busy" ? "up.error.busy" : failureKey(code)));
     } finally {
       setBusy(false);
     }

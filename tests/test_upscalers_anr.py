@@ -208,8 +208,7 @@ ANR_HEAD = [
 
 
 def test_report_keeps_the_anr_header_the_pacing_tail_pushes_out(anr_setup):
-    # PDC-HF3B (#1425): a black bar under Onimusha with ANR on; the 60-line tail was all pacing, without the
-    # feature's output size. Lines from a real ANR log on the Steam Machine.
+    # PDC-HF3B (#1425): the tail was all pacing lines, without the feature's output size.
     service, game = anr_setup
     service.begin("install", APPID)
     service.install(APPID, {"build": "new", "fg": "on", "fg_route": "anr"})

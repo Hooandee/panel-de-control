@@ -38,9 +38,9 @@ _FACTS = (
 # OptiScaler cannot hand a Vulkan game's textures to FSR 4 (D3D12 only) and drops to an older FSR.
 _TEXTURE_FAILURE = re.compile(r"CreateSharedTexture Failed to get memory Win32 handle|Can't process Vulkan textures")
 _CLOCK = re.compile(r"\[(\d{2}):(\d{2}):(\d{2})\.\d+\]")
-_ERROR = re.compile(r"\[(?:E|C)\]\s")
-# The function that logged an error, without OptiScaler's anonymous-namespace prefix.
-_ERROR_SOURCE = re.compile(r"\[(?:E|C)\]\s+(?:`anonymous-namespace'::)?([A-Za-z_][\w:]{0,60})")
+_FSR4_MODELS = {"int8 lite": "Lite", "int8": "INT8", "fp8": "FP8"}
+# An error line and, when it names one, the function that logged it (without OptiScaler's anonymous-namespace prefix).
+_ERROR = re.compile(r"\[(?:E|C)\]\s\s*(?:(?:`anonymous-namespace'::)?([A-Za-z_][\w:]{0,60}))?")
 ERROR_SOURCES = 6
 
 
@@ -90,10 +90,10 @@ def read(target: Path, since: float | None = None) -> dict:
                 }
             else:
                 facts[key] = next(g for g in match.groups() if g is not None).strip()[:120]
-        if _ERROR.search(line):
+        if error := _ERROR.search(line):
             errors += 1
-            if source := _ERROR_SOURCE.search(line):
-                sources[source[1]] = sources.get(source[1], 0) + 1
+            if error[1]:
+                sources[error[1]] = sources.get(error[1], 0) + 1
         if _TEXTURE_FAILURE.search(line):
             facts["texture_failure"] = True
     # OptiFG starts generating as soon as its context exists and logs no activation until toggled;
@@ -130,7 +130,7 @@ def provider_observation(facts: dict) -> dict:
                 family = candidate
                 break
     # OptiScaler's FSR entry points (`fsr31`, `FSR 3.X`, `FSR 3.X/4`) run the FSR 4 provider it selected.
-    older = isinstance(token, str) and bool(_OLD_FSR.fullmatch(str(facts.get("upscaler") or "").strip()))
+    older = bool(_OLD_FSR.fullmatch(str(facts.get("upscaler") or "").strip()))
     version = facts.get("fsr4_provider") if family == "fsr" and not older and not facts.get("texture_failure") else None
     model = _FSR4_MODELS.get(str(facts.get("fsr4_model") or "")) if version else None
     return {"provider_family": family,
@@ -139,9 +139,6 @@ def provider_observation(facts: dict) -> dict:
             "provider_model": model,
             "provider_source": "optiscaler_log" if available else "unavailable",
             "provider_confidence": "log_provider" if version else "family_only" if family else "unknown"}
-
-
-_FSR4_MODELS = {"int8 lite": "Lite", "int8": "INT8", "fp8": "FP8"}
 
 
 _OLD_FSR = re.compile(r"FSR (?:(2)\.(\d+)|(3)\.(\d+))(?:\.\d+)?")
