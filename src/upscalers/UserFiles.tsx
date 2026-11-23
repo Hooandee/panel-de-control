@@ -40,6 +40,7 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
     setWaiting(event.type === "watching");
     if (event.type === "adopted") onDetail(event.detail);
     if (event.type === "failed") setError(t(event.code === "user_file_wrong" ? "up.error.user_file_wrong" : "up.error.user_file_unreadable"));
+    if (event.type === "expired") setError(t("up.error.watch_expired"));
   }), [appid, file.id, onDetail, t]);
 
   useEffect(() => {

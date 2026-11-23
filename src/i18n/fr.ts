@@ -680,6 +680,7 @@ export const fr: Record<string, string> = {
   "up.error.mod_layout": "Ce mod se répartit dans le dossier du jeu ; installez-le à la main",
   "up.mod.apply": "Réinstaller pour l’appliquer",
   "up.error.mod_unsafe": "Cette archive contient des chemins non valides ou est trop grande",
+  "up.error.watch_expired": "Aucun fichier n'est arrivé dans Téléchargements en 15 minutes. Téléchargez-le à nouveau ou choisissez le fichier",
   "up.error.mod_unreadable": "Impossible de lire ce fichier",
   "up.error.user_file_wrong": "Ce fichier n'est pas celui dont ce jeu a besoin",
   "up.error.user_file_unreadable": "Impossible de lire ce fichier",

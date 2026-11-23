@@ -31,7 +31,9 @@ const needsPassword = (code: string) => code === "mod_password" || code === "mod
 
 onUserFileWatch((event) => {
   if (event.dependency !== MOD_WATCH) return;
-  if (event.type === "failed") {
+  if (event.type === "expired") {
+    lastError.set(event.appid, "watch_expired");
+  } else if (event.type === "failed") {
     lastError.set(event.appid, event.code);
     if (needsPassword(event.code) && event.path) lockedArchive.set(event.appid, event.path);
   } else if (event.type === "watching" || event.type === "adopted") {
@@ -41,6 +43,7 @@ onUserFileWatch((event) => {
 });
 
 const errorKey = (code: string) => code === "busy" ? "up.error.busy"
+  : code === "watch_expired" ? "up.error.watch_expired"
   : code === "mod_password" ? "up.error.mod_password"
   : code === "mod_password_wrong" ? "up.error.mod_password_wrong"
   : code === "mod_conflict" ? "up.error.mod_conflict"

@@ -680,6 +680,7 @@ export const ptBR: Record<string, string> = {
   "up.error.mod_layout": "Esse mod se espalha pela pasta do jogo; instale manualmente",
   "up.mod.apply": "Reinstalar para aplicar",
   "up.error.mod_unsafe": "Esse arquivo tem caminhos inválidos ou é grande demais",
+  "up.error.watch_expired": "Nenhum arquivo chegou em Downloads em 15 minutos. Baixe de novo ou escolha o arquivo",
   "up.error.mod_unreadable": "Não foi possível ler esse arquivo",
   "up.error.user_file_wrong": "Esse arquivo não é o que este jogo precisa",
   "up.error.user_file_unreadable": "Não foi possível ler esse arquivo",

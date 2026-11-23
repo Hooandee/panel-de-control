@@ -1,6 +1,7 @@
 import { Navigation } from "@decky/ui";
 
 import { addUpscalerMod, addUpscalerUserFile, getUpscalerModCandidates, getUpscalerUserFileCandidates } from "../api";
+import { recordUiEvent } from "../system/uiEvents";
 import { upscalerErrorCode } from "./errorCode";
 import { holdPage } from "./pageMemory";
 import type { GameDetail, UserFile } from "./types";
@@ -11,6 +12,7 @@ const LIMIT_MS = 15 * 60 * 1000;
 export type UserFileWatchEvent =
   | { type: "watching"; appid: string; dependency: string }
   | { type: "stopped"; appid: string; dependency: string }
+  | { type: "expired"; appid: string; dependency: string }
   | { type: "adopted"; appid: string; dependency: string; detail: GameDetail }
   | { type: "failed"; appid: string; dependency: string; code: string; path?: string };
 
@@ -37,6 +39,9 @@ const reinstall = new Set<string>();
 const listeners = new Set<(event: UserFileWatchEvent) => void>();
 
 function emit(event: UserFileWatchEvent): void {
+  // Where a download got to, for reports: never the file's path.
+  recordUiEvent("upscalers", "file_watch", { appid: event.appid, dependency: event.dependency, event: event.type,
+    ...(event.type === "failed" ? { code: event.code } : {}) }, event.type !== "failed" && event.type !== "expired");
   for (const listener of listeners) listener(event);
 }
 
@@ -75,7 +80,8 @@ async function tick(): Promise<void> {
   const current = watch;
   if (!current || current.busy) return;
   if (Date.now() > current.until) {
-    cancelUserFileWatch();
+    stop();
+    emit({ type: "expired", appid: current.appid, dependency: current.dependency });
     return;
   }
   current.busy = true;

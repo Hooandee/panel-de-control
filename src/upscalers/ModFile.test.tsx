@@ -157,3 +157,14 @@ it("stops waiting for the download once the user picks a file", async () => {
   await act(async () => { fireEvent.click(screen.getByText("up.userFile.choose")); });
   expect(watchingFor("1245620", MOD_WATCH)).toBe(false);
 });
+
+it("says the download never arrived once the wait runs out, instead of «Downloading» forever", async () => {
+  // PDC-JXY8 (#1443): Resident Evil Village's card stayed on the download wait.
+  vi.useFakeTimers();
+  api.candidates = [];
+  await act(async () => { render(<ModFile appid="1196590" mod={null} needed name={null} download={PATREON} onDetail={vi.fn()} />); });
+  await act(async () => { fireEvent.click(screen.getByText("up.userFile.download")); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(16 * 60 * 1000); });
+  expect(screen.getByText("up.error.watch_expired")).toBeTruthy();
+  expect(screen.getByText("up.userFile.download")).toBeTruthy();
+});

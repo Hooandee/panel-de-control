@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({ getUpscalerUserFileCandidates: vi.fn(), addUpscalerUserFile: vi.fn() }));
 const ui = vi.hoisted(() => ({ Navigation: { NavigateToExternalWeb: vi.fn() } }));
+const journal = vi.hoisted(() => ({ recordUiEvent: vi.fn() }));
+vi.mock("../system/uiEvents", () => journal);
 vi.mock("../api", () => api);
 vi.mock("@decky/ui", () => ui);
 import { cancelUserFileWatch, downloadUserFile, onUserFileWatch, takePendingReinstall, watchingFor } from "./userFileWatch";
@@ -39,8 +41,12 @@ it("gives up after a while and can be cancelled", async () => {
   onUserFileWatch((event) => events.push(event.type));
   await downloadUserFile("2050650", file);
   await vi.advanceTimersByTimeAsync(16 * 60 * 1000);
-  expect(events).toEqual(["watching", "stopped"]);
+  // PDC-JXY8 (#1443): the card said «Downloading» until the wait ran out silently, and the journal had nothing.
+  expect(events).toEqual(["watching", "expired"]);
   expect(watchingFor("2050650", file.id)).toBe(false);
+  expect(journal.recordUiEvent.mock.calls.map(([area, action, fields, ok]) => [area, action, fields.event, ok])).toEqual([
+    ["upscalers", "file_watch", "watching", true], ["upscalers", "file_watch", "expired", false]]);
+  expect(JSON.stringify(journal.recordUiEvent.mock.calls)).not.toContain("/home/");
 });
 
 it("leaves nothing to reinstall when the game had no install yet", async () => {
