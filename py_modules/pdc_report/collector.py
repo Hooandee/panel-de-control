@@ -176,7 +176,7 @@ def tail_logs(
 
 _PLUGIN_LOAD_ERROR = re.compile(r"Error loading plugin\b", re.I)
 _PLUGIN_LOAD_EXCEPTION = re.compile(
-    r"Error loading plugin\s+.+?\s+\([^)\r\n]{1,80}\)\s+"
+    r"Error loading plugin\s+(?P<name>.+?)\s+\([^)\r\n]{1,80}\)\s+"
     r"(?P<error>TypeError|ReferenceError|SyntaxError|Error)\b",
     re.I,
 )
@@ -541,11 +541,13 @@ def frontend_crash_diagnostics(
                 plugin_load_error = True
             match = _PLUGIN_LOAD_EXCEPTION.search(raw_line)
             if match:
+                slug = re.sub(r"[^a-z0-9]", "", match.group("name").lower())
                 plugin = {
                     "error_type": _PLUGIN_ERROR_TYPES[match.group("error").lower()],
                     "source": source,
+                    "origin": _KNOWN_FRONTEND_ORIGINS.get(slug, "other_plugin"),
                 }
-                key = (plugin["error_type"], source)
+                key = (plugin["error_type"], source, plugin["origin"])
                 if (
                     key not in seen_plugins
                     and len(plugin_load_errors) < _MAX_FRONTEND_SIGNALS

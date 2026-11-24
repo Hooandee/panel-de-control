@@ -1,13 +1,25 @@
 type Surface = { doc: Document; surface: "main" | "qam" };
-type Operation = "installing" | "activating";
+type Operation = "installing" | "activating" | "deactivating";
 type RecordEvent = (area: string, action: string, detail: string, ok: boolean) => Promise<unknown>;
-type Begin = (operation: Operation) => (ok: boolean) => void;
+type Begin = (operation: Operation, theme?: string) => (ok: boolean) => void;
 type Mark = (phase: string, fields?: Record<string, unknown>, ok?: boolean) => void;
 
 let begin: Begin | undefined;
 
-export function beginThemeObservation(operation: Operation) {
-  return begin?.(operation);
+export function beginThemeObservation(operation: Operation, theme?: string) {
+  return begin?.(operation, theme);
+}
+
+const CSS_LOADER_STYLE = "style.css-loader-style";
+
+// Whether CSS Loader had injected anything when the user pressed again tells a theme that never
+// painted apart from one that painted and was then switched off.
+function cssLoaderStyles(doc: Document): number | null {
+  try {
+    return doc.querySelectorAll(CSS_LOADER_STYLE).length;
+  } catch {
+    return null;
+  }
 }
 
 type SubscribeQam = (handler: (doc: Document) => void) => () => void;
@@ -46,13 +58,13 @@ function watchDocuments(docs: Surface[], mark: Mark, subscribeQam?: SubscribeQam
       const frame = view.requestAnimationFrame(() => {
         if (rendered.has(surface)) return;
         rendered.add(surface);
-        mark("frame", { surface });
+        mark("frame", { surface, styles: cssLoaderStyles(doc) });
       });
       releases.push(() => view.cancelAnimationFrame(frame));
       const input = (event: Event) => {
         if (inputSeen || (!event.isTrusted && event.type !== "vgp_onbuttondown")) return;
         inputSeen = true;
-        mark("input", { surface, type: event.type });
+        mark("input", { surface, type: event.type, styles: cssLoaderStyles(doc) });
         try {
           const focus = doc.activeElement;
           const next = view.requestAnimationFrame(() => {
@@ -83,18 +95,23 @@ export function configureThemeInteractionJournal(
 ): () => void {
   let sequence = 0;
   let cancel: (() => void) | undefined;
-  const start: Begin = (operation) => {
+  const start: Begin = (operation, theme) => {
     cancel?.();
     const attempt = ++sequence;
     const started = performance.now();
     const mark: Mark = (phase, fields = {}, ok = true) => {
       try {
         const elapsedMs = Math.round(performance.now() - started);
-        const detail = JSON.stringify({ attempt, operation, phase, elapsedMs, ...fields });
+        const detail = JSON.stringify({ attempt, operation, ...(theme ? { theme } : {}), phase, elapsedMs, ...fields });
         void record("themes", "theme_interaction", detail, ok).catch(() => undefined);
       } catch {}
     };
-    mark("started");
+    let startStyles: number | null = null;
+    try {
+      const main = getDocuments().find((entry) => entry.surface === "main");
+      if (main) startStyles = cssLoaderStyles(main.doc);
+    } catch {}
+    mark("started", startStyles === null ? {} : { styles: startStyles });
     return (ok) => {
       if (attempt !== sequence) return;
       if (!ok) {
