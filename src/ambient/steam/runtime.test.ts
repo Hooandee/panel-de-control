@@ -859,6 +859,26 @@ describe("AmbientRuntime", () => {
     } finally { runtime.stop(); }
   });
 
+  it("hands a host the hashed hero Steam serves for the game and reports where it came from", async () => {
+    const hash = "35c4a38067592e934fbb389098eccb0d8a8de000";
+    Object.assign(globalThis, {
+      appStore: { GetAppOverviewByAppID: (id: number) => ({ appid: id }), GetCustomHeroImageURLs: () => [] },
+      appDetailsStore: { GetHeroImagesForAppId: () => ({ rgHeroImages: [`https://shared.steamstatic.com/store_item_assets/steam/apps/730/${hash}/library_hero.jpg?t=0`] }) },
+    });
+    const { channel, runtime } = hostGameArtFixture();
+    try {
+      await runtime.start();
+      await runtime.showMineOver([hostGameArt.themeId]);
+      await vi.waitFor(() => expect(channel.getState().media?.url).toBe(`https://steamloopback.host/assets/730/${hash}/library_hero.jpg`));
+      const reports = rpcMock.recordAmbientEvent.mock.calls.filter(([kind]) => kind === "game_art").map(([, detail]) => JSON.parse(detail));
+      expect(reports).toEqual([{ appid: 730, source: "hashed", store: true }]);
+    } finally {
+      delete (globalThis as { appStore?: unknown }).appStore;
+      delete (globalThis as { appDetailsStore?: unknown }).appDetailsStore;
+      runtime.stop();
+    }
+  });
+
   it.each([null, "yield", "unclaimed"] as const)("keeps native game art for a %s surface", async (mode) => {
     const { channel, runtime } = hostGameArtFixture(mode === "unclaimed" ? "host" : mode, mode === "unclaimed" ? ["library"] : ["home"]);
     try {

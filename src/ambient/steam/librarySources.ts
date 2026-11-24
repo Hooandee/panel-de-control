@@ -25,6 +25,46 @@ export function libraryHeroUrl(appid: number | string): string {
   return `https://steamloopback.host/assets/${appid}/library_hero.jpg`;
 }
 
+const LOOPBACK = "https://steamloopback.host";
+const HASHED_HERO = /\/apps\/(\d+)\/([0-9a-f]{40})\/library_hero\.jpg/;
+
+function loopbackArt(path: unknown): string | null {
+  if (typeof path !== "string") return null;
+  try {
+    const url = new URL(path, LOOPBACK);
+    return url.origin === LOOPBACK && /^\/(?:assets|customimages)\//.test(url.pathname) ? url.href : null;
+  } catch { return null; }
+}
+
+export type HeroSource = "custom" | "hashed" | "plain";
+
+/**
+ * The hero Steam itself shows for a game. Custom art wins; store games whose art lives under a content
+ * hash are not served at the plain `library_hero.jpg` path (404); shortcuts only have custom art.
+ */
+export function gameHero(appid: number | string): { url: string; source: HeroSource } {
+  try {
+    const id = Number(appid);
+    const g = globalThis as unknown as {
+      appStore?: { GetAppOverviewByAppID?(id: number): unknown; GetCustomHeroImageURLs?(overview: unknown): unknown };
+      appDetailsStore?: { GetHeroImagesForAppId?(id: number): { rgHeroImages?: unknown } | undefined };
+    };
+    const overview = g.appStore?.GetAppOverviewByAppID?.(id);
+    const custom = overview ? g.appStore?.GetCustomHeroImageURLs?.(overview) : null;
+    if (Array.isArray(custom)) for (const entry of custom) { const url = loopbackArt(entry); if (url) return { url, source: "custom" }; }
+    const heroes = g.appDetailsStore?.GetHeroImagesForAppId?.(id)?.rgHeroImages;
+    if (Array.isArray(heroes)) {
+      for (const entry of heroes) {
+        const hashed = typeof entry === "string" ? HASHED_HERO.exec(entry) : null;
+        if (hashed && hashed[1] === String(id)) return { url: `${LOOPBACK}/assets/${id}/${hashed[2]}/library_hero.jpg`, source: "hashed" };
+      }
+    }
+  } catch { /* Steam versions can omit these stores; the plain path still serves older art. */ }
+  return { url: libraryHeroUrl(appid), source: "plain" };
+}
+
+export const gameHeroUrl = (appid: number | string): string => gameHero(appid).url;
+
 const APP_ART = /\/(?:assets|customimages)\/(\d+)(?:[_/.p])/;
 
 /** The game a piece of Steam art belongs to (store assets, or a non-Steam shortcut's custom art). */
