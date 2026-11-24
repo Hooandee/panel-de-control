@@ -3,9 +3,71 @@
 ## [0.95.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.95.0...panel-de-control-v0.95.1) (2026-11-24)
 
 
-### Bug Fixes
+### Español
 
-* themes, Ambient, upscalers and TDP fixes from user reports ([#1492](https://github.com/Hooandee/panel-de-control/issues/1492)) ([56a7bd3](https://github.com/Hooandee/panel-de-control/commit/56a7bd339c3a74801908a9b0168e9e80f3ec680a))
+* **Monster Hunter Rise ya funciona con Escaladores:** OptiScaler se cargaba pero el juego nunca ofrecía DLSS, así que no escalaba nada. Ahora se instala como pide la guía de OptiScaler para este juego, con REFramework incluido, y en sus opciones gráficas aparece DLSS para elegirlo.
+* **Más juegos reciben el archivo que necesitan:** Cuando la guía de OptiScaler pide instalarlo con otro nombre de archivo, Panel de Control ahora le hace caso en todos los juegos. Antes lo ignoraba en casi todos y juegos como INDIKA, Persona 3 Reload o la trilogía de GTA podían cargar el escalador sin que hiciera nada.
+* **God of War Ragnarök ya no se rompe con el modo DLL:** Cambiar su librería de FSR hacía que el juego mostrara un error al arrancar. Ahora ese modo no se ofrece en este juego y se usa OptiScaler, que sí funciona.
+* **Activar un tema ya no lo desactiva al momento:** Al pulsar Activar tema, el botón pasaba a Desactivar tema y una segunda pulsación lo apagaba antes de verlo. Ahora muestra Tema activado unos segundos y no hace caso a esa segunda pulsación.
+* **Tus propios temas ya no salen como un problema:** La comprobación de temas marcaba los temas de CSS Loader que tú usas aunque no tuvieras activo ninguno de los nuestros, y Solucionar los apagaba. Ahora solo los señala si chocan con un tema nuestro activo.
+* **Los fondos de los juegos se ven en más juegos:** En los temas que pintan su propio fondo, algunos juegos y los accesos directos que no son de Steam se quedaban sin imagen. Ahora se usa la imagen real del juego, también la que hayas puesto tú.
+* **Eliges qué suena al seleccionar un juego:** En Ambiente puedes decidir si suena la banda sonora de Apple Music, el audio del tráiler, uno primero y el otro si no hay, o dejarlo como estaba.
+* **El TDP de la MSI Claw A8 con SteamOS vuelve a subir:** Se quedaba en unos 20 W aunque eligieras más. Ahora el límite que pones se aplica de verdad.
+
+### English
+
+* **Monster Hunter Rise now works with Upscalers:** OptiScaler loaded but the game never offered DLSS, so nothing was upscaled. It now installs the way the OptiScaler guide asks for this game, REFramework included, and DLSS shows up in its graphics options to pick.
+* **More games get the file they need:** When the OptiScaler guide asks for it to be installed under a different file name, Panel de Control now follows it in every game. Before, it ignored it in almost all of them, and games like INDIKA, Persona 3 Reload or the GTA trilogy could load the upscaler without it doing anything.
+* **God of War Ragnarök no longer breaks with DLL mode:** Swapping its FSR library made the game show an error at start. That mode is no longer offered for this game and OptiScaler is used instead, which works.
+* **Activating a theme no longer turns it off right away:** After pressing Activate theme, the button became Deactivate theme and a second press switched the theme off before you could see it. It now shows Theme activated for a few seconds and ignores that second press.
+* **Your own themes no longer show up as a problem:** The theme check flagged the CSS Loader themes you use even with none of ours on, and Fix switched them off. It now only points them out when they clash with one of our themes that is on.
+* **Game backgrounds show in more games:** In themes that draw their own background, some games and non-Steam shortcuts were left without an image. The game's real image is used now, including one you set yourself.
+* **You choose what plays when you select a game:** In Ambient you can pick the Apple Music soundtrack, the trailer audio, one first and the other when there is none, or keep it as it was.
+* **The MSI Claw A8 TDP on SteamOS goes up again:** It stayed around 20 W even when you picked more. The limit you set now really applies.
+
+### Italiano
+
+* **Monster Hunter Rise ora funziona con Upscaler:** OptiScaler si caricava ma il gioco non offriva mai DLSS, quindi non scalava nulla. Ora si installa come chiede la guida di OptiScaler per questo gioco, REFramework incluso, e nelle opzioni grafiche compare DLSS da scegliere.
+* **Più giochi ricevono il file di cui hanno bisogno:** Quando la guida di OptiScaler chiede di installarlo con un altro nome di file, Panel de Control ora la segue in tutti i giochi. Prima la ignorava in quasi tutti, e giochi come INDIKA, Persona 3 Reload o la trilogia di GTA potevano caricare l'upscaler senza che facesse nulla.
+* **God of War Ragnarök non si rompe più con la modalità DLL:** Cambiare la sua libreria FSR faceva comparire un errore all'avvio. Ora questa modalità non viene offerta per questo gioco e si usa OptiScaler, che funziona.
+* **Attivare un tema non lo disattiva più subito:** Dopo aver premuto Attiva tema, il pulsante diventava Disattiva tema e una seconda pressione spegneva il tema prima di vederlo. Ora mostra Tema attivato per qualche secondo e ignora quella seconda pressione.
+* **I tuoi temi non risultano più un problema:** Il controllo dei temi segnalava i temi di CSS Loader che usi anche senza nessuno dei nostri attivo, e Risolvi li spegneva. Ora li indica solo se si scontrano con un nostro tema attivo.
+* **Gli sfondi dei giochi si vedono in più giochi:** Nei temi che disegnano il proprio sfondo, alcuni giochi e i collegamenti non Steam restavano senza immagine. Ora si usa l'immagine vera del gioco, anche quella che hai messo tu.
+* **Scegli cosa suona quando selezioni un gioco:** In Atmosfera puoi scegliere la colonna sonora di Apple Music, l'audio del trailer, uno prima e l'altro se manca, oppure lasciarlo com'era.
+* **Il TDP della MSI Claw A8 con SteamOS torna a salire:** Restava intorno ai 20 W anche se ne sceglievi di più. Ora il limite che imposti si applica davvero.
+
+### Deutsch
+
+* **Monster Hunter Rise funktioniert jetzt mit Upscaler:** OptiScaler wurde geladen, aber das Spiel bot nie DLSS an, also wurde nichts hochskaliert. Jetzt wird es so installiert, wie die OptiScaler-Anleitung es für dieses Spiel verlangt, mit REFramework, und in den Grafikoptionen erscheint DLSS zur Auswahl.
+* **Mehr Spiele bekommen die Datei, die sie brauchen:** Wenn die OptiScaler-Anleitung einen anderen Dateinamen für die Installation verlangt, hält sich Panel de Control jetzt in jedem Spiel daran. Vorher wurde das fast überall ignoriert, und Spiele wie INDIKA, Persona 3 Reload oder die GTA-Trilogie konnten den Upscaler laden, ohne dass er etwas tat.
+* **God of War Ragnarök geht mit dem DLL-Modus nicht mehr kaputt:** Das Austauschen seiner FSR-Bibliothek ließ das Spiel beim Start einen Fehler zeigen. Dieser Modus wird für das Spiel nicht mehr angeboten, stattdessen läuft OptiScaler, das funktioniert.
+* **Ein Theme zu aktivieren schaltet es nicht mehr sofort aus:** Nach Theme aktivieren wurde der Knopf zu Theme deaktivieren, und ein zweiter Druck schaltete das Theme aus, bevor man es sah. Jetzt zeigt er ein paar Sekunden Theme aktiviert und ignoriert diesen zweiten Druck.
+* **Deine eigenen Themes gelten nicht mehr als Problem:** Die Theme-Prüfung markierte deine CSS-Loader-Themes, auch wenn keins von unseren aktiv war, und Beheben schaltete sie aus. Jetzt weist sie nur darauf hin, wenn sie mit einem aktiven Theme von uns kollidieren.
+* **Spielhintergründe erscheinen in mehr Spielen:** In Themes mit eigenem Hintergrund blieben manche Spiele und Nicht-Steam-Verknüpfungen ohne Bild. Jetzt wird das echte Bild des Spiels verwendet, auch eines, das du selbst gesetzt hast.
+* **Du wählst, was beim Auswählen eines Spiels läuft:** In Ambiente kannst du den Soundtrack von Apple Music, den Trailer-Ton, eins zuerst und das andere, wenn es fehlt, wählen oder alles lassen, wie es war.
+* **Die TDP der MSI Claw A8 unter SteamOS steigt wieder:** Sie blieb bei etwa 20 W, auch wenn du mehr eingestellt hast. Jetzt gilt das Limit, das du setzt, wirklich.
+
+### Português (Brasil)
+
+* **Monster Hunter Rise agora funciona com o Upscalers:** O OptiScaler carregava, mas o jogo nunca oferecia DLSS, então nada era escalado. Agora ele é instalado como o guia do OptiScaler pede para esse jogo, com o REFramework incluído, e o DLSS aparece nas opções gráficas para escolher.
+* **Mais jogos recebem o arquivo de que precisam:** Quando o guia do OptiScaler pede para instalar com outro nome de arquivo, o Panel de Control agora segue isso em todos os jogos. Antes ele ignorava em quase todos, e jogos como INDIKA, Persona 3 Reload ou a trilogia GTA podiam carregar o upscaler sem que ele fizesse nada.
+* **God of War Ragnarök não quebra mais com o modo DLL:** Trocar a biblioteca de FSR fazia o jogo mostrar um erro ao abrir. Agora esse modo não é oferecido nesse jogo e o OptiScaler é usado no lugar, que funciona.
+* **Ativar um tema não o desativa mais na hora:** Depois de apertar Ativar tema, o botão virava Desativar tema e um segundo toque desligava o tema antes de você ver. Agora ele mostra Tema ativado por alguns segundos e ignora esse segundo toque.
+* **Seus próprios temas não aparecem mais como problema:** A verificação de temas marcava os temas do CSS Loader que você usa mesmo sem nenhum dos nossos ativo, e Resolver os desligava. Agora só aponta quando eles batem com um tema nosso ativo.
+* **Os fundos dos jogos aparecem em mais jogos:** Nos temas que desenham o próprio fundo, alguns jogos e atalhos que não são da Steam ficavam sem imagem. Agora é usada a imagem real do jogo, inclusive a que você mesmo colocou.
+* **Você escolhe o que toca ao selecionar um jogo:** Em Ambiente você pode escolher a trilha do Apple Music, o áudio do trailer, um primeiro e o outro se não houver, ou deixar como estava.
+* **O TDP do MSI Claw A8 no SteamOS volta a subir:** Ficava em uns 20 W mesmo escolhendo mais. Agora o limite que você define é aplicado de verdade.
+
+### Français
+
+* **Monster Hunter Rise fonctionne maintenant avec Upscalers :** OptiScaler se chargeait mais le jeu ne proposait jamais DLSS, donc rien n'était mis à l'échelle. Il s'installe maintenant comme le demande le guide d'OptiScaler pour ce jeu, REFramework compris, et DLSS apparaît dans ses options graphiques.
+* **Plus de jeux reçoivent le fichier dont ils ont besoin :** Quand le guide d'OptiScaler demande de l'installer sous un autre nom de fichier, Panel de Control le suit maintenant dans tous les jeux. Avant, il l'ignorait presque partout, et des jeux comme INDIKA, Persona 3 Reload ou la trilogie GTA pouvaient charger l'upscaler sans qu'il fasse quoi que ce soit.
+* **God of War Ragnarök ne casse plus avec le mode DLL :** Remplacer sa bibliothèque FSR faisait afficher une erreur au lancement. Ce mode n'est plus proposé pour ce jeu et OptiScaler est utilisé à la place, ce qui fonctionne.
+* **Activer un thème ne le désactive plus aussitôt :** Après Activer le thème, le bouton devenait Désactiver le thème et un deuxième appui éteignait le thème avant qu'on le voie. Il affiche maintenant Thème activé quelques secondes et ignore ce deuxième appui.
+* **Vos propres thèmes ne sont plus signalés comme un problème :** La vérification des thèmes signalait les thèmes CSS Loader que vous utilisez même sans aucun des nôtres actif, et Corriger les éteignait. Elle ne les signale maintenant que s'ils entrent en conflit avec l'un de nos thèmes actifs.
+* **Les fonds des jeux s'affichent dans plus de jeux :** Dans les thèmes qui dessinent leur propre fond, certains jeux et les raccourcis hors Steam restaient sans image. La vraie image du jeu est maintenant utilisée, y compris celle que vous avez mise vous-même.
+* **Vous choisissez ce qui joue quand vous sélectionnez un jeu :** Dans Ambiance, vous pouvez choisir la bande-son Apple Music, le son de la bande-annonce, l'un d'abord et l'autre s'il n'y en a pas, ou garder le réglage d'avant.
+* **Le TDP du MSI Claw A8 sous SteamOS remonte :** Il restait vers 20 W même en choisissant plus. La limite que vous réglez s'applique maintenant vraiment.
 
 ## [0.95.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.3...panel-de-control-v0.95.0) (2026-11-23)
 
