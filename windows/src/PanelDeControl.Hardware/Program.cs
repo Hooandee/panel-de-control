@@ -110,7 +110,7 @@ public static class Program
             var upscalersServer = new UpscalersPipeServer(
                 UpscalersPipeServer.PackagedPipeName,
                 upscalerService,
-                PackageNamedPipeServerFactory.CreateControl);
+                PackageNamedPipeServerFactory.CreateConcurrentControl);
 
             using var reportHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
             var reportServer = new ReportPipeServer(

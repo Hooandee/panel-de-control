@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Pipes;
 using System.Text;
 using PanelDeControl.Core.Upscalers;
@@ -12,6 +13,8 @@ public sealed class UpscalersPipeServer
 {
     public const string PackagedPipeName = @"LOCAL\PanelDeControl.Upscalers";
 
+    private static readonly TimeSpan SlowRequest = TimeSpan.FromSeconds(1);
+
     private readonly string pipeName;
     private readonly IUpscalersController controller;
     private readonly Func<string, NamedPipeServerStream> pipeFactory;
@@ -25,23 +28,75 @@ public sealed class UpscalersPipeServer
 
     public async Task RunUntilCancelledAsync(CancellationToken cancellationToken)
     {
+        var serving = new HashSet<Task>();
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                await RunOnceAsync(cancellationToken).ConfigureAwait(false);
+                var server = await AcceptAsync(cancellationToken).ConfigureAwait(false);
+                var task = ServeGuardedAsync(server, cancellationToken);
+                lock (serving)
+                {
+                    serving.RemoveWhere(item => item.IsCompleted);
+                    serving.Add(task);
+                }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
+        finally
+        {
+            Task[] pending;
+            lock (serving)
+            {
+                pending = serving.ToArray();
+            }
+
+            await Task.WhenAll(pending).ConfigureAwait(false);
+        }
     }
 
     public async Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        await using var server = await PipeInstances.CreateAsync(pipeFactory, pipeName, cancellationToken).ConfigureAwait(false);
+        var server = await AcceptAsync(cancellationToken).ConfigureAwait(false);
+        await ServeAsync(server, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<NamedPipeServerStream> AcceptAsync(CancellationToken cancellationToken)
+    {
+        var server = await PipeInstances.CreateAsync(pipeFactory, pipeName, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+            return server;
+        }
+        catch
+        {
+            await server.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task ServeGuardedAsync(NamedPipeServerStream server, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ServeAsync(server, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            CompanionLog.Write("upscalers.serve", exception);
+        }
+    }
+
+    private async Task ServeAsync(NamedPipeServerStream server, CancellationToken cancellationToken)
+    {
+        await using var owned = server;
         using var clientRelease = PipeClientRelease.For(server);
-        await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
         using var reader = new StreamReader(server, new UTF8Encoding(false), false, 1024, leaveOpen: true);
         var writer = new StreamWriter(server, new UTF8Encoding(false), 4096, leaveOpen: true) { AutoFlush = true };
         try
@@ -67,7 +122,12 @@ public sealed class UpscalersPipeServer
             try
             {
                 var request = UpscalersWireCodec.DeserializeRequest(payload);
+                var watch = Stopwatch.StartNew();
                 response = await controller.HandleAsync(request, cancellationToken).ConfigureAwait(false);
+                if (watch.Elapsed > SlowRequest)
+                {
+                    CompanionLog.Write("upscalers.slow", $"{request.Operation} {watch.ElapsedMilliseconds}ms status={response.Status}");
+                }
             }
             catch (Exception exception) when (exception is InvalidDataException or ArgumentException or System.Runtime.Serialization.SerializationException)
             {

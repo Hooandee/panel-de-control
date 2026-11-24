@@ -280,7 +280,7 @@ public sealed class UpscalersView : UserControl
         }
     }
 
-    private async Task LoadOverviewAsync()
+    private async Task LoadOverviewAsync(bool reloadGame = true)
     {
         var response = await client.OverviewAsync();
         if (!Experimental)
@@ -320,7 +320,7 @@ public sealed class UpscalersView : UserControl
         }
 
         RenderGames();
-        if (selectedAppId is not null)
+        if (selectedAppId is not null && reloadGame)
         {
             await LoadGameAsync();
         }
@@ -633,7 +633,7 @@ public sealed class UpscalersView : UserControl
 
         if (detail.Install is { Status: UpscalerGameStates.Installed, Build.Length: 0 })
         {
-            return Localized("UpscalersStateInstalledUnknown");
+            return string.Empty;
         }
 
         if (detail.Foreign is not null || summary?.State == UpscalerGameStates.Foreign)
@@ -672,7 +672,7 @@ public sealed class UpscalersView : UserControl
                 title = !string.IsNullOrEmpty(installed.Label)
                     ? string.Format(Localized("UpscalersStatusInstalled"), installed.Label)
                     : Localized(installed.Build.Length == 0 ? "UpscalersStateInstalledUnknown" : "UpscalersStateInstalled");
-                sub = resultText.Text.Length == 0 ? Localized("UpscalersStatusPending") : string.Empty;
+                sub = resultText.Text.Length == 0 && installed.Build.Length != 0 ? Localized("UpscalersStatusPending") : string.Empty;
             }
         }
         else if (detail.Foreign is not null || detail.Game.State == UpscalerGameStates.Foreign)
@@ -838,6 +838,7 @@ public sealed class UpscalersView : UserControl
 
         selectedBuild = option.Build.Id;
         selectedModel = option.Model;
+        ClearResult();
         UpdateActionState();
     }
 
@@ -849,6 +850,7 @@ public sealed class UpscalersView : UserControl
         }
 
         selectedQuality = quality;
+        ClearResult();
         UpdateActionState();
     }
 
@@ -890,9 +892,13 @@ public sealed class UpscalersView : UserControl
         {
             var summary = detail.Game;
             var installed = detail.Install is not null;
-            actionButton.Content = installed
-                ? string.Format(Localized("UpscalersDeactivate"), !string.IsNullOrEmpty(detail.Install!.Label) ? detail.Install.Label : Localized(detail.Install.Build.Length == 0 ? "UpscalersStateInstalledUnknown" : "UpscalersStateInstalled"))
-                : string.Format(Localized("UpscalersActivate"), SelectedBadge());
+            actionButton.Content = loadingGame
+                ? Localized("UpscalersLoading")
+                : installed
+                    ? detail.Install!.Build.Length == 0
+                        ? Localized("UpscalersDeactivatePlain")
+                        : string.Format(Localized("UpscalersDeactivate"), !string.IsNullOrEmpty(detail.Install.Label) ? detail.Install.Label : Localized("UpscalersStateInstalled"))
+                    : string.Format(Localized("UpscalersActivate"), SelectedBadge());
             actionButton.Background = installed ? Resource<Brush>("PdcLayerBrush") : AccentFill();
             if (summary.Running == true)
             {
@@ -1031,13 +1037,26 @@ public sealed class UpscalersView : UserControl
     {
         var kind = jobKind;
         var appId = jobAppId;
-        HideProgress();
         var message = job is null
             ? Localized("UpscalersUnconfirmed")
             : job.State == UpscalerJobStates.Error ? ErrorMessage(job.Error) : string.Empty;
         var good = false;
+        if (job is { State: UpscalerJobStates.Done })
+        {
+            statusTitle.Text = kind == "install"
+                ? string.Format(Localized("UpscalersStatusInstalled"), SelectedBadge())
+                : Localized("UpscalersStatusNone");
+            statusSub.Text = string.Empty;
+        }
+
+        ShowLoadingRow();
+        if (selectedAppId == appId)
+        {
+            await LoadGameAsync();
+        }
+
         jobRunning = false;
-        await LoadOverviewAsync();
+        HideProgress();
         if (job is { State: UpscalerJobStates.Done })
         {
             var confirmed = detail is not null && selectedAppId == appId;
@@ -1063,6 +1082,46 @@ public sealed class UpscalersView : UserControl
         ShowResult(message, good);
         RenderStatus();
         UpdateActionState();
+        _ = RefreshOverviewQuietlyAsync();
+    }
+
+    private async Task RefreshOverviewQuietlyAsync()
+    {
+        if (refreshing)
+        {
+            return;
+        }
+
+        refreshing = true;
+        try
+        {
+            await LoadOverviewAsync(reloadGame: false);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            refreshing = false;
+        }
+    }
+
+    private void ShowLoadingRow()
+    {
+        progressText.Text = Localized("UpscalersLoading");
+        progressPanel.Visibility = Visibility.Visible;
+        progressBar.IsIndeterminate = true;
+    }
+
+    private void ClearResult()
+    {
+        if (resultText.Text.Length == 0)
+        {
+            return;
+        }
+
+        ShowResult(string.Empty, true);
+        RenderStatus();
     }
 
     private void ShowResult(string text, bool good)

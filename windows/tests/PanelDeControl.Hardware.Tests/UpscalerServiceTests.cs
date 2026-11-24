@@ -588,6 +588,60 @@ public sealed class UpscalerServiceTests : IDisposable
         Assert.Equal((UpscalersResponseStatus.Rejected, "invalid_upscalers_request"), (bad.Status, bad.ErrorCode));
     }
 
+    [Fact]
+    public async Task ASlowRequestDoesNotBlockOtherConnections()
+    {
+        var pipeName = "pc-" + Guid.NewGuid().ToString("N")[..12];
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var controller = new GatedController(release.Task);
+        var server = new UpscalersPipeServer(pipeName, controller, name => new NamedPipeServerStream(
+            name, PipeDirection.InOut, 4, PipeTransmissionMode.Byte, PipeOptions.Asynchronous));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var serving = server.RunUntilCancelledAsync(timeout.Token);
+
+        var slow = SendAsync(pipeName, UpscalersWireCodec.SerializeRequest(UpscalersRequest.Overview()), timeout.Token);
+        await controller.OverviewStarted.Task.WaitAsync(timeout.Token);
+        var fast = await SendAsync(pipeName, UpscalersWireCodec.SerializeRequest(UpscalersRequest.Job()), timeout.Token);
+
+        Assert.Equal(UpscalersResponseStatus.Ok, fast.Status);
+        Assert.False(slow.IsCompleted);
+        release.SetResult();
+        Assert.Equal(UpscalersResponseStatus.Ok, (await slow).Status);
+        timeout.Cancel();
+        await serving;
+    }
+
+    private static async Task<UpscalersResponse> SendAsync(string name, string payload, CancellationToken token)
+    {
+        await using var client = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await client.ConnectAsync(token);
+        using var reader = new StreamReader(client, new UTF8Encoding(false), false, 256, leaveOpen: true);
+        await using var writer = new StreamWriter(client, new UTF8Encoding(false), 256, leaveOpen: true) { AutoFlush = true };
+        await writer.WriteLineAsync(payload);
+        var line = await reader.ReadLineAsync(token);
+        return UpscalersWireCodec.DeserializeResponse(line!);
+    }
+
+    private sealed class GatedController : IUpscalersController
+    {
+        private readonly Task gate;
+
+        public GatedController(Task gate) => this.gate = gate;
+
+        public TaskCompletionSource OverviewStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<UpscalersResponse> HandleAsync(UpscalersRequest request, CancellationToken cancellationToken)
+        {
+            if (request.Operation == UpscalersOperation.Overview)
+            {
+                OverviewStarted.TrySetResult();
+                await gate.WaitAsync(cancellationToken);
+            }
+
+            return new UpscalersResponse { Status = UpscalersResponseStatus.Ok };
+        }
+    }
+
     private static async Task<UpscalersResponse> ExchangeAsync(UpscalersPipeServer server, string name, string payload, CancellationToken token)
     {
         var serving = server.RunOnceAsync(token);

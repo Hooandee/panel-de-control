@@ -542,4 +542,5 @@
   <data name="UpscalersModel_full" xml:space="preserve"><value>Vollständig</value></data>
   <data name="UpscalersActivate" xml:space="preserve"><value>{0} aktivieren</value></data>
   <data name="UpscalersDeactivate" xml:space="preserve"><value>{0} deaktivieren</value></data>
+  <data name="UpscalersDeactivatePlain" xml:space="preserve"><value>Deaktivieren</value></data>
 </root>
