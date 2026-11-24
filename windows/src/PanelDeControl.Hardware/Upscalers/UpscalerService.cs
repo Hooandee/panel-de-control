@@ -38,6 +38,8 @@ public sealed class UpscalerService : IUpscalersController
     private readonly Lazy<string?> device;
     private readonly Func<Func<Task>, Task> start;
     private readonly Func<byte[], int, ScaledCover?> scaleCover;
+    private readonly ISteamLaunchOptions? launchOptions;
+    private readonly Func<string?> vcRuntime;
     private readonly Dictionary<string, (double Until, UpscalerCover? Cover)> covers = new(StringComparer.Ordinal);
     private readonly object coverLock = new();
 
@@ -54,7 +56,9 @@ public sealed class UpscalerService : IUpscalersController
         Func<double>? clock = null,
         Action<string, string>? log = null,
         Func<Func<Task>, Task>? start = null,
-        Func<byte[], int, ScaledCover?>? scaleCover = null)
+        Func<byte[], int, ScaledCover?>? scaleCover = null,
+        ISteamLaunchOptions? launchOptions = null,
+        Func<string?>? vcRuntime = null)
     {
         this.data = data;
         this.store = store;
@@ -68,6 +72,8 @@ public sealed class UpscalerService : IUpscalersController
         this.log = log ?? ((step, detail) => CompanionLog.Write(step, detail));
         this.start = start ?? (job => Task.Run(job));
         this.scaleCover = scaleCover ?? CoverImages.Scale;
+        this.launchOptions = launchOptions;
+        this.vcRuntime = vcRuntime ?? (() => null);
         gpu = new Lazy<GpuFamilyResult>(() => this.readGpu());
         device = new Lazy<string?>(() => this.readDevice());
     }
@@ -253,6 +259,8 @@ public sealed class UpscalerService : IUpscalersController
                     Installable = recipe.Dependencies.Count == 0 && recipe.Configuration.Count == 0,
                     Revision = recipe.Revision,
                     RecommendedBuild = recipe.RecommendedBuild,
+                    Dependencies = Dependencies(recipe),
+                    Args = recipe.Args.Count > 0 ? recipe.Args.ToArray() : null,
                 },
             Preferred = UpscalerPlanner.PreferredBuild(data.Catalog, generation, recipe?.RecommendedBuild),
             Builds = builds,
@@ -356,6 +364,7 @@ public sealed class UpscalerService : IUpscalersController
                     folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder)),
                     progress,
                     CancellationToken.None).ConfigureAwait(false);
+            install.AddedArgs = previous?.Install.AddedArgs ?? Array.Empty<string>();
             try
             {
                 var installedAt = clock();
@@ -374,6 +383,8 @@ public sealed class UpscalerService : IUpscalersController
                 throw new UpscalerException("install_unverified");
             }
 
+            jobs.Stage("launch");
+            await ApplyLaunchArgsAsync(appId, install).ConfigureAwait(false);
             Record(appId, "install", "done", install.Build, null);
             jobs.Finish();
         }
@@ -383,7 +394,7 @@ public sealed class UpscalerService : IUpscalersController
         }
     }
 
-    private Task RunUninstallAsync(string appId, StoredUpscaler stored)
+    private async Task RunUninstallAsync(string appId, StoredUpscaler stored)
     {
         Record(appId, "uninstall", "started", stored.Install.Build, null);
         try
@@ -395,6 +406,11 @@ public sealed class UpscalerService : IUpscalersController
                 throw new UpscalerException("files_kept", kept.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
             }
 
+            if (stored.Install.AddedArgs.Count > 0 && !await RevertLaunchArgsAsync(appId, stored.Install.AddedArgs).ConfigureAwait(false))
+            {
+                Record(appId, "launch", "error", stored.Install.Build, "launch_args_kept");
+            }
+
             store.ClearInstall(appId);
             Record(appId, "uninstall", "done", stored.Install.Build, null);
             jobs.Finish();
@@ -403,8 +419,103 @@ public sealed class UpscalerService : IUpscalersController
         {
             Fail(appId, "uninstall", stored.Install.Build, exception);
         }
+    }
 
-        return Task.CompletedTask;
+    /// <summary>
+    /// Puts the recipe's arguments in Steam's launch options, keeping whatever the user wrote, and remembers which ones
+    /// Panel added. The install stands either way: without Steam's debugging port the game page says what to add by hand.
+    /// </summary>
+    private async Task ApplyLaunchArgsAsync(string appId, InstalledUpscaler install)
+    {
+        if ((install.Args.Count == 0 && install.AddedArgs.Count == 0) || launchOptions is null || !long.TryParse(appId, out var id))
+        {
+            return;
+        }
+
+        var read = await launchOptions.ReadAsync(id, CancellationToken.None).ConfigureAwait(false);
+        if (!read.Succeeded)
+        {
+            log("upscalers.launch", $"{appId} read {read.Outcome} {read.Reason}");
+            return;
+        }
+
+        var current = read.Value ?? "";
+        var plan = LaunchOptionsComposer.Replace(current, install.AddedArgs, install.Args);
+        if (plan is null)
+        {
+            log("upscalers.launch", $"{appId} ambiguous");
+            return;
+        }
+
+        var installedAt = store.Install(appId)?.InstalledAt ?? clock();
+        if (plan.Value != current)
+        {
+            var before = install.AddedArgs;
+            // Saved before Steam is touched: if the companion dies mid-write, a later removal still takes them out.
+            install.AddedArgs = before.Union(plan.Added, StringComparer.Ordinal).ToList();
+            store.SetInstall(appId, install, installedAt);
+            var written = await launchOptions.WriteAsync(id, plan.Value, false, CancellationToken.None).ConfigureAwait(false);
+            if (written.Outcome != SteamLaunchOptionsOutcome.Written)
+            {
+                log("upscalers.launch", $"{appId} write {written.Outcome} {written.Reason}");
+                install.AddedArgs = before;
+                store.SetInstall(appId, install, installedAt);
+                return;
+            }
+        }
+
+        install.AddedArgs = plan.Added;
+        store.SetInstall(appId, install, installedAt);
+        WriteRecord(install, installedAt);
+    }
+
+    private async Task<bool> RevertLaunchArgsAsync(string appId, IReadOnlyList<string> added)
+    {
+        if (launchOptions is null || !long.TryParse(appId, out var id))
+        {
+            return false;
+        }
+
+        var read = await launchOptions.ReadAsync(id, CancellationToken.None).ConfigureAwait(false);
+        var current = read.Value ?? "";
+        if (!read.Succeeded || LaunchOptionsComposer.Revert(current, added) is not { } value)
+        {
+            return false;
+        }
+
+        return value == current
+            || (await launchOptions.WriteAsync(id, value, false, CancellationToken.None).ConfigureAwait(false)).Outcome == SteamLaunchOptionsOutcome.Written;
+    }
+
+    private UpscalerDependencyStatus[]? Dependencies(GameRecipe recipe)
+    {
+        if (recipe.Dependencies.Count == 0 || data.Recipes is null)
+        {
+            return null;
+        }
+
+        var plan = RecipeDependencyPlan.Build(data.Recipes, recipe, component => component == "vc14_x64" ? vcRuntime() : null);
+        var entries = plan.Entries
+            .Where(entry => entry.Outcome != DependencyOutcome.NotApplicable)
+            .Select(entry => new UpscalerDependencyStatus
+            {
+                Id = entry.Id,
+                Kind = entry.Kind,
+                State = entry.Outcome switch
+                {
+                    DependencyOutcome.InstallFromAsset => "install",
+                    DependencyOutcome.RedistSatisfied => "satisfied",
+                    DependencyOutcome.RedistMissing => "missing",
+                    DependencyOutcome.RedistOutdated => "outdated",
+                    _ => "user_file",
+                },
+                Name = entry.Name,
+                Installed = entry.InstalledVersion,
+                Required = entry.RequiredVersion,
+                Url = entry.Url,
+            })
+            .ToArray();
+        return entries.Length > 0 ? entries : null;
     }
 
     private void Fail(string appId, string action, string build, Exception exception)
@@ -549,6 +660,8 @@ public sealed class UpscalerService : IUpscalersController
             InstalledAt = (long)stored.InstalledAt,
             Status = ManifestCheck.Presence(install.Target).Installed ? UpscalerGameStates.Installed : UpscalerGameStates.Missing,
             Label = UpscalerLabel.Badge(data.Catalog.Build(install.Build), install.Options.Model),
+            AddedArgs = install.AddedArgs.Count > 0 ? install.AddedArgs.ToArray() : null,
+            MissingArgs = install.Args.Except(install.AddedArgs, StringComparer.Ordinal).ToArray() is { Length: > 0 } missing ? missing : null,
         };
     }
 

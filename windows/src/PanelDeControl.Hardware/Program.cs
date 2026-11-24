@@ -105,7 +105,9 @@ public static class Program
                 new SteamGames(PhysicalFileSystem.Instance, steamRootList),
                 runningImages,
                 () => GpuFamilyReader.Read(upscalerData.GpuRules),
-                () => upscalerIdentity.Read().Profile?.Key);
+                () => upscalerIdentity.Read().Profile?.Key,
+                launchOptions: new SteamLaunchOptions(steamDevTools),
+                vcRuntime: new VcRuntimeProbe().InstalledVersion);
             _ = Task.Run(() => upscalerService.Gpu);
             var upscalersServer = new UpscalersPipeServer(
                 UpscalersPipeServer.PackagedPipeName,

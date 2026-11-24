@@ -227,6 +227,39 @@ public sealed class UpscalerRecipeStatus
 
     [DataMember(Name = "recommended_build", Order = 4, EmitDefaultValue = false)]
     public string? RecommendedBuild { get; set; }
+
+    /// <summary>What Windows does with each of the recipe's dependencies; warnings never block an install.</summary>
+    [DataMember(Name = "dependencies", Order = 5, EmitDefaultValue = false)]
+    public UpscalerDependencyStatus[]? Dependencies { get; set; }
+
+    [DataMember(Name = "args", Order = 6, EmitDefaultValue = false)]
+    public string[]? Args { get; set; }
+}
+
+[DataContract]
+public sealed class UpscalerDependencyStatus
+{
+    [DataMember(Name = "id", Order = 1, IsRequired = true)]
+    public string Id { get; set; } = "";
+
+    [DataMember(Name = "kind", Order = 2, IsRequired = true)]
+    public string Kind { get; set; } = "";
+
+    /// <summary><c>install</c>, <c>satisfied</c>, <c>missing</c>, <c>outdated</c>, <c>not_applicable</c> or <c>user_file</c>.</summary>
+    [DataMember(Name = "state", Order = 3, IsRequired = true)]
+    public string State { get; set; } = "";
+
+    [DataMember(Name = "name", Order = 4, EmitDefaultValue = false)]
+    public string? Name { get; set; }
+
+    [DataMember(Name = "installed", Order = 5, EmitDefaultValue = false)]
+    public string? Installed { get; set; }
+
+    [DataMember(Name = "required", Order = 6, EmitDefaultValue = false)]
+    public string? Required { get; set; }
+
+    [DataMember(Name = "url", Order = 7, EmitDefaultValue = false)]
+    public string? Url { get; set; }
 }
 
 [DataContract]
@@ -285,6 +318,14 @@ public sealed class UpscalerInstallEntry
 
     [DataMember(Name = "label", Order = 9, EmitDefaultValue = false)]
     public string? Label { get; set; }
+
+    /// <summary>Panel's arguments in Steam's launch options.</summary>
+    [DataMember(Name = "added_args", Order = 10, EmitDefaultValue = false)]
+    public string[]? AddedArgs { get; set; }
+
+    /// <summary>Arguments the recipe needs that Panel could not put in Steam (Steam closed or without debugging).</summary>
+    [DataMember(Name = "missing_args", Order = 11, EmitDefaultValue = false)]
+    public string[]? MissingArgs { get; set; }
 }
 
 [DataContract]

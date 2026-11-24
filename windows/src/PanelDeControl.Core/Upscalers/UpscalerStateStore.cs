@@ -322,12 +322,17 @@ public sealed class UpscalerStateStore
             DllTargets = install.Get("dll_targets") is DataArray targets
                 ? targets.Items.OfType<DataString>().Select(item => item.Value).ToList()
                 : new List<string>(),
+            Args = Strings(install.Get("args")),
+            AddedArgs = Strings(install.Get("added_args")),
             Managed = managed,
             Components = components,
         };
         var at = install.Get("installed_at") is DataNumber number ? number.Real : 0;
         return new StoredUpscaler(installed, at);
     }
+
+    private static IReadOnlyList<string> Strings(DataValue? value) =>
+        value is DataArray list ? list.Items.OfType<DataString>().Select(item => item.Value).ToList() : new List<string>();
 
     internal static DataValue WriteInstall(StoredUpscaler stored)
     {
@@ -357,6 +362,8 @@ public sealed class UpscalerStateStore
             })).ToList())),
             Member("managed", new DataArray(install.Managed.Select(key => (DataValue)new DataString(key)).ToList())),
             Member("dll_targets", new DataArray(install.DllTargets.Select(path => (DataValue)new DataString(path)).ToList())),
+            Member("args", new DataArray(install.Args.Select(arg => (DataValue)new DataString(arg)).ToList())),
+            Member("added_args", new DataArray(install.AddedArgs.Select(arg => (DataValue)new DataString(arg)).ToList())),
         });
     }
 

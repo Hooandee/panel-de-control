@@ -24,6 +24,12 @@ public sealed class InstalledUpscaler
     /// <summary>The game libraries the DLL mode swapped, relative to <see cref="Target"/>.</summary>
     public IReadOnlyList<string> DllTargets { get; set; } = Array.Empty<string>();
 
+    /// <summary>Launch arguments the game's recipe asks for on Windows.</summary>
+    public IReadOnlyList<string> Args { get; set; } = Array.Empty<string>();
+
+    /// <summary>The arguments Panel itself added to Steam's launch options, and only those come out on removal.</summary>
+    public IReadOnlyList<string> AddedArgs { get; set; } = Array.Empty<string>();
+
     /// <summary>OptiScaler.ini keys Panel owns, sorted as Linux stores them.</summary>
     public IReadOnlyList<string> Managed { get; set; } = Array.Empty<string>();
 
@@ -171,6 +177,7 @@ public sealed class OptiScalerInstaller
             Exe = analysis.Exe,
             Options = Clean(request.Choice),
             FrameGenRoute = frameGen?.Route,
+            Args = recipe?.Args ?? Array.Empty<string>(),
             Managed = panel.Select(pair => pair.Key).OrderBy(key => key, StringComparer.Ordinal).ToList(),
             Components = assets.Select(asset => new KeyValuePair<string, string>(asset.Id, asset.Sha256)).ToList(),
             Files = manifest.Files.Count,
