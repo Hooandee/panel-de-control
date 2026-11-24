@@ -470,4 +470,61 @@
   <data name="SteamHomeButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Aller à l'accueil de Steam</value>
   </data>
+  <data name="BlockUpscalersTitle" xml:space="preserve"><value>Upscalers</value></data>
+  <data name="BlockUpscalersDesc" xml:space="preserve"><value>FSR, XeSS et génération d'images dans vos jeux Steam (expérimental).</value></data>
+  <data name="UpscalersTitle" xml:space="preserve"><value>Upscalers</value></data>
+  <data name="UpscalersExperimentalName" xml:space="preserve"><value>Activer les upscalers expérimentaux</value></data>
+  <data name="UpscalersExperimentalHelp" xml:space="preserve"><value>Expérimental : modifie des fichiers de vos jeux. Désactivé par défaut.</value></data>
+  <data name="UpscalersIntro" xml:space="preserve"><value>Ajoutez FSR, XeSS et la génération d'images à vos jeux Steam. Expérimental.</value></data>
+  <data name="UpscalersLoading" xml:space="preserve"><value>Chargement…</value></data>
+  <data name="UpscalersGpu" xml:space="preserve"><value>GPU : {0}</value></data>
+  <data name="UpscalersGpuUnknown" xml:space="preserve"><value>non détectée</value></data>
+  <data name="UpscalersNoSteam" xml:space="preserve"><value>Steam est introuvable.</value></data>
+  <data name="UpscalersNoGames" xml:space="preserve"><value>Aucun jeu installé.</value></data>
+  <data name="UpscalersStateInstalled" xml:space="preserve"><value>Installé</value></data>
+  <data name="UpscalersStateInstalledBuild" xml:space="preserve"><value>Installé · {0}</value></data>
+  <data name="UpscalersStateMissing" xml:space="preserve"><value>Fichiers introuvables</value></data>
+  <data name="UpscalersStateForeign" xml:space="preserve"><value>Autre upscaler détecté</value></data>
+  <data name="UpscalersStateRunning" xml:space="preserve"><value>En cours</value></data>
+  <data name="UpscalersStateUpdating" xml:space="preserve"><value>Mise à jour en cours</value></data>
+  <data name="UpscalersRecipeNone" xml:space="preserve"><value>Aucune recette spécifique pour ce jeu.</value></data>
+  <data name="UpscalersRecipeVerified" xml:space="preserve"><value>Recette vérifiée pour Windows.</value></data>
+  <data name="UpscalersRecipeExperimental" xml:space="preserve"><value>Recette expérimentale pour Windows.</value></data>
+  <data name="UpscalersRecipeUnsupported" xml:space="preserve"><value>Ce jeu nécessite des réglages que Windows ne sait pas encore appliquer.</value></data>
+  <data name="UpscalersInstalledInfo" xml:space="preserve"><value>Installé : {0}</value></data>
+  <data name="UpscalersBuildLabel" xml:space="preserve"><value>Version</value></data>
+  <data name="UpscalersQualityLabel" xml:space="preserve"><value>Qualité d'image</value></data>
+  <data name="UpscalersQuality_native" xml:space="preserve"><value>Natif</value></data>
+  <data name="UpscalersQuality_quality" xml:space="preserve"><value>Qualité</value></data>
+  <data name="UpscalersQuality_balanced" xml:space="preserve"><value>Équilibré</value></data>
+  <data name="UpscalersQuality_performance" xml:space="preserve"><value>Performance</value></data>
+  <data name="UpscalersMegabytes" xml:space="preserve"><value>{0} Mo</value></data>
+  <data name="UpscalersRecommended" xml:space="preserve"><value>Recommandée</value></data>
+  <data name="UpscalersInstall" xml:space="preserve"><value>Installer</value></data>
+  <data name="UpscalersRemove" xml:space="preserve"><value>Retirer</value></data>
+  <data name="UpscalersProgressPrepare" xml:space="preserve"><value>Préparation…</value></data>
+  <data name="UpscalersProgressDownloadStart" xml:space="preserve"><value>Téléchargement…</value></data>
+  <data name="UpscalersProgressDownload" xml:space="preserve"><value>Téléchargement · {0} / {1} Mo</value></data>
+  <data name="UpscalersProgressInstall" xml:space="preserve"><value>Installation…</value></data>
+  <data name="UpscalersProgressRestore" xml:space="preserve"><value>Restauration des fichiers d'origine…</value></data>
+  <data name="UpscalersInstalledOk" xml:space="preserve"><value>Installé : {0}</value></data>
+  <data name="UpscalersRemovedOk" xml:space="preserve"><value>Retiré. Les fichiers d'origine sont restaurés.</value></data>
+  <data name="UpscalersUnconfirmed" xml:space="preserve"><value>Impossible de confirmer le résultat. Rouvrez le panneau.</value></data>
+  <data name="UpscalersErrRunning" xml:space="preserve"><value>Fermez d'abord le jeu.</value></data>
+  <data name="UpscalersErrUpdating" xml:space="preserve"><value>Steam met le jeu à jour. Attendez la fin.</value></data>
+  <data name="UpscalersErrUpdatePending" xml:space="preserve"><value>Le jeu a une mise à jour Steam en attente. Terminez-la d'abord.</value></data>
+  <data name="UpscalersErrBusy" xml:space="preserve"><value>Une autre opération est déjà en cours.</value></data>
+  <data name="UpscalersErrAntiCheat" xml:space="preserve"><value>Ce jeu utilise un anti-cheat : il ne peut pas être modifié.</value></data>
+  <data name="UpscalersErrProtectedFolder" xml:space="preserve"><value>Le dossier du jeu est protégé. Il ne peut pas être modifié.</value></data>
+  <data name="UpscalersErrForeign" xml:space="preserve"><value>Le jeu a déjà un upscaler d'un autre outil. Il reste intact.</value></data>
+  <data name="UpscalersErrRecipeUnsupported" xml:space="preserve"><value>Ce jeu nécessite des réglages que Windows ne sait pas encore appliquer.</value></data>
+  <data name="UpscalersErrExperimentalRequired" xml:space="preserve"><value>Activez l'option expérimentale pour installer ou retirer.</value></data>
+  <data name="UpscalersErrDownload" xml:space="preserve"><value>Impossible de télécharger ou vérifier le fichier. Vérifiez votre connexion et réessayez.</value></data>
+  <data name="UpscalersErrNoSpace" xml:space="preserve"><value>Espace disque insuffisant.</value></data>
+  <data name="UpscalersErrInstallUnverified" xml:space="preserve"><value>L'installation n'a pas pu être vérifiée. Retirez-la puis réinstallez.</value></data>
+  <data name="UpscalersErrFilesKept" xml:space="preserve"><value>Certains fichiers ont été conservés car ils ont changé depuis l'installation.</value></data>
+  <data name="UpscalersErrNoExe" xml:space="preserve"><value>L'exécutable du jeu est introuvable.</value></data>
+  <data name="UpscalersErrNoBuilds" xml:space="preserve"><value>Aucune version disponible pour votre GPU.</value></data>
+  <data name="UpscalersErrCompanion" xml:space="preserve"><value>Impossible de joindre le service Panel de Control.</value></data>
+  <data name="UpscalersErrGeneric" xml:space="preserve"><value>L'opération n'a pas pu être terminée.</value></data>
 </root>
