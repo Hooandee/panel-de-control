@@ -527,4 +527,10 @@
   <data name="UpscalersErrNoBuilds" xml:space="preserve"><value>Keine Versionen für deine GPU verfügbar.</value></data>
   <data name="UpscalersErrCompanion" xml:space="preserve"><value>Der Panel-de-Control-Dienst ist nicht erreichbar.</value></data>
   <data name="UpscalersErrGeneric" xml:space="preserve"><value>Der Vorgang konnte nicht abgeschlossen werden.</value></data>
+  <data name="NavUpscalers" xml:space="preserve">
+    <value>Upscaler</value>
+  </data>
+  <data name="NavUpscalersDesc" xml:space="preserve">
+    <value>Schärferes Bild und mehr FPS in deinen Spielen</value>
+  </data>
 </root>

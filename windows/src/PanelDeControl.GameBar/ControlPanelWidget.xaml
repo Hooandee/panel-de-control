@@ -610,7 +610,7 @@
 
             <ContentControl
                 x:Name="UpscalersHost"
-                Tag="themes.upscalers"
+                Tag="upscalers.games"
                 HorizontalContentAlignment="Stretch"
                 IsTabStop="False" />
 

@@ -105,6 +105,10 @@ public static class SectionCatalog
         {
             new BlockDefinition("launchOptions", "BlockLaunchOptions", ""),
         }),
+        new SectionDefinition("upscalers", "Upscalers", 0xFFB0533F, "", new[]
+        {
+            new BlockDefinition("games", "BlockUpscalers", "", implementedOnWindows: true),
+        }),
         new SectionDefinition("cleaner", "Cleaner", 0xFF507E86, "", new[]
         {
             new BlockDefinition("steamCache", "BlockSteamCache", ""),
@@ -113,7 +117,6 @@ public static class SectionCatalog
         {
             new BlockDefinition("library", "BlockThemeLibrary", "", implementedOnWindows: true),
             new BlockDefinition("accent", "BlockAccent", "", implementedOnWindows: true),
-            new BlockDefinition("upscalers", "BlockUpscalers", "", implementedOnWindows: true),
         }),
         new SectionDefinition("settings", "Settings", 0xFF626B73, "", new[]
         {

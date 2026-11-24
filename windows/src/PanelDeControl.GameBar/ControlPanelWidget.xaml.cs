@@ -429,8 +429,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private Task RefreshThemesWhenShownAsync()
     {
-        var shown = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
-        return shown ? Task.WhenAll(themesView.RefreshAsync(), upscalersView.RefreshAsync()) : Task.CompletedTask;
+        var shown = sections.Count > selectedSection ? sections[selectedSection].Definition.Id : null;
+        return shown switch
+        {
+            "themes" => themesView.RefreshAsync(),
+            "upscalers" => upscalersView.RefreshAsync(),
+            _ => Task.CompletedTask,
+        };
     }
 
     private async Task ApplySnapshotWhenReadyAsync(
@@ -1646,11 +1651,15 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void SelectSection(int index)
     {
-        var wasThemes = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
+        var previous = sections.Count > selectedSection ? sections[selectedSection].Definition.Id : null;
         selectedSection = index;
-        if (!wasThemes && sections[index].Definition.Id == "themes")
+        var next = sections[index].Definition.Id;
+        if (previous != next && next == "themes")
         {
             _ = themesView.RefreshAsync();
+        }
+        else if (previous != next && next == "upscalers")
+        {
             _ = upscalersView.RefreshAsync();
         }
 
