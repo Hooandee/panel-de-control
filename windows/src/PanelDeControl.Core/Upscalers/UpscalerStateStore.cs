@@ -277,7 +277,7 @@ public sealed class UpscalerStateStore
         }
     }
 
-    private static StoredUpscaler? ReadInstall(DataObject install)
+    internal static StoredUpscaler? ReadInstall(DataObject install)
     {
         var build = Text(install.Get("build"));
         var target = Text(install.Get("target"));
@@ -326,7 +326,7 @@ public sealed class UpscalerStateStore
         return new StoredUpscaler(installed, at);
     }
 
-    private static DataValue WriteInstall(StoredUpscaler stored)
+    internal static DataValue WriteInstall(StoredUpscaler stored)
     {
         var install = stored.Install;
         var options = install.Options;

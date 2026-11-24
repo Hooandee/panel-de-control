@@ -481,6 +481,7 @@
   <data name="UpscalersNoSteam" xml:space="preserve"><value>Steam non trovato.</value></data>
   <data name="UpscalersNoGames" xml:space="preserve"><value>Nessun gioco installato.</value></data>
   <data name="UpscalersStateInstalled" xml:space="preserve"><value>Installato</value></data>
+  <data name="UpscalersStateInstalledUnknown" xml:space="preserve"><value>Installato da Panel (versione sconosciuta)</value></data>
   <data name="UpscalersStateMissing" xml:space="preserve"><value>File non trovati</value></data>
   <data name="UpscalersStateForeign" xml:space="preserve"><value>OptiScaler installato a mano</value></data>
   <data name="UpscalersStateRunning" xml:space="preserve"><value>In esecuzione</value></data>

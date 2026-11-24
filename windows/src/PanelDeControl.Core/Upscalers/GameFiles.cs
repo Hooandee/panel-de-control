@@ -166,6 +166,11 @@ public static class GameFiles
         {
             throw new UpscalerException("recipe_unsupported", "manifest restores recipe configuration");
         }
+        var record = Path.Combine(meta, PanelInstallRecord.FileName);
+        if (File.Exists(record) && !IsLink(record))
+        {
+            File.Delete(record);
+        }
         var kept = new List<string>();
         foreach (var pair in manifest.Files)
         {

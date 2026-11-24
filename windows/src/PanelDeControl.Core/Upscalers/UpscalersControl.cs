@@ -39,13 +39,16 @@ public enum UpscalersResponseStatus
     Fault = 2,
 }
 
-/// <summary>What Panel knows of one game's upscaler: <c>none</c>, <c>installed</c>, <c>missing</c> or <c>foreign</c>.</summary>
+/// <summary>What Panel knows of one game's upscaler: <c>none</c>, <c>installed</c>, <c>missing</c>, <c>foreign</c> or <c>panel_unknown</c>.</summary>
 public static class UpscalerGameStates
 {
     public const string None = "none";
     public const string Installed = "installed";
     public const string Missing = "missing";
     public const string Foreign = "foreign";
+
+    /// <summary>Panel's files are there (complete manifest) but the record of which build was lost.</summary>
+    public const string PanelUnknown = "panel_unknown";
 }
 
 [DataContract]

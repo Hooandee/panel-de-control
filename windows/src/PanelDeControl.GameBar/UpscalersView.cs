@@ -384,6 +384,9 @@ public sealed class UpscalersView : UserControl
             case UpscalerGameStates.Foreign:
                 parts.Add(Localized("UpscalersStateForeign"));
                 break;
+            case UpscalerGameStates.PanelUnknown:
+                parts.Add(Localized("UpscalersStateInstalledUnknown"));
+                break;
         }
 
         if (game.Running == true)
@@ -628,6 +631,11 @@ public sealed class UpscalersView : UserControl
             return installed.Label!;
         }
 
+        if (detail.Install is { Status: UpscalerGameStates.Installed, Build.Length: 0 })
+        {
+            return Localized("UpscalersStateInstalledUnknown");
+        }
+
         if (detail.Foreign is not null || summary?.State == UpscalerGameStates.Foreign)
         {
             return Localized("UpscalersStateForeign");
@@ -661,7 +669,9 @@ public sealed class UpscalersView : UserControl
             }
             else
             {
-                title = string.IsNullOrEmpty(installed.Label) ? Localized("UpscalersStateInstalled") : string.Format(Localized("UpscalersStatusInstalled"), installed.Label);
+                title = !string.IsNullOrEmpty(installed.Label)
+                    ? string.Format(Localized("UpscalersStatusInstalled"), installed.Label)
+                    : Localized(installed.Build.Length == 0 ? "UpscalersStateInstalledUnknown" : "UpscalersStateInstalled");
                 sub = resultText.Text.Length == 0 ? Localized("UpscalersStatusPending") : string.Empty;
             }
         }
@@ -881,7 +891,7 @@ public sealed class UpscalersView : UserControl
             var summary = detail.Game;
             var installed = detail.Install is not null;
             actionButton.Content = installed
-                ? string.Format(Localized("UpscalersDeactivate"), string.IsNullOrEmpty(detail.Install!.Label) ? Localized("UpscalersStateInstalled") : detail.Install.Label)
+                ? string.Format(Localized("UpscalersDeactivate"), !string.IsNullOrEmpty(detail.Install!.Label) ? detail.Install.Label : Localized(detail.Install.Build.Length == 0 ? "UpscalersStateInstalledUnknown" : "UpscalersStateInstalled"))
                 : string.Format(Localized("UpscalersActivate"), SelectedBadge());
             actionButton.Background = installed ? Resource<Brush>("PdcLayerBrush") : AccentFill();
             if (summary.Running == true)

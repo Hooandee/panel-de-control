@@ -411,6 +411,149 @@ public sealed class UpscalerServiceTests : IDisposable
         Assert.Null(new UpscalerStateStore(StatePath).Install("100"));
     }
 
+    private async Task InstallThroughService(string appId)
+    {
+        var service = Service(prepare: PrepareCache);
+        await service.HandleAsync(UpscalersRequest.Install(appId, "fsr-3.1", "performance", null, true), CancellationToken.None);
+        await RunDeferredAsync();
+        Assert.Equal(UpscalerJobStates.Done, service.Job!.State);
+    }
+
+    [Fact]
+    public async Task APanelReinstallStillKnowsWhatItInstalledFromTheRecordBesideTheManifest()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        var record = Path.Combine(Target(game), ".pdc-upscaler", "panel-install.json");
+        Assert.True(File.Exists(record));
+        Assert.DoesNotContain("panel-install", File.ReadAllText(Path.Combine(Target(game), ".pdc-upscaler", "manifest.json")));
+        File.Delete(StatePath);
+        var service = Service();
+
+        var overview = (await service.HandleAsync(UpscalersRequest.Overview(), CancellationToken.None)).Overview!;
+
+        var row = overview.Games.Single();
+        Assert.Equal((UpscalerGameStates.Installed, "fsr-3.1"), (row.State, row.Build));
+        Assert.Equal("fsr-3.1", new UpscalerStateStore(StatePath).Install("100")!.Install.Build);
+        var detail = (await service.HandleAsync(UpscalersRequest.Game("100"), CancellationToken.None)).Game!;
+        Assert.Equal(("fsr-3.1", "performance"), (detail.Install!.Build, detail.Install.Quality));
+
+        await service.HandleAsync(UpscalersRequest.Uninstall("100", true), CancellationToken.None);
+        await RunDeferredAsync();
+        Assert.False(File.Exists(record));
+        Assert.False(Directory.Exists(Path.Combine(Target(game), ".pdc-upscaler")));
+    }
+
+    [Fact]
+    public async Task ARecordForAnotherFolderIsIgnoredAndTheInstallIsReportedAsPanelsWithAnUnknownBuild()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        var record = Path.Combine(Target(game), ".pdc-upscaler", "panel-install.json");
+        File.WriteAllText(record, File.ReadAllText(record).Replace("Plain", "Elsewhere"));
+        File.Delete(StatePath);
+        var service = Service();
+
+        var row = (await service.HandleAsync(UpscalersRequest.Overview(), CancellationToken.None)).Overview!.Games.Single();
+
+        Assert.Equal(UpscalerGameStates.PanelUnknown, row.State);
+        Assert.Null(new UpscalerStateStore(StatePath).Install("100"));
+    }
+
+    [Fact]
+    public async Task AnOldManifestWithoutARecordIsPanelsAndUninstallRestoresTheFolderFromTheManifestAlone()
+    {
+        var game = AddGame("100", "Plain");
+        var before = Snapshot(game);
+        await InstallThroughService("100");
+        File.Delete(Path.Combine(Target(game), ".pdc-upscaler", "panel-install.json"));
+        File.Delete(StatePath);
+        var service = Service();
+
+        var row = (await service.HandleAsync(UpscalersRequest.Overview(), CancellationToken.None)).Overview!.Games.Single();
+        var detail = (await service.HandleAsync(UpscalersRequest.Game("100"), CancellationToken.None)).Game!;
+
+        Assert.Equal(UpscalerGameStates.PanelUnknown, row.State);
+        Assert.Equal(("", UpscalerGameStates.Installed), (detail.Install!.Build, detail.Install.Status));
+        var removed = await service.HandleAsync(UpscalersRequest.Uninstall("100", true), CancellationToken.None);
+        Assert.Equal(UpscalersResponseStatus.Ok, removed.Status);
+        await RunDeferredAsync();
+        Assert.Equal(UpscalerJobStates.Done, service.Job!.State);
+        Assert.Equal(before, Snapshot(game));
+    }
+
+    [Fact]
+    public async Task AnIncompleteManifestIsNeverAdopted()
+    {
+        var game = AddGame("100", "Plain");
+        Write(Target(game), ".pdc-upscaler/manifest.json", "{\"files\": {}, \"backups\": [], \"dirs\": [], \"configuration\": {}, \"owned\": [], \"incomplete\": true}");
+
+        var row = (await Service().HandleAsync(UpscalersRequest.Overview(), CancellationToken.None)).Overview!.Games.Single();
+
+        Assert.Equal(UpscalerGameStates.None, row.State);
+    }
+
+    [Theory]
+    [InlineData("library_600x900_spanish.jpg", "header_spanish.jpg", "library_hero.jpg", "library_600x900_spanish.jpg")]
+    [InlineData("header.jpg", "library_600x900_spanish.jpg", "library_600x900.jpg", "library_600x900.jpg")]
+    [InlineData("header_spanish.jpg", "library_capsule_french.png", "library_hero.jpg", "library_capsule_french.png")]
+    [InlineData("header_spanish.jpg", "logo_spanish.png", "library_hero.jpg", "header_spanish.jpg")]
+    public async Task ALocalizedCoverIsFoundByPatternAndThePortraitWins(string first, string second, string third, string expected)
+    {
+        AddGame("100", "Plain");
+        var folder = Path.Combine(library, "appcache", "librarycache", "100");
+        foreach (var name in new[] { first, second, third })
+        {
+            Write(folder, name, name);
+        }
+
+        var cover = await Service(scaleCover: (source, _) => new ScaledCover(source, UpscalerCover.Jpeg))
+            .HandleAsync(UpscalersRequest.Cover("100"), CancellationToken.None);
+
+        Assert.Equal(expected, Encoding.UTF8.GetString(Convert.FromBase64String(cover.Cover!.Data)));
+    }
+
+    [Fact]
+    public async Task ALocalizedCoverInsideAHashedSubfolderIsFoundButNeverThroughALink()
+    {
+        AddGame("100", "Plain");
+        var folder = Path.Combine(library, "appcache", "librarycache", "100");
+        Write(Path.Combine(folder, "0123abcd"), "library_600x900_latam.jpg", "hashed");
+        Write(folder, "library_hero.jpg", "hero");
+        var service = Service(scaleCover: (source, _) => new ScaledCover(source, UpscalerCover.Jpeg));
+
+        var found = await service.HandleAsync(UpscalersRequest.Cover("100"), CancellationToken.None);
+
+        Assert.Equal("hashed", Encoding.UTF8.GetString(Convert.FromBase64String(found.Cover!.Data)));
+        Assert.Null(CoverFiles.Find(new LinkedFolder(PhysicalFileSystem.Instance, folder), new[] { library }, "100"));
+    }
+
+    private sealed class LinkedFolder : IReadOnlyFileSystem
+    {
+        private readonly IReadOnlyFileSystem inner;
+        private readonly string link;
+
+        public LinkedFolder(IReadOnlyFileSystem inner, string link)
+        {
+            this.inner = inner;
+            this.link = link.Replace((char)92, '/');
+        }
+
+        public IReadOnlyList<FileSystemEntry> List(string directory) => inner.List(directory);
+
+        public bool IsFile(string path) => inner.IsFile(path);
+
+        public bool IsDirectory(string path) => inner.IsDirectory(path);
+
+        public bool Exists(string path) => inner.Exists(path);
+
+        public bool IsSymbolicLink(string path) => path.Replace((char)92, '/').StartsWith(link, StringComparison.OrdinalIgnoreCase) || inner.IsSymbolicLink(path);
+
+        public long? Length(string path) => inner.Length(path);
+
+        public Stream? OpenRead(string path) => inner.OpenRead(path);
+    }
+
     [Fact]
     public async Task AFailedInstallLeavesAnErrorJobAndAJournalEntry()
     {

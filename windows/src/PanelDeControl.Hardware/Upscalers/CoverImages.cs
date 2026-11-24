@@ -19,15 +19,26 @@ public sealed class ScaledCover
     public string Mime { get; }
 }
 
-/// <summary>Steam's cached artwork for a game: the portrait first, then header and capsule images.</summary>
+/// <summary>
+/// Steam's cached artwork for a game: the portrait first, then capsule and header images, in any language Steam cached
+/// and in the appid folder or one level of subfolders.
+/// </summary>
 public static class CoverFiles
 {
     public const long MaximumSourceBytes = 8 * 1024 * 1024;
 
-    private static readonly string[] Names =
-    {
-        "library_600x900.jpg", "library_capsule.jpg", "library_600x900.png", "header.jpg", "library_header.jpg", "capsule_616x353.jpg", "capsule_231x87.jpg",
-    };
+    private static readonly System.Text.RegularExpressions.Regex Portrait =
+        new(@"^library_600x900(_[A-Za-z0-9-]+)?\.(jpg|png)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static readonly System.Text.RegularExpressions.Regex Capsule =
+        new(@"^library_capsule[^/\\]*\.(jpg|png)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static readonly System.Text.RegularExpressions.Regex Header =
+        new(@"^header(_[A-Za-z0-9-]+)?\.(jpg|png)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static readonly string[] Plain = { "library_600x900", "library_capsule", "header", "library_header", "capsule_616x353", "capsule_231x87" };
+
+    private static readonly string[] Legacy = { "library_header.jpg", "capsule_616x353.jpg", "capsule_231x87.jpg" };
 
     public static byte[]? Find(IReadOnlyFileSystem fileSystem, IEnumerable<string> steamRoots, string appId)
     {
@@ -35,23 +46,62 @@ public static class CoverFiles
         {
             var cache = root.Replace('\\', '/').TrimEnd('/') + "/appcache/librarycache";
             var folder = cache + "/" + appId;
-            var subfolders = fileSystem.List(folder).Where(entry => entry.IsDirectory).Select(entry => folder + "/" + entry.Name).ToList();
-            foreach (var name in Names)
+            if (fileSystem.IsSymbolicLink(folder))
             {
-                var candidates = new List<string> { folder + "/" + name };
-                candidates.AddRange(subfolders.Select(sub => sub + "/" + name));
-                candidates.Add(cache + "/" + appId + "_" + name);
-                foreach (var path in candidates)
+                continue;
+            }
+
+            var folders = new List<(string Folder, List<string> Files)> { Entries(fileSystem, folder, out var children) };
+            folders.AddRange(children.Select(child => Entries(fileSystem, child, out _)));
+            foreach (var matches in new Func<string, bool>[] { Portrait.IsMatch, Capsule.IsMatch, Header.IsMatch, name => Legacy.Contains(name, StringComparer.OrdinalIgnoreCase) })
+            {
+                foreach (var (directory, files) in folders)
                 {
-                    if (Read(fileSystem, path) is { } bytes)
+                    foreach (var name in files.Where(matches).OrderBy(Rank).ThenBy(name => name, StringComparer.OrdinalIgnoreCase))
                     {
-                        return bytes;
+                        if (Read(fileSystem, directory + "/" + name) is { } bytes)
+                        {
+                            return bytes;
+                        }
                     }
+                }
+            }
+
+            foreach (var name in new[] { "library_600x900.jpg", "library_capsule.jpg", "library_600x900.png", "header.jpg" }.Concat(Legacy))
+            {
+                var path = cache + "/" + appId + "_" + name;
+                if (!fileSystem.IsSymbolicLink(path) && Read(fileSystem, path) is { } bytes)
+                {
+                    return bytes;
                 }
             }
         }
 
         return null;
+    }
+
+    // The plain name before a localized one, and JPEG before PNG.
+    private static int Rank(string name) =>
+        (Plain.Contains(Path.GetFileNameWithoutExtension(name), StringComparer.OrdinalIgnoreCase) ? 0 : 2)
+        + (name.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? 1 : 0);
+
+    private static (string Folder, List<string> Files) Entries(IReadOnlyFileSystem fileSystem, string folder, out List<string> children)
+    {
+        var files = new List<string>();
+        children = new List<string>();
+        foreach (var entry in fileSystem.List(folder).Where(entry => !entry.IsSymbolicLink).OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            if (entry.IsDirectory)
+            {
+                children.Add(folder + "/" + entry.Name);
+            }
+            else
+            {
+                files.Add(entry.Name);
+            }
+        }
+
+        return (folder, files);
     }
 
     private static byte[]? Read(IReadOnlyFileSystem fileSystem, string path)

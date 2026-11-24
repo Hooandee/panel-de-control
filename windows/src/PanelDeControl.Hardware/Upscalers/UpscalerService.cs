@@ -152,9 +152,17 @@ public sealed class UpscalerService : IUpscalersController
                 {
                     row.Scanned = false;
                 }
-                else if (Scan(app, null).Foreign)
+                else
                 {
-                    row.State = UpscalerGameStates.Foreign;
+                    var analysis = Scan(app, null);
+                    if (Recover(app, analysis) is { } recovered)
+                    {
+                        row = recovered == UpscalerGameStates.Installed ? Summary(app, images) : WithState(row, recovered);
+                    }
+                    else if (analysis.Foreign)
+                    {
+                        row.State = UpscalerGameStates.Foreign;
+                    }
                 }
             }
 
@@ -200,9 +208,16 @@ public sealed class UpscalerService : IUpscalersController
         var recipe = Recipe(app);
         var analysis = Scan(app, recipe, force: true);
         var summary = Summary(app, images);
-        if (summary.State == UpscalerGameStates.None && analysis.Foreign)
+        if (summary.State == UpscalerGameStates.None)
         {
-            summary.State = UpscalerGameStates.Foreign;
+            if (Recover(app, analysis) is { } recovered)
+            {
+                summary = recovered == UpscalerGameStates.Installed ? Summary(app, images) : WithState(summary, recovered);
+            }
+            else if (analysis.Foreign)
+            {
+                summary.State = UpscalerGameStates.Foreign;
+            }
         }
 
         var generation = Gpu.Generation;
@@ -241,7 +256,11 @@ public sealed class UpscalerService : IUpscalersController
                 },
             Preferred = UpscalerPlanner.PreferredBuild(data.Catalog, generation, recipe?.RecommendedBuild),
             Builds = builds,
-            Install = stored is null ? null : InstallEntry(stored),
+            Install = stored is not null
+                ? InstallEntry(stored)
+                : summary.State == UpscalerGameStates.PanelUnknown
+                    ? new UpscalerInstallEntry { Proxy = "", Status = UpscalerGameStates.Installed }
+                    : null,
         };
     }
 
@@ -285,8 +304,9 @@ public sealed class UpscalerService : IUpscalersController
 
     private UpscalersResponse BeginUninstall(string appId)
     {
-        var stored = store.Install(appId) ?? throw new UpscalerException("not_patched");
-        if (steam.Find(appId) is { } app)
+        var app = steam.Find(appId);
+        var stored = store.Install(appId) ?? FromManifest(app) ?? throw new UpscalerException("not_patched");
+        if (app is not null)
         {
             GameGuards.EnsureClosed(app, runningImages());
         }
@@ -330,7 +350,9 @@ public sealed class UpscalerService : IUpscalersController
                 CancellationToken.None).ConfigureAwait(false);
             try
             {
-                store.SetInstall(appId, install, clock());
+                var installedAt = clock();
+                store.SetInstall(appId, install, installedAt);
+                WriteRecord(install, installedAt);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
@@ -422,6 +444,67 @@ public sealed class UpscalerService : IUpscalersController
         {
             log("upscalers.journal", exception.GetType().Name);
         }
+    }
+
+    private void WriteRecord(InstalledUpscaler install, double installedAt)
+    {
+        try
+        {
+            PanelInstallRecord.Write(install.Target, new StoredUpscaler(install, installedAt));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            log("upscalers.record", exception.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// A game whose Panel state was lost (the package was reinstalled) but whose folder still holds a complete Panel
+    /// manifest: adopted from the record beside it, or reported as Panel's with an unknown build. Null when nothing is there.
+    /// </summary>
+    private string? Recover(SteamApp app, GameAnalysis analysis)
+    {
+        var target = analysis.Target;
+        if (target is null || store.Install(app.AppId) is not null || ManifestOf(target) is null
+            || store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, target)))
+        {
+            return null;
+        }
+
+        if (PanelInstallRecord.Read(target) is { } record && SamePath(record.Install.Target, target))
+        {
+            try
+            {
+                store.SetInstall(app.AppId, record.Install, record.InstalledAt);
+                log("upscalers.recovered", app.AppId);
+                return UpscalerGameStates.Installed;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                log("upscalers.recover", exception.GetType().Name);
+            }
+        }
+
+        return UpscalerGameStates.PanelUnknown;
+    }
+
+    private static GameManifest? ManifestOf(string target) =>
+        GameFiles.ReadManifest(target) is { Incomplete: false } manifest && manifest.Engine != "dll" ? manifest : null;
+
+    private StoredUpscaler? FromManifest(SteamApp? app)
+    {
+        if (app is null || Scan(app, null).Target is not { } target || ManifestOf(target) is null)
+        {
+            return null;
+        }
+
+        return new StoredUpscaler(new InstalledUpscaler { Target = target }, 0);
+    }
+
+    private static UpscalerGameSummary WithState(UpscalerGameSummary row, string state)
+    {
+        row.State = state;
+        return row;
     }
 
     private UpscalerGameSummary Summary(SteamApp app, IReadOnlyList<string>? images)
