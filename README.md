@@ -84,8 +84,8 @@ Todo se maneja con el mando, y las actualizaciones llegan solas al menú rápido
 ## 📺 Ambiente
 
 Pon de fondo en Inicio tus fotos, tus vídeos o el arte de tus juegos, y al pasar por un juego deja
-que suene su banda sonora o se vea su tráiler. Si no se leen bien las portadas, difumina u oscurece
-el fondo, o añade una viñeta, con la intensidad que quieras.
+que suene su banda sonora o se vea su tráiler, y elige cuál de los dos manda. Si no se leen bien las
+portadas, difumina u oscurece el fondo, o añade una viñeta, con la intensidad que quieras.
 
 Si has elegido conservar el fondo de un tema, Ambiente te permite recuperarlo para Panel con
 **Mostrar el mío igualmente**, sin perder tus imágenes ni la configuración.

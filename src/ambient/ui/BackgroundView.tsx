@@ -1,5 +1,5 @@
 import { Focusable } from "@decky/ui";
-import { useEffect, type FC, type ReactNode } from "react";
+import { useEffect, type FC } from "react";
 import { LuChevronLeft, LuChevronRight, LuLibrary } from "react-icons/lu";
 
 import { useI18n } from "../../i18n";
@@ -7,14 +7,11 @@ import { theme } from "../../theme";
 import type { AmbientSettings } from "../core/types";
 import type { CollectionEntry } from "../steam/rpc";
 import { gameName, type AmbientRuntime, type AmbientSnapshot } from "../steam/runtime";
-import { Button, Caption, ChoiceRow, ToggleRow, SliderRow, MoreSettings, Tile, TileStrip, ValueRow, cardStyle } from "./primitives";
+import { Button, Caption, ChoiceRow, Hint, ToggleRow, SliderRow, MoreSettings, Tile, TileStrip, ValueRow, cardStyle } from "./primitives";
 import { RoundButton } from "./NowPlaying";
 import { openBackgroundLibrary } from "./BackgroundLibrary";
 import { visualSources } from "./libraryModel";
 
-const Hint: FC<{ children: ReactNode }> = ({ children }) => (
-  <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, padding: "0 2px", marginTop: -4 }}>{children}</span>
-);
 const INTERVALS = [30, 60, 300, 900, 3600] as const;
 
 const SWATCHES: Record<string, string> = {

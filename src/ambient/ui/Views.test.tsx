@@ -20,6 +20,7 @@ vi.mock("./NowPlaying", () => ({
 vi.mock("./primitives", () => ({
   Button: ({ label, onActivate }: any) => <button onClick={onActivate}>{label}</button>,
   Caption: ({ children }: any) => <div>{children}</div>,
+  Hint: ({ children }: any) => <span>{children}</span>,
   ChoiceRow: ({ label }: any) => <div>{label}</div>,
   ValueRow: ({ label }: any) => <div>{label}</div>,
   SliderRow: ({ label }: any) => <div>{label}</div>,

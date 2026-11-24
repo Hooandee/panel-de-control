@@ -1270,16 +1270,9 @@ def test_protected_install_still_rolls_back_with_its_scaler_transition(steam, fa
     assert not list(game.rglob("winmm.dll"))
 
 
-def test_recipe_proxy_panel_cannot_install_is_left_out(steam, fake_catalog, proc, monkeypatch):
-    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll"))
-    service = _service(steam, fake_catalog, proc)
-    assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["dxgi=n,b"]
-
-
 def test_endfield_recipe_installs_the_d3d12_proxy(steam, fake_catalog, proc, monkeypatch):
     # Under Proton, OptiScaler as dxgi.dll makes Endfield quit seconds after init; d3d12.dll keeps it running.
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll"))
-    monkeypatch.setattr(catalog, "D3D12_PROXY_APPIDS", frozenset({APPID}))
     service = _service(steam, fake_catalog, proc)
     result = service.install(APPID, {"build": "fsr-test"})
     assert result["overrides"] == ["d3d12=n,b"]

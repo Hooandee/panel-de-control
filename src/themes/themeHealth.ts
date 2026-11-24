@@ -43,7 +43,7 @@ export type ThemeHealthFinding =
   | { id: "other_active"; severity: "problem"; names: string[] }
   | { id: "profile_active"; severity: "problem"; names: string[] }
   | { id: "ghost_styles"; severity: "problem"; count: number }
-  | { id: "set_aside"; severity: "problem"; folders: { folder: string; kind: ThemeFolderKind }[] }
+  | { id: "set_aside"; severity: "problem"; folders: { folder: string; name: string; kind: ThemeFolderKind }[] }
   | { id: "several_hooandee"; severity: "problem"; names: string[]; themes: { name: string; label: string }[] }
   | { id: "steam_scale"; severity: "setting"; scale: number; autoScale: number }
   | { id: "resolution"; severity: "setting"; width: number; height: number; panelWidth: number; panelHeight: number }
@@ -214,9 +214,16 @@ export function displayReport(display: SteamDisplayState): Record<string, number
   };
 }
 
-/** Catalog themes that restyle the interface: a keyboard theme only dresses Steam's keyboard and runs next to them. */
-export function interfaceThemeNames(releases: Iterable<Pick<PublishedThemeRelease, "cssLoaderName" | "exclusiveGroup">>): Set<string> {
-  return new Set([...releases].filter((release) => !isKeyboardTheme(release)).map((release) => release.cssLoaderName));
+/**
+ * Catalog themes that restyle the interface: a keyboard theme only dresses Steam's keyboard and runs next to them.
+ * Without the catalog there is no telling them apart, so every theme of ours (`ours`) counts.
+ */
+export function interfaceThemeNames(
+  releases: Iterable<Pick<PublishedThemeRelease, "cssLoaderName" | "exclusiveGroup">>,
+  ours: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const names = new Set([...releases].filter((release) => !isKeyboardTheme(release)).map((release) => release.cssLoaderName));
+  return names.size ? names : ours;
 }
 
 export function hooandeeNames(backend: ThemeHealthBackend, catalogNames: Iterable<string>): Set<string> {
@@ -246,8 +253,11 @@ export function diagnoseThemeHealth(
     .filter((theme) => !profiles.has(theme.name) && !setAsideNames.has(theme.name))
     .map((theme) => theme.displayName || theme.name);
   const activeProfiles = foreign.filter((theme) => profiles.has(theme.name)).map((theme) => theme.displayName || theme.name);
-  if (others.length) findings.push({ id: "other_active", severity: "problem", names: others });
-  if (activeProfiles.length) findings.push({ id: "profile_active", severity: "problem", names: activeProfiles });
+  // Someone's own CSS Loader theme only competes with an interface theme of ours; next to a keyboard
+  // theme or with none of ours on, it is their setup, not a problem to clean up.
+  const oursActive = enabled.some((theme) => interfaceThemes.has(theme.name));
+  if (oursActive && others.length) findings.push({ id: "other_active", severity: "problem", names: others });
+  if (oursActive && activeProfiles.length) findings.push({ id: "profile_active", severity: "problem", names: activeProfiles });
 
   // With CSS Loader off or removed nothing owns its styles; while it runs, only an empty list proves it.
   const cssLoaderGone = snapshot.status === "missing" || snapshot.status === "disabled";
@@ -257,7 +267,7 @@ export function diagnoseThemeHealth(
 
   const setAside = backend.folders
     .filter((folder) => SET_ASIDE_KINDS.has(folder.kind))
-    .map(({ folder, kind }) => ({ folder, kind }));
+    .map(({ folder, name, kind }) => ({ folder, name, kind }));
   if (setAside.length) findings.push({ id: "set_aside", severity: "problem", folders: setAside });
 
   const ours = enabled.filter((theme) => interfaceThemes.has(theme.name));
@@ -305,12 +315,25 @@ export function cleanupPlan(
 ): ThemeCleanupPlan {
   const setAside = findings.find((finding) => finding.id === "set_aside");
   const several = findings.find((finding) => finding.id === "several_hooandee");
+  const foreignFlagged = findings.some((finding) => finding.id === "other_active" || finding.id === "profile_active");
+  const setAsideNames = new Set(setAside?.id === "set_aside" ? setAside.folders.map((folder) => folder.name) : []);
   return {
     chooseOne: several?.id === "several_hooandee" ? several.themes : [],
-    disable: snapshot.themes.filter((theme) => theme.enabled && !keep.has(theme.name)).map((theme) => theme.name),
+    disable: snapshot.themes
+      .filter((theme) => theme.enabled && !keep.has(theme.name) && (foreignFlagged || setAsideNames.has(theme.name)))
+      .map((theme) => theme.name),
     setAside: setAside?.id === "set_aside" ? setAside.folders.length : 0,
     ghostStyles: findings.some((finding) => finding.id === "ghost_styles"),
   };
+}
+
+// Someone's own active themes that the plan leaves alone stay on through the cleanup too.
+export function coexistingThemes(snapshot: CssLoaderSnapshot, keep: Iterable<string>, plan: ThemeCleanupPlan | null): string[] {
+  const kept = new Set(keep);
+  const disable = new Set(plan?.disable ?? []);
+  return snapshot.themes
+    .filter((theme) => theme.enabled && !kept.has(theme.name) && !disable.has(theme.name))
+    .map((theme) => theme.name);
 }
 
 export function cleanupNeeded(plan: ThemeCleanupPlan): boolean {

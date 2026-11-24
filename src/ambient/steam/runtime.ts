@@ -5,6 +5,7 @@ import { readFlag, writeFlag } from "../../platform/preferences";
 import type { PowerPort, PowerSnapshot } from "../../platform/power";
 import { arbitrate, conflictKey, type ArbiterDecision, type ThemeClaim, type ThirdPartySignal } from "../core/arbiter";
 import { chooseBackground } from "../core/gameArtBlend";
+import { pickGameAudio } from "../core/gameAudio";
 import { motionFor, type MotionState } from "../core/powerPolicy";
 import { needsCopy, videoTarget } from "../core/videoQuality";
 import { gameVolumeTarget, planForGameState } from "../core/playbackPolicy";
@@ -13,7 +14,7 @@ import type { AmbientSettings, ClaimOwner, MediaKind, Channel, PlaylistContents,
 import { AudioLoaderBridge } from "./audioLoader";
 import { BackgroundLayer } from "./backgroundLayer";
 import { GameMediaDirector, ThemeAudio, type GameMedia } from "./gameMedia";
-import { installedGameAppIds, isStoreApp, libraryHeroUrl, neighborAppIdsIn, selectedAppIdIn } from "./librarySources";
+import { gameHero, installedGameAppIds, isStoreApp, neighborAppIdsIn, selectedAppIdIn } from "./librarySources";
 import { linkKind, linkName } from "../core/linkName";
 import { isLiveEmbed, parseEmbedStream } from "../core/streams";
 import { parseYouTube } from "../core/youtube";
@@ -175,6 +176,7 @@ export class AmbientRuntime {
   /** The game whose soundtrack and trailer sound stay quiet because the user chose their own music over it. */
   private themeSilencedFor: string | null = null;
   private lastSelectedAppId: string | null = null;
+  private heroReported = new Set<string>();
   private libraryViews = 0;
   private floatingMounts = 0;
   private videoPage: string | null = null;
@@ -738,7 +740,7 @@ export class AmbientRuntime {
   private async previewFor(id: string, url?: string): Promise<string | null> {
     if (id === "suggested.library") {
       const appid = installedGameAppIds()[0];
-      return appid ? libraryHeroUrl(appid) : null;
+      return appid ? gameHero(appid).url : null;
     }
     if (id in DAILY_FEEDS) return (await this.feed(id).catch(() => []))[0]?.url ?? null;
     if (url) return VIDEO_URL.test(url) ? null : url;
@@ -748,6 +750,8 @@ export class AmbientRuntime {
 
   private async resolve(ref: string): Promise<string | null> {
     const effective = this.optimized.get(`${ref}|${this.settings()?.background.videoQuality ?? "fluid"}`) ?? ref;
+    // Not cached: custom art or a newly downloaded hash can change the hero at any time.
+    if (effective.startsWith("steam:")) return gameHero(effective.slice(6)).url;
     const cached = this.urls.get(effective);
     if (cached) return cached;
     if (this.noSpace.has(effective)) return null;
@@ -756,8 +760,7 @@ export class AmbientRuntime {
     const generation = this.cacheGeneration;
     const request = (async () => {
       let url: string | null = null;
-      if (effective.startsWith("steam:")) url = libraryHeroUrl(effective.slice(6));
-      else if (effective.startsWith("remote:")) {
+      if (effective.startsWith("remote:")) {
         const collection = this.snapshot.items.find((item) => item.ref === ref)?.collection ?? "";
         const served = await rpc.cacheAmbientRemote(effective.slice(7), collection).catch(() => ({ error: "unreachable" }) as rpc.Served);
         if (this.stopped || generation !== this.cacheGeneration) return null;
@@ -890,7 +893,12 @@ export class AmbientRuntime {
     const hostClaim = this.channel.activeClaim();
     const hosted = hostClaim?.mode === "host" && surface !== "other" && hostClaim.surfaces.includes(surface);
     // A host replaces Steam's Home, so its native game art must travel through the media channel.
-    const hostGameArtUrl = hosted && choice.mediaRef === null && choice.nativeArt === "show" && selectedAppId ? libraryHeroUrl(selectedAppId) : null;
+    const hostHero = hosted && choice.mediaRef === null && choice.nativeArt === "show" && selectedAppId ? gameHero(selectedAppId) : null;
+    const hostGameArtUrl = hostHero?.url ?? null;
+    if (hostHero && selectedAppId && (hostHero.source !== "plain" || !isStoreApp(selectedAppId)) && !this.heroReported.has(selectedAppId)) {
+      this.heroReported.add(selectedAppId);
+      void rpc.recordAmbientEvent("game_art", JSON.stringify({ appid: Number(selectedAppId), source: hostHero.source, store: isStoreApp(selectedAppId) })).catch(() => undefined);
+    }
     const mediaRef = choice.mediaRef ?? (hostGameArtUrl ? `steam:${selectedAppId}` : null);
     if (!owns || mediaRef === null) {
       this.layer.apply(null, { transition: settings.background.transition, nativeArt: "show", motion, visible: false });
@@ -949,8 +957,9 @@ export class AmbientRuntime {
   }
 
   /**
-   * The game's soundtrack replaces Ambiente's media while its game is selected; without one, the
-   * trailer's own audio does. Returns whether the trailer should sound.
+   * The game's soundtrack or its trailer's own audio replaces Ambiente's media while its game is selected,
+   * as `background.gameAudio` chooses (by default the soundtrack, and the trailer when there is none).
+   * Returns whether the trailer should sound.
    */
   private syncGameTheme(media: GameMedia | null, settings: AmbientSettings): boolean {
     if (this.librarySession) {
@@ -958,8 +967,12 @@ export class AmbientRuntime {
       return false;
     }
     const wanted = settings.background.gameThemes ? media : null;
-    const theme = wanted?.theme ?? null;
-    const trailerSound = !theme && !!wanted?.trailer && settings.background.enabled && settings.background.gameTrailers;
+    const pick = pickGameAudio(settings.background.gameAudio, {
+      theme: !!wanted?.theme,
+      trailer: !!wanted?.trailer && settings.background.enabled && settings.background.gameTrailers,
+    });
+    const theme = pick === "theme" ? wanted?.theme ?? null : null;
+    const trailerSound = pick === "trailer";
     if (theme) this.themeAudio.play(theme.url, settings.music.volume);
     else this.themeAudio.stop();
     const sounding = !!theme || trailerSound;

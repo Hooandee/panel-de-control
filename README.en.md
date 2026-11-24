@@ -84,8 +84,8 @@ works with the controller, and updates show up on their own in the quick access 
 ## 📺 Ambient
 
 Put your photos, your videos or your games' art behind Home, and let a game's soundtrack play or
-its trailer show when you land on it. If the covers are hard to read, blur or darken the background,
-or add a vignette, as much as you like.
+its trailer show when you land on it, and pick which of the two leads. If the covers are hard to read,
+blur or darken the background, or add a vignette, as much as you like.
 
 If you chose to keep a theme’s background, **Show mine anyway** lets Ambient take it back for
 Panel while keeping your images and settings.

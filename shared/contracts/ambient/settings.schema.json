@@ -125,6 +125,14 @@
         "gameThemes": {
           "type": "boolean"
         },
+        "gameAudio": {
+          "enum": [
+            "auto",
+            "trailerFirst",
+            "musicOnly",
+            "trailerOnly"
+          ]
+        },
         "pinned": {
           "type": "string",
           "pattern": "^$|^(local|url|opt|steam|remote):"

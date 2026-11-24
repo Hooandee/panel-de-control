@@ -61,3 +61,42 @@ it("drops observers on expiry, replacement and dismount, including a late operat
     vi.useRealTimers();
   }
 });
+
+// PDC-AHYE: each activation was undone by the next press ~2 s later, with no record of which theme
+// it was nor whether CSS Loader had painted anything yet.
+it("records the theme, the toggle direction and CSS Loader styles present at each step", () => {
+  const frames = new Map<number, FrameRequestCallback>();
+  let next = 0;
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => { frames.set(++next, cb); return next; });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => { frames.delete(id); });
+  const styles: HTMLStyleElement[] = [];
+  const paint = () => {
+    const style = document.createElement("style");
+    style.className = "css-loader-style";
+    document.head.appendChild(style);
+    styles.push(style);
+  };
+  const entries: Record<string, unknown>[] = [];
+  const stop = configureThemeInteractionJournal(() => [{ doc: document, surface: "main" }], async (_area, _action, detail) => {
+    entries.push(JSON.parse(detail));
+  });
+  try {
+    paint();
+    beginThemeObservation("activating", "hooandee-loop")!(true);
+    frames.get(1)!(0);
+    paint();
+    document.dispatchEvent(new CustomEvent("vgp_onbuttondown"));
+    beginThemeObservation("deactivating", "hooandee-loop");
+
+    expect(entries.map(({ operation, theme, phase, styles: count }) => ({ operation, theme, phase, styles: count }))).toEqual([
+      { operation: "activating", theme: "hooandee-loop", phase: "started", styles: 1 },
+      { operation: "activating", theme: "hooandee-loop", phase: "completed", styles: undefined },
+      { operation: "activating", theme: "hooandee-loop", phase: "frame", styles: 1 },
+      { operation: "activating", theme: "hooandee-loop", phase: "input", styles: 2 },
+      { operation: "deactivating", theme: "hooandee-loop", phase: "started", styles: 2 },
+    ]);
+  } finally {
+    stop();
+    styles.forEach((style) => style.remove());
+  }
+});

@@ -1,3 +1,4 @@
+import re
 import json
 import os
 import types
@@ -338,12 +339,29 @@ def test_frontend_crash_diagnostics_names_plugin_and_crash(tmp_path):
         {
             "error_type": "TypeError",
             "source": "cef_log.previous.txt",
+            "origin": "panel",
         }
     ]
     assert {signal["kind"] for signal in diagnostics["signals"]} == {
         "plugin_load_error",
         "shared_context_crash",
     }
+
+
+def test_plugin_load_error_names_a_known_plugin_by_fixed_origin(tmp_path):
+    # PDC-AHYE: 17 load errors under Decky 4.0.0-pre1 without saying whether CSS Loader was one.
+    current = tmp_path / "cef_log.txt"
+    _write(
+        current,
+        "Decky PluginLoader: Error loading plugin CSS Loader (v2.1.3) TypeError: boom\n"
+        "Decky PluginLoader: Error loading plugin CSS Loader (v2.1.3) TypeError: boom\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(current)])
+
+    assert diagnostics["plugin_load_errors"] == [
+        {"error_type": "TypeError", "source": "cef_log.txt", "origin": "css_loader"},
+    ]
 
 
 def test_frontend_crash_diagnostics_does_not_parse_error_from_plugin_name(tmp_path):
@@ -359,8 +377,8 @@ def test_frontend_crash_diagnostics_does_not_parse_error_from_plugin_name(tmp_pa
     diagnostics = frontend_crash_diagnostics([str(previous)])
 
     assert diagnostics["plugin_load_errors"] == [
-        {"error_type": "TypeError", "source": "cef_log.previous.txt"},
-        {"error_type": "ReferenceError", "source": "cef_log.previous.txt"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
+        {"error_type": "ReferenceError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
     ]
 
 
@@ -418,8 +436,9 @@ def test_frontend_crash_diagnostics_never_includes_free_form_cef_text(tmp_path):
     ):
         assert secret not in serialized
     assert diagnostics["plugin_load_errors"] == [
-        {"error_type": "TypeError", "source": "cef_log.previous.txt"},
-        {"error_type": "ReferenceError", "source": "cef_log.previous.txt"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "panel"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
+        {"error_type": "ReferenceError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
     ]
     assert all("line" not in signal for signal in diagnostics["signals"])
 
@@ -1711,3 +1730,22 @@ def test_bundle_keeps_only_observed_sleep_events_by_boot():
     missing = kernel_logs(lambda cmd: report_collector.capture_command(cmd, run=journalctl))
     assert missing["sleep_userspace"] == []
     assert missing["previous_boot_sleep_userspace"] is None
+
+
+def test_kernel_logs_capture_session_crashes_behind_a_cef_disconnect():
+    cmd = report_collector._KERNEL_CMDS["session_crashes"]
+    pattern = re.compile(cmd[cmd.index("--grep") + 1])
+    assert pattern.search("Process 13440 (gamescope-wl) of user 1000 dumped core.")
+    assert pattern.search("steamwebhelper[5120]: segfault at 0 ip 0000 sp 0000 error 4")
+    assert pattern.search("traps: gamescope-wl[2211] general protection fault ip:7f1c sp:7ffd error:0 in libc.so.6")
+    assert not pattern.search("Process 9001 (MonsterHunterRi) of user 1000 dumped core.")
+    assert not pattern.search("wine64-preloader[812]: segfault at 10 ip 0000 sp 0000 error 6")
+
+    def run(argv):
+        if argv == cmd:
+            return ("systemd-coredump[14702]: Process 13440 (gamescope-wl) of user 1000 "
+                    "dumped core.")
+        return None
+
+    out = kernel_logs(run)
+    assert "gamescope-wl" in out["session_crashes"]

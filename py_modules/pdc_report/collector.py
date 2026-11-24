@@ -176,7 +176,7 @@ def tail_logs(
 
 _PLUGIN_LOAD_ERROR = re.compile(r"Error loading plugin\b", re.I)
 _PLUGIN_LOAD_EXCEPTION = re.compile(
-    r"Error loading plugin\s+.+?\s+\([^)\r\n]{1,80}\)\s+"
+    r"Error loading plugin\s+(?P<name>.+?)\s+\([^)\r\n]{1,80}\)\s+"
     r"(?P<error>TypeError|ReferenceError|SyntaxError|Error)\b",
     re.I,
 )
@@ -421,15 +421,17 @@ def _steam_ui_exception_detail(line: str) -> dict:
     return detail
 
 
+def _frontend_origin(plugin_name: str) -> str:
+    return _KNOWN_FRONTEND_ORIGINS.get(re.sub(r"[^a-z0-9]", "", plugin_name.lower()), "other_plugin")
+
+
 def _frontend_exception_detail(line: str) -> dict:
     error = _FRONTEND_EXCEPTION_TYPE.search(line)
     origin = "decky"
     match = _DECKY_ORIGIN.search(line)
     path = (match.group("path") if match else None) or ""
     if path.startswith("/plugins/"):
-        folder = urllib.parse.unquote(path[len("/plugins/"):].split("/", 1)[0])
-        slug = re.sub(r"[^a-z0-9]", "", folder.lower())
-        origin = _KNOWN_FRONTEND_ORIGINS.get(slug, "other_plugin")
+        origin = _frontend_origin(urllib.parse.unquote(path[len("/plugins/"):].split("/", 1)[0]))
     detail = {
         "error_type": error.group("error") if error else "unknown",
         "origin": origin,
@@ -544,8 +546,9 @@ def frontend_crash_diagnostics(
                 plugin = {
                     "error_type": _PLUGIN_ERROR_TYPES[match.group("error").lower()],
                     "source": source,
+                    "origin": _frontend_origin(match.group("name")),
                 }
-                key = (plugin["error_type"], source)
+                key = (plugin["error_type"], source, plugin["origin"])
                 if (
                     key not in seen_plugins
                     and len(plugin_load_errors) < _MAX_FRONTEND_SIGNALS
@@ -709,6 +712,12 @@ _KERNEL_CMDS = {
         "/usr/bin/journalctl", "-b", "-1", "-u", "plugin_loader",
         "--grep", _LOADER_LIFECYCLE_GREP,
         "-n", "80", "--no-pager",
+    ],
+    # A Steam/gamescope crash shows in the plugin log only as "CEF has disconnected".
+    "session_crashes": [
+        "/usr/bin/journalctl", "-b", "-t", "systemd-coredump", "-t", "kernel",
+        "--grep", r"(?i)\((steam\w*|gamescope\S*)\) of user \d+ dumped core|(steam\w*|gamescope\S*)\[\d+\]:? (segfault|general protection fault)",
+        "-n", "40", "--no-pager",
     ],
     "earlyoom": ["/usr/bin/journalctl", "-b", "-t", "earlyoom", "-n", "30", "--no-pager"],
     "previous_boot_earlyoom": [

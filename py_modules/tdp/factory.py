@@ -278,6 +278,9 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
         return [deck]
     if os_id != "anatase":
         if key == "msi_claw_a8":
+            if os_id == "steamos":
+                # Under SteamOS the APU ignores the firmware rails (they read back any request at ~20 W); ryzenadj holds.
+                return [ryzenadj, msi_a8]
             # The SPPT/FPPT rails live in msi-wmi-platform; ryzenadj cannot read them back.
             return [msi_a8, ryzenadj]
         if key == "onexplayer_apex":

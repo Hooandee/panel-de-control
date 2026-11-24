@@ -67,6 +67,8 @@ class Recipe:
     protect_dlls: bool = False
     # (file under the prefix's user folder, XML element, text) set on install and put back on removal.
     game_config: tuple[tuple[str, str, str], ...] = ()
+    # False when the game fails to start with FSR 4's loader in place of its FSR 3.1 amd_fidelityfx_dx12.dll.
+    legacy_ffx_swap: bool = True
 
 
 RECIPES: dict[str, Recipe] = {
@@ -88,6 +90,10 @@ RECIPES: dict[str, Recipe] = {
         # Monster Hunter Wilds wiki entry: on AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing
         # on top crashes it. REFramework comes from the RE Engine rule.
         Recipe("2246340", ini={"Spoofing.Dxgi": "false"}, needs=("reframework",)),
+        # Monster Hunter Rise wiki entry: as dxgi.dll on AMD the game never offers DLSS, and REFramework as dinput8.dll
+        # beside OptiScaler crashes it; OptiScaler goes in as d3d12.dll and loads REFramework as ReShade64.dll.
+        Recipe("1446780", proxy="d3d12.dll", files={"ReShade64.dll": "reframework-nightly"},
+               ini={"Plugins.LoadReshade": "true"}),
         # Hogwarts Legacy lists DLSS Frame Generation only while its upscaler is DLSS; both apply on restart.
         Recipe("990080", anr_settings=(("Upscale Type (Tipo de escalado)", "NVIDIA DLSS"),
                                        ("Frame Generation (Generación de fotogramas)", "NVIDIA DLSS Frame Generation x2"))),
@@ -106,7 +112,9 @@ RECIPES: dict[str, Recipe] = {
         # RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it.
         Recipe("1174180", game_config=(("Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml", "API",
                                         "kSettingAPI_DX12"),)),
-        Recipe("2322010", anr_settings=(("Frame Generation (Generación de fotogramas)", "Nvidia DLSS-FG"),)),
+        # God of War Ragnarök shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works.
+        Recipe("2322010", anr_settings=(("Frame Generation (Generación de fotogramas)", "Nvidia DLSS-FG"),),
+               legacy_ffx_swap=False),
     )
 }
 
@@ -233,10 +241,12 @@ def with_engine(recipe: Recipe | None, appid: str, root: Path) -> Recipe | None:
     # REFramework opens its own menu with Insert too: OptiScaler's moves to Home (VK 0x24).
     keys = {"ini": {**base.ini, "Menu.ShortcutKey": "0x24"}, "menu_key": "home"}
     files = dict(base.files)
-    if not any(name.lower() == "dinput8.dll" for name in (*files, *_dependency_files(base))):
+    placed = {name.lower() for name in (*files, *_dependency_files(base))}
+    if "reframework-nightly" not in files.values() and "dinput8.dll" not in placed:
         files.update(REFRAMEWORK)
+        placed.add("dinput8.dll")
     native_dlls = {}
-    for name in (*base.native_dlls, "dinput8"):
+    for name in (*base.native_dlls, *(("dinput8",) if "dinput8.dll" in placed else ())):
         native_dlls.setdefault(name.lower(), name)
     return replace(base, files=files, native_dlls=tuple(native_dlls.values()),
                    needs=tuple(n for n in base.needs if n != "reframework"), **keys)
