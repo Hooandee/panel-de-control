@@ -710,6 +710,12 @@ _KERNEL_CMDS = {
         "--grep", _LOADER_LIFECYCLE_GREP,
         "-n", "80", "--no-pager",
     ],
+    # A Steam/gamescope crash shows in the plugin log only as "CEF has disconnected".
+    "session_crashes": [
+        "/usr/bin/journalctl", "-b", "-t", "systemd-coredump", "-t", "kernel",
+        "--grep", "(?i)dumped core|segfault|general protection fault",
+        "-n", "40", "--no-pager",
+    ],
     "earlyoom": ["/usr/bin/journalctl", "-b", "-t", "earlyoom", "-n", "30", "--no-pager"],
     "previous_boot_earlyoom": [
         "/usr/bin/journalctl", "-b", "-1", "-t", "earlyoom", "-n", "30", "--no-pager",

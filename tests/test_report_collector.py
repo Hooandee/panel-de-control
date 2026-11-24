@@ -1711,3 +1711,21 @@ def test_bundle_keeps_only_observed_sleep_events_by_boot():
     missing = kernel_logs(lambda cmd: report_collector.capture_command(cmd, run=journalctl))
     assert missing["sleep_userspace"] == []
     assert missing["previous_boot_sleep_userspace"] is None
+
+
+def test_kernel_logs_capture_session_crashes_behind_a_cef_disconnect():
+    cmd = report_collector._KERNEL_CMDS["session_crashes"]
+    assert cmd[cmd.index("-b") + 1 :][0] != "-1"
+    assert "systemd-coredump" in cmd and "kernel" in cmd
+    pattern = cmd[cmd.index("--grep") + 1]
+    for token in ("dumped core", "segfault"):
+        assert token in pattern
+
+    def run(argv):
+        if argv == cmd:
+            return ("systemd-coredump[14702]: Process 13440 (gamescope-wl) of user 1000 "
+                    "dumped core.")
+        return None
+
+    out = kernel_logs(run)
+    assert "gamescope-wl" in out["session_crashes"]
