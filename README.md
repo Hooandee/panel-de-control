@@ -26,7 +26,7 @@ Si tu equipo no deja leer o cambiar algo, simplemente no aparece, y los números
 reales.
 
 Funciona con [Decky Loader](https://decky.xyz/) y está en español, inglés, italiano, alemán,
-portugués de Brasil y francés.
+portugués de Brasil, francés y ruso.
 
 ## 🎬 Guías en vídeo
 

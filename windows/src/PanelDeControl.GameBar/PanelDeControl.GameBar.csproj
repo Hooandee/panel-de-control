@@ -95,6 +95,7 @@
     <PRIResource Include="Strings\it\Resources.resw" />
     <PRIResource Include="Strings\pt-BR\Resources.resw" />
     <PRIResource Include="Strings\fr\Resources.resw" />
+    <PRIResource Include="Strings\ru\Resources.resw" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\Square44x44Logo.png" />

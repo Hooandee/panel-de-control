@@ -63,6 +63,10 @@ function frenchCatalog(): Record<string, string> {
   return DICTS.fr;
 }
 
+function russianCatalog(): Record<string, string> {
+  return DICTS.ru;
+}
+
 function placeholders(value: string): string[] {
   return [...(value.match(PLACEHOLDER) ?? [])].sort();
 }
@@ -93,6 +97,7 @@ describe("Every supported translation catalog", () => {
       de: { "steam.performance.title": "Steam-Leistung" },
       "pt-BR": { "steam.performance.title": "Desempenho do Steam" },
       fr: { "steam.performance.title": "Performances de Steam" },
+      ru: { "steam.performance.title": "Производительность Steam" },
     });
   });
 
@@ -247,6 +252,23 @@ describe("Every supported translation catalog", () => {
         "desktop.fan.auto.note": "„Automatisch“ gibt diesen Lüfter an die zuvor zuständige Steuerung oder die Firmware zurück.",
         "desktop.fan.firmwareOnly": "Diese Firmware lehnt den manuellen Modus für den GPU-Lüfter ab. Er wird weiterhin überwacht und bleibt automatisch geregelt.",
         "tdp.conflict.powerstation.disablePdc": "TDP im Kontrollzentrum deaktivieren",
+      },
+      ru: {
+        "load.retry": "Повторить",
+        "hud.metric.gpu": "Нагрузка GPU",
+        "hud.metric.gpu_junction_temp": "Горячая точка GPU",
+        "hud.metric.battery_time": "Время работы",
+        "hud.metric.pdc_bat_health": "Здоровье батареи",
+        "display.oled.desc": "Делает цвета твоего экрана ближе к OLED: ярче и глубже. Саму панель не меняет, только цветопередачу.",
+        "fans.experimental.resetFail": "Не удалось перезапустить управление вентилятором. Если проблема останется, перезагрузи устройство.",
+        "settings.cooler": "Внешнее охлаждение подключено",
+        "settings.desktop.desc": "Включает раздельное управление CPU, дискретной графикой и вентиляторами на этом Linux-ПК. Стартует в режиме «Свободный» и ничего не меняет, пока ты не выберешь другой режим.",
+        "desktop.power.available": "Лимит графики",
+        "desktop.cpu.draw": "Потребление CPU",
+        "desktop.power.partial": "Показаны только элементы управления, чтение и запись которых подтверждены системой.",
+        "desktop.fan.auto.note": "«Авто» возвращает этот вентилятор прежнему владельцу или прошивке.",
+        "desktop.fan.firmwareOnly": "Эта прошивка отклоняет ручной режим для вентилятора графики; он наблюдается и остаётся в авто.",
+        "tdp.conflict.powerstation.disablePdc": "Выключить TDP в PdC",
       },
     });
   });
@@ -500,6 +522,66 @@ describe("French catalog", () => {
   });
 });
 
+describe("Russian catalog", () => {
+  it("is a first-class supported language with reviewed Russian wording", () => {
+    expect(i18n.SUPPORTED_LANGUAGES).toContain("ru");
+    expect(russianCatalog()).toMatchObject({
+      "load.retry": "Повторить",
+      "home.title": "Главная",
+      "home.tabs": "Вкладки",
+      "customize.home.dashboard": "Дашборд",
+      "nav.mandos": "Контроллеры",
+      "nav.fans": "Вентиляторы",
+      "settings.language": "Язык",
+      "tdp.presets.add": "Добавить профиль",
+      "tdp.conflict.cede": "Уступить PdC",
+      "system.rgb.confirm.desc": "Colores будет скачан и установлен с GitHub. Продолжить?",
+      "system.battery.health": "Здоровье",
+      "system.battery.healthGroup": "Здоровье батареи",
+      "tdp.inherit": "Наследует общее",
+    });
+  });
+
+  it("keeps established gaming, hardware and product terms", () => {
+    const values = Object.values(russianCatalog());
+    for (const term of [
+      "TDP", "Auto-TDP", "FPS", "CPU", "GPU", "HDR", "RGB", "FSR", "XeSS",
+      "RDNA", "Proton", "SteamOS", "Decky", "MangoHud", "GameMode", "PowerStation",
+      "SimpleDeckyTDP", "Colores",
+    ]) {
+      expect(values.some((value) => value.includes(term)), term).toBe(true);
+    }
+  });
+
+  it("distinguishes battery health from charge and capacity", () => {
+    expect(russianCatalog()).toMatchObject({
+      "hud.metric.pdc_bat_health": "Здоровье батареи",
+      "system.battery.health": "Здоровье",
+      "system.battery.healthGroup": "Здоровье батареи",
+      "system.battery.capacity": "Ёмкость",
+      "system.battery.limit": "Ограничить заряд",
+    });
+  });
+
+  it("warns that AYANEO module ejection may suspend the device", () => {
+    expect(DICTS.ru["mandos.modules.confirm.desc"]).toContain("режим сна");
+  });
+
+  it("formats profile counts without a fixed plural", () => {
+    window.localStorage.setItem(STORAGE_KEY, "ru");
+
+    expect(i18n.translate("gameProfiles.cores", { n: 1 })).toBe("Ядер: 1");
+    expect(i18n.translate("gameProfiles.buttons", { n: 2 })).toBe("Кнопок: 2");
+    expect(i18n.translate("params.activeCount", { n: 1 })).toBe("Активно: 1");
+  });
+
+  it("accepts a persisted Russian selection for lookup", () => {
+    window.localStorage.setItem(STORAGE_KEY, "ru");
+
+    expect(i18n.translate("load.retry")).toBe("Повторить");
+  });
+});
+
 describe("LanguageSelector", () => {
   it("notifies separate roots when the language changes", () => {
     const listener = vi.fn();
@@ -558,7 +640,7 @@ describe("LanguageSelector", () => {
     const selector = screen.getByRole("combobox", { name: "Idioma" });
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     const flags = [...container.querySelectorAll<HTMLImageElement>("[data-language-flag]")];
-    expect(flags).toHaveLength(6);
+    expect(flags).toHaveLength(7);
     expect(flags.every((flag) => flag.tagName === "IMG")).toBe(true);
     expect(flags.every((flag) => flag.src.startsWith("data:image/svg+xml,"))).toBe(true);
     expect([...selector.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
@@ -568,6 +650,7 @@ describe("LanguageSelector", () => {
       "Deutsch",
       "Português (Brasil)",
       "Français",
+      "Русский",
     ]);
     fireEvent.change(selector, { target: { value: "pt-BR" } });
 
@@ -582,5 +665,15 @@ describe("LanguageSelector", () => {
     });
 
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe("fr");
+  });
+
+  it("persists Russian when selected", () => {
+    render(createElement(i18n.I18nProvider, null, createElement(LanguageSelector)));
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Idioma" }), {
+      target: { value: "ru" },
+    });
+
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe("ru");
   });
 });

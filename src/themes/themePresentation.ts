@@ -30,6 +30,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Ein Launcher mit dem Geist der PS Vita",
       "pt-BR": "Um launcher com todo o espírito do PS Vita",
       fr: "Un launcher avec tout l'esprit de la PS Vita",
+      ru: "Лаунчер в духе PS Vita",
     },
     description: {
       es: "Un launcher con todo el espíritu de PS Vita: tus juegos flotan como burbujas de cristal, con Amigos, Trofeos, música y sonidos propios.",
@@ -38,6 +39,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Ein Launcher mit dem ganzen Geist der PS Vita: Deine Spiele schweben als Glasblasen, mit eigenen Freunden, Trophäen, Musik und Sounds.",
       "pt-BR": "Um launcher com todo o espírito do PS Vita: seus jogos flutuam como bolhas de vidro, com Amigos, Troféus, música e sons próprios.",
       fr: "Un launcher avec tout l'esprit de la PS Vita : vos jeux flottent comme des bulles de verre, avec ses propres Amis, Trophées, musique et sons.",
+      ru: "Лаунчер в духе PS Vita: игры парят стеклянными пузырями, со своими Друзьями, Трофеями, музыкой и звуками.",
     },
   },
   "hooandee-duo": {
@@ -50,6 +52,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Konsolen-Startseite mit Dock und Sounds",
       "pt-BR": "Início de console, com dock e sons",
       fr: "Un accueil façon console, avec dock et sons",
+      ru: "Консольная главная с доком и звуками",
     },
     description: {
       es: "Duo es un tema inspirado en una de las consolas más queridas, con acceso directo a tus juegos, sonidos propios y una experiencia de lo más divertida.",
@@ -58,6 +61,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Duo ist ein Theme, inspiriert von einer der beliebtesten Konsolen, mit direktem Zugriff auf deine Spiele, eigenen Sounds und einem richtig unterhaltsamen Erlebnis.",
       "pt-BR": "Duo é um tema inspirado em um dos consoles mais queridos, com acesso direto aos seus jogos, sons próprios e uma experiência muito divertida.",
       fr: "Duo est un thème inspiré de l'une des consoles les plus appréciées, avec un accès direct à vos jeux, des sons bien à lui et une expérience vraiment amusante.",
+      ru: "Duo вдохновлена одной из самых любимых консолей: быстрый доступ к играм, собственные звуки и очень весёлый опыт.",
     },
   },
   "hooandee-gallery": {
@@ -70,6 +74,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Steam aus Glas, hell oder dunkel",
       "pt-BR": "Steam em vidro, claro ou escuro",
       fr: "Steam en verre, clair ou sombre",
+      ru: "Steam как стекло, светлый или тёмный",
     },
     description: {
       es: "Mi primer tema. Una versión más elegante de Steam inspirada en el cristal y las transparencias, con capas translúcidas y detalles sutiles que aportan profundidad sin perder claridad.",
@@ -78,6 +83,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Mein erstes Theme. Eine elegantere Version von Steam, inspiriert von Glas und Transparenz, mit durchscheinenden Ebenen und dezenten Details, die Tiefe geben, ohne an Klarheit zu verlieren.",
       "pt-BR": "Meu primeiro tema. Uma versão mais elegante do Steam inspirada no vidro e nas transparências, com camadas translúcidas e detalhes sutis que dão profundidade sem perder a clareza.",
       fr: "Mon premier thème. Une version plus élégante de Steam, inspirée du verre et de la transparence, avec des couches translucides et des détails discrets qui apportent de la profondeur sans rien perdre en lisibilité.",
+      ru: "Моя первая тема. Более элегантный Steam, вдохновлённый стеклом и прозрачностью: полупрозрачные слои и тонкие детали добавляют глубины, не теряя ясности.",
     },
   },
   "hooandee-luminous-atlas": {
@@ -90,6 +96,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Die Kartenmenüs eines Taktik-RPGs",
       "pt-BR": "Os menus de mapa de um RPG tático",
       fr: "Les menus de carte d'un RPG tactique",
+      ru: "Меню карт тактической RPG",
     },
     description: {
       es: "Un tema táctico inspirado en los menús de atlas y mapas de los RPG de estrategia. Pergamino verde oscuro, tinta marfil y marcos de latón, con portadas personalizables, menú de acceso rápido y elementos dinámicos.",
@@ -98,6 +105,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Ein taktisches Theme, inspiriert von den Atlas- und Kartenmenüs strategischer Rollenspiele. Dunkelgrünes Pergament, elfenbeinfarbene Tinte und Messingrahmen, mit anpassbaren Covern, einem Schnellzugriffsmenü und dynamischen Elementen.",
       "pt-BR": "Um tema tático inspirado nos menus de atlas e mapas dos RPGs de estratégia. Pergaminho verde-escuro, tinta marfim e molduras de latão, com capas personalizáveis, menu de acesso rápido e elementos dinâmicos.",
       fr: "Un thème tactique inspiré des menus d'atlas et de cartes des RPG de stratégie. Parchemin vert foncé, encre ivoire et cadres en laiton, avec des jaquettes personnalisables, un menu d'accès rapide et des éléments dynamiques.",
+      ru: "Тактическая тема по мотивам меню атласов и карт стратегических RPG. Тёмно-зелёный пергамент, чернила цвета слоновой кости и латунные рамки, настраиваемые обложки, меню быстрого доступа и живые элементы.",
     },
   },
   "hooandee-eclipse": {
@@ -110,6 +118,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Deine Spiele als Planeten, für OLED gemacht",
       "pt-BR": "Seus jogos como planetas, feito para OLED",
       fr: "Vos jeux en planètes, pensé pour l'OLED",
+      ru: "Твои игры как планеты, для OLED",
     },
     description: {
       es: "Un tema inspirado en el espacio y los eclipses. Tus juegos se convierten en planetas sobre un fondo negro de verdad, con estrellas y un brillo suave en lo que tienes seleccionado. Pensado para pantallas OLED, que es donde más luce.",
@@ -118,6 +127,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Ein Theme, inspiriert vom Weltall und von Sonnenfinsternissen. Deine Spiele werden zu Planeten auf einem wirklich schwarzen Hintergrund, mit Sternen und einem sanften Leuchten auf dem, was du gerade ausgewählt hast. Gemacht für OLED-Bildschirme, denn dort kommt es am besten zur Geltung.",
       "pt-BR": "Um tema inspirado no espaço e nos eclipses. Seus jogos viram planetas sobre um fundo preto de verdade, com estrelas e um brilho suave no que você tem selecionado. Feito para telas OLED, que é onde ele fica mais bonito.",
       fr: "Un thème inspiré de l'espace et des éclipses. Vos jeux deviennent des planètes sur un fond vraiment noir, avec des étoiles et une douce lueur sur ce que vous avez sélectionné. Pensé pour les écrans OLED, car c'est là qu'il rend le mieux.",
+      ru: "Тема, вдохновлённая космосом и затмениями. Твои игры становятся планетами на по-настоящему чёрном фоне, со звёздами и мягким свечением выбранного. Создана для OLED-экранов, где раскрывается лучше всего.",
     },
   },
   "hooandee-loop": {
@@ -130,6 +140,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Deine Cover, riesig und in 3D",
       "pt-BR": "Suas capas, enormes e em 3D",
       fr: "Vos jaquettes, immenses et en 3D",
+      ru: "Твои обложки, огромные и в 3D",
     },
     description: {
       es: "Tus portadas, enormes y en 3D. Giran con suavidad sobre un suelo de cristal oscuro que las refleja, con el logo delante, el fondo del juego detrás y su ficha en cuanto te paras. A para jugar.",
@@ -138,6 +149,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Deine Cover, riesig und in 3D. Sie gleiten über einen dunklen Glasboden, der sie spiegelt, mit dem Logo davor, dem Artwork des Spiels dahinter und seinen Details, sobald du anhältst. Drück A zum Spielen.",
       "pt-BR": "Suas capas, enormes e em 3D. Elas deslizam sobre um piso de vidro escuro que as reflete, com o logo na frente, a arte do jogo atrás e a ficha dele assim que você para. Aperte A para jogar.",
       fr: "Vos jaquettes, immenses et en 3D. Elles glissent sur un sol de verre sombre qui les reflète, avec le logo devant, l'illustration du jeu derrière et sa fiche dès que vous vous arrêtez. Appuyez sur A pour jouer.",
+      ru: "Твои обложки, огромные и в 3D. Они скользят по тёмному стеклянному полу, который их отражает: логотип спереди, арт игры сзади, а карточка появляется, как только остановишься. Нажми A, чтобы играть.",
     },
   },
   "hooandee-terciopelo": {
@@ -150,6 +162,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Eine Samttastatur mit dem Klang einer Schreibmaschine",
       "pt-BR": "Um teclado de veludo com som de máquina de escrever",
       fr: "Un clavier de velours au son de machine à écrire",
+      ru: "Бархатная клавиатура со звуком машинки",
     },
     description: {
       es: "Un teclado de terciopelo negro con letras en champán y el sonido de una máquina de escribir. Cada tecla se hunde al pulsarla y suelta un poco de polvo dorado.",
@@ -158,6 +171,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Eine Tastatur aus schwarzem Samt mit champagnerfarbenen Zeichen und dem Klang einer Schreibmaschine. Jede Taste sinkt beim Drücken ein und lässt ein wenig goldenen Staub frei.",
       "pt-BR": "Um teclado de veludo preto com letras cor de champanhe e o som de uma máquina de escrever. Cada tecla afunda ao ser pressionada e solta um pouco de poeira dourada.",
       fr: "Un clavier de velours noir aux lettres couleur champagne, avec le son d'une machine à écrire. Chaque touche s'enfonce quand on l'appuie et laisse échapper un peu de poussière dorée.",
+      ru: "Клавиатура из чёрного бархата с буквами цвета шампанского и звуком пишущей машинки. Каждая клавиша проседает при нажатии и выпускает немного золотой пыли.",
     },
   },
   "hooandee-lobo-blanco": {
@@ -170,6 +184,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Silberne Tasten, blutrote Runen und ein Wolfsmedaillon",
       "pt-BR": "Teclas prateadas, runas vermelho-sangue e um medalhão de lobo",
       fr: "Des touches argentées, des runes rouge sang et un médaillon de loup",
+      ru: "Серебряные клавиши, руны и медальон волка",
     },
     description: {
       es: "Teclas plateadas de felpa, teclas especiales rojo sangre con su propia runa y un medallón de lobo. Cada pulsación suena a metal y las runas se encienden al tocarlas.",
@@ -178,6 +193,7 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Silberne Plüschtasten, blutrote Sondertasten mit eigener Rune und ein Wolfsmedaillon. Jeder Druck klingt nach Metall, und die Runen leuchten bei Berührung auf.",
       "pt-BR": "Teclas prateadas de pelúcia, teclas especiais vermelho-sangue com sua própria runa e um medalhão de lobo. Cada toque soa como metal e as runas se acendem ao serem tocadas.",
       fr: "Des touches argentées en peluche, des touches spéciales rouge sang avec leur propre rune et un médaillon de loup. Chaque pression sonne comme du métal et les runes s'allument au toucher.",
+      ru: "Плюшевые серебряные клавиши, особые клавиши цвета крови со своей руной и медальон волка. Каждое нажатие звучит как металл, а руны загораются от прикосновения.",
     },
   },
 };

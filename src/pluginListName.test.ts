@@ -36,6 +36,12 @@ describe("nextRowText", () => {
     expect(nextRowText(IDENTITY, IDENTITY, translate("app.title"))).toBeNull();
   });
 
+  it("keeps the identity row unchanged with a persisted Russian selection", () => {
+    window.localStorage.setItem("panel-de-control-lang", "ru");
+
+    expect(nextRowText(IDENTITY, IDENTITY, translate("app.title"))).toBeNull();
+  });
+
   it("leaves the row untouched when the target equals the identity (Spanish)", () => {
     expect(nextRowText(IDENTITY, IDENTITY, IDENTITY)).toBeNull();
   });
