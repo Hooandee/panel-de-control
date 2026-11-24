@@ -943,6 +943,7 @@ export const de: Record<string, string> = {
   "themes.action.activating": "Wird aktiviert…",
   "themes.action.deactivate": "Theme deaktivieren",
   "themes.action.deactivating": "Wird deaktiviert…",
+  "themes.action.activated": "Theme aktiviert",
   "themes.action.install": "Theme installieren",
   "themes.early.badge": "Early",
   "themes.early.title": "Früher Zugang",

@@ -654,6 +654,48 @@ describe("ThemeDetailsModal", () => {
     expect(deactivate).toHaveBeenCalledWith("example-theme");
   });
 
+  // PDC-AHYE: the button turned into "Deactivate" under the cursor and the next press, 1.4–2.3 s
+  // after each activation, switched the theme off again before it could be seen.
+  it("holds a fresh activation against the next press, then allows deactivation", async () => {
+    vi.useFakeTimers();
+    try {
+      const deactivate = vi.fn(async () => true);
+      const base = controller();
+      const installedTheme = {
+        id: "Example Theme", name: "Example Theme", displayName: "Example Theme", version: "1.2.3",
+        author: "Example Author", enabled: false, patches: [],
+      };
+      const installedCard = { ...base.cards[0], installed: true, installedVersion: "1.2.3", cssLoaderTheme: installedTheme, versionRelation: "current" as const };
+      const activeController = controller({
+        snapshot: { status: "ready", themes: [{ ...installedTheme, enabled: true }] },
+        cards: [{ ...installedCard, active: true, cssLoaderTheme: { ...installedTheme, enabled: true } }],
+        deactivate,
+      });
+      mocks.controller = controller({
+        snapshot: { status: "ready", themes: [installedTheme] },
+        cards: [installedCard],
+        activate: vi.fn(async () => {
+          mocks.controller = activeController;
+          return true;
+        }),
+        deactivate,
+      });
+      const view = render(<ThemeDetailsModal themeId="example-theme" />);
+
+      fireEvent.click(screen.getByRole("button", { name: "themes.action.activate" }));
+      await act(async () => {});
+      view.rerender(<ThemeDetailsModal themeId="example-theme" />);
+      fireEvent.click(screen.getByRole("button", { name: "themes.action.activated" }));
+      expect(deactivate).not.toHaveBeenCalled();
+
+      await act(async () => { vi.advanceTimersByTime(4000); });
+      fireEvent.click(screen.getByRole("button", { name: "themes.action.deactivate" }));
+      expect(deactivate).toHaveBeenCalledWith("example-theme");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("uses Panel tokens instead of theme-owned chrome variables", () => {
     mocks.controller = controller();
     render(<ThemeDetailsModal themeId="example-theme" />);

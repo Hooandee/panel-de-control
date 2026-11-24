@@ -43,6 +43,9 @@ interface ThemeActionFeedback {
 }
 
 const ACTION_FEEDBACK_MS = 2500;
+// Steam keeps focus on the same button, now "Deactivate"; a second press while the theme is still
+// painting (PDC-AHYE: 1.4–2.3 s after each activation) silently turned it off again.
+const ACTIVATION_HOLD_MS = 4000;
 
 const gamepadNavigation = createThemeNavigationAccess();
 
@@ -307,6 +310,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const themeActions = useThemeActions(themeId, card?.cssLoaderTheme?.name, card?.installedVersion);
   const actionsListening = useThemeActionsListening(themeId);
   const [actionFeedback, setActionFeedback] = useState<ThemeActionFeedback | null>(null);
+  const [activationHold, setActivationHold] = useState(false);
   const installOfferRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -325,6 +329,12 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
     }
     previousInstalledRef.current = installed;
   }, [card?.installed]);
+
+  useEffect(() => {
+    if (!activationHold) return undefined;
+    const timer = setTimeout(() => setActivationHold(false), ACTIVATION_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [activationHold]);
 
   useEffect(() => {
     if (!actionFeedback) return undefined;
@@ -356,6 +366,20 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const uninstalling = controller.operation?.kind === "uninstalling" && controller.operation.themeId === card.id;
   const activating = controller.operation?.kind === "activating" && controller.operation.themeId === card.id;
   const deactivating = controller.operation?.kind === "deactivating" && controller.operation.themeId === card.id;
+  const justActivated = activationHold && card.active;
+  const toggleActivation = () => {
+    if (justActivated) {
+      recordUiEvent("themes", "deactivate_held", { theme: card.id });
+      return;
+    }
+    if (card.active) {
+      void controller.deactivate(card.id);
+      return;
+    }
+    void controller.activate(card.id).then((activated) => {
+      if (activated) setActivationHold(true);
+    });
+  };
   const displayName = localizePublishedText(card.release.displayName, lang);
   const description = themeDescriptionFor(card.release, lang);
   const releaseNote = localizePublishedText(card.release.notes, lang);
@@ -459,10 +483,10 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                     <ButtonItem
                       layout="below"
                       disabled={activationBlocked}
-                      onClick={() => void (card.active ? controller.deactivate(card.id) : controller.activate(card.id))}
+                      onClick={toggleActivation}
                     >
-                      {card.active ? <LuPower size={14} aria-hidden /> : <LuSparkles size={14} aria-hidden />}{" "}
-                      {t(card.active
+                      {justActivated ? <LuCheck size={14} aria-hidden /> : card.active ? <LuPower size={14} aria-hidden /> : <LuSparkles size={14} aria-hidden />}{" "}
+                      {t(justActivated ? "themes.action.activated" : card.active
                         ? deactivating ? "themes.action.deactivating" : "themes.action.deactivate"
                         : activating ? "themes.action.activating" : "themes.action.activate")}
                     </ButtonItem>
