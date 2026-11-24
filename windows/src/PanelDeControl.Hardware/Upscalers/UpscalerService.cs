@@ -241,8 +241,32 @@ public sealed class UpscalerService : IUpscalersController
             })
             .ToArray();
         var stored = store.Install(appId);
+        var install = stored is not null ? InstallEntry(stored) : null;
+        if (stored is not null && install?.Verdict is { } verdict && verdict != OptiScalerLog.NotRun)
+        {
+            try
+            {
+                store.SettleHistory(appId, stored.Install.Build, verdict, install.Observed);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                log("upscalers.history", exception.GetType().Name);
+            }
+        }
+
+        var history = store.History(appId)
+            .Select(item => new UpscalerHistoryEntry
+            {
+                Build = item.Build,
+                At = (long)item.At,
+                Result = item.Result,
+                Label = UpscalerLabel.Badge(data.Catalog.Build(item.Build), item.Model),
+                Observed = item.Observed,
+            })
+            .ToArray();
         return new UpscalerGameDetail
         {
+            History = history.Length > 0 ? history : null,
             Game = summary,
             Exe = analysis.Exe,
             Apis = analysis.Apis.ToArray(),
@@ -264,8 +288,8 @@ public sealed class UpscalerService : IUpscalersController
                 },
             Preferred = UpscalerPlanner.PreferredBuild(data.Catalog, generation, recipe?.RecommendedBuild),
             Builds = builds,
-            Install = stored is not null
-                ? InstallEntry(stored)
+            Install = install is not null
+                ? install
                 : summary.State == UpscalerGameStates.PanelUnknown
                     ? new UpscalerInstallEntry { Proxy = "", Status = UpscalerGameStates.Installed }
                     : null,
@@ -385,6 +409,16 @@ public sealed class UpscalerService : IUpscalersController
 
             jobs.Stage("launch");
             await ApplyLaunchArgsAsync(appId, install).ConfigureAwait(false);
+            try
+            {
+                store.AddHistory(appId, new UpscalerHistoryItem(clock(), install.Build, install.Proxy.Length > 0 ? install.Proxy : null,
+                    install.Engine == "dll" ? "not_run" : "pending", install.Exe, install.Options.Model));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                log("upscalers.history", exception.GetType().Name);
+            }
+
             Record(appId, "install", "done", install.Build, null);
             jobs.Finish();
         }

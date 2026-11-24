@@ -237,6 +237,26 @@ public sealed class UpscalerRecipeStatus
 }
 
 [DataContract]
+public sealed class UpscalerHistoryEntry
+{
+    [DataMember(Name = "build", Order = 1, IsRequired = true)]
+    public string Build { get; set; } = "";
+
+    [DataMember(Name = "at", Order = 2, IsRequired = true)]
+    public long At { get; set; }
+
+    /// <summary><c>pending</c>, <c>not_run</c>, <c>loaded</c> or <c>active</c>.</summary>
+    [DataMember(Name = "result", Order = 3, IsRequired = true)]
+    public string Result { get; set; } = "";
+
+    [DataMember(Name = "label", Order = 4, EmitDefaultValue = false)]
+    public string? Label { get; set; }
+
+    [DataMember(Name = "observed", Order = 5, EmitDefaultValue = false)]
+    public string? Observed { get; set; }
+}
+
+[DataContract]
 public sealed class UpscalerDependencyStatus
 {
     [DataMember(Name = "id", Order = 1, IsRequired = true)]
@@ -347,6 +367,10 @@ public sealed class UpscalerInstallEntry
 [DataContract]
 public sealed class UpscalerGameDetail
 {
+    /// <summary>The last installs in this game, newest last, with what the log said about each.</summary>
+    [DataMember(Name = "history", Order = 20, EmitDefaultValue = false)]
+    public UpscalerHistoryEntry[]? History { get; set; }
+
     [DataMember(Name = "game", Order = 1, IsRequired = true)]
     public UpscalerGameSummary Game { get; set; } = new();
 

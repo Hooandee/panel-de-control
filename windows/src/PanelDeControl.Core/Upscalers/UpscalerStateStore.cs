@@ -48,9 +48,39 @@ public sealed class UpscalerAction
 /// <c>state.json</c> with the Linux layout (<c>games.&lt;appid&gt;.install</c>, <c>games.&lt;appid&gt;.actions</c>), written
 /// through a temporary file so a crash never leaves half a file.
 /// </summary>
+/// <summary>One install in a game's history, as Linux keeps it: <c>result</c> starts pending and the log settles it.</summary>
+public sealed class UpscalerHistoryItem
+{
+    public UpscalerHistoryItem(double at, string build, string? proxy, string result, string? exe, string? model = null, string? observed = null)
+    {
+        At = at;
+        Build = build;
+        Proxy = proxy;
+        Result = result;
+        Exe = exe;
+        Model = model;
+        Observed = observed;
+    }
+
+    public double At { get; }
+
+    public string Build { get; }
+
+    public string? Proxy { get; }
+
+    public string Result { get; }
+
+    public string? Exe { get; }
+
+    public string? Model { get; }
+
+    public string? Observed { get; }
+}
+
 public sealed class UpscalerStateStore
 {
     public const int ActionLimit = 20;
+    public const int HistoryLimit = 20;
     public const long MaximumBytes = 4 * 1024 * 1024;
 
     private static readonly UTF8Encoding Utf8 = new(false);
@@ -59,6 +89,7 @@ public sealed class UpscalerStateStore
     private readonly Action<string, string> _replace;
     private readonly Dictionary<string, StoredUpscaler> _installs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<UpscalerAction>> _actions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<UpscalerHistoryItem>> _history = new(StringComparer.Ordinal);
 
     /// <param name="path">The state file.</param>
     /// <param name="replace">Moves the finished temporary file over the state file; replaceable so a test can fail it.</param>
@@ -95,6 +126,56 @@ public sealed class UpscalerStateStore
         lock (_lock)
         {
             return _actions.TryGetValue(appId, out var list) ? list.ToList() : new List<UpscalerAction>();
+        }
+    }
+
+    public IReadOnlyList<UpscalerHistoryItem> History(string appId)
+    {
+        lock (_lock)
+        {
+            return _history.TryGetValue(appId, out var list) ? list.ToList() : new List<UpscalerHistoryItem>();
+        }
+    }
+
+    public void AddHistory(string appId, UpscalerHistoryItem item)
+    {
+        lock (_lock)
+        {
+            Mutate(() =>
+            {
+                if (!_history.TryGetValue(appId, out var list))
+                {
+                    list = new List<UpscalerHistoryItem>();
+                    _history[appId] = list;
+                }
+
+                list.Add(item);
+                if (list.Count > HistoryLimit)
+                {
+                    list.RemoveRange(0, list.Count - HistoryLimit);
+                }
+            });
+        }
+    }
+
+    /// <summary>Settles the newest entry once the log has spoken, only while it is still the install in the game.</summary>
+    public bool SettleHistory(string appId, string build, string result, string? observed)
+    {
+        lock (_lock)
+        {
+            if (!_history.TryGetValue(appId, out var list) || list.Count == 0)
+            {
+                return false;
+            }
+
+            var last = list[list.Count - 1];
+            if (last.Build != build || (last.Result == result && last.Observed == observed))
+            {
+                return false;
+            }
+
+            Mutate(() => list[list.Count - 1] = new UpscalerHistoryItem(last.At, last.Build, last.Proxy, result, last.Exe, last.Model, observed));
+            return true;
         }
     }
 
@@ -150,6 +231,7 @@ public sealed class UpscalerStateStore
     {
         var installs = new Dictionary<string, StoredUpscaler>(_installs, StringComparer.Ordinal);
         var actions = _actions.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
+        var history = _history.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
         try
         {
             change();
@@ -167,6 +249,12 @@ public sealed class UpscalerStateStore
             foreach (var pair in actions)
             {
                 _actions[pair.Key] = pair.Value;
+            }
+
+            _history.Clear();
+            foreach (var pair in history)
+            {
+                _history[pair.Key] = pair.Value;
             }
 
             throw;
@@ -200,6 +288,15 @@ public sealed class UpscalerStateStore
                     _installs[game.Key] = stored;
                 }
 
+                if (entry.Get("history") is DataArray past)
+                {
+                    var items = past.Items.OfType<DataObject>().Select(ReadHistory).Where(item => item is not null).Cast<UpscalerHistoryItem>().ToList();
+                    if (items.Count > 0)
+                    {
+                        _history[game.Key] = items.Skip(Math.Max(0, items.Count - HistoryLimit)).ToList();
+                    }
+                }
+
                 if (entry.Get("actions") is DataArray actions)
                 {
                     var list = actions.Items.OfType<DataObject>().Select(item => ReadAction(game.Key, item)).Where(item => item is not null)
@@ -215,18 +312,24 @@ public sealed class UpscalerStateStore
         {
             _installs.Clear();
             _actions.Clear();
+            _history.Clear();
         }
     }
 
     private void Save()
     {
         var games = new List<KeyValuePair<string, DataValue>>();
-        foreach (var appId in _installs.Keys.Concat(_actions.Keys).Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
+        foreach (var appId in _installs.Keys.Concat(_actions.Keys).Concat(_history.Keys).Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
         {
             var members = new List<KeyValuePair<string, DataValue>>();
             if (_installs.TryGetValue(appId, out var stored))
             {
                 members.Add(Member("install", WriteInstall(stored)));
+            }
+
+            if (_history.TryGetValue(appId, out var past) && past.Count > 0)
+            {
+                members.Add(Member("history", new DataArray(past.Select(WriteHistory).ToList())));
             }
 
             members.Add(Member("actions", new DataArray(
@@ -366,6 +469,29 @@ public sealed class UpscalerStateStore
             Member("added_args", new DataArray(install.AddedArgs.Select(arg => (DataValue)new DataString(arg)).ToList())),
         });
     }
+
+    private static UpscalerHistoryItem? ReadHistory(DataObject item)
+    {
+        var build = Text(item.Get("build"));
+        if (string.IsNullOrEmpty(build))
+        {
+            return null;
+        }
+
+        return new UpscalerHistoryItem(item.Get("at") is DataNumber at ? at.Real : 0, build!, Text(item.Get("proxy")),
+            Text(item.Get("result")) ?? "pending", Text(item.Get("exe")), Text(item.Get("model")), Text(item.Get("observed")));
+    }
+
+    private static DataValue WriteHistory(UpscalerHistoryItem item) => new DataObject(new[]
+    {
+        Member("build", new DataString(item.Build)),
+        Member("proxy", Optional(item.Proxy)),
+        Member("at", new DataNumber(null, item.At)),
+        Member("result", new DataString(item.Result)),
+        Member("exe", Optional(item.Exe)),
+        Member("model", Optional(item.Model)),
+        Member("observed", Optional(item.Observed)),
+    });
 
     private static UpscalerAction? ReadAction(string appId, DataObject item)
     {

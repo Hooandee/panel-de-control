@@ -451,6 +451,25 @@ public sealed class UpscalerServiceTests : IDisposable
         Assert.Contains(new UpscalerStateStore(StatePath).Actions("100"), action => action.Error == "launch_args_kept");
     }
 
+    [Fact]
+    public async Task TheGamePageKeepsAHistoryThatTheLogSettles()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        var service = Service();
+        var first = (await service.HandleAsync(UpscalersRequest.Game("100"), CancellationToken.None)).Game!;
+        File.WriteAllText(Path.Combine(Target(game), "OptiScaler.log"),
+            "[13:19:00.245658] [W] OptiScaler v0.9.4-final (7534ad0) loaded\n" +
+            "[13:21:05.132848] [I] NVSDK_NGX_D3D12_CreateFeature Creating new fsr31 upscaler\n");
+
+        var second = (await service.HandleAsync(UpscalersRequest.Game("100"), CancellationToken.None)).Game!;
+
+        Assert.Equal(("fsr-3.1", "pending"), (first.History!.Single().Build, first.History!.Single().Result));
+        Assert.Equal("active", second.Install!.Verdict);
+        Assert.Equal("active", second.History!.Single().Result);
+        Assert.Equal("active", new UpscalerStateStore(StatePath).History("100").Single().Result);
+    }
+
     private sealed class FakeLaunchOptions : ISteamLaunchOptions
     {
         public FakeLaunchOptions(string value) => Value = value;
