@@ -1,0 +1,55 @@
+{
+  "name": "A Plague Tale: Requiem",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/A-Plague-Tale-Requiem"
+    ],
+    "anr_settings": [
+      {
+        "setting": "NVIDIA DLSS Frame Generation",
+        "value": "On (Sí)"
+      }
+    ]
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/A-Plague-Tale-Requiem"
+    ],
+    "anr_settings": [
+      {
+        "setting": "NVIDIA DLSS Frame Generation",
+        "value": "On (Sí)"
+      }
+    ]
+  }
+}

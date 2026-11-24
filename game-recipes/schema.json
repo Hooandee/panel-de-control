@@ -398,6 +398,176 @@
             ],
             "additionalProperties": false
           }
+        },
+        "proxy": {
+          "description": "DLL name OptiScaler loads as instead of dxgi.dll.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+\\.dll$"
+        },
+        "protect_dlls": {
+          "description": "The game's launcher deletes unknown libraries beside the exe at every start; read-only ones survive.",
+          "type": "boolean",
+          "default": false
+        },
+        "legacy_ffx_swap": {
+          "description": "False when the game fails to start with FSR 4's loader in place of its FSR 3.1 amd_fidelityfx_dx12.dll.",
+          "type": "boolean",
+          "default": true
+        },
+        "files": {
+          "description": "Extra files placed beside the exe: destination -> id of a build catalog asset.",
+          "type": "object",
+          "maxProperties": 16,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\:])(?!.*//)[^/](?:.*[^/])?$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,79}$"
+          }
+        },
+        "native_dlls": {
+          "description": "Libraries the game must load natively.",
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_]+$"
+          }
+        },
+        "needs": {
+          "description": "What the game needs besides OptiScaler.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "reframework",
+              "nvngx_dlss",
+              "anti_cheat_off",
+              "luma",
+              "mod"
+            ]
+          }
+        },
+        "anr_settings": {
+          "description": "What the game's own menu needs so its DLSS Frame Generation reaches ANR, in the game's words.",
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "properties": {
+              "setting": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "setting",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "game_config": {
+          "description": "XML settings applied on install and put back on removal. The file is relative to the user's profile folder on each OS (the prefix user folder under Proton).",
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\:])(?!.*//)[^/](?:.*[^/])?$"
+              },
+              "element": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]+$"
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "file",
+              "element",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "mod_launch_exe": {
+          "description": "With a user's mod in: the launcher Steam starts and the exe to start instead.",
+          "type": "object",
+          "properties": {
+            "launcher": {
+              "type": "string",
+              "pattern": "^[^/\\\\]+$",
+              "maxLength": 128
+            },
+            "exe": {
+              "type": "string",
+              "pattern": "^[^/\\\\]+$",
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "launcher",
+            "exe"
+          ],
+          "additionalProperties": false
+        },
+        "mod_settings": {
+          "description": "The mod's own settings: file beside the exe -> `Section.Key` -> value.",
+          "type": "object",
+          "maxProperties": 8,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\:])(?!.*//)[^/](?:.*[^/])?$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        },
+        "mod_frame_generation": {
+          "description": "Frame generation the mod's settings turn on, named in the in-game pill.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "fg_note": {
+          "description": "Key of the note shown about frame generation for this game.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+$",
+          "maxLength": 40
+        },
+        "notes": {
+          "description": "Why the recipe is the way it is, including what this OS leaves out.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
         }
       },
       "required": [

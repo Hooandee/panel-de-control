@@ -92,7 +92,7 @@ def test_god_of_war_ragnarok_keeps_its_fsr31_library_out_of_the_dll_route(steam,
     legacy = _write(folder / "amd_fidelityfx_dx12.dll", b"ffx 1.0.1")
     service = _service(steam, tmp_path / "state", proc)
     assert service.game(APPID)["analysis"]["dll_targets"] == ["bin/x64_dx12/amd_fidelityfx_dx12.dll"]
-    monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["2322010"], appid=APPID))
+    monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.recipe_for("2322010", platform="linux", arch="x86_64"), appid=APPID))
     without_bundled_recipes(monkeypatch)
     analysis = service.game(APPID)["analysis"]
     assert analysis["dll_targets"] == [] and analysis["dll_blocked"] == "recipe_legacy_ffx"

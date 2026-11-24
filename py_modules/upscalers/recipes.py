@@ -1,6 +1,6 @@
 """What a particular game needs besides OptiScaler, so nobody has to research it.
 
-Hand-written entries are checked against the game's files and a real install on a handheld.
+Curated entries live in game-recipes/games/<appid>.json, one block per OS, shared with the Windows port.
 `recipes_wiki.json` is generated from the whole OptiScaler wiki (`wiki.py`): every listed game with
 the community verdict, its inputs, the proxy, -dx12, OptiPatcher, the OptiScaler.ini settings its
 page lists and what Panel must warn about (REFramework, a copied nvngx_dlss.dll, anti-cheat, a
@@ -71,52 +71,8 @@ class Recipe:
     legacy_ffx_swap: bool = True
 
 
-RECIPES: dict[str, Recipe] = {
-    recipe.appid: recipe
-    for recipe in (
-        # ERSS-FG (the mod the wiki asks for) needs Easy Anti-Cheat off, which its author does by starting eldenring.exe
-        # instead of start_protected_game.exe, and its FSR upscaler (OptiScaler's input) and FSR Frame Generation chosen.
-        Recipe("1245620", mod_launch_exe=("start_protected_game.exe", "eldenring.exe"),
-               mod_settings={"ERSS2/ERSS-FG.toml": {"Renderer.ScalingMode": '"FSR3U"', "FrameGeneration.FrameGenMode": "1"}},
-               mod_frame_generation="ERSS-FG"),
-        # REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers.
-        # graphics.xml: FSR Frame Generation is disabled while Reflex is on.
-        Recipe("292030", exe="bin/x64_dx12/witcher3.exe", args=("--launcher-skip", "-dx12"), fg_note="reflexOff"),
-        # ControlLauncher also loads the proxy before OptiScaler can apply its Control_DX12 spoofing exception.
-        # FSR 4 only runs through OptiScaler's D3D11 to D3D12 bridge: the Vulkan path cannot share its textures.
-        Recipe("870780", ini={"Spoofing.Dxgi": "false"}),
-        # RE Engine exposes its upscaler to OptiScaler only through REFramework.
-        Recipe("2054970", files={"dinput8.dll": "reframework-nightly"}, native_dlls=("dinput8",)),
-        # Monster Hunter Wilds wiki entry: on AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing
-        # on top crashes it. REFramework comes from the RE Engine rule.
-        Recipe("2246340", ini={"Spoofing.Dxgi": "false"}, needs=("reframework",)),
-        # Monster Hunter Rise wiki entry: as dxgi.dll on AMD the game never offers DLSS, and REFramework as dinput8.dll
-        # beside OptiScaler crashes it; OptiScaler goes in as d3d12.dll and loads REFramework as ReShade64.dll.
-        Recipe("1446780", proxy="d3d12.dll", files={"ReShade64.dll": "reframework-nightly"},
-               ini={"Plugins.LoadReshade": "true"}),
-        # Hogwarts Legacy lists DLSS Frame Generation only while its upscaler is DLSS; both apply on restart.
-        Recipe("990080", anr_settings=(("Upscale Type (Tipo de escalado)", "NVIDIA DLSS"),
-                                       ("Frame Generation (Generación de fotogramas)", "NVIDIA DLSS Frame Generation x2"))),
-        # Cyberpunk 2077 waits on REDlauncher under Proton.
-        Recipe("1091500", args=("--launcher-skip",),
-               anr_settings=(("Resolution Scaling (Escalado de resolución)", "DLSS Super Resolution"),
-                             ("Frame Generation (Generación de fotogramas)", "DLSS Frame Generation"))),
-        Recipe("2124490", anr_settings=(("Supersampling (Supermuestreo)", "DLSS"),
-                                        ("Frame Generation (Generación de fotogramas)", "On (Activada)"))),
-        Recipe("1182900", anr_settings=(("NVIDIA DLSS Frame Generation", "On (Sí)"),)),
-        # Deep Rock Galactic asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.
-        Recipe("548430", args=("-dx12",), anr_settings=(("Frame Generation", "On"),)),
-        # Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll;
-        # its launcher purges unknown .dll files at every start.
-        Recipe("230410", proxy="winmm.dll", protect_dlls=True),
-        # RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it.
-        Recipe("1174180", game_config=(("Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml", "API",
-                                        "kSettingAPI_DX12"),)),
-        # God of War Ragnarök shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works.
-        Recipe("2322010", anr_settings=(("Frame Generation (Generación de fotogramas)", "Nvidia DLSS-FG"),),
-               legacy_ffx_swap=False),
-    )
-}
+# Test hook: curated recipes live in game-recipes/games/<appid>.json.
+RECIPES: dict[str, Recipe] = {}
 
 
 def _wiki(path: Path = WIKI_FILE) -> dict[str, Recipe]:
@@ -207,12 +163,22 @@ def recipe_for(appid: str, live: Recipe | None = None, *, engine: str = "optisca
     entry = catalog.match(appid, engine, platform, arch, game_build=game_build)
     hand = RECIPES.get(str(appid))
     if entry:
-        hand = replace(hand or Recipe(entry.appid), exe=entry.exe or (hand.exe if hand else None), args=entry.args, ini=dict(entry.ini),
-                      dependencies=entry.dependencies, catalog_revision=entry.revision,
-                      catalog_version=catalog.catalog_version, source="game-recipes",
-                      recommended_input=entry.recommended_input, effective_api=entry.effective_api, quality_owner=entry.quality_owner, recommended_build=entry.recommended_build, optiscaler_root_files=entry.optiscaler_root_files,
-                      reframework_upscaler=entry.reframework_upscaler, optiscaler_fg=entry.optiscaler_fg,
-                      game_settings=entry.game_settings)
+        base = hand or Recipe(entry.appid)
+        hand = replace(base, exe=entry.exe or base.exe, args=entry.args, ini=dict(entry.ini),
+                       proxy=entry.proxy or base.proxy, protect_dlls=entry.protect_dlls or base.protect_dlls,
+                       legacy_ffx_swap=entry.legacy_ffx_swap and base.legacy_ffx_swap,
+                       files=dict(entry.files) or base.files, native_dlls=entry.native_dlls or base.native_dlls,
+                       needs=tuple(dict.fromkeys((*base.needs, *entry.needs))),
+                       anr_settings=entry.anr_settings or base.anr_settings, game_config=entry.game_config or base.game_config,
+                       mod_launch_exe=entry.mod_launch_exe or base.mod_launch_exe,
+                       mod_settings={k: dict(v) for k, v in entry.mod_settings.items()} or base.mod_settings,
+                       mod_frame_generation=entry.mod_frame_generation or base.mod_frame_generation,
+                       fg_note=entry.fg_note or base.fg_note,
+                       dependencies=entry.dependencies, catalog_revision=entry.revision,
+                       catalog_version=catalog.catalog_version, source="game-recipes",
+                       recommended_input=entry.recommended_input if engine == "optiscaler" else None, effective_api=entry.effective_api, quality_owner=entry.quality_owner, recommended_build=entry.recommended_build, optiscaler_root_files=entry.optiscaler_root_files,
+                       reframework_upscaler=entry.reframework_upscaler, optiscaler_fg=entry.optiscaler_fg,
+                       game_settings=entry.game_settings)
         # The catalog installs Luma itself; games the wiki does not list still need it named.
         if any(dep.startswith("luma-") for dep in entry.dependencies):
             hand = replace(hand, needs=tuple(dict.fromkeys((*hand.needs, "luma"))))

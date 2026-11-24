@@ -1,0 +1,65 @@
+{
+  "name": "Hogwarts Legacy",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Hogwarts-Legacy"
+    ],
+    "anr_settings": [
+      {
+        "setting": "Upscale Type (Tipo de escalado)",
+        "value": "NVIDIA DLSS"
+      },
+      {
+        "setting": "Frame Generation (Generación de fotogramas)",
+        "value": "NVIDIA DLSS Frame Generation x2"
+      }
+    ],
+    "notes": "DLSS Frame Generation is listed only while the upscaler is DLSS; both apply on restart."
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Hogwarts-Legacy"
+    ],
+    "anr_settings": [
+      {
+        "setting": "Upscale Type (Tipo de escalado)",
+        "value": "NVIDIA DLSS"
+      },
+      {
+        "setting": "Frame Generation (Generación de fotogramas)",
+        "value": "NVIDIA DLSS Frame Generation x2"
+      }
+    ],
+    "notes": "DLSS Frame Generation is listed only while the upscaler is DLSS; both apply on restart."
+  }
+}

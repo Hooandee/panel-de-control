@@ -26,6 +26,9 @@ _REDISTRIBUTABLES = {'vc14_x64'}
 _REDIST_PAGE_HOSTS = {'learn.microsoft.com'}
 # Pages a user_files dependency may point the user to; Panel never downloads from them.
 _PAGE_HOSTS = {'www.nexusmods.com', 'nexusmods.com', 'github.com', 'www.patreon.com'}
+_PROXY = re.compile(r'[A-Za-z0-9_]+\.dll\Z')
+_WORD = re.compile(r'[A-Za-z0-9_]+\Z')
+_NEEDS = ('reframework', 'nvngx_dlss', 'anti_cheat_off', 'luma', 'mod')
 _VERSION = re.compile(r'[0-9]+(?:\.[0-9]+){0,3}\Z')
 # TutorialProgress=4 marks ReShade's tutorial done: otherwise its splash stays over the game until Home is pressed.
 _CONFIGURATION = {'ReShade.ini': {'Luma.SRUserType': {'2'}, 'OVERLAY.TutorialProgress': {'4'}}}
@@ -91,6 +94,27 @@ class GameRecipe:
     optiscaler_fg: bool = True
     # Options the user must change in the game's own menu, as (setting, value) in the game's words.
     game_settings: tuple[tuple[str, str], ...] = ()
+    # The DLL name OptiScaler loads as instead of dxgi.dll.
+    proxy: str | None = None
+    # The game's launcher deletes unknown libraries beside the exe at every start; read-only ones survive.
+    protect_dlls: bool = False
+    # False when the game fails to start with FSR 4's loader in place of its FSR 3.1 amd_fidelityfx_dx12.dll.
+    legacy_ffx_swap: bool = True
+    # Extra files placed beside the exe: destination -> id of a build catalog asset.
+    files: dict[str, str] = field(default_factory=dict)
+    native_dlls: tuple[str, ...] = ()
+    needs: tuple[str, ...] = ()
+    # What the game's own menu needs so its DLSS Frame Generation reaches ANR, as (setting, value).
+    anr_settings: tuple[tuple[str, str], ...] = ()
+    # (file relative to the user's profile folder, XML element, text) set on install and put back on removal.
+    game_config: tuple[tuple[str, str, str], ...] = ()
+    # With a user's mod in: (launcher Steam starts, exe to start instead).
+    mod_launch_exe: tuple[str, str] | None = None
+    # The mod's own settings: file beside the exe -> `Section.Key` -> value.
+    mod_settings: dict[str, dict[str, str]] = field(default_factory=dict)
+    mod_frame_generation: str | None = None
+    fg_note: str | None = None
+    notes: str | None = None
     platform: str = 'linux'
     status: str = 'tested'
 
@@ -261,8 +285,72 @@ def _closure(ids, dependencies, platform: str) -> list[DependencySpec]:
     return list(seen.values())
 
 
+def _pairs(value, limit=16):
+    if not isinstance(value, list) or len(value) > limit:
+        raise CatalogError('invalid_pairs')
+    pairs = []
+    for entry in value:
+        entry = _object(entry, ('setting', 'value'))
+        pairs.append((_text(entry['setting'], 80), _text(entry['value'], 80)))
+    return tuple(pairs)
+
+
+def _extras(item) -> dict:
+    """Fields a recipe adds to what the OptiScaler install does for the game."""
+    extras = {}
+    if 'proxy' in item:
+        if not isinstance(item['proxy'], str) or not _PROXY.fullmatch(item['proxy']):
+            raise CatalogError('invalid_proxy')
+        extras['proxy'] = item['proxy']
+    for key, default in (('protect_dlls', False), ('legacy_ffx_swap', True)):
+        extras[key] = item.get(key, default)
+        if type(extras[key]) is not bool:
+            raise CatalogError('invalid_' + key)
+    files = item.get('files', {})
+    if not isinstance(files, dict) or len(files) > 16:
+        raise CatalogError('invalid_files')
+    extras['files'] = {_path(destination): _identifier(asset) for destination, asset in files.items()}
+    extras['native_dlls'] = _strings(item.get('native_dlls', []), lambda v: v if isinstance(v, str) and _WORD.fullmatch(v) else _bad('invalid_native_dll'), 8)
+    extras['needs'] = _strings(item.get('needs', []), lambda v: v if v in _NEEDS else _bad('invalid_need'), len(_NEEDS))
+    extras['anr_settings'] = _pairs(item.get('anr_settings', []))
+    config = item.get('game_config', [])
+    if not isinstance(config, list) or len(config) > 8:
+        raise CatalogError('invalid_game_config')
+    rows = []
+    for entry in config:
+        entry = _object(entry, ('file', 'element', 'value'))
+        if not isinstance(entry['element'], str) or not _WORD.fullmatch(entry['element']):
+            raise CatalogError('invalid_game_config')
+        rows.append((_path(entry['file']), entry['element'], _text(entry['value'], 80)))
+    extras['game_config'] = tuple(rows)
+    if 'mod_launch_exe' in item:
+        launch = _object(item['mod_launch_exe'], ('launcher', 'exe'))
+        names = (_text(launch['launcher'], 128), _text(launch['exe'], 128))
+        if any('/' in name or '\\' in name for name in names):
+            raise CatalogError('invalid_mod_launch_exe')
+        extras['mod_launch_exe'] = names
+    mod_settings = item.get('mod_settings', {})
+    if not isinstance(mod_settings, dict) or len(mod_settings) > 8:
+        raise CatalogError('invalid_mod_settings')
+    extras['mod_settings'] = {}
+    for filename, values in mod_settings.items():
+        if not isinstance(values, dict) or not values or len(values) > 16:
+            raise CatalogError('invalid_mod_settings')
+        extras['mod_settings'][_path(filename)] = {_text(key, 80): _text(value, 80) for key, value in values.items()}
+    for key, limit in (('mod_frame_generation', 80), ('fg_note', 40), ('notes', 400)):
+        if key in item:
+            extras[key] = _text(item[key], limit)
+    if 'fg_note' in extras and not _WORD.fullmatch(extras['fg_note']):
+        raise CatalogError('invalid_fg_note')
+    return extras
+
+
+def _bad(code):
+    raise CatalogError(code)
+
+
 def _recipe(appid: str, name: str, platform: str, item, dependencies) -> GameRecipe:
-    item = _object(item, ('status', 'revision', 'conditions', 'args', 'ini', 'dependencies', 'source_urls'), ('exe', 'tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings'))
+    item = _object(item, ('status', 'revision', 'conditions', 'args', 'ini', 'dependencies', 'source_urls'), ('exe', 'tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings', 'proxy', 'protect_dlls', 'legacy_ffx_swap', 'files', 'native_dlls', 'needs', 'anr_settings', 'game_config', 'mod_launch_exe', 'mod_settings', 'mod_frame_generation', 'fg_note', 'notes'))
     conditions = _object(item['conditions'], ('engine', 'arch'), ('game_builds',))
     allowed = {'engine': _ENGINES, 'arch': _ARCHES}
     parsed_conditions = {}
@@ -329,6 +417,7 @@ def _recipe(appid: str, name: str, platform: str, item, dependencies) -> GameRec
     for entry in raw_settings:
         entry = _object(entry, ('setting', 'value'))
         game_settings.append((_text(entry['setting'], 80), _text(entry['value'], 40)))
+    extras = _extras(item)
     tested_builds = _strings(item.get('tested_game_builds', []), _game_build)
     tested_at = item.get('tested_at')
     if tested_at is not None:
@@ -339,7 +428,7 @@ def _recipe(appid: str, name: str, platform: str, item, dependencies) -> GameRec
             raise CatalogError('invalid_test_date') from None
     return GameRecipe(appid, name, _integer(item['revision'], 2**31 - 1),
                       parsed_conditions, _path(item['exe']) if 'exe' in item else None, args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
-                      flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings), platform, item['status'])
+                      flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings), platform=platform, status=item['status'], **extras)
 
 
 def load(path: Path = CATALOG_PATH) -> Catalog:

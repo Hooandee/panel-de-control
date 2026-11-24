@@ -1,0 +1,57 @@
+{
+  "name": "Monster Hunter Rise",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {
+      "Plugins.LoadReshade": "true"
+    },
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Rise"
+    ],
+    "proxy": "d3d12.dll",
+    "files": {
+      "ReShade64.dll": "reframework-nightly"
+    },
+    "notes": "As dxgi.dll on AMD the game never offers DLSS and REFramework as dinput8.dll crashes it: OptiScaler loads as d3d12.dll and REFramework as ReShade64.dll."
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {
+      "Plugins.LoadReshade": "true"
+    },
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Rise"
+    ],
+    "proxy": "d3d12.dll",
+    "files": {
+      "ReShade64.dll": "reframework-nightly"
+    },
+    "notes": "As dxgi.dll on AMD the game never offers DLSS and REFramework as dinput8.dll crashes it: OptiScaler loads as d3d12.dll and REFramework as ReShade64.dll."
+  }
+}

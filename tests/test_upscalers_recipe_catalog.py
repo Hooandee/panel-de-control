@@ -92,7 +92,7 @@ def test_conditions_use_actual_host(monkeypatch):
     assert catalog.match('1462040', 'optiscaler')
     for engine, platform, arch in [('dll', 'linux', 'x86_64'), ('optiscaler', 'darwin', 'x86_64'), ('optiscaler', 'linux', 'aarch64')]:
         assert catalog.match('1462040', engine, platform, arch) is None
-    assert catalog.match('292030', 'optiscaler', 'windows', 'x86_64') is None
+    assert catalog.match('1086940', 'optiscaler', 'windows', 'x86_64') is None
     assert catalog.match('99999', 'optiscaler') is None
 
 
@@ -101,7 +101,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 18
+    assert recipe.catalog_version == 19
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'

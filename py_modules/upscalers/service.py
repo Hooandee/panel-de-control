@@ -249,7 +249,7 @@ class UpscalerService:
     # ---- read side -----------------------------------------------------------
     @staticmethod
     def _mod_frame_generation(appid: str, install: dict) -> str | None:
-        recipe = recipes.RECIPES.get(str(appid))
+        recipe = recipes.recipe_for(str(appid)) if install.get("mod") else None
         return recipe.mod_frame_generation if recipe and install.get("mod") else None
 
     def overview(self) -> dict:

@@ -1,0 +1,59 @@
+{
+  "name": "Red Dead Redemption 2",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II"
+    ],
+    "game_config": [
+      {
+        "file": "Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml",
+        "element": "API",
+        "value": "kSettingAPI_DX12"
+      }
+    ],
+    "notes": "RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it. The file is relative to the user profile folder on each OS."
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II"
+    ],
+    "game_config": [
+      {
+        "file": "Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml",
+        "element": "API",
+        "value": "kSettingAPI_DX12"
+      }
+    ],
+    "notes": "RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it. The file is relative to the user profile folder on each OS."
+  }
+}
