@@ -412,6 +412,65 @@ public sealed class UpscalerServiceTests : IDisposable
         Assert.Null(new UpscalerStateStore(StatePath).Install("100"));
     }
 
+    [Fact]
+    public async Task UninstallTakesOutOnlyTheLaunchArgumentsPanelAdded()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        var store = new UpscalerStateStore(StatePath);
+        var stored = store.Install("100")!;
+        stored.Install.AddedArgs = new[] { "-dx12" };
+        store.SetInstall("100", stored.Install, stored.InstalledAt);
+        var steam = new FakeLaunchOptions("-dx12 -novid");
+        var service = Service(launchOptions: steam);
+
+        await service.HandleAsync(UpscalersRequest.Uninstall("100", true), CancellationToken.None);
+        await RunDeferredAsync();
+
+        Assert.Equal(UpscalerJobStates.Done, service.Job!.State);
+        Assert.Equal("-novid", steam.Value);
+    }
+
+    [Fact]
+    public async Task WithoutSteamTheLaunchArgumentsStayAndTheUninstallStillFinishes()
+    {
+        AddGame("100", "Plain");
+        await InstallThroughService("100");
+        var store = new UpscalerStateStore(StatePath);
+        var stored = store.Install("100")!;
+        stored.Install.AddedArgs = new[] { "-dx12" };
+        store.SetInstall("100", stored.Install, stored.InstalledAt);
+        var steam = new FakeLaunchOptions("-dx12") { Available = false };
+        var service = Service(launchOptions: steam);
+
+        await service.HandleAsync(UpscalersRequest.Uninstall("100", true), CancellationToken.None);
+        await RunDeferredAsync();
+
+        Assert.Equal(UpscalerJobStates.Done, service.Job!.State);
+        Assert.Equal("-dx12", steam.Value);
+        Assert.Contains(new UpscalerStateStore(StatePath).Actions("100"), action => action.Error == "launch_args_kept");
+    }
+
+    private sealed class FakeLaunchOptions : ISteamLaunchOptions
+    {
+        public FakeLaunchOptions(string value) => Value = value;
+
+        public string Value { get; private set; }
+
+        public bool Available { get; set; } = true;
+
+        public Task<SteamLaunchOptionsResult> ReadAsync(long appId, CancellationToken cancellationToken) =>
+            Task.FromResult(Available
+                ? new SteamLaunchOptionsResult(SteamLaunchOptionsOutcome.Read, Value)
+                : new SteamLaunchOptionsResult(SteamLaunchOptionsOutcome.SteamUnavailable));
+
+        public Task<SteamLaunchOptionsResult> WriteAsync(long appId, string value, bool isNonSteamShortcut, CancellationToken cancellationToken)
+        {
+            Value = value;
+            return Task.FromResult(new SteamLaunchOptionsResult(SteamLaunchOptionsOutcome.Written, value));
+        }
+    }
+
     private async Task InstallThroughService(string appId)
     {
         var service = Service(prepare: PrepareCache);
@@ -656,7 +715,8 @@ public sealed class UpscalerServiceTests : IDisposable
         return UpscalersWireCodec.DeserializeResponse(line!);
     }
 
-    private UpscalerService Service(Action<UpscalerStateStore>? seed = null, Action? prepare = null, GpuFamilyResult? gpu = null, Func<byte[], int, ScaledCover?>? scaleCover = null)
+    private UpscalerService Service(Action<UpscalerStateStore>? seed = null, Action? prepare = null, GpuFamilyResult? gpu = null, Func<byte[], int, ScaledCover?>? scaleCover = null,
+        ISteamLaunchOptions? launchOptions = null)
     {
         var store = new UpscalerStateStore(StatePath);
         seed?.Invoke(store);
@@ -677,7 +737,8 @@ public sealed class UpscalerServiceTests : IDisposable
                 deferred.Add(job);
                 return Task.CompletedTask;
             },
-            scaleCover);
+            scaleCover,
+            launchOptions);
     }
 
     private async Task RunDeferredAsync()

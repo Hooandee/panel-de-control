@@ -326,6 +326,22 @@ public sealed class UpscalerInstallEntry
     /// <summary>Arguments the recipe needs that Panel could not put in Steam (Steam closed or without debugging).</summary>
     [DataMember(Name = "missing_args", Order = 11, EmitDefaultValue = false)]
     public string[]? MissingArgs { get; set; }
+
+    /// <summary>What OptiScaler's log says since the install: <c>not_run</c>, <c>loaded</c> or <c>active</c>.</summary>
+    [DataMember(Name = "verdict", Order = 12, EmitDefaultValue = false)]
+    public string? Verdict { get; set; }
+
+    /// <summary>The upscaler the log shows running, as OptiScaler names it.</summary>
+    [DataMember(Name = "observed", Order = 13, EmitDefaultValue = false)]
+    public string? Observed { get; set; }
+
+    /// <summary>The FSR 4 library that answered, with its version and model when the log names them.</summary>
+    [DataMember(Name = "provider", Order = 14, EmitDefaultValue = false)]
+    public string? Provider { get; set; }
+
+    /// <summary>FSR 4 was chosen but the log shows an older FSR running instead.</summary>
+    [DataMember(Name = "fallback", Order = 15, EmitDefaultValue = false)]
+    public string? Fallback { get; set; }
 }
 
 [DataContract]

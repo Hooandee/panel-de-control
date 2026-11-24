@@ -54,6 +54,9 @@ public static class UpscalersReportSection
         var install = stored.Install;
         var manifest = ManifestCheck.Verify(install.Target);
         var log = OptiScalerLogFacts.Read(install.Target);
+        var report = install.Engine == "optiscaler" ? OptiScalerLog.Read(install.Target, UpscalerVerdict.Since(stored.InstalledAt)) : null;
+        var provider = report is null ? null : OptiScalerLog.ProviderObservationOf(report);
+        var fallback = report is null ? null : OptiScalerLog.FallbackOf(install.Engine, install.Build, report);
         var lastError = store.Actions(appId).LastOrDefault(action => action.Error is not null)?.Error;
         return new JsonObject
         {
@@ -79,6 +82,20 @@ public static class UpscalersReportSection
                 ["present"] = log.Present,
                 ["modified"] = log.Modified is { } modified ? modified.ToString("O", CultureInfo.InvariantCulture) : null,
                 ["upscaler_created"] = log.UpscalerCreated,
+                ["verdict"] = report is null ? null : OptiScalerLog.Verdict(report),
+                ["stale"] = report?.Stale,
+                ["version"] = report?.Version,
+                ["upscaler"] = report?.Upscaler,
+                ["input"] = report?.Input,
+                ["fg"] = report?.FrameGeneration,
+                ["fg_state"] = report?.FrameGenerationState,
+                ["fsr4_model"] = report?.Fsr4Model,
+                ["provider_name"] = provider?.Name,
+                ["provider_version"] = provider?.Version,
+                ["provider_confidence"] = provider?.Confidence,
+                ["fallback"] = fallback is null ? null : new JsonObject { ["requested"] = fallback.Requested, ["observed"] = fallback.Observed, ["reason"] = fallback.Reason },
+                ["texture_failure"] = report?.TextureFailure,
+                ["errors"] = report?.Errors,
             },
         };
     }

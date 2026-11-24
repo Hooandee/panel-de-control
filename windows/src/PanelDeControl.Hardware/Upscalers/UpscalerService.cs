@@ -649,8 +649,13 @@ public sealed class UpscalerService : IUpscalersController
     private UpscalerInstallEntry InstallEntry(StoredUpscaler stored)
     {
         var install = stored.Install;
+        var verdict = UpscalerVerdict.Read(install, stored.InstalledAt);
         return new UpscalerInstallEntry
         {
+            Verdict = verdict?.Verdict,
+            Observed = verdict?.Observed,
+            Provider = verdict?.Provider,
+            Fallback = verdict?.Fallback,
             Build = install.Build,
             Version = data.Catalog.Build(install.Build)?.Version,
             Proxy = install.Proxy,
