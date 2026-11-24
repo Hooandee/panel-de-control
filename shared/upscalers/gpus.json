@@ -13,7 +13,8 @@
   ],
   "pci_vendors": {
     "0x8086": "intel",
-    "0x1002": "amd"
+    "0x1002": "amd",
+    "0x10de": "nvidia"
   },
   "amd_pci": {
     "0x163f": "rdna2", "0x1435": "rdna2", "0x1681": "rdna2",
@@ -23,5 +24,6 @@
     "0x744c": "rdna3", "0x747e": "rdna3", "0x7480": "rdna3", "0x7483": "rdna3",
     "0x7550": "rdna4", "0x7590": "rdna4"
   },
+  "discrete_amd": ["0x73bf", "0x73df", "0x73ef", "0x73ff", "0x743f", "0x744c", "0x747e", "0x7480", "0x7483", "0x7550", "0x7590"],
   "unknown_amd": "rdna3"
 }

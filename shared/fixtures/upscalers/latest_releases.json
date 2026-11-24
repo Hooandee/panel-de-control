@@ -1,0 +1,973 @@
+{
+ "schema_version": 1,
+ "pinned": {
+  "id": "tool",
+  "filename": "Tool_1.0.zip",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "size": 500,
+  "url": "https://github.com/acme/tool/releases/download/v1.0/Tool_1.0.zip"
+ },
+ "track": {
+  "repo": "acme/tool",
+  "name": "Tool_\\d+\\.\\d+\\.zip",
+  "prerelease": false
+ },
+ "base_clock": 1000000,
+ "api_url": "https://api.github.com/repos/acme/tool/releases?per_page=10",
+ "cases": [
+  {
+   "id": "newest-with-digest-wins",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v1.5",
+       "published_at": "2026-01-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_1.5.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v1.5/Tool_1.5.zip",
+         "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        }
+       ]
+      },
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+         "name": "Tool_3.0.pdb",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.pdb",
+         "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+        }
+       ]
+      },
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_3.0.zip",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip"
+      ],
+      "version": "v3.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "release-without-digest-is-skipped",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": null
+        }
+       ]
+      },
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      },
+      {
+       "tag_name": "v1.5",
+       "published_at": "2026-01-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_1.5.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v1.5/Tool_1.5.zip",
+         "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "malformed-digest-is-skipped",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha1:3333333333333333333333333333333333333333"
+        }
+       ]
+      },
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "uppercase-digest-is-skipped",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+       ]
+      },
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "no-digest-anywhere-stays-pinned",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": null
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "pinned": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-stays-pinned",
+   "steps": [
+    {
+     "at": 0,
+     "response": null,
+     "fetched": true,
+     "expected": {
+      "pinned": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "rate-limited-reply-stays-pinned",
+   "steps": [
+    {
+     "at": 0,
+     "response": {
+      "message": "API rate limit exceeded"
+     },
+     "fetched": true,
+     "expected": {
+      "pinned": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-keeps-the-last-good-release",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    },
+    {
+     "at": 25000,
+     "response": null,
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "answer-is-cached-for-six-hours",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    },
+    {
+     "at": 21599,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+         "name": "Tool_3.0.pdb",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.pdb",
+         "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+        }
+       ]
+      }
+     ],
+     "fetched": false,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    },
+    {
+     "at": 21600,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+         "name": "Tool_3.0.pdb",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.pdb",
+         "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_3.0.zip",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip"
+      ],
+      "version": "v3.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "failure-is-retried-after-ten-minutes",
+   "steps": [
+    {
+     "at": 0,
+     "response": null,
+     "fetched": true,
+     "expected": {
+      "pinned": true
+     }
+    },
+    {
+     "at": 599,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+         "name": "Tool_3.0.pdb",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.pdb",
+         "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+        }
+       ]
+      }
+     ],
+     "fetched": false,
+     "expected": {
+      "pinned": true
+     }
+    },
+    {
+     "at": 600,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+         "name": "Tool_3.0.pdb",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.pdb",
+         "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_3.0.zip",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip"
+      ],
+      "version": "v3.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "empty-answer-keeps-the-last-good-release",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    },
+    {
+     "at": 21600,
+     "response": [],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "download-url-on-another-host-is-rejected",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://evil.example.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        }
+       ]
+      },
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "download-url-from-another-repository-is-rejected",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/other/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "pinned": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "plain-http-download-url-is-rejected",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "http://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "pinned": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "file-name-must-match-completely",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip.sig",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip.sig",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+         "name": "Old_Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Old_Tool_3.0.zip",
+         "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "pinned": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "drafts-are-skipped",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": true,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+         "name": "Tool_3.0.pdb",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.pdb",
+         "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+        }
+       ]
+      },
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "prereleases-are-skipped-unless-tracked",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": true,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+         "name": "Tool_3.0.pdb",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.pdb",
+         "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+        }
+       ]
+      },
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "prereleases-are-taken-when-tracked",
+   "track": {
+    "repo": "acme/tool",
+    "name": "Tool_\\d+\\.\\d+\\.zip",
+    "prerelease": true
+   },
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": true,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+         "name": "Tool_3.0.pdb",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.pdb",
+         "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+        }
+       ]
+      },
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_3.0.zip",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip"
+      ],
+      "version": "v3.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "size-out-of-range-is-skipped",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v3.0",
+       "published_at": "2026-03-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_3.0.zip",
+         "size": 0,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v3.0/Tool_3.0.zip",
+         "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        }
+       ]
+      },
+      {
+       "tag_name": "v2.5",
+       "published_at": "2026-02-15T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.5.zip",
+         "size": 2147483648,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.5/Tool_2.5.zip",
+         "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        }
+       ]
+      },
+      {
+       "tag_name": "v2.0",
+       "published_at": "2026-02-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_2.0.zip",
+         "size": 1000,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip",
+         "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "filename": "Tool_2.0.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "size": 1000,
+      "urls": [
+       "https://github.com/acme/tool/releases/download/v2.0/Tool_2.0.zip"
+      ],
+      "version": "v2.0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "pinned-release-is-returned-unchanged",
+   "steps": [
+    {
+     "at": 0,
+     "response": [
+      {
+       "tag_name": "v1.0",
+       "published_at": "2025-12-01T00:00:00Z",
+       "draft": false,
+       "prerelease": false,
+       "assets": [
+        {
+         "name": "Tool_1.0.zip",
+         "size": 500,
+         "browser_download_url": "https://github.com/acme/tool/releases/download/v1.0/Tool_1.0.zip",
+         "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       ]
+      }
+     ],
+     "fetched": true,
+     "expected": {
+      "pinned": true
+     }
+    }
+   ]
+  }
+ ]
+}

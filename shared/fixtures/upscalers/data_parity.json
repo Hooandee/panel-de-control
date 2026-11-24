@@ -20,7 +20,8 @@
    "rdna35",
    "rdna4",
    "intel",
-   "unknown"
+   "unknown",
+   "nvidia"
   ],
   "preferred": {
    "rdna2": "fsr-4.1.2-beta",
@@ -649,7 +650,8 @@
      "rdna35",
      "rdna4",
      "intel",
-     "unknown"
+     "unknown",
+     "nvidia"
     ],
     "image": 1,
     "cost": 1,
@@ -682,7 +684,8 @@
      "rdna35",
      "rdna4",
      "intel",
-     "unknown"
+     "unknown",
+     "nvidia"
     ],
     "image": 2,
     "cost": 2,

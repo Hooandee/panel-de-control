@@ -9,13 +9,14 @@ import json
 import re
 import time
 import urllib.request
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 
 from http_util import ssl_context
 from json_store import atomic_json_save
 
-from .catalog import Asset
+from . import catalog
+from .catalog import Asset, Track
 
 API = "https://api.github.com/repos/{repo}/releases?per_page=10"
 FRESH_S = 6 * 3600
@@ -25,31 +26,7 @@ LIMIT = 8 * 1024 * 1024
 MAX_SIZE = 1024 * 1024 * 1024
 
 
-@dataclass(frozen=True)
-class Track:
-    repo: str
-    name: str
-    prerelease: bool = False
-
-
-# Only tools whose newest release keeps the layout Panel installs; user-chosen FSR versions stay pinned.
-TRACKS: dict[str, Track] = {
-    "optiscaler-0.9.4": Track("optiscaler/OptiScaler", r"Optiscaler_0\.9\.\d+[^/]*\.7z"),
-    "optiscaler-10-nightly": Track("optiscaler/OptiScaler-nightly", r"OptiScaler_v10\.\d+\.\d+[^/]*\.7z", prerelease=True),
-    "reframework-nightly": Track("praydog/REFramework-nightly", r"REFramework\.zip"),
-    "optipatcher-0.42": Track("optiscaler/OptiPatcher", r"OptiPatcher_v\d+\.\d+\.asi"),
-    "luma-ff7-800": Track("Filoppi/Luma-Framework", r"Luma-Final_Fantasy_VII_Remake\.zip"),
-    "luma-p5r-825": Track("Filoppi/Luma-Framework", r"Luma-Persona_5_Royal\.zip"),
-    "luma-mrf-840": Track("Filoppi/Luma-Framework", r"Luma-Metaphor_ReFantazio\.zip"),
-    "luma-gbfr-840": Track("Filoppi/Luma-Framework", r"Luma-Granblue_Fantasy_Relink\.zip"),
-    "luma-qb-840": Track("Filoppi/Luma-Framework", r"Luma-Quantum_Break\.zip"),
-    "luma-prey-840": Track("Filoppi/Luma-Framework", r"Luma-Prey\.zip"),
-    "luma-dh2-840": Track("Filoppi/Luma-Framework", r"Luma-Dishonored_2\.zip"),
-    "luma-wd2-840": Track("Filoppi/Luma-Framework", r"Luma-Watch_Dogs_2\.zip"),
-    "luma-ue-840": Track("Filoppi/Luma-Framework", r"Luma-Unreal_Engine\.zip"),
-    "helixsr-3.2.0": Track("lonewolf0622/HelixSR", r"HelixSR-3\.\d+\.\d+\.zip"),
-    "anr-fg-addon": Track("apex-compute/ANR", r"anr-fg-V\.B\d+-addon\.zip"),
-}
+TRACKS = catalog.TRACKS
 
 
 def _fetch(url: str) -> bytes:

@@ -6,6 +6,7 @@ never invalidates an install.
 """
 
 import json
+import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
@@ -32,7 +33,7 @@ def _read(path: Path = CATALOG_PATH) -> dict:
     """The neutral build catalog the Windows app reads too, straight from the same JSON file."""
     raw = _fields(json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_keys),
                   ("schema_version", "archives", "gpu_groups", "preferred", "quality_ratios", "easy_modes", "sharpness",
-                   "proxies", "base_ini", "ffx_loader", "anr", "assets", "builds"), ("notes",))
+                   "proxies", "base_ini", "ffx_loader", "anr", "tracks", "assets", "builds"), ("notes",))
     if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
         raise CatalogError("unsupported_schema")
     return raw
@@ -58,6 +59,13 @@ class Asset:
     archive: bool = False
     member: str | None = None
     generation: int = 9
+
+
+@dataclass(frozen=True)
+class Track:
+    repo: str
+    name: str
+    prerelease: bool = False
 
 
 @dataclass(frozen=True)
@@ -132,6 +140,17 @@ def _build(item) -> Build:
     )
 
 
+def _track(item) -> Track:
+    item = _fields(item, ("repo", "name"), ("prerelease",))
+    _check(isinstance(item["repo"], str) and re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", item["repo"]) is not None
+           and type(item.get("prerelease", False)) is bool, "invalid_track")
+    try:
+        re.compile(_text(item["name"]))
+    except re.error:
+        raise CatalogError("invalid_track") from None
+    return Track(item["repo"], item["name"], item.get("prerelease", False))
+
+
 def _parse(raw: dict) -> dict:
     groups = _fields(raw["gpu_groups"], ("amd", "every"))
     archives = _fields(raw["archives"], _ARCHIVE_ROLES)
@@ -150,8 +169,10 @@ def _parse(raw: dict) -> dict:
     anr = _fields(raw["anr"], ("asset", "provider", "builds"))
     anr_builds = _mapping(anr["builds"])
     _check(_text(anr["asset"]) in assets and set(anr_builds.values()) <= builds.keys(), "missing_anr")
+    _check(isinstance(raw["tracks"], dict), "invalid_track")
+    tracks = {asset_id: _track(item) for asset_id, item in raw["tracks"].items()}
     return {
-        "amd": _strings(groups["amd"]), "every_gpu": _strings(groups["every"]),
+        "tracks": tracks, "amd": _strings(groups["amd"]), "every_gpu": _strings(groups["every"]),
         "assets": assets, "builds": builds, "preferred": preferred,
         "quality_ratios": _mapping(raw["quality_ratios"], (int, float)), "easy_modes": _mapping(raw["easy_modes"]),
         "sharpness": _mapping(raw["sharpness"], (int, float, type(None))), "proxies": _strings(raw["proxies"]),
@@ -162,6 +183,7 @@ def _parse(raw: dict) -> dict:
 
 _DATA = _parse(_RAW)
 ASSETS: dict[str, Asset] = _DATA["assets"]
+TRACKS: dict[str, Track] = _DATA["tracks"]
 AMD = _DATA["amd"]
 EVERY_GPU = _DATA["every_gpu"]
 BUILDS: dict[str, Build] = _DATA["builds"]

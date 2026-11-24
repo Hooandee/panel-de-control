@@ -15,7 +15,7 @@ from pathlib import Path
 from upscalers import catalog, solution_plan
 
 FIXTURE = Path(__file__).parents[1] / "shared" / "fixtures" / "upscalers" / "plan_parity.json"
-GPUS = (*catalog.EVERY_GPU, "nvidia")
+GPUS = catalog.EVERY_GPU
 DEVICES = ("", "steam_deck_lcd", "steam_deck_oled", "rog_ally", "rog_ally_x", "legion_go", "legion_go_s", "msi_claw_8")
 INPUT_SETS = {
     "none": {},

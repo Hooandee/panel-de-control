@@ -46,6 +46,6 @@ public static class GpuFamilyReader
         {
         }
 
-        return rules.Detect(GpuFamily.CpuVendor(manufacturer), name, gpus);
+        return rules.DetectDiscrete(GpuFamily.CpuVendor(manufacturer), name, gpus);
     }
 }
