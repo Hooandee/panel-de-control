@@ -272,6 +272,7 @@ def test_reframework_placed_under_another_name_gets_no_dinput8(tmp_path):
 def test_monster_hunter_rise_installs_as_d3d12_with_reframework_through_reshade(steam, re_catalog, proc, monkeypatch):
     # PDC-AHVV: as dxgi.dll beside REFramework's dinput8.dll OptiScaler loaded but the game never offered DLSS.
     monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["1446780"], appid=APPID))
+    without_bundled_recipes(monkeypatch)
     _, game = steam
     _write(game / recipes.RE_ENGINE_MARKER)
     target = game / "bin/x64_dx12"
@@ -289,6 +290,7 @@ def test_monster_hunter_rise_installs_as_d3d12_with_reframework_through_reshade(
 
 def test_wiki_d3d12_proxy_is_honoured_for_any_game(steam, fake_catalog, proc, monkeypatch):
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll", status="works"))
+    without_bundled_recipes(monkeypatch)
     service = _service(steam, fake_catalog, proc)
     assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["d3d12=n,b"]
     assert "declined_proxy" not in service.diagnose(APPID)["recipe"]
@@ -296,6 +298,7 @@ def test_wiki_d3d12_proxy_is_honoured_for_any_game(steam, fake_catalog, proc, mo
 
 def test_report_names_a_wiki_proxy_panel_cannot_place(steam, fake_catalog, proc, monkeypatch):
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="ddraw.dll", status="works"))
+    without_bundled_recipes(monkeypatch)
     service = _service(steam, fake_catalog, proc)
     assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["dxgi=n,b"]
     assert service.diagnose(APPID)["recipe"]["declined_proxy"] == "ddraw.dll"

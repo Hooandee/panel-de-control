@@ -4,7 +4,7 @@ import pytest
 
 from upscalers import catalog
 from upscalers.service import UpscalerError
-from test_upscalers import APPID, _service, _write, proc, steam
+from test_upscalers import APPID, _service, _write, proc, steam, without_bundled_recipes
 
 
 BUILD = "fsr-4.1.2-lite-dll"
@@ -93,6 +93,7 @@ def test_god_of_war_ragnarok_keeps_its_fsr31_library_out_of_the_dll_route(steam,
     service = _service(steam, tmp_path / "state", proc)
     assert service.game(APPID)["analysis"]["dll_targets"] == ["bin/x64_dx12/amd_fidelityfx_dx12.dll"]
     monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["2322010"], appid=APPID))
+    without_bundled_recipes(monkeypatch)
     analysis = service.game(APPID)["analysis"]
     assert analysis["dll_targets"] == [] and analysis["dll_blocked"] == "recipe_legacy_ffx"
     with pytest.raises(UpscalerError, match="dll_no_target"):
