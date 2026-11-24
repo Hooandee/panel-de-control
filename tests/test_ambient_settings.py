@@ -108,3 +108,13 @@ def test_queue_and_play_modes_are_kept_only_when_valid():
 def test_non_finite_filter_levels_are_ignored():
     out = normalize_settings({"version": 1, "background": {"filters": {"blur": float("inf"), "dim": float("-inf"), "vignette": 30}}})
     assert out["background"]["filters"] == {"blur": 0, "dim": 0, "vignette": 30}
+
+
+@pytest.mark.parametrize("value", ["auto", "trailerFirst", "musicOnly", "trailerOnly"])
+def test_game_audio_source_is_kept_when_valid(value):
+    assert normalize_settings({"version": SETTINGS_VERSION, "background": {"gameAudio": value}})["background"]["gameAudio"] == value
+
+
+@pytest.mark.parametrize("value", ["apple", "", None, 3, ["musicOnly"]])
+def test_game_audio_source_falls_back_to_auto(value):
+    assert normalize_settings({"version": SETTINGS_VERSION, "background": {"gameAudio": value}})["background"]["gameAudio"] == "auto"

@@ -8,10 +8,11 @@ import type { OverlayCorner, OverlayMode } from "../core/types";
 import { parseEmbedStream } from "../core/streams";
 import { isHls, parseYouTube } from "../core/youtube";
 import { favoriteToStation, type AmbientRuntime, type AmbientSnapshot } from "../steam/runtime";
+import { GAME_AUDIO_SOURCES } from "../core/gameAudio";
 import { levelsForBalance, mixBalance } from "../core/mixBalance";
 import { trackSource } from "../steam/player";
 import { NowPlaying } from "./NowPlaying";
-import { Button, Caption, ChoiceRow, ToggleRow, CornerPicker, MoreSettings, SliderRow, Tile, TileStrip, cardStyle } from "./primitives";
+import { Button, Caption, ChoiceRow, ToggleRow, CornerPicker, MoreSettings, SliderRow, Tile, TileStrip, ValueRow, cardStyle } from "./primitives";
 import { openMediaLibrary } from "./StationsModal";
 
 const MUSIC_SWATCH = "linear-gradient(135deg,#3a2a60,#8a4a8a)";
@@ -127,6 +128,17 @@ export const SoundView: FC<{ snapshot: AmbientSnapshot; runtime: AmbientRuntime 
         })}
       />
       <ToggleRow label={t("ambient.game.themes")} description={t("ambient.game.themes.desc")} checked={settings.background.gameThemes} onChange={(gameThemes) => void runtime.updateSettings((s) => ({ ...s, background: { ...s.background, gameThemes } }))} />
+      {settings.background.gameThemes && (
+        <>
+          <ValueRow
+            label={t("ambient.game.audio")}
+            value={settings.background.gameAudio}
+            options={GAME_AUDIO_SOURCES.map((value) => ({ value, label: t(`ambient.game.audio.${value}`) }))}
+            onChange={(gameAudio) => void runtime.updateSettings((s) => ({ ...s, background: { ...s.background, gameAudio } }))}
+          />
+          <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>{t(`ambient.game.audio.${settings.background.gameAudio}.desc`)}</span>
+        </>
+      )}
       <ChoiceRow
         label={t("ambient.sound.overGame")}
         value={music.overlay}

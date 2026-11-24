@@ -122,6 +122,11 @@ def test_background_diagnostics_explain_selection_without_private_references(ser
     assert service.diagnostics()["setup"]["pinned"] is False
 
 
+def test_game_art_source_is_recorded(service):
+    assert service.record_event("game_art", '{"appid":548430,"source":"hashed","store":true}') is True
+    assert service.diagnostics()["events"][-1]["kind"] == "game_art"
+
+
 @pytest.mark.parametrize("detail", ["enter", "exit"])
 def test_fullscreen_events_are_recorded(service, detail):
     assert service.record_event("video_fullscreen", detail) is True

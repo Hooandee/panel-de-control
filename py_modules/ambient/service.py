@@ -49,7 +49,7 @@ DISCOVER_TTL_SEC = 600
 PLAYLIST_TTL_SEC = 6 * 3600
 DISCOVER_CACHE_SIZE = 64
 _log = logging.getLogger(__name__)
-_EVENT_KINDS = {"playback_error", "radio_error", "conflict", "power", "serve_error", "remote_error", "cache", "video_fullscreen", "share", "selection", "theme_image", "music", "share_firewall", "floating_missing", "playlist_error"}
+_EVENT_KINDS = {"playback_error", "radio_error", "conflict", "power", "serve_error", "remote_error", "cache", "video_fullscreen", "share", "selection", "theme_image", "music", "share_firewall", "floating_missing", "playlist_error", "game_art"}
 
 
 _GAME_MEDIA_TTL_S = 7 * 24 * 3600
@@ -988,6 +988,7 @@ class AmbientService:
             "selectedBackgroundCount": len(settings["background"]["selectedRefs"]),
             "gameThemes": settings["background"]["gameThemes"],
             "gameTrailers": settings["background"]["gameTrailers"],
+            "gameAudio": settings["background"]["gameAudio"],
             "musicEnabled": settings["music"]["enabled"],
             "musicSource": settings["music"]["source"],
             "queueLength": len(settings["music"]["queue"]),
