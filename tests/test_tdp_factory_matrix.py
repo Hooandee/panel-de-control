@@ -519,10 +519,24 @@ def test_go_s_83n6_failed_hand_back_never_locks_tdp_or_rewrites(tmp_path, monkey
     assert _read_lenovo_rails(root) == (12, 15, 20)
 
 
-def test_msi_a8_steamos_exposes_the_boost_rails_through_its_firmware(tmp_path):
-    root = str(tmp_path)
-    _mk_firmware(root, "msi-wmi-platform")
+def _mk_a8_report_firmware(root):
+    # msi-wmi-platform rails as captured on a Claw A8 (MS-1T8K, SteamOS, BIOS E1T8KAMS.106).
+    base = os.path.join(root, "sys/class/firmware-attributes/msi-wmi-platform/attributes")
+    for attr, minimum, maximum in (
+        ("ppt_pl1_spl", 7, 35),
+        ("ppt_pl2_sppt", 9, 40),
+        ("ppt_pl3_fppt", 10, 48),
+    ):
+        path = os.path.join(base, attr)
+        _write(os.path.join(path, "current_value"), 25)
+        _write(os.path.join(path, "min_value"), minimum)
+        _write(os.path.join(path, "max_value"), maximum)
     _mk_board(root, "MS-1T8K")
+
+
+def test_msi_a8_steamos_prefers_ryzenadj_over_firmware_rails_the_apu_ignores(tmp_path):
+    root = str(tmp_path)
+    _mk_a8_report_firmware(root)
 
     backend = select_backend(
         _profile("msi_claw_a8"),
@@ -531,8 +545,39 @@ def test_msi_a8_steamos_exposes_the_boost_rails_through_its_firmware(tmp_path):
         os_id="steamos",
     )
 
+    assert backend.name == "ryzenadj"
+    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
+
+
+def test_msi_a8_steamos_without_ryzenadj_falls_back_to_firmware_rails(tmp_path):
+    root = str(tmp_path)
+    _mk_a8_report_firmware(root)
+
+    backend = select_backend(
+        _profile("msi_claw_a8"),
+        root=root,
+        ryzenadj_resolve=_no_ryzenadj,
+        os_id="steamos",
+    )
+
     assert backend.name == "msi-claw-a8-firmware"
     assert backend.supports_levels is True
+    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj", "msi_a8"]
+
+
+def test_msi_a8_outside_steamos_keeps_firmware_rails_first(tmp_path):
+    root = str(tmp_path)
+    _mk_a8_report_firmware(root)
+
+    backend = select_backend(
+        _profile("msi_claw_a8"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+        os_id="bazzite",
+    )
+
+    assert backend.name == "msi-claw-a8-firmware"
+    assert [item["candidate"] for item in backend.probe_trace] == ["msi_a8"]
 
 
 def test_msi_a8_steamos_without_readable_firmware_rails_keeps_ryzenadj(tmp_path):
@@ -547,4 +592,4 @@ def test_msi_a8_steamos_without_readable_firmware_rails_keeps_ryzenadj(tmp_path)
     )
 
     assert backend.name == "ryzenadj"
-    assert [item["candidate"] for item in backend.probe_trace] == ["msi_a8", "ryzenadj"]
+    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
