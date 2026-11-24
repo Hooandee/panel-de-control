@@ -77,3 +77,26 @@ def test_dll412_lite_mixed_targets_restore_original_bytes(steam, proc, tmp_path,
     for name, data in originals.items():
         assert (folder / name).read_bytes() == data
     assert not (folder / "_storage_/amd_fidelityfx_framegeneration_dx12.dll").exists()
+
+
+def test_god_of_war_ragnarok_keeps_its_fsr31_library_out_of_the_dll_route(steam, proc, tmp_path, monkeypatch):
+    # PDC-XAZS: GoWR ships only the FSR 3.1 amd_fidelityfx_dx12.dll; with FSR 4's loader in its place the game shows a
+    # Windows error at start, while OptiScaler on the same install reached FSR.
+    from dataclasses import replace
+
+    from upscalers import recipes
+
+    _, game = steam
+    folder = game / "bin/x64_dx12"
+    (folder / PROVIDER).unlink()
+    legacy = _write(folder / "amd_fidelityfx_dx12.dll", b"ffx 1.0.1")
+    service = _service(steam, tmp_path / "state", proc)
+    assert service.game(APPID)["analysis"]["dll_targets"] == ["bin/x64_dx12/amd_fidelityfx_dx12.dll"]
+    assert recipes.RECIPES["2322010"].legacy_ffx_swap is False
+    monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["2322010"], appid=APPID))
+    analysis = service.game(APPID)["analysis"]
+    assert analysis["dll_targets"] == [] and analysis["dll_blocked"] == "recipe_legacy_ffx"
+    with pytest.raises(UpscalerError, match="dll_no_target"):
+        service.install(APPID, {"build": BUILD})
+    assert legacy.read_bytes() == b"ffx 1.0.1"
+    assert service.diagnose(APPID)["recipe"]["dll_blocked"] == "recipe_legacy_ffx"
