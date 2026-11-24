@@ -2486,8 +2486,6 @@ def _dll_route(analysis: dict, recipe) -> dict:
 def _recipe_proxy(recipe) -> str | None:
     if not recipe or recipe.proxy not in catalog.PROXIES:
         return None
-    if recipe.proxy == "d3d12.dll" and recipe.appid not in catalog.D3D12_PROXY_APPIDS:
-        return None
     return recipe.proxy
 
 
@@ -2495,7 +2493,7 @@ def _recipe_info(recipe) -> dict | None:
     if not recipe:
         return None
     return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": _recipe_proxy(recipe), "args": list(recipe.args),
-            # The wiki's proxy when Panel installs another one instead: the first suspect when OptiScaler loads idle.
+            # A wiki proxy Panel cannot place: the first suspect when OptiScaler loads idle.
             "declined_proxy": recipe.proxy if recipe.proxy and recipe.proxy != _recipe_proxy(recipe) else None,
             "dll_blocked": None if getattr(recipe, "legacy_ffx_swap", True) else "recipe_legacy_ffx",
             "status": recipe.status, "inputs": list(recipe.inputs), "linux": recipe.linux, "optipatcher": recipe.optipatcher,

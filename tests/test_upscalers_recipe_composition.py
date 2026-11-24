@@ -276,7 +276,6 @@ def test_monster_hunter_rise_installs_as_d3d12_with_reframework_through_reshade(
     rise = recipes.recipe_for("1446780")
     assert _recipe_proxy(rise) == "d3d12.dll"
     monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["1446780"], appid=APPID))
-    monkeypatch.setattr(catalog, "D3D12_PROXY_APPIDS", frozenset({APPID}))
     _, game = steam
     _write(game / recipes.RE_ENGINE_MARKER)
     target = game / "bin/x64_dx12"
@@ -292,10 +291,15 @@ def test_monster_hunter_rise_installs_as_d3d12_with_reframework_through_reshade(
     assert not (target / "ReShade64.dll").exists() and not (target / "d3d12.dll").exists()
 
 
-def test_report_names_the_wiki_proxy_panel_declined(steam, fake_catalog, proc, monkeypatch):
+def test_wiki_d3d12_proxy_is_honoured_for_any_game(steam, fake_catalog, proc, monkeypatch):
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll", status="works"))
     service = _service(steam, fake_catalog, proc)
-    assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["dxgi=n,b"]
-    assert service.diagnose(APPID)["recipe"]["declined_proxy"] == "d3d12.dll"
-    monkeypatch.setattr(catalog, "D3D12_PROXY_APPIDS", frozenset({APPID}))
+    assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["d3d12=n,b"]
     assert "declined_proxy" not in service.diagnose(APPID)["recipe"]
+
+
+def test_report_names_a_wiki_proxy_panel_cannot_place(steam, fake_catalog, proc, monkeypatch):
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="ddraw.dll", status="works"))
+    service = _service(steam, fake_catalog, proc)
+    assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["dxgi=n,b"]
+    assert service.diagnose(APPID)["recipe"]["declined_proxy"] == "ddraw.dll"

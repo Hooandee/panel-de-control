@@ -326,9 +326,6 @@ QUALITY_RATIOS = {"native": 1.0, "quality": 1.5, "balanced": 1.7, "performance":
 EASY_MODES = {"image": "quality", "balanced": "balanced", "fps": "performance"}
 SHARPNESS = {"off": None, "soft": 0.3, "high": 0.6}
 PROXIES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "wininet.dll", "winhttp.dll", "d3d12.dll")
-# Recipes may only pick d3d12.dll where the game needs it: Endfield under Proton exits seconds after OptiScaler
-# initialises as dxgi.dll and stays up as d3d12.dll; Monster Hunter Rise never offers DLSS with OptiScaler as dxgi.dll.
-D3D12_PROXY_APPIDS = frozenset({"4732690", "1446780"})
 
 # Always set: the log is how Panel proves the upscaler ran, and the HQ font
 # auto mode asserts under Proton when its TTF is missing.
