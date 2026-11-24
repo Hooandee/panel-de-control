@@ -1,0 +1,495 @@
+using System.Diagnostics;
+using PanelDeControl.Core.FileSystem;
+using PanelDeControl.Core.Steam;
+using PanelDeControl.Core.Upscalers;
+
+namespace PanelDeControl.Hardware.Upscalers;
+
+public interface IUpscalersController
+{
+    Task<UpscalersResponse> HandleAsync(UpscalersRequest request, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// What the widget asks of upscalers: reads answer at once, install and uninstall start the one background job the
+/// widget then polls. Everything reported is read back from the game's manifest, never taken from what was asked.
+/// </summary>
+public sealed class UpscalerService : IUpscalersController
+{
+    public static readonly TimeSpan OverviewScanBudget = TimeSpan.FromSeconds(3);
+
+    private const string Platform = "windows";
+    private const string Arch = "amd64";
+
+    private readonly UpscalerData data;
+    private readonly UpscalerStateStore store;
+    private readonly AssetCache cache;
+    private readonly IReadOnlyFileSystem fileSystem;
+    private readonly SteamGames steam;
+    private readonly Func<IReadOnlyList<string>> runningImages;
+    private readonly Func<GpuFamilyResult> readGpu;
+    private readonly Func<string?> readDevice;
+    private readonly Func<double> clock;
+    private readonly Action<string, string> log;
+    private readonly UpscalerJobTracker jobs = new();
+    private readonly object scanLock = new();
+    private readonly Dictionary<string, (long Stamp, GameAnalysis Analysis)> scans = new(StringComparer.Ordinal);
+    private readonly Lazy<GpuFamilyResult> gpu;
+    private readonly Lazy<string?> device;
+    private readonly Func<Func<Task>, Task> start;
+
+    /// <param name="start">Starts the background job; replaceable so a test can run it inline.</param>
+    public UpscalerService(
+        UpscalerData data,
+        UpscalerStateStore store,
+        AssetCache cache,
+        IReadOnlyFileSystem fileSystem,
+        SteamGames steam,
+        Func<IReadOnlyList<string>> runningImages,
+        Func<GpuFamilyResult> readGpu,
+        Func<string?> readDevice,
+        Func<double>? clock = null,
+        Action<string, string>? log = null,
+        Func<Func<Task>, Task>? start = null)
+    {
+        this.data = data;
+        this.store = store;
+        this.cache = cache;
+        this.fileSystem = fileSystem;
+        this.steam = steam;
+        this.runningImages = runningImages;
+        this.readGpu = readGpu;
+        this.readDevice = readDevice;
+        this.clock = clock ?? (() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0);
+        this.log = log ?? ((step, detail) => CompanionLog.Write(step, detail));
+        this.start = start ?? (job => Task.Run(job));
+        gpu = new Lazy<GpuFamilyResult>(() => this.readGpu());
+        device = new Lazy<string?>(() => this.readDevice());
+    }
+
+    public UpscalerJobStatus? Job => jobs.Snapshot();
+
+    public GpuFamilyResult Gpu => gpu.Value;
+
+    public string? Device => device.Value;
+
+    public async Task<UpscalersResponse> HandleAsync(UpscalersRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            switch (request.Operation)
+            {
+                case UpscalersOperation.Overview:
+                    return Ok(overview: await Task.Run(Overview, cancellationToken).ConfigureAwait(false));
+                case UpscalersOperation.Job:
+                    return Ok();
+                case UpscalersOperation.Game:
+                    return Ok(game: await Task.Run(() => Game(request.AppId!), cancellationToken).ConfigureAwait(false));
+                case UpscalersOperation.Install:
+                    if (!request.ExperimentalEnabled)
+                    {
+                        return UpscalersResponse.Rejected("experimental_required", jobs.Snapshot());
+                    }
+
+                    return await Task.Run(() => BeginInstall(request), cancellationToken).ConfigureAwait(false);
+                case UpscalersOperation.Uninstall:
+                    if (!request.ExperimentalEnabled)
+                    {
+                        return UpscalersResponse.Rejected("experimental_required", jobs.Snapshot());
+                    }
+
+                    return await Task.Run(() => BeginUninstall(request.AppId!), cancellationToken).ConfigureAwait(false);
+                default:
+                    return UpscalersResponse.Rejected("unsupported_operation", jobs.Snapshot());
+            }
+        }
+        catch (UpscalerException exception)
+        {
+            return UpscalersResponse.Rejected(exception.Code, jobs.Snapshot());
+        }
+        catch (AssetException exception)
+        {
+            return UpscalersResponse.Rejected(exception.Code, jobs.Snapshot());
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            log($"upscalers.{request.Operation}", exception.ToString());
+            return UpscalersResponse.Fault(exception is IOException or UnauthorizedAccessException ? "upscalers_storage_failed" : "upscalers_failed", jobs.Snapshot());
+        }
+    }
+
+    public UpscalersOverview Overview()
+    {
+        var result = Gpu;
+        var libraries = steam.Libraries();
+        IReadOnlyList<string>? images = null;
+        try
+        {
+            images = runningImages();
+        }
+        catch (UpscalerException)
+        {
+        }
+
+        var clockWatch = Stopwatch.StartNew();
+        var rows = new List<UpscalerGameSummary>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var app in steam.All())
+        {
+            seen.Add(app.AppId);
+            var row = Summary(app, images);
+            if (row.State == UpscalerGameStates.None)
+            {
+                if (clockWatch.Elapsed > OverviewScanBudget)
+                {
+                    row.Scanned = false;
+                }
+                else if (Scan(app, null).Foreign)
+                {
+                    row.State = UpscalerGameStates.Foreign;
+                }
+            }
+
+            rows.Add(row);
+        }
+
+        foreach (var appId in store.InstalledAppIds.Where(id => !seen.Contains(id)))
+        {
+            rows.Add(new UpscalerGameSummary
+            {
+                AppId = appId,
+                Name = appId,
+                State = UpscalerGameStates.Missing,
+                Build = store.Install(appId)!.Install.Build,
+                Version = data.Catalog.Build(store.Install(appId)!.Install.Build)?.Version,
+            });
+        }
+
+        return new UpscalersOverview
+        {
+            Gpu = result.Generation,
+            GpuSource = result.Source,
+            Device = Device,
+            SteamFound = libraries.Count > 0,
+            Games = rows.ToArray(),
+        };
+    }
+
+    public UpscalerGameDetail Game(string appId)
+    {
+        var app = steam.Find(appId) ?? throw new UpscalerException("not_installed");
+        IReadOnlyList<string>? images = null;
+        try
+        {
+            images = runningImages();
+        }
+        catch (UpscalerException)
+        {
+        }
+
+        var recipe = Recipe(app);
+        var analysis = Scan(app, recipe, force: true);
+        var summary = Summary(app, images);
+        if (summary.State == UpscalerGameStates.None && analysis.Foreign)
+        {
+            summary.State = UpscalerGameStates.Foreign;
+        }
+
+        var generation = Gpu.Generation;
+        var builds = UpscalerPlanner.Describe(data.Catalog, generation, Device ?? "")
+            .Where(build => build.Engine == "optiscaler" && build.Available && build.Supported)
+            .Select(build => new UpscalerBuildEntry
+            {
+                Id = build.Id,
+                Family = build.Family,
+                Version = build.Version,
+                Channel = build.Channel,
+                DownloadBytes = build.DownloadBytes,
+                Models = build.Models.ToArray(),
+            })
+            .ToArray();
+        var stored = store.Install(appId);
+        return new UpscalerGameDetail
+        {
+            Game = summary,
+            Exe = analysis.Exe,
+            Apis = analysis.Apis.ToArray(),
+            Inputs = analysis.Inputs.Select(input => new UpscalerInput { Kind = input.Key, Files = input.Value.ToArray() }).ToArray(),
+            AntiCheat = analysis.AntiCheat,
+            Foreign = analysis.Foreign && analysis.ForeignIdentity is { } identity
+                ? new UpscalerForeignSummary { Engine = identity.Engine, Variant = identity.Variant, ManifestError = identity.ManifestError }
+                : null,
+            Recipe = recipe is null
+                ? null
+                : new UpscalerRecipeStatus
+                {
+                    Status = recipe.Status,
+                    Installable = recipe.Dependencies.Count == 0 && recipe.Configuration.Count == 0,
+                    Revision = recipe.Revision,
+                    RecommendedBuild = recipe.RecommendedBuild,
+                },
+            Preferred = UpscalerPlanner.PreferredBuild(data.Catalog, generation, recipe?.RecommendedBuild),
+            Builds = builds,
+            Install = stored is null ? null : InstallEntry(stored),
+        };
+    }
+
+    private UpscalersResponse BeginInstall(UpscalersRequest request)
+    {
+        var appId = request.AppId!;
+        var build = data.Catalog.Build(request.Build!);
+        if (build is null || !build.Available)
+        {
+            throw new UpscalerException("unknown_build");
+        }
+
+        if (build.Engine != "optiscaler")
+        {
+            throw new UpscalerException("engine_unsupported");
+        }
+
+        if (request.Quality is not null && !data.Catalog.QualityRatios.ContainsKey(request.Quality))
+        {
+            throw new UpscalerException("invalid_quality");
+        }
+
+        if (request.Model is not null && build.Models.All(model => model.Id != request.Model))
+        {
+            throw new UpscalerException("invalid_model");
+        }
+
+        var app = steam.Find(appId) ?? throw new UpscalerException("not_installed");
+        var recipe = Recipe(app);
+        if (recipe is not null && (recipe.Dependencies.Count > 0 || recipe.Configuration.Count > 0))
+        {
+            throw new UpscalerException("recipe_unsupported");
+        }
+
+        GameGuards.EnsureCanInstall(app, runningImages());
+        var job = jobs.Begin("install", appId);
+        var choice = new UpscalerChoice { Quality = request.Quality, Model = request.Model };
+        _ = start(() => RunInstallAsync(app, build.Id, choice, recipe));
+        return Ok(job: job);
+    }
+
+    private UpscalersResponse BeginUninstall(string appId)
+    {
+        var stored = store.Install(appId) ?? throw new UpscalerException("not_patched");
+        if (steam.Find(appId) is { } app)
+        {
+            GameGuards.EnsureClosed(app, runningImages());
+        }
+
+        var job = jobs.Begin("uninstall", appId);
+        _ = start(() => RunUninstallAsync(appId, stored));
+        return Ok(job: job);
+    }
+
+    private async Task RunInstallAsync(SteamApp app, string buildId, UpscalerChoice choice, GameRecipe? recipe)
+    {
+        var appId = app.AppId;
+        Record(appId, "install", "started", buildId, null);
+        try
+        {
+            jobs.Stage("prepare");
+            var catalog = data.Catalog;
+            var plan = catalog.Build(buildId)!;
+            var assets = UpscalerPlanner.BuildAssets(catalog, plan);
+            var total = assets.GroupBy(asset => asset.Sha256, StringComparer.Ordinal).Sum(group => group.Last().Size);
+            var pending = assets.Any(asset => !cache.Ready(asset));
+            jobs.Stage(pending ? "download" : "install", total);
+            var progress = new Progress<long>(done =>
+            {
+                jobs.Progress(done);
+                if (done >= total)
+                {
+                    jobs.Stage("install");
+                }
+            });
+            var previous = store.Install(appId);
+            var installer = new OptiScalerInstaller(catalog, cache, Gpu.Generation);
+            var request = new OptiScalerInstallRequest { Build = buildId, Choice = choice };
+            var install = await installer.InstallAsync(
+                () => Analyze(app, recipe),
+                recipe,
+                request,
+                previous?.Install,
+                folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder)),
+                progress,
+                CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                store.SetInstall(appId, install, clock());
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                OptiScalerInstaller.Uninstall(install);
+                throw new UpscalerException("state_save_failed", exception.GetType().Name);
+            }
+
+            if (!ManifestCheck.Presence(install.Target).Installed)
+            {
+                store.ClearInstall(appId);
+                throw new UpscalerException("install_unverified");
+            }
+
+            Record(appId, "install", "done", install.Build, null);
+            jobs.Finish();
+        }
+        catch (Exception exception)
+        {
+            Fail(appId, "install", buildId, exception);
+        }
+    }
+
+    private Task RunUninstallAsync(string appId, StoredUpscaler stored)
+    {
+        Record(appId, "uninstall", "started", stored.Install.Build, null);
+        try
+        {
+            jobs.Stage("restore");
+            var kept = OptiScalerInstaller.Uninstall(stored.Install);
+            if (ManifestCheck.Presence(stored.Install.Target).Present)
+            {
+                throw new UpscalerException("files_kept", kept.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+
+            store.ClearInstall(appId);
+            Record(appId, "uninstall", "done", stored.Install.Build, null);
+            jobs.Finish();
+        }
+        catch (Exception exception)
+        {
+            Fail(appId, "uninstall", stored.Install.Build, exception);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void Fail(string appId, string action, string build, Exception exception)
+    {
+        string code;
+        string? detail = null;
+        switch (exception)
+        {
+            case UpscalerException upscaler:
+                code = upscaler.Code;
+                detail = upscaler.Detail.Length > 0 ? upscaler.Detail : null;
+                break;
+            case AssetException asset:
+                code = asset.Code;
+                detail = asset.Detail.Length > 0 ? asset.Detail : null;
+                break;
+            case OperationCanceledException:
+                code = "cancelled";
+                break;
+            default:
+                code = "internal_error";
+                log($"upscalers.{action}", exception.ToString());
+                break;
+        }
+
+        jobs.Fail(code, detail);
+        try
+        {
+            Record(appId, action, "error", build, code);
+        }
+        catch (Exception recordFailure) when (recordFailure is IOException or UnauthorizedAccessException)
+        {
+            log("upscalers.journal", recordFailure.GetType().Name);
+        }
+    }
+
+    private void Record(string appId, string action, string state, string? build, string? error)
+    {
+        try
+        {
+            store.Record(new UpscalerAction(clock(), appId, action, state, build, error));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            log("upscalers.journal", exception.GetType().Name);
+        }
+    }
+
+    private UpscalerGameSummary Summary(SteamApp app, IReadOnlyList<string>? images)
+    {
+        var row = new UpscalerGameSummary
+        {
+            AppId = app.AppId,
+            Name = app.Name,
+            Updating = app.UpdateState is not null,
+            Running = images is null ? null : GameGuards.IsRunningUnder(app.Root, images),
+        };
+        if (store.Install(app.AppId) is { } stored)
+        {
+            row.State = ManifestCheck.Presence(stored.Install.Target).Installed ? UpscalerGameStates.Installed : UpscalerGameStates.Missing;
+            row.Build = stored.Install.Build;
+            row.Version = data.Catalog.Build(stored.Install.Build)?.Version;
+        }
+
+        return row;
+    }
+
+    private UpscalerInstallEntry InstallEntry(StoredUpscaler stored)
+    {
+        var install = stored.Install;
+        return new UpscalerInstallEntry
+        {
+            Build = install.Build,
+            Version = data.Catalog.Build(install.Build)?.Version,
+            Proxy = install.Proxy,
+            Exe = install.Exe,
+            Quality = install.Options.Quality,
+            Model = install.Options.Model,
+            InstalledAt = (long)stored.InstalledAt,
+            Status = ManifestCheck.Presence(install.Target).Installed ? UpscalerGameStates.Installed : UpscalerGameStates.Missing,
+        };
+    }
+
+    private GameRecipe? Recipe(SteamApp app) => data.Recipes?.Match(app.AppId, "optiscaler", Platform, Arch, app.BuildId);
+
+    private GameAnalysis Analyze(SteamApp app, GameRecipe? recipe) => GameFolder.Analyze(fileSystem, app.Root, null, recipe?.Exe);
+
+    // The scan reads executables: it is kept per game until the folder or Steam's state changes.
+    private GameAnalysis Scan(SteamApp app, GameRecipe? recipe, bool force = false)
+    {
+        var stamp = Stamp(app);
+        lock (scanLock)
+        {
+            if (!force && scans.TryGetValue(app.AppId, out var cached) && cached.Stamp == stamp)
+            {
+                return cached.Analysis;
+            }
+        }
+
+        var analysis = Analyze(app, recipe ?? Recipe(app));
+        lock (scanLock)
+        {
+            scans[app.AppId] = (stamp, analysis);
+        }
+
+        return analysis;
+    }
+
+    private static long Stamp(SteamApp app)
+    {
+        try
+        {
+            return Directory.GetLastWriteTimeUtc(app.Root).Ticks ^ app.StateFlags;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+    }
+
+    private static bool SamePath(string? left, string right) =>
+        left is not null && string.Equals(
+            left.Replace('/', '\\').TrimEnd('\\'),
+            right.Replace('/', '\\').TrimEnd('\\'),
+            StringComparison.OrdinalIgnoreCase);
+
+    private UpscalersResponse Ok(UpscalersOverview? overview = null, UpscalerGameDetail? game = null, UpscalerJobStatus? job = null) =>
+        new() { Status = UpscalersResponseStatus.Ok, Overview = overview, Game = game, Job = job ?? jobs.Snapshot() };
+}

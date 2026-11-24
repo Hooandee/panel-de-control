@@ -38,7 +38,8 @@ public static class ReportBundleBuilder
         JsonNode? capabilityInventory,
         JsonNode? machine,
         IEnumerable<ReportLogSource> logs,
-        ReportRedactor redactor)
+        ReportRedactor redactor,
+        JsonNode? upscalers = null)
     {
         var bundle = new JsonObject
         {
@@ -61,7 +62,7 @@ public static class ReportBundleBuilder
                 ["kernel"] = environment.OperatingSystemBuild,
             },
             ["capabilities"] = new JsonObject(),
-            ["state"] = new JsonObject { ["themes"] = themes },
+            ["state"] = new JsonObject { ["themes"] = themes, ["upscalers"] = upscalers },
             ["stores"] = new JsonObject(),
             ["logs"] = ReadLogs(logs),
             ["journal"] = new JsonObject(),
