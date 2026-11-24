@@ -5,6 +5,7 @@ import { readFlag, writeFlag } from "../../platform/preferences";
 import type { PowerPort, PowerSnapshot } from "../../platform/power";
 import { arbitrate, conflictKey, type ArbiterDecision, type ThemeClaim, type ThirdPartySignal } from "../core/arbiter";
 import { chooseBackground } from "../core/gameArtBlend";
+import { pickGameAudio } from "../core/gameAudio";
 import { motionFor, type MotionState } from "../core/powerPolicy";
 import { needsCopy, videoTarget } from "../core/videoQuality";
 import { gameVolumeTarget, planForGameState } from "../core/playbackPolicy";
@@ -955,8 +956,9 @@ export class AmbientRuntime {
   }
 
   /**
-   * The game's soundtrack replaces Ambiente's media while its game is selected; without one, the
-   * trailer's own audio does. Returns whether the trailer should sound.
+   * The game's soundtrack or its trailer's own audio replaces Ambiente's media while its game is selected,
+   * as `background.gameAudio` chooses (by default the soundtrack, and the trailer when there is none).
+   * Returns whether the trailer should sound.
    */
   private syncGameTheme(media: GameMedia | null, settings: AmbientSettings): boolean {
     if (this.librarySession) {
@@ -964,8 +966,12 @@ export class AmbientRuntime {
       return false;
     }
     const wanted = settings.background.gameThemes ? media : null;
-    const theme = wanted?.theme ?? null;
-    const trailerSound = !theme && !!wanted?.trailer && settings.background.enabled && settings.background.gameTrailers;
+    const pick = pickGameAudio(settings.background.gameAudio, {
+      theme: !!wanted?.theme,
+      trailer: !!wanted?.trailer && settings.background.enabled && settings.background.gameTrailers,
+    });
+    const theme = pick === "theme" ? wanted?.theme ?? null : null;
+    const trailerSound = pick === "trailer";
     if (theme) this.themeAudio.play(theme.url, settings.music.volume);
     else this.themeAudio.stop();
     const sounding = !!theme || trailerSound;

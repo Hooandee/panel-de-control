@@ -11,6 +11,7 @@ INTERVALS_SEC = (30, 60, 300, 900, 3600)
 ORDERS = ("sequential", "shuffle")
 TRANSITIONS = ("fade", "kenburns")
 GAME_ART_MODES = ("mine", "blend", "game")
+GAME_AUDIO_SOURCES = ("auto", "trailerFirst", "musicOnly", "trailerOnly")
 MUSIC_SOURCES = ("music", "radio")
 IN_GAME_ACTIONS = ("pause", "continue", "duck")
 OVERLAY_MODES = ("off", "peek", "always")
@@ -50,6 +51,7 @@ DEFAULTS: dict[str, Any] = {
         "selectedRefs": [],
         "gameTrailers": False,
         "gameThemes": False,
+        "gameAudio": "auto",
         "lowBatteryPercent": 20,
         "optimizeVideos": True,
         "videoQuality": "fluid",
@@ -118,6 +120,7 @@ def _normalize_background(out: dict[str, Any], raw: dict[str, Any]) -> None:
     _enum(out, raw, "order", ORDERS)
     _enum(out, raw, "transition", TRANSITIONS)
     _enum(out, raw, "gameArt", GAME_ART_MODES)
+    _enum(out, raw, "gameAudio", GAME_AUDIO_SOURCES)
     collections = raw.get("collections")
     if isinstance(collections, list):
         out["collections"] = _unique([c for c in collections if isinstance(c, str) and _ID.match(c)])

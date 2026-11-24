@@ -988,6 +988,7 @@ class AmbientService:
             "selectedBackgroundCount": len(settings["background"]["selectedRefs"]),
             "gameThemes": settings["background"]["gameThemes"],
             "gameTrailers": settings["background"]["gameTrailers"],
+            "gameAudio": settings["background"]["gameAudio"],
             "musicEnabled": settings["music"]["enabled"],
             "musicSource": settings["music"]["source"],
             "queueLength": len(settings["music"]["queue"]),

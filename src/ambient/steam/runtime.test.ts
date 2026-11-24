@@ -1131,6 +1131,47 @@ describe("AmbientRuntime", () => {
     } finally { runtime.stop(); }
   }, 30000);
 
+  it.each([
+    ["auto", "theme"],
+    ["trailerFirst", "trailer"],
+    ["musicOnly", "theme"],
+    ["trailerOnly", "trailer"],
+  ] as const)("with the soundtrack and the trailer both found, game audio %s sounds the %s", async (gameAudio, sounds) => {
+    const frameUrls = new WeakMap<HTMLIFrameElement, string>();
+    vi.spyOn(HTMLIFrameElement.prototype, "src", "set").mockImplementation(function (this: HTMLIFrameElement, value: string) { frameUrls.set(this, value); });
+    vi.spyOn(HTMLIFrameElement.prototype, "src", "get").mockImplementation(function (this: HTMLIFrameElement) { return frameUrls.get(this) ?? ""; });
+    document.body.innerHTML = '<div class="h-BasicHome"><section></section><div class="h-RecentGamesContainer"><img src="https://steamloopback.host/assets/1145360/library_hero_blur.jpg?c=0"></div></div>';
+    const THEME = "https://audio.test/theme.m4a";
+    rpcMock.getAmbientGameMedia.mockResolvedValue({ trailer: { url: "https://video.akamai.steamstatic.com/a.m3u8", poster: "", title: "" }, theme: { url: THEME, title: "Theme", artist: "" } });
+    const configured = settings();
+    configured.background.gameTrailers = true;
+    configured.background.gameThemes = true;
+    configured.background.gameAudio = gameAudio;
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    const elements: HTMLAudioElement[] = [];
+    vi.stubGlobal("Audio", function () {
+      const audio = document.createElement("audio");
+      vi.spyOn(audio, "play").mockImplementation(async () => { audio.dispatchEvent(new Event("playing")); });
+      vi.spyOn(audio, "pause").mockImplementation(() => undefined);
+      vi.spyOn(audio, "load").mockImplementation(() => undefined);
+      elements.push(audio);
+      return audio;
+    });
+    const themePlays = () => elements.filter((audio) => vi.mocked(audio.play).mock.instances.length > 0 && audio.getAttribute("src") === THEME);
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      const frame = await vi.waitFor(() => {
+        const found = document.querySelector<HTMLIFrameElement>("#pdc-ambient-layer iframe");
+        if (!found) throw new Error("no trailer yet");
+        return found;
+      }, { timeout: 4000 });
+      expect(Number(new URL(frame.src).searchParams.get("vol")) > 0).toBe(sounds === "trailer");
+      if (sounds === "theme") await vi.waitFor(() => expect(themePlays()).toHaveLength(1), { timeout: 5000 });
+      else expect(themePlays()).toHaveLength(0);
+    } finally { runtime.stop(); }
+  });
+
   it("says when Decky never draws the floating player, and not when it does", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     rpcMock.getAmbientState.mockResolvedValue({ settings: settings(), knownFolders: {}, collections: [], mediaServer: "stopped" });

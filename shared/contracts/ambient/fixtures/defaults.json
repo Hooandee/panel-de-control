@@ -16,6 +16,7 @@
     "selectedRefs": [],
     "gameTrailers": false,
     "gameThemes": false,
+    "gameAudio": "auto",
     "lowBatteryPercent": 20,
     "optimizeVideos": true,
     "videoQuality": "fluid",
