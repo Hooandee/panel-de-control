@@ -1,0 +1,49 @@
+{
+  "name": "Control Ultimate Edition",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {
+      "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Control-Ultimate-Edition"
+    ],
+    "notes": "ControlLauncher loads the proxy before OptiScaler's Control_DX12 spoofing exception applies. FSR 4 only runs through the D3D11 to D3D12 bridge."
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {
+      "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Control-Ultimate-Edition"
+    ],
+    "notes": "ControlLauncher loads the proxy before OptiScaler's Control_DX12 spoofing exception applies. FSR 4 only runs through the D3D11 to D3D12 bridge."
+  }
+}

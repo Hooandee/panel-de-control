@@ -1,0 +1,55 @@
+{
+  "name": "Monster Hunter Wilds",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {
+      "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Wilds"
+    ],
+    "needs": [
+      "reframework"
+    ],
+    "notes": "On AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing on top crashes it. REFramework comes from the RE Engine rule."
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {
+      "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Wilds"
+    ],
+    "needs": [
+      "reframework"
+    ],
+    "notes": "On AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing on top crashes it. REFramework comes from the RE Engine rule."
+  }
+}

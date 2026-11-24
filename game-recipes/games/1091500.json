@@ -1,0 +1,67 @@
+{
+  "name": "Cyberpunk 2077",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [
+      "--launcher-skip"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077"
+    ],
+    "anr_settings": [
+      {
+        "setting": "Resolution Scaling (Escalado de resolución)",
+        "value": "DLSS Super Resolution"
+      },
+      {
+        "setting": "Frame Generation (Generación de fotogramas)",
+        "value": "DLSS Frame Generation"
+      }
+    ],
+    "notes": "REDlauncher waits for a click under Proton."
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077"
+    ],
+    "anr_settings": [
+      {
+        "setting": "Resolution Scaling (Escalado de resolución)",
+        "value": "DLSS Super Resolution"
+      },
+      {
+        "setting": "Frame Generation (Generación de fotogramas)",
+        "value": "DLSS Frame Generation"
+      }
+    ],
+    "notes": "REDlauncher waits for a click under Proton. On Windows the launcher skip is left out: it only matters under Proton."
+  }
+}

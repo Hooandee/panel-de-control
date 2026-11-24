@@ -1,0 +1,67 @@
+{
+  "name": "Elden Ring",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "mod_launch_exe": {
+      "launcher": "start_protected_game.exe",
+      "exe": "eldenring.exe"
+    },
+    "mod_settings": {
+      "ERSS2/ERSS-FG.toml": {
+        "Renderer.ScalingMode": "\"FSR3U\"",
+        "FrameGeneration.FrameGenMode": "1"
+      }
+    },
+    "mod_frame_generation": "ERSS-FG",
+    "notes": "ERSS-FG needs Easy Anti-Cheat off (eldenring.exe instead of start_protected_game.exe), its FSR upscaler and FSR Frame Generation chosen."
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "mod_launch_exe": {
+      "launcher": "start_protected_game.exe",
+      "exe": "eldenring.exe"
+    },
+    "mod_settings": {
+      "ERSS2/ERSS-FG.toml": {
+        "Renderer.ScalingMode": "\"FSR3U\"",
+        "FrameGeneration.FrameGenMode": "1"
+      }
+    },
+    "mod_frame_generation": "ERSS-FG",
+    "notes": "ERSS-FG needs Easy Anti-Cheat off (eldenring.exe instead of start_protected_game.exe), its FSR upscaler and FSR Frame Generation chosen."
+  }
+}

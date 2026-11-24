@@ -48,7 +48,7 @@ CATALOG_CASES = [
 RECIPE_CASES = [
     {"id": "missing-windows-block", "file": "games/1462040.json", "op": "delete", "path": ["windows"]},
     {"id": "unknown-status", "file": "games/1462040.json", "op": "set", "path": ["windows", "status"], "value": "works"},
-    {"id": "unknown-block-with-fields", "file": "games/292030.json", "op": "set", "path": ["windows", "exe"], "value": "x.exe"},
+    {"id": "unknown-block-with-fields", "file": "games/1086940.json", "op": "set", "path": ["windows", "exe"], "value": "x.exe"},
     {"id": "proton-verb-on-windows", "file": "games/1462040.json", "op": "set", "path": ["windows", "dependencies"],
      "value": ["luma-ff7", "vcrun2022"]},
     {"id": "windows-runtime-on-linux", "file": "games/1462040.json", "op": "set", "path": ["linux", "dependencies"],

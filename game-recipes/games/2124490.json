@@ -1,0 +1,63 @@
+{
+  "name": "Silent Hill 2",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Silent-Hill-2-Remake"
+    ],
+    "anr_settings": [
+      {
+        "setting": "Supersampling (Supermuestreo)",
+        "value": "DLSS"
+      },
+      {
+        "setting": "Frame Generation (Generación de fotogramas)",
+        "value": "On (Activada)"
+      }
+    ]
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Silent-Hill-2-Remake"
+    ],
+    "anr_settings": [
+      {
+        "setting": "Supersampling (Supermuestreo)",
+        "value": "DLSS"
+      },
+      {
+        "setting": "Frame Generation (Generación de fotogramas)",
+        "value": "On (Activada)"
+      }
+    ]
+  }
+}

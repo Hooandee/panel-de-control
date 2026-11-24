@@ -760,7 +760,7 @@
  },
  "recipes": {
   "schema_version": 2,
-  "catalog_version": 18,
+  "catalog_version": 19,
   "assets": {
    "luma-ff7-800": {
     "id": "luma-ff7-800",
@@ -2108,6 +2108,13 @@
      "windows": "unknown"
     }
    },
+   "1091500": {
+    "name": "Cyberpunk 2077",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
    "1172380": {
     "name": "STAR WARS Jedi: Fallen Order",
     "statuses": {
@@ -2115,11 +2122,32 @@
      "windows": "unknown"
     }
    },
+   "1174180": {
+    "name": "Red Dead Redemption 2",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
+   "1182900": {
+    "name": "A Plague Tale: Requiem",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
    "1196590": {
     "name": "Resident Evil Village",
     "statuses": {
      "linux": "tested",
      "windows": "unknown"
+    }
+   },
+   "1245620": {
+    "name": "Elden Ring",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
     }
    },
    "1332010": {
@@ -2150,6 +2178,13 @@
      "windows": "unknown"
     }
    },
+   "1446780": {
+    "name": "Monster Hunter Rise",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
    "1462040": {
     "name": "FINAL FANTASY VII REMAKE INTERGRADE",
     "statuses": {
@@ -2178,6 +2213,41 @@
      "windows": "unknown"
     }
    },
+   "2054970": {
+    "name": "Dragon's Dogma 2",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
+   "2124490": {
+    "name": "Silent Hill 2",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
+   "2246340": {
+    "name": "Monster Hunter Wilds",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
+   "230410": {
+    "name": "Warframe",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
+   "2322010": {
+    "name": "God of War Ragnarök",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
    "2679460": {
     "name": "Metaphor: ReFantazio",
     "statuses": {
@@ -2189,7 +2259,7 @@
     "name": "The Witcher 3: Wild Hunt",
     "statuses": {
      "linux": "tested",
-     "windows": "unknown"
+     "windows": "untested"
     }
    },
    "355790": {
@@ -2283,6 +2353,13 @@
      "windows": "unknown"
     }
    },
+   "548430": {
+    "name": "Deep Rock Galactic",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
    "574090": {
     "name": "MOTHERGUNSHIP",
     "statuses": {
@@ -2346,6 +2423,13 @@
      "windows": "unknown"
     }
    },
+   "870780": {
+    "name": "Control Ultimate Edition",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
    "881020": {
     "name": "Granblue Fantasy: Relink",
     "statuses": {
@@ -2379,6 +2463,13 @@
     "statuses": {
      "linux": "tested",
      "windows": "unknown"
+    }
+   },
+   "990080": {
+    "name": "Hogwarts Legacy",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
     }
    },
    "996580": {
@@ -2438,8 +2529,493 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1091500|dll|linux|x86_64": {
+    "appid": "1091500",
+    "name": "Cyberpunk 2077",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "--launcher-skip"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Resolution Scaling (Escalado de resolución)",
+      "DLSS Super Resolution"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "DLSS Frame Generation"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "REDlauncher waits for a click under Proton.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1091500|dll|linux|aarch64": {
+    "appid": "1091500",
+    "name": "Cyberpunk 2077",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "--launcher-skip"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Resolution Scaling (Escalado de resolución)",
+      "DLSS Super Resolution"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "DLSS Frame Generation"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "REDlauncher waits for a click under Proton.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1091500|dll|windows|x86_64": {
+    "appid": "1091500",
+    "name": "Cyberpunk 2077",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Resolution Scaling (Escalado de resolución)",
+      "DLSS Super Resolution"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "DLSS Frame Generation"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "REDlauncher waits for a click under Proton. On Windows the launcher skip is left out: it only matters under Proton.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1091500|dll|windows|aarch64": {
+    "appid": "1091500",
+    "name": "Cyberpunk 2077",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Resolution Scaling (Escalado de resolución)",
+      "DLSS Super Resolution"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "DLSS Frame Generation"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "REDlauncher waits for a click under Proton. On Windows the launcher skip is left out: it only matters under Proton.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1091500|optiscaler|linux|x86_64": {
+    "appid": "1091500",
+    "name": "Cyberpunk 2077",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "--launcher-skip"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Resolution Scaling (Escalado de resolución)",
+      "DLSS Super Resolution"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "DLSS Frame Generation"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "REDlauncher waits for a click under Proton.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1091500|optiscaler|linux|aarch64": {
+    "appid": "1091500",
+    "name": "Cyberpunk 2077",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "--launcher-skip"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Resolution Scaling (Escalado de resolución)",
+      "DLSS Super Resolution"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "DLSS Frame Generation"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "REDlauncher waits for a click under Proton.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1091500|optiscaler|windows|x86_64": {
+    "appid": "1091500",
+    "name": "Cyberpunk 2077",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Resolution Scaling (Escalado de resolución)",
+      "DLSS Super Resolution"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "DLSS Frame Generation"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "REDlauncher waits for a click under Proton. On Windows the launcher skip is left out: it only matters under Proton.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1091500|optiscaler|windows|aarch64": {
+    "appid": "1091500",
+    "name": "Cyberpunk 2077",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Resolution Scaling (Escalado de resolución)",
+      "DLSS Super Resolution"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "DLSS Frame Generation"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "REDlauncher waits for a click under Proton. On Windows the launcher skip is left out: it only matters under Proton.",
+    "platform": "windows",
+    "status": "untested",
     "ordered_dependencies": []
    },
    "1172380|optiscaler|linux|x86_64": {
@@ -2488,6 +3064,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -2495,6 +3084,878 @@
      "msvcrt40",
      "luma-ue"
     ]
+   },
+   "1174180|dll|linux|x86_64": {
+    "appid": "1174180",
+    "name": "Red Dead Redemption 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [
+     [
+      "Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml",
+      "API",
+      "kSettingAPI_DX12"
+     ]
+    ],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it. The file is relative to the user profile folder on each OS.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1174180|dll|linux|aarch64": {
+    "appid": "1174180",
+    "name": "Red Dead Redemption 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [
+     [
+      "Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml",
+      "API",
+      "kSettingAPI_DX12"
+     ]
+    ],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it. The file is relative to the user profile folder on each OS.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1174180|dll|windows|x86_64": {
+    "appid": "1174180",
+    "name": "Red Dead Redemption 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [
+     [
+      "Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml",
+      "API",
+      "kSettingAPI_DX12"
+     ]
+    ],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it. The file is relative to the user profile folder on each OS.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1174180|dll|windows|aarch64": {
+    "appid": "1174180",
+    "name": "Red Dead Redemption 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [
+     [
+      "Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml",
+      "API",
+      "kSettingAPI_DX12"
+     ]
+    ],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it. The file is relative to the user profile folder on each OS.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1174180|optiscaler|linux|x86_64": {
+    "appid": "1174180",
+    "name": "Red Dead Redemption 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [
+     [
+      "Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml",
+      "API",
+      "kSettingAPI_DX12"
+     ]
+    ],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it. The file is relative to the user profile folder on each OS.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1174180|optiscaler|linux|aarch64": {
+    "appid": "1174180",
+    "name": "Red Dead Redemption 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [
+     [
+      "Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml",
+      "API",
+      "kSettingAPI_DX12"
+     ]
+    ],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it. The file is relative to the user profile folder on each OS.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1174180|optiscaler|windows|x86_64": {
+    "appid": "1174180",
+    "name": "Red Dead Redemption 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [
+     [
+      "Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml",
+      "API",
+      "kSettingAPI_DX12"
+     ]
+    ],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it. The file is relative to the user profile folder on each OS.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1174180|optiscaler|windows|aarch64": {
+    "appid": "1174180",
+    "name": "Red Dead Redemption 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [
+     [
+      "Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml",
+      "API",
+      "kSettingAPI_DX12"
+     ]
+    ],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it. The file is relative to the user profile folder on each OS.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1182900|dll|linux|x86_64": {
+    "appid": "1182900",
+    "name": "A Plague Tale: Requiem",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/A-Plague-Tale-Requiem"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "NVIDIA DLSS Frame Generation",
+      "On (Sí)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1182900|dll|linux|aarch64": {
+    "appid": "1182900",
+    "name": "A Plague Tale: Requiem",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/A-Plague-Tale-Requiem"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "NVIDIA DLSS Frame Generation",
+      "On (Sí)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1182900|dll|windows|x86_64": {
+    "appid": "1182900",
+    "name": "A Plague Tale: Requiem",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/A-Plague-Tale-Requiem"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "NVIDIA DLSS Frame Generation",
+      "On (Sí)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1182900|dll|windows|aarch64": {
+    "appid": "1182900",
+    "name": "A Plague Tale: Requiem",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/A-Plague-Tale-Requiem"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "NVIDIA DLSS Frame Generation",
+      "On (Sí)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1182900|optiscaler|linux|x86_64": {
+    "appid": "1182900",
+    "name": "A Plague Tale: Requiem",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/A-Plague-Tale-Requiem"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "NVIDIA DLSS Frame Generation",
+      "On (Sí)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1182900|optiscaler|linux|aarch64": {
+    "appid": "1182900",
+    "name": "A Plague Tale: Requiem",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/A-Plague-Tale-Requiem"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "NVIDIA DLSS Frame Generation",
+      "On (Sí)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1182900|optiscaler|windows|x86_64": {
+    "appid": "1182900",
+    "name": "A Plague Tale: Requiem",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/A-Plague-Tale-Requiem"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "NVIDIA DLSS Frame Generation",
+      "On (Sí)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1182900|optiscaler|windows|aarch64": {
+    "appid": "1182900",
+    "name": "A Plague Tale: Requiem",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/A-Plague-Tale-Requiem"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "NVIDIA DLSS Frame Generation",
+      "On (Sí)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
    },
    "1196590|optiscaler|linux|x86_64": {
     "appid": "1196590",
@@ -2535,12 +3996,481 @@
     "reframework_upscaler": true,
     "optiscaler_fg": false,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
      "refw-pdup-re8",
      "puredark-upscaler-base"
     ]
+   },
+   "1245620|dll|linux|x86_64": {
+    "appid": "1245620",
+    "name": "Elden Ring",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": [
+     "start_protected_game.exe",
+     "eldenring.exe"
+    ],
+    "mod_settings": {
+     "ERSS2/ERSS-FG.toml": {
+      "Renderer.ScalingMode": "\"FSR3U\"",
+      "FrameGeneration.FrameGenMode": "1"
+     }
+    },
+    "mod_frame_generation": "ERSS-FG",
+    "fg_note": null,
+    "notes": "ERSS-FG needs Easy Anti-Cheat off (eldenring.exe instead of start_protected_game.exe), its FSR upscaler and FSR Frame Generation chosen.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1245620|dll|linux|aarch64": {
+    "appid": "1245620",
+    "name": "Elden Ring",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": [
+     "start_protected_game.exe",
+     "eldenring.exe"
+    ],
+    "mod_settings": {
+     "ERSS2/ERSS-FG.toml": {
+      "Renderer.ScalingMode": "\"FSR3U\"",
+      "FrameGeneration.FrameGenMode": "1"
+     }
+    },
+    "mod_frame_generation": "ERSS-FG",
+    "fg_note": null,
+    "notes": "ERSS-FG needs Easy Anti-Cheat off (eldenring.exe instead of start_protected_game.exe), its FSR upscaler and FSR Frame Generation chosen.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1245620|dll|windows|x86_64": {
+    "appid": "1245620",
+    "name": "Elden Ring",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": [
+     "start_protected_game.exe",
+     "eldenring.exe"
+    ],
+    "mod_settings": {
+     "ERSS2/ERSS-FG.toml": {
+      "Renderer.ScalingMode": "\"FSR3U\"",
+      "FrameGeneration.FrameGenMode": "1"
+     }
+    },
+    "mod_frame_generation": "ERSS-FG",
+    "fg_note": null,
+    "notes": "ERSS-FG needs Easy Anti-Cheat off (eldenring.exe instead of start_protected_game.exe), its FSR upscaler and FSR Frame Generation chosen.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1245620|dll|windows|aarch64": {
+    "appid": "1245620",
+    "name": "Elden Ring",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": [
+     "start_protected_game.exe",
+     "eldenring.exe"
+    ],
+    "mod_settings": {
+     "ERSS2/ERSS-FG.toml": {
+      "Renderer.ScalingMode": "\"FSR3U\"",
+      "FrameGeneration.FrameGenMode": "1"
+     }
+    },
+    "mod_frame_generation": "ERSS-FG",
+    "fg_note": null,
+    "notes": "ERSS-FG needs Easy Anti-Cheat off (eldenring.exe instead of start_protected_game.exe), its FSR upscaler and FSR Frame Generation chosen.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1245620|optiscaler|linux|x86_64": {
+    "appid": "1245620",
+    "name": "Elden Ring",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": [
+     "start_protected_game.exe",
+     "eldenring.exe"
+    ],
+    "mod_settings": {
+     "ERSS2/ERSS-FG.toml": {
+      "Renderer.ScalingMode": "\"FSR3U\"",
+      "FrameGeneration.FrameGenMode": "1"
+     }
+    },
+    "mod_frame_generation": "ERSS-FG",
+    "fg_note": null,
+    "notes": "ERSS-FG needs Easy Anti-Cheat off (eldenring.exe instead of start_protected_game.exe), its FSR upscaler and FSR Frame Generation chosen.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1245620|optiscaler|linux|aarch64": {
+    "appid": "1245620",
+    "name": "Elden Ring",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": [
+     "start_protected_game.exe",
+     "eldenring.exe"
+    ],
+    "mod_settings": {
+     "ERSS2/ERSS-FG.toml": {
+      "Renderer.ScalingMode": "\"FSR3U\"",
+      "FrameGeneration.FrameGenMode": "1"
+     }
+    },
+    "mod_frame_generation": "ERSS-FG",
+    "fg_note": null,
+    "notes": "ERSS-FG needs Easy Anti-Cheat off (eldenring.exe instead of start_protected_game.exe), its FSR upscaler and FSR Frame Generation chosen.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1245620|optiscaler|windows|x86_64": {
+    "appid": "1245620",
+    "name": "Elden Ring",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": [
+     "start_protected_game.exe",
+     "eldenring.exe"
+    ],
+    "mod_settings": {
+     "ERSS2/ERSS-FG.toml": {
+      "Renderer.ScalingMode": "\"FSR3U\"",
+      "FrameGeneration.FrameGenMode": "1"
+     }
+    },
+    "mod_frame_generation": "ERSS-FG",
+    "fg_note": null,
+    "notes": "ERSS-FG needs Easy Anti-Cheat off (eldenring.exe instead of start_protected_game.exe), its FSR upscaler and FSR Frame Generation chosen.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1245620|optiscaler|windows|aarch64": {
+    "appid": "1245620",
+    "name": "Elden Ring",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": [
+     "start_protected_game.exe",
+     "eldenring.exe"
+    ],
+    "mod_settings": {
+     "ERSS2/ERSS-FG.toml": {
+      "Renderer.ScalingMode": "\"FSR3U\"",
+      "FrameGeneration.FrameGenMode": "1"
+     }
+    },
+    "mod_frame_generation": "ERSS-FG",
+    "fg_note": null,
+    "notes": "ERSS-FG needs Easy Anti-Cheat off (eldenring.exe instead of start_protected_game.exe), its FSR upscaler and FSR Frame Generation chosen.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
    },
    "1332010|optiscaler|linux|x86_64": {
     "appid": "1332010",
@@ -2588,6 +4518,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -2642,6 +4585,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -2696,6 +4652,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -2750,6 +4719,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -2757,6 +4739,430 @@
      "msvcrt40",
      "luma-ue"
     ]
+   },
+   "1446780|dll|linux|x86_64": {
+    "appid": "1446780",
+    "name": "Monster Hunter Rise",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Rise"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "d3d12.dll",
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "ReShade64.dll": "reframework-nightly"
+    },
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "As dxgi.dll on AMD the game never offers DLSS and REFramework as dinput8.dll crashes it: OptiScaler loads as d3d12.dll and REFramework as ReShade64.dll.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1446780|dll|linux|aarch64": {
+    "appid": "1446780",
+    "name": "Monster Hunter Rise",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Rise"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "d3d12.dll",
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "ReShade64.dll": "reframework-nightly"
+    },
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "As dxgi.dll on AMD the game never offers DLSS and REFramework as dinput8.dll crashes it: OptiScaler loads as d3d12.dll and REFramework as ReShade64.dll.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1446780|dll|windows|x86_64": {
+    "appid": "1446780",
+    "name": "Monster Hunter Rise",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Rise"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "d3d12.dll",
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "ReShade64.dll": "reframework-nightly"
+    },
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "As dxgi.dll on AMD the game never offers DLSS and REFramework as dinput8.dll crashes it: OptiScaler loads as d3d12.dll and REFramework as ReShade64.dll.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1446780|dll|windows|aarch64": {
+    "appid": "1446780",
+    "name": "Monster Hunter Rise",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Rise"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "d3d12.dll",
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "ReShade64.dll": "reframework-nightly"
+    },
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "As dxgi.dll on AMD the game never offers DLSS and REFramework as dinput8.dll crashes it: OptiScaler loads as d3d12.dll and REFramework as ReShade64.dll.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1446780|optiscaler|linux|x86_64": {
+    "appid": "1446780",
+    "name": "Monster Hunter Rise",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Rise"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "d3d12.dll",
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "ReShade64.dll": "reframework-nightly"
+    },
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "As dxgi.dll on AMD the game never offers DLSS and REFramework as dinput8.dll crashes it: OptiScaler loads as d3d12.dll and REFramework as ReShade64.dll.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1446780|optiscaler|linux|aarch64": {
+    "appid": "1446780",
+    "name": "Monster Hunter Rise",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Rise"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "d3d12.dll",
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "ReShade64.dll": "reframework-nightly"
+    },
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "As dxgi.dll on AMD the game never offers DLSS and REFramework as dinput8.dll crashes it: OptiScaler loads as d3d12.dll and REFramework as ReShade64.dll.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1446780|optiscaler|windows|x86_64": {
+    "appid": "1446780",
+    "name": "Monster Hunter Rise",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Rise"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "d3d12.dll",
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "ReShade64.dll": "reframework-nightly"
+    },
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "As dxgi.dll on AMD the game never offers DLSS and REFramework as dinput8.dll crashes it: OptiScaler loads as d3d12.dll and REFramework as ReShade64.dll.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "1446780|optiscaler|windows|aarch64": {
+    "appid": "1446780",
+    "name": "Monster Hunter Rise",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Rise"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "d3d12.dll",
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "ReShade64.dll": "reframework-nightly"
+    },
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "As dxgi.dll on AMD the game never offers DLSS and REFramework as dinput8.dll crashes it: OptiScaler loads as d3d12.dll and REFramework as ReShade64.dll.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
    },
    "1462040|optiscaler|linux|x86_64": {
     "appid": "1462040",
@@ -2806,6 +5212,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -2858,6 +5277,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "windows",
     "status": "untested",
     "ordered_dependencies": [
@@ -2911,6 +5343,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -2963,6 +5408,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3013,6 +5471,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "windows",
     "status": "untested",
     "ordered_dependencies": [
@@ -3064,12 +5535,2161 @@
       "No"
      ]
     ],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
      "refw-pdup-re4",
      "puredark-upscaler-base"
     ]
+   },
+   "2054970|dll|linux|x86_64": {
+    "appid": "2054970",
+    "name": "Dragon's Dogma 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Dragons-Dogma-2"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "dinput8.dll": "reframework-nightly"
+    },
+    "native_dlls": [
+     "dinput8"
+    ],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RE Engine exposes its upscaler to OptiScaler only through REFramework.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2054970|dll|linux|aarch64": {
+    "appid": "2054970",
+    "name": "Dragon's Dogma 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Dragons-Dogma-2"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "dinput8.dll": "reframework-nightly"
+    },
+    "native_dlls": [
+     "dinput8"
+    ],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RE Engine exposes its upscaler to OptiScaler only through REFramework.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2054970|dll|windows|x86_64": {
+    "appid": "2054970",
+    "name": "Dragon's Dogma 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Dragons-Dogma-2"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "dinput8.dll": "reframework-nightly"
+    },
+    "native_dlls": [
+     "dinput8"
+    ],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RE Engine exposes its upscaler to OptiScaler only through REFramework.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2054970|dll|windows|aarch64": {
+    "appid": "2054970",
+    "name": "Dragon's Dogma 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Dragons-Dogma-2"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "dinput8.dll": "reframework-nightly"
+    },
+    "native_dlls": [
+     "dinput8"
+    ],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RE Engine exposes its upscaler to OptiScaler only through REFramework.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2054970|optiscaler|linux|x86_64": {
+    "appid": "2054970",
+    "name": "Dragon's Dogma 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Dragons-Dogma-2"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "dinput8.dll": "reframework-nightly"
+    },
+    "native_dlls": [
+     "dinput8"
+    ],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RE Engine exposes its upscaler to OptiScaler only through REFramework.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2054970|optiscaler|linux|aarch64": {
+    "appid": "2054970",
+    "name": "Dragon's Dogma 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Dragons-Dogma-2"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "dinput8.dll": "reframework-nightly"
+    },
+    "native_dlls": [
+     "dinput8"
+    ],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RE Engine exposes its upscaler to OptiScaler only through REFramework.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2054970|optiscaler|windows|x86_64": {
+    "appid": "2054970",
+    "name": "Dragon's Dogma 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Dragons-Dogma-2"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "dinput8.dll": "reframework-nightly"
+    },
+    "native_dlls": [
+     "dinput8"
+    ],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RE Engine exposes its upscaler to OptiScaler only through REFramework.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2054970|optiscaler|windows|aarch64": {
+    "appid": "2054970",
+    "name": "Dragon's Dogma 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Dragons-Dogma-2"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {
+     "dinput8.dll": "reframework-nightly"
+    },
+    "native_dlls": [
+     "dinput8"
+    ],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "RE Engine exposes its upscaler to OptiScaler only through REFramework.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2124490|dll|linux|x86_64": {
+    "appid": "2124490",
+    "name": "Silent Hill 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Silent-Hill-2-Remake"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Supersampling (Supermuestreo)",
+      "DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "On (Activada)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2124490|dll|linux|aarch64": {
+    "appid": "2124490",
+    "name": "Silent Hill 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Silent-Hill-2-Remake"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Supersampling (Supermuestreo)",
+      "DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "On (Activada)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2124490|dll|windows|x86_64": {
+    "appid": "2124490",
+    "name": "Silent Hill 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Silent-Hill-2-Remake"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Supersampling (Supermuestreo)",
+      "DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "On (Activada)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2124490|dll|windows|aarch64": {
+    "appid": "2124490",
+    "name": "Silent Hill 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Silent-Hill-2-Remake"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Supersampling (Supermuestreo)",
+      "DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "On (Activada)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2124490|optiscaler|linux|x86_64": {
+    "appid": "2124490",
+    "name": "Silent Hill 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Silent-Hill-2-Remake"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Supersampling (Supermuestreo)",
+      "DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "On (Activada)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2124490|optiscaler|linux|aarch64": {
+    "appid": "2124490",
+    "name": "Silent Hill 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Silent-Hill-2-Remake"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Supersampling (Supermuestreo)",
+      "DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "On (Activada)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2124490|optiscaler|windows|x86_64": {
+    "appid": "2124490",
+    "name": "Silent Hill 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Silent-Hill-2-Remake"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Supersampling (Supermuestreo)",
+      "DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "On (Activada)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2124490|optiscaler|windows|aarch64": {
+    "appid": "2124490",
+    "name": "Silent Hill 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Silent-Hill-2-Remake"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Supersampling (Supermuestreo)",
+      "DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "On (Activada)"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2246340|dll|linux|x86_64": {
+    "appid": "2246340",
+    "name": "Monster Hunter Wilds",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Wilds"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [
+     "reframework"
+    ],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "On AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing on top crashes it. REFramework comes from the RE Engine rule.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2246340|dll|linux|aarch64": {
+    "appid": "2246340",
+    "name": "Monster Hunter Wilds",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Wilds"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [
+     "reframework"
+    ],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "On AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing on top crashes it. REFramework comes from the RE Engine rule.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2246340|dll|windows|x86_64": {
+    "appid": "2246340",
+    "name": "Monster Hunter Wilds",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Wilds"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [
+     "reframework"
+    ],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "On AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing on top crashes it. REFramework comes from the RE Engine rule.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2246340|dll|windows|aarch64": {
+    "appid": "2246340",
+    "name": "Monster Hunter Wilds",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Wilds"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [
+     "reframework"
+    ],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "On AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing on top crashes it. REFramework comes from the RE Engine rule.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2246340|optiscaler|linux|x86_64": {
+    "appid": "2246340",
+    "name": "Monster Hunter Wilds",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Wilds"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [
+     "reframework"
+    ],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "On AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing on top crashes it. REFramework comes from the RE Engine rule.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2246340|optiscaler|linux|aarch64": {
+    "appid": "2246340",
+    "name": "Monster Hunter Wilds",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Wilds"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [
+     "reframework"
+    ],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "On AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing on top crashes it. REFramework comes from the RE Engine rule.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2246340|optiscaler|windows|x86_64": {
+    "appid": "2246340",
+    "name": "Monster Hunter Wilds",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Wilds"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [
+     "reframework"
+    ],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "On AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing on top crashes it. REFramework comes from the RE Engine rule.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2246340|optiscaler|windows|aarch64": {
+    "appid": "2246340",
+    "name": "Monster Hunter Wilds",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Monster-Hunter-Wilds"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [
+     "reframework"
+    ],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "On AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing on top crashes it. REFramework comes from the RE Engine rule.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "230410|dll|linux|x86_64": {
+    "appid": "230410",
+    "name": "Warframe",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "winmm.dll",
+    "protect_dlls": true,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll; its launcher purges unknown .dll files at every start.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "230410|dll|linux|aarch64": {
+    "appid": "230410",
+    "name": "Warframe",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "winmm.dll",
+    "protect_dlls": true,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll; its launcher purges unknown .dll files at every start.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "230410|dll|windows|x86_64": {
+    "appid": "230410",
+    "name": "Warframe",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "winmm.dll",
+    "protect_dlls": true,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll; its launcher purges unknown .dll files at every start.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "230410|dll|windows|aarch64": {
+    "appid": "230410",
+    "name": "Warframe",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "winmm.dll",
+    "protect_dlls": true,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll; its launcher purges unknown .dll files at every start.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "230410|optiscaler|linux|x86_64": {
+    "appid": "230410",
+    "name": "Warframe",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "winmm.dll",
+    "protect_dlls": true,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll; its launcher purges unknown .dll files at every start.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "230410|optiscaler|linux|aarch64": {
+    "appid": "230410",
+    "name": "Warframe",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "winmm.dll",
+    "protect_dlls": true,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll; its launcher purges unknown .dll files at every start.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "230410|optiscaler|windows|x86_64": {
+    "appid": "230410",
+    "name": "Warframe",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "winmm.dll",
+    "protect_dlls": true,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll; its launcher purges unknown .dll files at every start.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "230410|optiscaler|windows|aarch64": {
+    "appid": "230410",
+    "name": "Warframe",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": "winmm.dll",
+    "protect_dlls": true,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll; its launcher purges unknown .dll files at every start.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2322010|dll|linux|x86_64": {
+    "appid": "2322010",
+    "name": "God of War Ragnarök",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/God-of-War-Ragnarok"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": false,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "Nvidia DLSS-FG"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2322010|dll|linux|aarch64": {
+    "appid": "2322010",
+    "name": "God of War Ragnarök",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/God-of-War-Ragnarok"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": false,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "Nvidia DLSS-FG"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2322010|dll|windows|x86_64": {
+    "appid": "2322010",
+    "name": "God of War Ragnarök",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/God-of-War-Ragnarok"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": false,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "Nvidia DLSS-FG"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2322010|dll|windows|aarch64": {
+    "appid": "2322010",
+    "name": "God of War Ragnarök",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/God-of-War-Ragnarok"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": false,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "Nvidia DLSS-FG"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2322010|optiscaler|linux|x86_64": {
+    "appid": "2322010",
+    "name": "God of War Ragnarök",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/God-of-War-Ragnarok"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": false,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "Nvidia DLSS-FG"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2322010|optiscaler|linux|aarch64": {
+    "appid": "2322010",
+    "name": "God of War Ragnarök",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/God-of-War-Ragnarok"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": false,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "Nvidia DLSS-FG"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "2322010|optiscaler|windows|x86_64": {
+    "appid": "2322010",
+    "name": "God of War Ragnarök",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/God-of-War-Ragnarok"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": false,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "Nvidia DLSS-FG"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "2322010|optiscaler|windows|aarch64": {
+    "appid": "2322010",
+    "name": "God of War Ragnarök",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/God-of-War-Ragnarok"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": false,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "Nvidia DLSS-FG"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
    },
    "2679460|optiscaler|linux|x86_64": {
     "appid": "2679460",
@@ -3115,6 +7735,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3123,16 +7756,18 @@
      "luma-mrf"
     ]
    },
-   "292030|optiscaler|linux|x86_64": {
+   "292030|dll|linux|x86_64": {
     "appid": "292030",
     "name": "The Witcher 3: Wild Hunt",
-    "revision": 1,
+    "revision": 2,
     "conditions": {
      "engine": [
-      "optiscaler"
+      "optiscaler",
+      "dll"
      ],
      "arch": [
-      "x86_64"
+      "x86_64",
+      "aarch64"
      ]
     },
     "exe": "bin/x64_dx12/witcher3.exe",
@@ -3156,8 +7791,381 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": "reflexOff",
+    "notes": "REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers. FSR Frame Generation is disabled while Reflex is on.",
     "platform": "linux",
     "status": "tested",
+    "ordered_dependencies": []
+   },
+   "292030|dll|linux|aarch64": {
+    "appid": "292030",
+    "name": "The Witcher 3: Wild Hunt",
+    "revision": 2,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": "bin/x64_dx12/witcher3.exe",
+    "args": [
+     "--launcher-skip",
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": "xess",
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": "reflexOff",
+    "notes": "REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers. FSR Frame Generation is disabled while Reflex is on.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "292030|dll|windows|x86_64": {
+    "appid": "292030",
+    "name": "The Witcher 3: Wild Hunt",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": "bin/x64_dx12/witcher3.exe",
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": "reflexOff",
+    "notes": "REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers. FSR Frame Generation is disabled while Reflex is on. On Windows the launcher skip is left out: it only matters under Proton. The XeSS input hint was measured on Linux only and is left out.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "292030|dll|windows|aarch64": {
+    "appid": "292030",
+    "name": "The Witcher 3: Wild Hunt",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": "bin/x64_dx12/witcher3.exe",
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": "reflexOff",
+    "notes": "REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers. FSR Frame Generation is disabled while Reflex is on. On Windows the launcher skip is left out: it only matters under Proton. The XeSS input hint was measured on Linux only and is left out.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "292030|optiscaler|linux|x86_64": {
+    "appid": "292030",
+    "name": "The Witcher 3: Wild Hunt",
+    "revision": 2,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": "bin/x64_dx12/witcher3.exe",
+    "args": [
+     "--launcher-skip",
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": "xess",
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": "reflexOff",
+    "notes": "REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers. FSR Frame Generation is disabled while Reflex is on.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "292030|optiscaler|linux|aarch64": {
+    "appid": "292030",
+    "name": "The Witcher 3: Wild Hunt",
+    "revision": 2,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": "bin/x64_dx12/witcher3.exe",
+    "args": [
+     "--launcher-skip",
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": "xess",
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": "reflexOff",
+    "notes": "REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers. FSR Frame Generation is disabled while Reflex is on.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "292030|optiscaler|windows|x86_64": {
+    "appid": "292030",
+    "name": "The Witcher 3: Wild Hunt",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": "bin/x64_dx12/witcher3.exe",
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": "reflexOff",
+    "notes": "REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers. FSR Frame Generation is disabled while Reflex is on. On Windows the launcher skip is left out: it only matters under Proton. The XeSS input hint was measured on Linux only and is left out.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "292030|optiscaler|windows|aarch64": {
+    "appid": "292030",
+    "name": "The Witcher 3: Wild Hunt",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": "bin/x64_dx12/witcher3.exe",
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": "reflexOff",
+    "notes": "REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers. FSR Frame Generation is disabled while Reflex is on. On Windows the launcher skip is left out: it only matters under Proton. The XeSS input hint was measured on Linux only and is left out.",
+    "platform": "windows",
+    "status": "untested",
     "ordered_dependencies": []
    },
    "355790|optiscaler|linux|x86_64": {
@@ -3206,6 +8214,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3258,6 +8279,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3305,6 +8339,19 @@
     "reframework_upscaler": true,
     "optiscaler_fg": false,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3358,6 +8405,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3412,6 +8472,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3464,6 +8537,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3518,6 +8604,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3572,6 +8671,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3614,6 +8726,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": []
@@ -3662,6 +8787,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3714,6 +8852,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3768,6 +8919,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3822,6 +8986,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3829,6 +9006,454 @@
      "msvcrt40",
      "luma-ue"
     ]
+   },
+   "548430|dll|linux|x86_64": {
+    "appid": "548430",
+    "name": "Deep Rock Galactic",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation",
+      "On"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "548430|dll|linux|aarch64": {
+    "appid": "548430",
+    "name": "Deep Rock Galactic",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation",
+      "On"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "548430|dll|windows|x86_64": {
+    "appid": "548430",
+    "name": "Deep Rock Galactic",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation",
+      "On"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "548430|dll|windows|aarch64": {
+    "appid": "548430",
+    "name": "Deep Rock Galactic",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation",
+      "On"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "548430|optiscaler|linux|x86_64": {
+    "appid": "548430",
+    "name": "Deep Rock Galactic",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation",
+      "On"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "548430|optiscaler|linux|aarch64": {
+    "appid": "548430",
+    "name": "Deep Rock Galactic",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation",
+      "On"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "548430|optiscaler|windows|x86_64": {
+    "appid": "548430",
+    "name": "Deep Rock Galactic",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation",
+      "On"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "548430|optiscaler|windows|aarch64": {
+    "appid": "548430",
+    "name": "Deep Rock Galactic",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Frame Generation",
+      "On"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "The game asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
    },
    "574090|optiscaler|linux|x86_64": {
     "appid": "574090",
@@ -3876,6 +9501,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3923,6 +9561,19 @@
     "reframework_upscaler": true,
     "optiscaler_fg": false,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -3976,6 +9627,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4030,6 +9694,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4084,6 +9761,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4138,6 +9828,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4192,6 +9895,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4246,6 +9962,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4300,6 +10029,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4307,6 +10049,414 @@
      "msvcrt40",
      "luma-ue"
     ]
+   },
+   "870780|dll|linux|x86_64": {
+    "appid": "870780",
+    "name": "Control Ultimate Edition",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Control-Ultimate-Edition"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "ControlLauncher loads the proxy before OptiScaler's Control_DX12 spoofing exception applies. FSR 4 only runs through the D3D11 to D3D12 bridge.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "870780|dll|linux|aarch64": {
+    "appid": "870780",
+    "name": "Control Ultimate Edition",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Control-Ultimate-Edition"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "ControlLauncher loads the proxy before OptiScaler's Control_DX12 spoofing exception applies. FSR 4 only runs through the D3D11 to D3D12 bridge.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "870780|dll|windows|x86_64": {
+    "appid": "870780",
+    "name": "Control Ultimate Edition",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Control-Ultimate-Edition"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "ControlLauncher loads the proxy before OptiScaler's Control_DX12 spoofing exception applies. FSR 4 only runs through the D3D11 to D3D12 bridge.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "870780|dll|windows|aarch64": {
+    "appid": "870780",
+    "name": "Control Ultimate Edition",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Control-Ultimate-Edition"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "ControlLauncher loads the proxy before OptiScaler's Control_DX12 spoofing exception applies. FSR 4 only runs through the D3D11 to D3D12 bridge.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "870780|optiscaler|linux|x86_64": {
+    "appid": "870780",
+    "name": "Control Ultimate Edition",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Control-Ultimate-Edition"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "ControlLauncher loads the proxy before OptiScaler's Control_DX12 spoofing exception applies. FSR 4 only runs through the D3D11 to D3D12 bridge.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "870780|optiscaler|linux|aarch64": {
+    "appid": "870780",
+    "name": "Control Ultimate Edition",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Control-Ultimate-Edition"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "ControlLauncher loads the proxy before OptiScaler's Control_DX12 spoofing exception applies. FSR 4 only runs through the D3D11 to D3D12 bridge.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "870780|optiscaler|windows|x86_64": {
+    "appid": "870780",
+    "name": "Control Ultimate Edition",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Control-Ultimate-Edition"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "ControlLauncher loads the proxy before OptiScaler's Control_DX12 spoofing exception applies. FSR 4 only runs through the D3D11 to D3D12 bridge.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "870780|optiscaler|windows|aarch64": {
+    "appid": "870780",
+    "name": "Control Ultimate Edition",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false"
+    },
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Control-Ultimate-Edition"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "ControlLauncher loads the proxy before OptiScaler's Control_DX12 spoofing exception applies. FSR 4 only runs through the D3D11 to D3D12 bridge.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
    },
    "881020|optiscaler|linux|x86_64": {
     "appid": "881020",
@@ -4351,6 +10501,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4398,6 +10561,19 @@
     "reframework_upscaler": true,
     "optiscaler_fg": false,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4451,6 +10627,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4498,6 +10687,19 @@
     "reframework_upscaler": true,
     "optiscaler_fg": false,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4551,6 +10753,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4558,6 +10773,470 @@
      "msvcrt40",
      "luma-ue"
     ]
+   },
+   "990080|dll|linux|x86_64": {
+    "appid": "990080",
+    "name": "Hogwarts Legacy",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Hogwarts-Legacy"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Upscale Type (Tipo de escalado)",
+      "NVIDIA DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "NVIDIA DLSS Frame Generation x2"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "DLSS Frame Generation is listed only while the upscaler is DLSS; both apply on restart.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "990080|dll|linux|aarch64": {
+    "appid": "990080",
+    "name": "Hogwarts Legacy",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Hogwarts-Legacy"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Upscale Type (Tipo de escalado)",
+      "NVIDIA DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "NVIDIA DLSS Frame Generation x2"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "DLSS Frame Generation is listed only while the upscaler is DLSS; both apply on restart.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "990080|dll|windows|x86_64": {
+    "appid": "990080",
+    "name": "Hogwarts Legacy",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Hogwarts-Legacy"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Upscale Type (Tipo de escalado)",
+      "NVIDIA DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "NVIDIA DLSS Frame Generation x2"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "DLSS Frame Generation is listed only while the upscaler is DLSS; both apply on restart.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "990080|dll|windows|aarch64": {
+    "appid": "990080",
+    "name": "Hogwarts Legacy",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Hogwarts-Legacy"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Upscale Type (Tipo de escalado)",
+      "NVIDIA DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "NVIDIA DLSS Frame Generation x2"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "DLSS Frame Generation is listed only while the upscaler is DLSS; both apply on restart.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "990080|optiscaler|linux|x86_64": {
+    "appid": "990080",
+    "name": "Hogwarts Legacy",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Hogwarts-Legacy"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Upscale Type (Tipo de escalado)",
+      "NVIDIA DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "NVIDIA DLSS Frame Generation x2"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "DLSS Frame Generation is listed only while the upscaler is DLSS; both apply on restart.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "990080|optiscaler|linux|aarch64": {
+    "appid": "990080",
+    "name": "Hogwarts Legacy",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Hogwarts-Legacy"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Upscale Type (Tipo de escalado)",
+      "NVIDIA DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "NVIDIA DLSS Frame Generation x2"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "DLSS Frame Generation is listed only while the upscaler is DLSS; both apply on restart.",
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "990080|optiscaler|windows|x86_64": {
+    "appid": "990080",
+    "name": "Hogwarts Legacy",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Hogwarts-Legacy"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Upscale Type (Tipo de escalado)",
+      "NVIDIA DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "NVIDIA DLSS Frame Generation x2"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "DLSS Frame Generation is listed only while the upscaler is DLSS; both apply on restart.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
+   },
+   "990080|optiscaler|windows|aarch64": {
+    "appid": "990080",
+    "name": "Hogwarts Legacy",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler",
+      "dll"
+     ],
+     "arch": [
+      "x86_64",
+      "aarch64"
+     ]
+    },
+    "exe": null,
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Hogwarts-Legacy"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [
+     [
+      "Upscale Type (Tipo de escalado)",
+      "NVIDIA DLSS"
+     ],
+     [
+      "Frame Generation (Generación de fotogramas)",
+      "NVIDIA DLSS Frame Generation x2"
+     ]
+    ],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": "DLSS Frame Generation is listed only while the upscaler is DLSS; both apply on restart.",
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": []
    },
    "996580|optiscaler|linux|x86_64": {
     "appid": "996580",
@@ -4605,6 +11284,19 @@
     "reframework_upscaler": false,
     "optiscaler_fg": true,
     "game_settings": [],
+    "proxy": null,
+    "protect_dlls": false,
+    "legacy_ffx_swap": true,
+    "files": {},
+    "native_dlls": [],
+    "needs": [],
+    "anr_settings": [],
+    "game_config": [],
+    "mod_launch_exe": null,
+    "mod_settings": {},
+    "mod_frame_generation": null,
+    "fg_note": null,
+    "notes": null,
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": [
@@ -4845,7 +11537,7 @@
   },
   {
    "id": "unknown-block-with-fields",
-   "file": "games/292030.json",
+   "file": "games/1086940.json",
    "op": "set",
    "path": [
     "windows",

@@ -119,9 +119,59 @@ public sealed class GameRecipe
     /// <summary>(setting, value) pairs in the game's own words.</summary>
     public IReadOnlyList<KeyValuePair<string, string>> GameSettings { get; internal set; } = Array.Empty<KeyValuePair<string, string>>();
 
+    /// <summary>The DLL name OptiScaler loads as instead of <c>dxgi.dll</c>.</summary>
+    public string? Proxy { get; internal set; }
+
+    /// <summary>The game's launcher deletes unknown libraries beside the exe at every start; read-only ones survive.</summary>
+    public bool ProtectDlls { get; internal set; }
+
+    /// <summary>Extra files placed beside the exe: destination to the id of a build catalog asset.</summary>
+    public IReadOnlyDictionary<string, string> Files { get; internal set; } = new Dictionary<string, string>();
+
+    public IReadOnlyList<string> NativeDlls { get; internal set; } = Array.Empty<string>();
+
+    /// <summary>What the game needs besides OptiScaler: reframework, nvngx_dlss, anti_cheat_off, luma, mod.</summary>
+    public IReadOnlyList<string> Needs { get; internal set; } = Array.Empty<string>();
+
+    /// <summary>(setting, value) the game's own menu needs so its DLSS Frame Generation reaches ANR.</summary>
+    public IReadOnlyList<KeyValuePair<string, string>> AnrSettings { get; internal set; } = Array.Empty<KeyValuePair<string, string>>();
+
+    /// <summary>(file relative to the user's profile folder, XML element, text) set on install and put back on removal.</summary>
+    public IReadOnlyList<GameConfigChange> GameConfig { get; internal set; } = Array.Empty<GameConfigChange>();
+
+    /// <summary>With a user's mod in: the launcher Steam starts and the exe to start instead.</summary>
+    public KeyValuePair<string, string>? ModLaunchExe { get; internal set; }
+
+    /// <summary>The mod's own settings: file beside the exe, then <c>Section.Key</c>, then value.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ModSettings { get; internal set; } =
+        new Dictionary<string, IReadOnlyDictionary<string, string>>();
+
+    public string? ModFrameGeneration { get; internal set; }
+
+    public string? FgNote { get; internal set; }
+
+    public string? Notes { get; internal set; }
+
     public string Platform { get; internal set; } = "";
 
     public string Status { get; internal set; } = "";
+}
+
+public sealed class GameConfigChange
+{
+    public GameConfigChange(string file, string element, string value)
+    {
+        File = file;
+        Element = element;
+        Value = value;
+    }
+
+    /// <summary>Relative to the user's profile folder.</summary>
+    public string File { get; }
+
+    public string Element { get; }
+
+    public string Value { get; }
 }
 
 public sealed class RecipeGame
@@ -182,6 +232,9 @@ public sealed class RecipeCatalog
     private static readonly Regex GameBuildPattern = new("^[1-9][0-9]{0,19}$", RegexOptions.CultureInvariant);
     private static readonly Regex ArgumentPattern = new("^--?[A-Za-z0-9][A-Za-z0-9_=.-]*$", RegexOptions.CultureInvariant);
     private static readonly Regex IniKeyPattern = new(@"^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$", RegexOptions.CultureInvariant);
+    private static readonly Regex ProxyPattern = new(@"^[A-Za-z0-9_]+\.dll$", RegexOptions.CultureInvariant);
+    private static readonly Regex WordPattern = new("^[A-Za-z0-9_]+$", RegexOptions.CultureInvariant);
+    private static readonly HashSet<string> NeedValues = new(StringComparer.Ordinal) { "reframework", "nvngx_dlss", "anti_cheat_off", "luma", "mod" };
     private static readonly Regex BuildIdPattern = new("^[a-z0-9][a-z0-9.-]{0,79}$", RegexOptions.CultureInvariant);
     private static readonly Regex AssetPathPattern = new("^/[^/]+/[^/]+/releases/download/[^/]+/[^/]+$", RegexOptions.CultureInvariant);
 
@@ -465,7 +518,8 @@ public sealed class RecipeCatalog
         var item = Object(value,
             new[] { "status", "revision", "conditions", "args", "ini", "dependencies", "source_urls" },
             new[] { "exe", "tested_game_builds", "tested_at", "configuration", "recommended_input", "effective_api", "quality_owner", "recommended_build",
-                "optiscaler_root_files", "reframework_upscaler", "optiscaler_fg", "game_settings" });
+                "optiscaler_root_files", "reframework_upscaler", "optiscaler_fg", "game_settings", "proxy", "protect_dlls", "legacy_ffx_swap", "files", "native_dlls",
+                "needs", "anr_settings", "game_config", "mod_launch_exe", "mod_settings", "mod_frame_generation", "fg_note", "notes" });
         var conditions = Object(item.Get("conditions")!, new[] { "engine", "arch" }, new[] { "game_builds" });
         var parsedConditions = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         foreach (var member in conditions.Members)
@@ -559,6 +613,7 @@ public sealed class RecipeCatalog
             .Select(entry => Object(entry, new[] { "setting", "value" }))
             .Select(entry => new KeyValuePair<string, string>(Text(entry.Get("setting")!, 80), Text(entry.Get("value")!, 40)))
             .ToList();
+        var extras = ReadExtras(item);
         var testedBuilds = Strings(item.Get("tested_game_builds") ?? EmptyArray, GameBuild);
         string? testedAt = null;
         if (item.Get("tested_at") is { } testedField && testedField is not DataNull)
@@ -592,9 +647,118 @@ public sealed class RecipeCatalog
             ReframeworkUpscaler = flags["reframework_upscaler"],
             OptiScalerFrameGeneration = flags["optiscaler_fg"],
             GameSettings = gameSettings,
+            Proxy = extras.Proxy,
+            ProtectDlls = extras.ProtectDlls,
+            LegacyFfxSwap = extras.LegacyFfxSwap,
+            Files = extras.Files,
+            NativeDlls = extras.NativeDlls,
+            Needs = extras.Needs,
+            AnrSettings = extras.AnrSettings,
+            GameConfig = extras.GameConfig,
+            ModLaunchExe = extras.ModLaunchExe,
+            ModSettings = extras.ModSettings,
+            ModFrameGeneration = extras.ModFrameGeneration,
+            FgNote = extras.FgNote,
+            Notes = extras.Notes,
             Platform = platform,
             Status = ((DataString)((DataObject)value).Get("status")!).Value,
         };
+    }
+
+    private static GameRecipe ReadExtras(DataObject item)
+    {
+        var extras = new GameRecipe();
+        if (item.Get("proxy") is { } proxy)
+        {
+            extras.Proxy = proxy is DataString { Value: var proxyName } && ProxyPattern.IsMatch(proxyName) ? proxyName : throw Error("invalid_proxy");
+        }
+        foreach (var key in new[] { "protect_dlls", "legacy_ffx_swap" })
+        {
+            var field = item.Get(key);
+            if (field is not null && field is not DataBool)
+            {
+                throw Error("invalid_" + key);
+            }
+            if (field is DataBool flag)
+            {
+                if (key == "protect_dlls")
+                {
+                    extras.ProtectDlls = flag.Value;
+                }
+                else
+                {
+                    extras.LegacyFfxSwap = flag.Value;
+                }
+            }
+        }
+        if (item.Get("files") is { } rawFiles && rawFiles is not DataObject { Count: <= 16 })
+        {
+            throw Error("invalid_files");
+        }
+        extras.Files = ((item.Get("files") as DataObject)?.Members ?? Array.Empty<KeyValuePair<string, DataValue>>())
+            .ToDictionary(member => SafePath(new DataString(member.Key)), member => Identifier(member.Value), StringComparer.Ordinal);
+        extras.NativeDlls = Strings(item.Get("native_dlls") ?? EmptyArray,
+            value => value is DataString { Value: var text } && WordPattern.IsMatch(text) ? text : throw Error("invalid_native_dll"), 8);
+        extras.Needs = Strings(item.Get("needs") ?? EmptyArray,
+            value => value is DataString { Value: var text } && NeedValues.Contains(text) ? text : throw Error("invalid_need"), NeedValues.Count);
+        extras.AnrSettings = ReadPairs(item.Get("anr_settings") ?? EmptyArray);
+        if (item.Get("game_config") is { } rawConfig && rawConfig is not DataArray { Items.Count: <= 8 })
+        {
+            throw Error("invalid_game_config");
+        }
+        extras.GameConfig = ((item.Get("game_config") as DataArray)?.Items ?? Array.Empty<DataValue>())
+            .Select(entry => Object(entry, new[] { "file", "element", "value" }))
+            .Select(entry => new GameConfigChange(
+                SafePath(entry.Get("file")!),
+                entry.Get("element") is DataString { Value: var element } && WordPattern.IsMatch(element) ? element : throw Error("invalid_game_config"),
+                Text(entry.Get("value")!, 80)))
+            .ToList();
+        if (item.Get("mod_launch_exe") is { } launch)
+        {
+            var names = Object(launch, new[] { "launcher", "exe" });
+            var launcher = Text(names.Get("launcher")!, 128);
+            var exe = Text(names.Get("exe")!, 128);
+            if (new[] { launcher, exe }.Any(name => name.IndexOf('/') >= 0 || name.IndexOf('\\') >= 0))
+            {
+                throw Error("invalid_mod_launch_exe");
+            }
+            extras.ModLaunchExe = new KeyValuePair<string, string>(launcher, exe);
+        }
+        if (item.Get("mod_settings") is { } rawMod && rawMod is not DataObject { Count: <= 8 })
+        {
+            throw Error("invalid_mod_settings");
+        }
+        var modSettings = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
+        foreach (var file in (item.Get("mod_settings") as DataObject)?.Members ?? Array.Empty<KeyValuePair<string, DataValue>>())
+        {
+            if (file.Value is not DataObject { Count: > 0 and <= 16 } values)
+            {
+                throw Error("invalid_mod_settings");
+            }
+            modSettings[SafePath(new DataString(file.Key))] = values.Members.ToDictionary(
+                member => Text(new DataString(member.Key), 80), member => Text(member.Value, 80), StringComparer.Ordinal);
+        }
+        extras.ModSettings = modSettings;
+        extras.ModFrameGeneration = item.Get("mod_frame_generation") is { } generation ? Text(generation, 80) : null;
+        extras.FgNote = item.Get("fg_note") is { } note ? Text(note, 40) : null;
+        if (extras.FgNote is not null && !WordPattern.IsMatch(extras.FgNote))
+        {
+            throw Error("invalid_fg_note");
+        }
+        extras.Notes = item.Get("notes") is { } notes ? Text(notes, 400) : null;
+        return extras;
+    }
+
+    private static IReadOnlyList<KeyValuePair<string, string>> ReadPairs(DataValue value)
+    {
+        if (value is not DataArray { Items.Count: <= 16 } array)
+        {
+            throw Error("invalid_pairs");
+        }
+        return array.Items
+            .Select(entry => Object(entry, new[] { "setting", "value" }))
+            .Select(entry => new KeyValuePair<string, string>(Text(entry.Get("setting")!, 80), Text(entry.Get("value")!, 80)))
+            .ToList();
     }
 
     private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ReadConfiguration(DataValue? value)

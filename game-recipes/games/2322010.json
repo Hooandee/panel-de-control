@@ -1,0 +1,59 @@
+{
+  "name": "God of War Ragnarök",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/God-of-War-Ragnarok"
+    ],
+    "anr_settings": [
+      {
+        "setting": "Frame Generation (Generación de fotogramas)",
+        "value": "Nvidia DLSS-FG"
+      }
+    ],
+    "legacy_ffx_swap": false,
+    "notes": "The game shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works."
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/God-of-War-Ragnarok"
+    ],
+    "anr_settings": [
+      {
+        "setting": "Frame Generation (Generación de fotogramas)",
+        "value": "Nvidia DLSS-FG"
+      }
+    ],
+    "legacy_ffx_swap": false,
+    "notes": "The game shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works."
+  }
+}

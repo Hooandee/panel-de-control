@@ -1,0 +1,49 @@
+{
+  "name": "Warframe",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "proxy": "winmm.dll",
+    "protect_dlls": true,
+    "notes": "Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll; its launcher purges unknown .dll files at every start."
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "proxy": "winmm.dll",
+    "protect_dlls": true,
+    "notes": "Warframe resolves dxgi.dll as a delayed import that skips its own folder, so OptiScaler loads as winmm.dll; its launcher purges unknown .dll files at every start."
+  }
+}
