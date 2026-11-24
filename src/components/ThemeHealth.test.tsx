@@ -132,7 +132,7 @@ describe("ThemeHealth", () => {
 
   it("says when the cleanup could only partly finish", async () => {
     mocks.health = health({
-      findings: [{ id: "set_aside", severity: "problem", folders: [{ folder: "Stuck", kind: "legacy" }] }],
+      findings: [{ id: "set_aside", severity: "problem", folders: [{ folder: "Stuck", name: "Stuck", kind: "legacy" }] }],
       plan: { disable: [], chooseOne: [], setAside: 1, ghostStyles: false },
       needsCleanup: true,
       cleanUp: vi.fn(async () => "partial" as const),
