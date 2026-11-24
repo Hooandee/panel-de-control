@@ -233,6 +233,10 @@ public sealed class UpscalerBuildEntry
 
     [DataMember(Name = "models", Order = 6, IsRequired = true)]
     public string[] Models { get; set; } = new string[0];
+
+    /// <summary>False when the catalog does not list this GPU: still offered, with a warning, as on Linux.</summary>
+    [DataMember(Name = "supported", Order = 7, IsRequired = true)]
+    public bool Supported { get; set; }
 }
 
 [DataContract]

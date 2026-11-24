@@ -197,7 +197,7 @@ public sealed class UpscalerService : IUpscalersController
 
         var generation = Gpu.Generation;
         var builds = UpscalerPlanner.Describe(data.Catalog, generation, Device ?? "")
-            .Where(build => build.Engine == "optiscaler" && build.Available && build.Supported)
+            .Where(build => build.Engine == "optiscaler" && build.Available)
             .Select(build => new UpscalerBuildEntry
             {
                 Id = build.Id,
@@ -206,6 +206,7 @@ public sealed class UpscalerService : IUpscalersController
                 Channel = build.Channel,
                 DownloadBytes = build.DownloadBytes,
                 Models = build.Models.ToArray(),
+                Supported = build.Supported,
             })
             .ToArray();
         var stored = store.Install(appId);

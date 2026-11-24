@@ -508,7 +508,8 @@
     "gpus": [
      "rdna2",
      "rdna3",
-     "rdna35"
+     "rdna35",
+     "nvidia"
     ],
     "image": 3,
     "cost": 2,

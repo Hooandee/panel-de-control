@@ -1739,7 +1739,8 @@ true
 "tuple": [
 "rdna2",
 "rdna3",
-"rdna35"
+"rdna35",
+"nvidia"
 ]
 }
 ],
@@ -24263,7 +24264,7 @@ true
 ],
 [
 "supported",
-false
+true
 ],
 [
 "download_bytes",
@@ -25424,7 +25425,7 @@ true
 ],
 [
 "supported",
-false
+true
 ],
 [
 "download_bytes",
@@ -26585,7 +26586,7 @@ true
 ],
 [
 "supported",
-false
+true
 ],
 [
 "download_bytes",

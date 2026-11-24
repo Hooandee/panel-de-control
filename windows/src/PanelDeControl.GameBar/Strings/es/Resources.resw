@@ -573,4 +573,7 @@
   <data name="NavUpscalersDesc" xml:space="preserve">
     <value>Mejor imagen y más FPS en tus juegos</value>
   </data>
+  <data name="UpscalersUntested" xml:space="preserve">
+    <value>Sin probar en tu GPU</value>
+  </data>
 </root>

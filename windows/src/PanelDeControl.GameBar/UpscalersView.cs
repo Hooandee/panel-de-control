@@ -439,7 +439,7 @@ public sealed class UpscalersView : UserControl
 
         foreach (var build in detail.Builds)
         {
-            var label = $"{build.Family} {build.Version}";
+            var label = $"{FamilyName(build.Family)} {build.Version}";
             if (build.DownloadBytes > 0)
             {
                 label += " · " + string.Format(Localized("UpscalersMegabytes"), Megabytes(build.DownloadBytes));
@@ -448,6 +448,11 @@ public sealed class UpscalersView : UserControl
             if (build.Id == detail.Preferred)
             {
                 label += " · " + Localized("UpscalersRecommended");
+            }
+
+            if (!build.Supported)
+            {
+                label += " · " + Localized("UpscalersUntested");
             }
 
             var chip = new Button
@@ -462,6 +467,14 @@ public sealed class UpscalersView : UserControl
             buildList.Children.Add(chip);
         }
     }
+
+    private static string FamilyName(string family) => family switch
+    {
+        "fsr" => "FSR",
+        "xess" => "XeSS",
+        "dlss" => "DLSS",
+        _ => family,
+    };
 
     private void BuildChip_Click(object sender, RoutedEventArgs args)
     {
