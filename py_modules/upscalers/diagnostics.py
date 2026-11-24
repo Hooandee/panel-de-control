@@ -742,8 +742,9 @@ def game_files(installed, analysis: dict, owned: list[str]) -> dict:
         for name in _STORE_FILES:
             if any(n.lower() == name.lower() for n in names):
                 result["store_files"].append(name)
-    # REFramework writes its own folder beside the dinput8.dll Panel placed: it comes with Panel's install.
-    if any(item["path"].lower().endswith("dinput8.dll") and item["owner"] == "panel" for item in result["loaders"]):
+    # REFramework writes its own folder beside the dinput8.dll (or ReShade64.dll) Panel placed: it comes with Panel's install.
+    if any(item["path"].lower().endswith(("dinput8.dll", "reshade64.dll")) and item["owner"] == "panel"
+           for item in result["loaders"]):
         for item in result["loaders"]:
             if item["dir"] and item["path"].lower().rsplit("/", 1)[-1] == "reframework":
                 item["owner"] = "panel_runtime"

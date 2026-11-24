@@ -2297,7 +2297,7 @@ class UpscalerService:
                 report["proton_prefix"] = diagnostics.proton_prefix(self.home, appid)
                 report["game_crash"] = diagnostics.game_crash(self.home, appid)
         info = _recipe_info(recipe)
-        report["recipe"] = diagnostics.fields(info, ("status", "broken", "linux", "optipatcher", "proxy"))
+        report["recipe"] = diagnostics.fields(info, ("status", "broken", "linux", "optipatcher", "proxy", "declined_proxy"))
         mod = self.user_mods.status(appid)
         if mod:
             report["mod"] = {"count": mod["count"], "native_dlls": mod["native_dlls"],
@@ -2483,6 +2483,8 @@ def _recipe_info(recipe) -> dict | None:
     if not recipe:
         return None
     return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": _recipe_proxy(recipe), "args": list(recipe.args),
+            # The wiki's proxy when Panel installs another one instead: the first suspect when OptiScaler loads idle.
+            "declined_proxy": recipe.proxy if recipe.proxy and recipe.proxy != _recipe_proxy(recipe) else None,
             "status": recipe.status, "inputs": list(recipe.inputs), "linux": recipe.linux, "optipatcher": recipe.optipatcher,
             "page": recipe.page, "settings": dict(recipe.wiki_settings), "suggestions": dict(recipe.wiki_suggestions),
             "recommended_input": recipe.recommended_input,

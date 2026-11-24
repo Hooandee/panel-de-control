@@ -258,3 +258,44 @@ def test_an_untouched_existing_reframework_config_comes_back_exactly(steam, re_c
     service.install(APPID, {"build": "fsr-test"})
     service.uninstall(APPID)
     assert config.read_bytes() == b"REFrameworkConfig_MenuOpen=true\n"
+
+
+def test_reframework_placed_under_another_name_gets_no_dinput8(tmp_path):
+    _write(tmp_path / recipes.RE_ENGINE_MARKER)
+    base = recipes.Recipe("1", files={"ReShade64.dll": "reframework-nightly"}, ini={"Plugins.LoadReshade": "true"})
+    result = recipes.with_engine(base, "1", tmp_path)
+    assert result.files == {"ReShade64.dll": "reframework-nightly"}
+    assert result.native_dlls == ()
+    assert result.menu_key == "home" and result.ini["Plugins.LoadReshade"] == "true"
+
+
+def test_monster_hunter_rise_installs_as_d3d12_with_reframework_through_reshade(steam, re_catalog, proc, monkeypatch):
+    # PDC-AHVV: as dxgi.dll beside REFramework's dinput8.dll OptiScaler loaded but the game never offered DLSS.
+    from upscalers.service import _recipe_proxy
+
+    rise = recipes.recipe_for("1446780")
+    assert _recipe_proxy(rise) == "d3d12.dll"
+    monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["1446780"], appid=APPID))
+    monkeypatch.setattr(catalog, "D3D12_PROXY_APPIDS", frozenset({APPID}))
+    _, game = steam
+    _write(game / recipes.RE_ENGINE_MARKER)
+    target = game / "bin/x64_dx12"
+    service = _service(steam, re_catalog, proc)
+    result = service.install(APPID, {"build": "fsr-test"})
+    assert result["overrides"] == ["d3d12=n,b"]
+    assert (target / "d3d12.dll").is_file() and not (target / "dxgi.dll").exists()
+    assert (target / "ReShade64.dll").read_bytes() == b"official framework"
+    assert not (target / "dinput8.dll").exists()
+    assert "LoadReshade=true" in (target / "OptiScaler.ini").read_text().replace(" ", "")
+    assert "REFrameworkConfig_MenuOpen=false" in (target / "re2_fw_config.txt").read_text()
+    service.uninstall(APPID)
+    assert not (target / "ReShade64.dll").exists() and not (target / "d3d12.dll").exists()
+
+
+def test_report_names_the_wiki_proxy_panel_declined(steam, fake_catalog, proc, monkeypatch):
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll", status="works"))
+    service = _service(steam, fake_catalog, proc)
+    assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["dxgi=n,b"]
+    assert service.diagnose(APPID)["recipe"]["declined_proxy"] == "d3d12.dll"
+    monkeypatch.setattr(catalog, "D3D12_PROXY_APPIDS", frozenset({APPID}))
+    assert "declined_proxy" not in service.diagnose(APPID)["recipe"]
