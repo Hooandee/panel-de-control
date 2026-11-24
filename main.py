@@ -698,7 +698,8 @@ class Plugin(AmbientRpc):
         # init or _main bricks plugin load (UI stuck on spinner forever).
         self._device = device_registry.detect()
         self._desktop_recognition_migration_pending = (
-            recognised_desktop_migration_pending(self._settings, self._device)
+            not self._monitor_only_power_fans()
+            and recognised_desktop_migration_pending(self._settings, self._device)
         )
         self._desktop_recognition_migration_last_attempt = float("-inf")
         self._desktop_recognition_migration_last_failure = None
@@ -820,14 +821,15 @@ class Plugin(AmbientRpc):
         self._tdp_profile_sanitize_max = None
         self._tdp_storage_migration_retry_at = 0.0
         # Preserve durable intent while a dynamic hardware ceiling is unreadable.
-        _lim = self._profile_storage_limits()
-        if _lim is None:
-            self._tdp_profile_sanitize_pending = True
-            self._tdp_storage_migration_retry_at = (
-                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
-            )
-        else:
-            self._sanitize_tdp_profiles(self._tdp_request_min(), _lim.max_ac_w)
+        if not self._monitor_only_power_fans():
+            _lim = self._profile_storage_limits()
+            if _lim is None:
+                self._tdp_profile_sanitize_pending = True
+                self._tdp_storage_migration_retry_at = (
+                    _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
+                )
+            else:
+                self._sanitize_tdp_profiles(self._tdp_request_min(), _lim.max_ac_w)
         # Which daemon owns the controller (HHD / InputPlumber / none). Detected
         # once — the resident daemon doesn't change at runtime. Probe never raises.
         self._controller = controller_detect.detect()
@@ -997,7 +999,8 @@ class Plugin(AmbientRpc):
         }
         self._smt = SmtControl()
         self._boost = select_boost()
-        self._cores = CoreControl()
+        self._cores = (CoreControl(read_only=True) if self._monitor_only_power_fans()
+                       else CoreControl())
         self._cpu_frequency = self._build_cpu_frequency_control()
         self._cpu_coordinator = CpuCoordinator(
             self._cores, self._smt, self._boost, self._cpu_frequency
@@ -4132,6 +4135,8 @@ class Plugin(AmbientRpc):
         )
 
     def _restore_power_handoff(self, preserve_ownership=False) -> bool | None:
+        if self._monitor_only_power_fans():
+            return True
         hardware_released = self._release_tdp_hardware(preserve_ownership)
         if hardware_released is not True:
             return hardware_released
@@ -4169,7 +4174,9 @@ class Plugin(AmbientRpc):
             "write_allowed": True, "reason": "unobserved_legacy",
         }
         supported = self._game_power_ownership_supported()
-        if not supported:
+        if self._monitor_only_power_fans():
+            state.update(owner=None, write_allowed=False, reason="monitor_only")
+        elif not supported:
             if self._game_power_ownership_has_context():
                 state.update(write_allowed=False, reason="ownership_capability_lost")
             else:
@@ -4179,7 +4186,8 @@ class Plugin(AmbientRpc):
 
     def _game_power_write_allowed(self):
         return (
-            not getattr(self, "_game_power_context_transition", False)
+            not self._monitor_only_power_fans()
+            and not getattr(self, "_game_power_context_transition", False)
             and getattr(self, "_game_power_reset", None) is None
             and self._game_power_owner_state()["write_allowed"]
         )
@@ -4806,6 +4814,8 @@ class Plugin(AmbientRpc):
         """OFF = stop writing rails and hand HHD back (step aside). ON = re-assert
         our setpoint."""
         self._init()
+        if self._monitor_only_power_fans():
+            return False
         enabled = bool(enabled)
         if enabled:
             await self._ensure_recognised_desktop_migration()
@@ -4978,7 +4988,7 @@ class Plugin(AmbientRpc):
 
     # ---- Fan-curve control (global + per-game, persisted) -------------------
     def _recover_gpd_fan_sync(self):
-        if getattr(self, "_gpd_fan_recovery_done", False):
+        if self._monitor_only_power_fans() or getattr(self, "_gpd_fan_recovery_done", False):
             return None
         self._gpd_fan_recovery_done = True
         if bool(getattr(self._fan_ctrl, "supported", False)):
@@ -5017,6 +5027,8 @@ class Plugin(AmbientRpc):
     def _fans_owned_by_panel(self) -> bool:
         # With fan control off, another tool may own the fans; only a release still
         # pending from the switch-off may write them.
+        if self._monitor_only_power_fans():
+            return False
         settings = getattr(self, "_settings", None)
         return (
             settings is None
@@ -5546,6 +5558,8 @@ class Plugin(AmbientRpc):
 
         Guarded: a bad fan apply must never brick load.
         """
+        if self._monitor_only_power_fans():
+            return True
         try:
             self._reapply_ps5_fan_sync()
         except Exception as error:  # noqa: BLE001
@@ -7981,9 +7995,13 @@ class Plugin(AmbientRpc):
                 }, sort_keys=True, separators=(",", ":")),
             )
 
+    def _monitor_only_power_fans(self) -> bool:
+        return getattr(getattr(self, "_device", None), "monitor_only_power_fans", False) is True
+
     def _tdp_control_on(self) -> bool:
         """Master switch: whether we're allowed to write the TDP rails at all."""
-        return bool(self._settings.get("tdp_control_enabled", True))
+        return (not self._monitor_only_power_fans()
+                and bool(self._settings.get("tdp_control_enabled", True)))
 
     def _reset_power_values_on_unit_change(self) -> None:
         """Saved power values are watts on PC and performance levels on ARM; a value
@@ -8108,6 +8126,8 @@ class Plugin(AmbientRpc):
 
     def _module_enabled(self, mid: str) -> bool:
         """Effective state: user flag AND requirements (cascade = all, dependency = any)."""
+        if mid in ("power", "fanControl") and self._monitor_only_power_fans():
+            return False
         if self._module_user_disabled(mid):
             return False
         req = self._MODULE_REQUIRES.get(mid)
@@ -9520,7 +9540,8 @@ class Plugin(AmbientRpc):
     def _start_tdp_guard_loop(self):
         lifecycle = getattr(self, "_lifecycle", None)
         if (
-            self._tdp_shutdown
+            self._monitor_only_power_fans()
+            or self._tdp_shutdown
             or self._tdp_guard_task is not None
             or getattr(lifecycle, "_task", None) is None
         ):
@@ -10565,6 +10586,8 @@ class Plugin(AmbientRpc):
         }
 
     def _build_cpu_frequency_control(self):
+        if self._monitor_only_power_fans():
+            return NullCpuFrequency("monitor_only")
         return select_cpu_frequency(
             persisted_state=self._settings.get("cpu_frequency_handoff"),
             persist_state=self._persist_cpu_frequency_state,
@@ -10677,6 +10700,11 @@ class Plugin(AmbientRpc):
         self, intent, generation, enabled=None,
         preserve_frequency_ownership=False, resume_current=None,
     ):
+        if self._monitor_only_power_fans():
+            return CpuCoordinatorResult(
+                False, "unsupported", generation,
+                {"attempted": False, "ok": None}, "monitor_only",
+            )
         if generation != getattr(self, "_cpu_generation", 0):
             return CpuCoordinatorResult(
                 False,
@@ -10741,6 +10769,8 @@ class Plugin(AmbientRpc):
 
     async def _release_cpu_controls(self, trigger) -> bool:
         self._init()
+        if self._monitor_only_power_fans():
+            return True
         result = None
         async with self._cpu_mutation_lock:
             for attempt in range(1, 4):
@@ -10765,6 +10795,8 @@ class Plugin(AmbientRpc):
         self, trigger, preserve_frequency_ownership=False
     ) -> bool:
         self._init()
+        if self._monitor_only_power_fans():
+            return True
         result = None
         for attempt in range(1, 4):
             generation = self._next_cpu_generation()
@@ -10787,7 +10819,7 @@ class Plugin(AmbientRpc):
         return False
 
     def _apply_cpu(self) -> None:
-        if getattr(self, "_cpu_shutdown", False):
+        if self._monitor_only_power_fans() or getattr(self, "_cpu_shutdown", False):
             return
         generation = self._next_cpu_generation()
         current = self._resume_work_current()
@@ -11875,8 +11907,10 @@ class Plugin(AmbientRpc):
             "threads": info["threads"],
             "base_khz": info["base_khz"],
             "max_khz": info["max_khz"],
-            "smt": {"supported": self._smt.supported, "enabled": self._smt.enabled()},
-            "boost": {"supported": self._boost.supported, "enabled": self._boost.enabled()},
+            "smt": {"supported": not self._monitor_only_power_fans() and self._smt.supported,
+                    "enabled": self._smt.enabled()},
+            "boost": {"supported": not self._monitor_only_power_fans() and self._boost.supported,
+                      "enabled": self._boost.enabled()},
             # Active physical cores (None max = feature unavailable on this device).
             "cores_supported": self._cores.supported,
             "max_cores": self._cores.max_cores,
@@ -11974,7 +12008,8 @@ class Plugin(AmbientRpc):
     def _cpu_scope_is_current(
         self, scope, appid, context_appid=_RPC_CONTEXT_UNSET
     ) -> bool:
-        return self._scope_context_is_current(scope, appid, context_appid)
+        return (not self._monitor_only_power_fans()
+                and self._scope_context_is_current(scope, appid, context_appid))
 
     def _exit_eco_for_cpu(self) -> None:
         self._eco_request_generation = getattr(self, "_eco_request_generation", 0) + 1
@@ -12470,7 +12505,7 @@ class Plugin(AmbientRpc):
             return await self._release_gpu_clock_unlocked(trigger)
 
     def _gpu_release_required(self) -> bool:
-        return bool(
+        return not self._monitor_only_power_fans() and bool(
             getattr(self, "_gpu_owned", False)
             or self._settings.get("gpu_handoff_pending", False)
         )
@@ -14470,6 +14505,8 @@ class Plugin(AmbientRpc):
         return ready
 
     async def _probe_tdp_backend(self, *, force: bool = False) -> bool:
+        if self._monitor_only_power_fans():
+            return False
         async with self._tdp_probe_lock:
             backend = self._tdp_backend
             now = _monotonic()
@@ -15314,6 +15351,8 @@ class Plugin(AmbientRpc):
         return released and marker_saved
 
     def _restore_desktop_power_safe(self) -> bool:
+        if self._monitor_only_power_fans():
+            return True
         try:
             coordinator = getattr(self, "_desktop_power", None)
             if coordinator is None:
@@ -15873,7 +15912,7 @@ class Plugin(AmbientRpc):
         self._log_tdp_backend_diagnostics()
         # Legion Go S hides its fan sensor unless lenovo_wmi_other is loaded with
         # expose_all_fans=Y — enable it (idempotent, no-op elsewhere, never raises).
-        if fan_expose.ensure_fan_sensor():
+        if not self._monitor_only_power_fans() and fan_expose.ensure_fan_sensor():
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
         if getattr(self, "_ps5_console", None) is not None:

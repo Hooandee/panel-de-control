@@ -487,7 +487,7 @@ export interface GamePowerOwnerState {
   observed: boolean;
   steam_profile: SteamPowerProfile | null;
   explicit_owner: GamePowerOwner | null;
-  owner: GamePowerOwner | "unresolved";
+  owner: GamePowerOwner | "unresolved" | null;
   write_allowed: boolean;
   reason: string;
   steam_settings?: Record<string, number | boolean>;

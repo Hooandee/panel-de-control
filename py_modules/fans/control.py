@@ -506,6 +506,8 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
     on firmware auto until a safe ceiling is proven. ``ec`` stays for that
     backend's own tests.
     """
+    if getattr(device, "monitor_only_power_fans", False):
+        return NullFanBackend()
     if getattr(device, "key", None) == "zotac_gaming_zone":
         return ZotacFanReadOnlyBackend()
     if getattr(device, "key", None) == "desktop_pc":
