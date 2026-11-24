@@ -19,11 +19,15 @@ public sealed class PciGpu
 
 public sealed class GpuFamilyResult
 {
-    public GpuFamilyResult(string generation, string source)
+    public GpuFamilyResult(string generation, string source, string? name = null)
     {
         Generation = generation;
         Source = source;
+        Name = name;
     }
+
+    /// <summary>The deciding display adapter's own name, when Windows reported one.</summary>
+    public string? Name { get; }
 
     /// <summary><c>rdna2</c>, <c>rdna3</c>, <c>rdna35</c>, <c>rdna4</c>, <c>intel</c>, <c>nvidia</c> or <c>unknown</c>.</summary>
     public string Generation { get; }
@@ -124,6 +128,41 @@ public sealed class GpuFamily
             }
         }
         return Detect(vendor, chip, displayGpus);
+    }
+
+    /// <summary>The index of the display adapter games render on, in the order <see cref="DetectDiscrete"/> decides; -1 for none.</summary>
+    public int ChosenAdapter(IReadOnlyList<PciGpu> displayGpus)
+    {
+        string Kind(PciGpu gpu) => _pciVendors.TryGetValue(gpu.Vendor, out var kind) ? kind : "";
+        for (var index = 0; index < displayGpus.Count; index++)
+        {
+            if (Kind(displayGpus[index]) == "nvidia")
+            {
+                return index;
+            }
+        }
+        for (var index = 0; index < displayGpus.Count; index++)
+        {
+            if (Kind(displayGpus[index]) == "amd" && _discreteAmd.Contains(displayGpus[index].Device))
+            {
+                return index;
+            }
+        }
+        for (var index = 0; index < displayGpus.Count; index++)
+        {
+            if (Kind(displayGpus[index]) == "intel")
+            {
+                return index;
+            }
+        }
+        for (var index = 0; index < displayGpus.Count; index++)
+        {
+            if (Kind(displayGpus[index]) == "amd")
+            {
+                return index;
+            }
+        }
+        return -1;
     }
 
     private string FromName(string? vendor, string? chip)

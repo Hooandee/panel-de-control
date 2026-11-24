@@ -17,6 +17,7 @@ public static class GpuFamilyReader
         string? manufacturer = null;
         string? name = null;
         var gpus = new List<PciGpu>();
+        var names = new List<string?>();
         try
         {
             using (var processors = new ManagementObjectSearcher("SELECT Manufacturer, Name FROM Win32_Processor"))
@@ -30,7 +31,7 @@ public static class GpuFamilyReader
                 }
             }
 
-            using (var adapters = new ManagementObjectSearcher("SELECT PNPDeviceID FROM Win32_VideoController"))
+            using (var adapters = new ManagementObjectSearcher("SELECT Name, PNPDeviceID FROM Win32_VideoController"))
             using (var results = adapters.Get())
             {
                 foreach (ManagementObject adapter in results)
@@ -38,6 +39,7 @@ public static class GpuFamilyReader
                     if (GpuFamily.FromPnpId(Convert.ToString(adapter["PNPDeviceID"])) is { } gpu)
                     {
                         gpus.Add(gpu);
+                        names.Add(Convert.ToString(adapter["Name"])?.Trim());
                     }
                 }
             }
@@ -46,6 +48,9 @@ public static class GpuFamilyReader
         {
         }
 
-        return rules.DetectDiscrete(GpuFamily.CpuVendor(manufacturer), name, gpus);
+        var result = rules.DetectDiscrete(GpuFamily.CpuVendor(manufacturer), name, gpus);
+        var chosen = rules.ChosenAdapter(gpus);
+        var adapterName = chosen >= 0 ? names[chosen] : names.FirstOrDefault(entry => !string.IsNullOrEmpty(entry));
+        return new GpuFamilyResult(result.Generation, result.Source, string.IsNullOrEmpty(adapterName) ? null : adapterName);
     }
 }

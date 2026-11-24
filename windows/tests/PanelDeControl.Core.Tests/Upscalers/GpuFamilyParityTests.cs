@@ -62,6 +62,17 @@ public sealed class GpuFamilyParityTests
     }
 
     [Fact]
+    public void TheAdapterGamesRenderOnIsTheOneWhoseNameIsShown()
+    {
+        var hybrid = new[] { GpuFamily.FromPnpId(@"PCI\VEN_8086&DEV_7D67")!, GpuFamily.FromPnpId(@"PCI\VEN_10DE&DEV_2C19")! };
+        Assert.Equal(1, Rules.ChosenAdapter(hybrid));
+        Assert.Equal(1, Rules.ChosenAdapter(new[] { new PciGpu("0x1002", "0x15bf"), new PciGpu("0x1002", "0x7550") }));
+        Assert.Equal(0, Rules.ChosenAdapter(new[] { new PciGpu("0x8086", "0x64a0") }));
+        Assert.Equal(-1, Rules.ChosenAdapter(Array.Empty<PciGpu>()));
+        Assert.Equal("NVIDIA GeForce RTX 5090 Laptop GPU", new GpuFamilyResult("nvidia", "pci", "NVIDIA GeForce RTX 5090 Laptop GPU").Name);
+    }
+
+    [Fact]
     public void AnAmdDiscreteGpuBeatsTheApuItSitsBeside()
     {
         var gpus = new[] { new PciGpu("0x1002", "0x15bf"), new PciGpu("0x1002", "0x7550") };

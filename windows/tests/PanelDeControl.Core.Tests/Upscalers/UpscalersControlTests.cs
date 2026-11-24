@@ -24,6 +24,9 @@ public sealed class UpscalersControlTests
     [InlineData("{\"operation\":\"overview\",\"appid\":\"1\"}")]
     [InlineData("{\"operation\":\"job\",\"experimental\":true}")]
     [InlineData("{\"operation\":\"game\"}")]
+    [InlineData("{\"operation\":\"cover\"}")]
+    [InlineData("{\"operation\":\"cover\",\"appid\":\"../1\"}")]
+    [InlineData("{\"operation\":\"cover\",\"appid\":\"1\",\"build\":\"fsr-3.1\"}")]
     [InlineData("{\"operation\":\"game\",\"appid\":\"abc\"}")]
     [InlineData("{\"operation\":\"game\",\"appid\":\"123456789012345678901\"}")]
     [InlineData("{\"operation\":\"game\",\"appid\":\"1\",\"build\":\"fsr-3.1\"}")]
@@ -111,5 +114,36 @@ public sealed class UpscalersControlTests
                 Games = new[] { new UpscalerGameSummary { AppId = "1" }, new UpscalerGameSummary { AppId = "1" } },
             },
         }));
+    }
+
+    [Fact]
+    public void ACoverRequestNeedsOnlyANumericAppId()
+    {
+        var request = UpscalersWireCodec.DeserializeRequest(UpscalersWireCodec.SerializeRequest(UpscalersRequest.Cover("1245620")));
+        Assert.Equal((UpscalersOperation.Cover, "1245620"), (request.Operation, request.AppId));
+    }
+
+    [Fact]
+    public void ACoverTravelsInTheResponseWithinItsLimits()
+    {
+        var data = Convert.ToBase64String(new byte[UpscalersWireCodec.MaximumCoverBytes]);
+        var ok = new UpscalersResponse { Status = UpscalersResponseStatus.Ok, Cover = new UpscalerCover { Mime = UpscalerCover.Jpeg, Data = data } };
+        var back = UpscalersWireCodec.DeserializeResponse(UpscalersWireCodec.SerializeResponse(ok));
+        Assert.Equal((UpscalerCover.Jpeg, data), (back.Cover!.Mime, back.Cover.Data));
+
+        var tooBig = new UpscalerCover { Mime = UpscalerCover.Jpeg, Data = Convert.ToBase64String(new byte[UpscalersWireCodec.MaximumCoverBytes + 4096]) };
+        Assert.Throws<InvalidDataException>(() => UpscalersWireCodec.SerializeResponse(new UpscalersResponse { Status = UpscalersResponseStatus.Ok, Cover = tooBig }));
+        Assert.Throws<InvalidDataException>(() => UpscalersWireCodec.SerializeResponse(new UpscalersResponse { Status = UpscalersResponseStatus.Ok, Cover = new UpscalerCover { Mime = "text/html", Data = "AAAA" } }));
+        Assert.Throws<InvalidDataException>(() => UpscalersWireCodec.SerializeResponse(new UpscalersResponse { Status = UpscalersResponseStatus.Ok, Cover = new UpscalerCover { Mime = UpscalerCover.Png, Data = "" } }));
+    }
+
+    [Theory]
+    [InlineData("fsr", "4.1.2", new[] { "lite", "full" }, null, "FSR 4.1.2 Lite")]
+    [InlineData("fsr", "4.1.2", new[] { "lite", "full" }, "full", "FSR 4.1.2")]
+    [InlineData("fsr", "3.1.5", new string[0], null, "FSR 3.1.5")]
+    [InlineData("xess", "2", new string[0], null, "XeSS 2")]
+    public void BuildsAreLabelledAsTheLinuxPillDoes(string family, string version, string[] models, string? model, string expected)
+    {
+        Assert.Equal(expected, UpscalerLabel.Badge(family, version, models, model));
     }
 }

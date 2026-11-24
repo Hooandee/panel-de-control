@@ -512,7 +512,6 @@
   </data>
   <data name="BlockUpscalersTitle" xml:space="preserve"><value>Escaladores</value></data>
   <data name="BlockUpscalersDesc" xml:space="preserve"><value>FSR, XeSS y Generación de frames en tus juegos de Steam (experimental).</value></data>
-  <data name="UpscalersTitle" xml:space="preserve"><value>Escaladores</value></data>
   <data name="UpscalersExperimentalName" xml:space="preserve"><value>Activar escaladores experimentales</value></data>
   <data name="UpscalersExperimentalHelp" xml:space="preserve"><value>Función experimental: modifica archivos de tus juegos. Desactivada por defecto.</value></data>
   <data name="UpscalersIntro" xml:space="preserve"><value>Añade FSR, XeSS y Generación de frames a tus juegos de Steam. Función experimental.</value></data>
@@ -522,32 +521,24 @@
   <data name="UpscalersNoSteam" xml:space="preserve"><value>No se encontró Steam.</value></data>
   <data name="UpscalersNoGames" xml:space="preserve"><value>No hay juegos instalados.</value></data>
   <data name="UpscalersStateInstalled" xml:space="preserve"><value>Instalado</value></data>
-  <data name="UpscalersStateInstalledBuild" xml:space="preserve"><value>Instalado · {0}</value></data>
   <data name="UpscalersStateMissing" xml:space="preserve"><value>Archivos no encontrados</value></data>
-  <data name="UpscalersStateForeign" xml:space="preserve"><value>Otro escalador detectado</value></data>
+  <data name="UpscalersStateForeign" xml:space="preserve"><value>OptiScaler instalado a mano</value></data>
   <data name="UpscalersStateRunning" xml:space="preserve"><value>En ejecución</value></data>
   <data name="UpscalersStateUpdating" xml:space="preserve"><value>Actualizándose</value></data>
-  <data name="UpscalersRecipeNone" xml:space="preserve"><value>Sin receta específica para este juego.</value></data>
-  <data name="UpscalersRecipeVerified" xml:space="preserve"><value>Receta verificada para Windows.</value></data>
-  <data name="UpscalersRecipeExperimental" xml:space="preserve"><value>Receta experimental para Windows.</value></data>
-  <data name="UpscalersRecipeUnsupported" xml:space="preserve"><value>Este juego necesita ajustes que Windows aún no aplica.</value></data>
-  <data name="UpscalersInstalledInfo" xml:space="preserve"><value>Instalado: {0}</value></data>
-  <data name="UpscalersBuildLabel" xml:space="preserve"><value>Versión</value></data>
-  <data name="UpscalersQualityLabel" xml:space="preserve"><value>Calidad de imagen</value></data>
+  <data name="UpscalersBuildLabel" xml:space="preserve"><value>Escalador y modelos</value></data>
+  <data name="UpscalersQualityLabel" xml:space="preserve"><value>Calidad</value></data>
   <data name="UpscalersQuality_native" xml:space="preserve"><value>Nativa</value></data>
   <data name="UpscalersQuality_quality" xml:space="preserve"><value>Calidad</value></data>
   <data name="UpscalersQuality_balanced" xml:space="preserve"><value>Equilibrado</value></data>
   <data name="UpscalersQuality_performance" xml:space="preserve"><value>Rendimiento</value></data>
   <data name="UpscalersMegabytes" xml:space="preserve"><value>{0} MB</value></data>
   <data name="UpscalersRecommended" xml:space="preserve"><value>Recomendada</value></data>
-  <data name="UpscalersInstall" xml:space="preserve"><value>Instalar</value></data>
-  <data name="UpscalersRemove" xml:space="preserve"><value>Quitar</value></data>
   <data name="UpscalersProgressPrepare" xml:space="preserve"><value>Preparando…</value></data>
   <data name="UpscalersProgressDownloadStart" xml:space="preserve"><value>Descargando…</value></data>
   <data name="UpscalersProgressDownload" xml:space="preserve"><value>Descargando · {0} / {1} MB</value></data>
   <data name="UpscalersProgressInstall" xml:space="preserve"><value>Instalando…</value></data>
   <data name="UpscalersProgressRestore" xml:space="preserve"><value>Restaurando los archivos originales…</value></data>
-  <data name="UpscalersInstalledOk" xml:space="preserve"><value>Instalado: {0}</value></data>
+  <data name="UpscalersInstalledOk" xml:space="preserve"><value>{0} instalado. Juega un poco para comprobarlo.</value></data>
   <data name="UpscalersRemovedOk" xml:space="preserve"><value>Quitado. Se restauraron los archivos originales.</value></data>
   <data name="UpscalersUnconfirmed" xml:space="preserve"><value>No se pudo confirmar el resultado. Vuelve a abrir el panel.</value></data>
   <data name="UpscalersErrRunning" xml:space="preserve"><value>Cierra el juego primero.</value></data>
@@ -574,6 +565,20 @@
     <value>Mejor imagen y más FPS en tus juegos</value>
   </data>
   <data name="UpscalersUntested" xml:space="preserve">
-    <value>Sin probar en tu GPU</value>
+    <value>Puede no ir en tu GPU</value>
   </data>
+  <data name="UpscalersExperimentalLabel" xml:space="preserve"><value>Experimental</value></data>
+  <data name="UpscalersBack" xml:space="preserve"><value>Juegos</value></data>
+  <data name="UpscalersStatusNone" xml:space="preserve"><value>Sin escalador de Panel de Control</value></data>
+  <data name="UpscalersStatusInstalled" xml:space="preserve"><value>{0} instalado</value></data>
+  <data name="UpscalersStatusPending" xml:space="preserve"><value>Juega un poco para comprobarlo</value></data>
+  <data name="UpscalersForeignTitle" xml:space="preserve"><value>Ya tiene un OptiScaler que no es de Panel de Control</value></data>
+  <data name="UpscalersSubUses" xml:space="preserve"><value>Usa {0}</value></data>
+  <data name="UpscalersAdvanced" xml:space="preserve"><value>Avanzado</value></data>
+  <data name="UpscalersExe" xml:space="preserve"><value>Ejecutable del juego</value></data>
+  <data name="UpscalersApis" xml:space="preserve"><value>API gráficas</value></data>
+  <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
+  <data name="UpscalersModel_full" xml:space="preserve"><value>Completo</value></data>
+  <data name="UpscalersActivate" xml:space="preserve"><value>Activar {0}</value></data>
+  <data name="UpscalersDeactivate" xml:space="preserve"><value>Desactivar {0}</value></data>
 </root>

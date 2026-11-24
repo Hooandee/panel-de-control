@@ -17,6 +17,8 @@ public sealed class UpscalersClient
 
     public Task<UpscalersResponse> GameAsync(string appId) => SendAsync(UpscalersRequest.Game(appId));
 
+    public Task<UpscalersResponse> CoverAsync(string appId) => SendAsync(UpscalersRequest.Cover(appId));
+
     public Task<UpscalersResponse> JobAsync() => SendAsync(UpscalersRequest.Job());
 
     public Task<UpscalersResponse> InstallAsync(string appId, string build, string? quality, string? model, bool experimental) =>

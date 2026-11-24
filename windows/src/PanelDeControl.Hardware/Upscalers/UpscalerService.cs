@@ -37,6 +37,9 @@ public sealed class UpscalerService : IUpscalersController
     private readonly Lazy<GpuFamilyResult> gpu;
     private readonly Lazy<string?> device;
     private readonly Func<Func<Task>, Task> start;
+    private readonly Func<byte[], int, ScaledCover?> scaleCover;
+    private readonly Dictionary<string, (double Until, UpscalerCover? Cover)> covers = new(StringComparer.Ordinal);
+    private readonly object coverLock = new();
 
     /// <param name="start">Starts the background job; replaceable so a test can run it inline.</param>
     public UpscalerService(
@@ -50,7 +53,8 @@ public sealed class UpscalerService : IUpscalersController
         Func<string?> readDevice,
         Func<double>? clock = null,
         Action<string, string>? log = null,
-        Func<Func<Task>, Task>? start = null)
+        Func<Func<Task>, Task>? start = null,
+        Func<byte[], int, ScaledCover?>? scaleCover = null)
     {
         this.data = data;
         this.store = store;
@@ -63,6 +67,7 @@ public sealed class UpscalerService : IUpscalersController
         this.clock = clock ?? (() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0);
         this.log = log ?? ((step, detail) => CompanionLog.Write(step, detail));
         this.start = start ?? (job => Task.Run(job));
+        this.scaleCover = scaleCover ?? CoverImages.Scale;
         gpu = new Lazy<GpuFamilyResult>(() => this.readGpu());
         device = new Lazy<string?>(() => this.readDevice());
     }
@@ -83,6 +88,9 @@ public sealed class UpscalerService : IUpscalersController
                     return Ok(overview: await Task.Run(Overview, cancellationToken).ConfigureAwait(false));
                 case UpscalersOperation.Job:
                     return Ok();
+                case UpscalersOperation.Cover:
+                    return Ok(cover: await Task.Run(() => Cover(request.AppId!), cancellationToken).ConfigureAwait(false)
+                        ?? throw new UpscalerException("no_cover"));
                 case UpscalersOperation.Game:
                     return Ok(game: await Task.Run(() => Game(request.AppId!), cancellationToken).ConfigureAwait(false));
                 case UpscalersOperation.Install:
@@ -162,6 +170,7 @@ public sealed class UpscalerService : IUpscalersController
                 State = UpscalerGameStates.Missing,
                 Build = store.Install(appId)!.Install.Build,
                 Version = data.Catalog.Build(store.Install(appId)!.Install.Build)?.Version,
+                Label = UpscalerLabel.Badge(data.Catalog.Build(store.Install(appId)!.Install.Build), store.Install(appId)!.Install.Options.Model),
             });
         }
 
@@ -170,6 +179,7 @@ public sealed class UpscalerService : IUpscalersController
             Gpu = result.Generation,
             GpuSource = result.Source,
             Device = Device,
+            GpuName = result.Name,
             SteamFound = libraries.Count > 0,
             Games = rows.ToArray(),
         };
@@ -428,6 +438,7 @@ public sealed class UpscalerService : IUpscalersController
             row.State = ManifestCheck.Presence(stored.Install.Target).Installed ? UpscalerGameStates.Installed : UpscalerGameStates.Missing;
             row.Build = stored.Install.Build;
             row.Version = data.Catalog.Build(stored.Install.Build)?.Version;
+            row.Label = UpscalerLabel.Badge(data.Catalog.Build(stored.Install.Build), stored.Install.Options.Model);
         }
 
         return row;
@@ -446,7 +457,42 @@ public sealed class UpscalerService : IUpscalersController
             Model = install.Options.Model,
             InstalledAt = (long)stored.InstalledAt,
             Status = ManifestCheck.Presence(install.Target).Installed ? UpscalerGameStates.Installed : UpscalerGameStates.Missing,
+            Label = UpscalerLabel.Badge(data.Catalog.Build(install.Build), install.Options.Model),
         };
+    }
+
+    private static readonly TimeSpan MissingCoverMemory = TimeSpan.FromSeconds(60);
+    private const int MaximumCachedCovers = 512;
+
+    /// <summary>The game's cached artwork shrunk to a list thumbnail, kept in memory; null when Steam has none.</summary>
+    public UpscalerCover? Cover(string appId)
+    {
+        var now = clock();
+        lock (coverLock)
+        {
+            if (covers.TryGetValue(appId, out var known) && (known.Cover is not null || known.Until > now))
+            {
+                return known.Cover;
+            }
+        }
+
+        UpscalerCover? cover = null;
+        if (CoverFiles.Find(fileSystem, steam.Roots(), appId) is { } source && scaleCover(source, UpscalersWireCodec.MaximumCoverWidth) is { } scaled)
+        {
+            cover = new UpscalerCover { Mime = scaled.Mime, Data = Convert.ToBase64String(scaled.Data) };
+        }
+
+        lock (coverLock)
+        {
+            if (covers.Count >= MaximumCachedCovers)
+            {
+                covers.Clear();
+            }
+
+            covers[appId] = (now + MissingCoverMemory.TotalSeconds, cover);
+        }
+
+        return cover;
     }
 
     private GameRecipe? Recipe(SteamApp app) => data.Recipes?.Match(app.AppId, "optiscaler", Platform, Arch, app.BuildId);
@@ -492,6 +538,6 @@ public sealed class UpscalerService : IUpscalersController
             right.Replace('/', '\\').TrimEnd('\\'),
             StringComparison.OrdinalIgnoreCase);
 
-    private UpscalersResponse Ok(UpscalersOverview? overview = null, UpscalerGameDetail? game = null, UpscalerJobStatus? job = null) =>
-        new() { Status = UpscalersResponseStatus.Ok, Overview = overview, Game = game, Job = job ?? jobs.Snapshot() };
+    private UpscalersResponse Ok(UpscalersOverview? overview = null, UpscalerGameDetail? game = null, UpscalerJobStatus? job = null, UpscalerCover? cover = null) =>
+        new() { Status = UpscalersResponseStatus.Ok, Overview = overview, Game = game, Job = job ?? jobs.Snapshot(), Cover = cover };
 }

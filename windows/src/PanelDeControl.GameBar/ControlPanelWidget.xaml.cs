@@ -36,6 +36,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 {
     private static readonly ResourceLoader Strings = ResourceLoader.GetForViewIndependentUse();
     private const string AccentSettingKey = "accent";
+    private const string SectionSettingKey = "section";
     private const double ArcCenterX = 100;
     private const double ArcCenterY = 92;
     private const double ArcRadius = 78;
@@ -152,7 +153,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 }
 
                 BuildSections();
-                SelectSection(0);
+                SelectSection(ReadSavedSection());
             }
             catch (Exception exception)
             {
@@ -1664,6 +1665,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
 
         var current = sections[index].Definition;
+        SaveSection(next);
         var accent = ToColor(current.AccentArgb);
         for (var position = 0; position < sections.Count; position++)
         {
@@ -2235,6 +2237,34 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             catch
             {
             }
+        }
+    }
+
+    private int ReadSavedSection()
+    {
+        try
+        {
+            if (ApplicationData.Current.LocalSettings.Values[SectionSettingKey] is string id)
+            {
+                var index = sections.FindIndex(section => section.Definition.Id == id);
+                return index >= 0 ? index : 0;
+            }
+        }
+        catch
+        {
+        }
+
+        return 0;
+    }
+
+    private static void SaveSection(string id)
+    {
+        try
+        {
+            ApplicationData.Current.LocalSettings.Values[SectionSettingKey] = id;
+        }
+        catch
+        {
         }
     }
 

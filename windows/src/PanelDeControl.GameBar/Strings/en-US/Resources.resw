@@ -512,7 +512,6 @@
   </data>
   <data name="BlockUpscalersTitle" xml:space="preserve"><value>Upscalers</value></data>
   <data name="BlockUpscalersDesc" xml:space="preserve"><value>FSR, XeSS and Frame Generation for your Steam games (experimental).</value></data>
-  <data name="UpscalersTitle" xml:space="preserve"><value>Upscalers</value></data>
   <data name="UpscalersExperimentalName" xml:space="preserve"><value>Turn on experimental upscalers</value></data>
   <data name="UpscalersExperimentalHelp" xml:space="preserve"><value>Experimental: changes files in your games. Off by default.</value></data>
   <data name="UpscalersIntro" xml:space="preserve"><value>Add FSR, XeSS and Frame Generation to your Steam games. Experimental.</value></data>
@@ -522,32 +521,24 @@
   <data name="UpscalersNoSteam" xml:space="preserve"><value>Steam was not found.</value></data>
   <data name="UpscalersNoGames" xml:space="preserve"><value>No installed games.</value></data>
   <data name="UpscalersStateInstalled" xml:space="preserve"><value>Installed</value></data>
-  <data name="UpscalersStateInstalledBuild" xml:space="preserve"><value>Installed · {0}</value></data>
   <data name="UpscalersStateMissing" xml:space="preserve"><value>Files not found</value></data>
-  <data name="UpscalersStateForeign" xml:space="preserve"><value>Another upscaler detected</value></data>
+  <data name="UpscalersStateForeign" xml:space="preserve"><value>OptiScaler installed by hand</value></data>
   <data name="UpscalersStateRunning" xml:space="preserve"><value>Running</value></data>
   <data name="UpscalersStateUpdating" xml:space="preserve"><value>Updating</value></data>
-  <data name="UpscalersRecipeNone" xml:space="preserve"><value>No specific recipe for this game.</value></data>
-  <data name="UpscalersRecipeVerified" xml:space="preserve"><value>Recipe verified for Windows.</value></data>
-  <data name="UpscalersRecipeExperimental" xml:space="preserve"><value>Experimental recipe for Windows.</value></data>
-  <data name="UpscalersRecipeUnsupported" xml:space="preserve"><value>This game needs setup Windows can't apply yet.</value></data>
-  <data name="UpscalersInstalledInfo" xml:space="preserve"><value>Installed: {0}</value></data>
-  <data name="UpscalersBuildLabel" xml:space="preserve"><value>Version</value></data>
-  <data name="UpscalersQualityLabel" xml:space="preserve"><value>Image quality</value></data>
+  <data name="UpscalersBuildLabel" xml:space="preserve"><value>Upscaler and models</value></data>
+  <data name="UpscalersQualityLabel" xml:space="preserve"><value>Quality</value></data>
   <data name="UpscalersQuality_native" xml:space="preserve"><value>Native</value></data>
   <data name="UpscalersQuality_quality" xml:space="preserve"><value>Quality</value></data>
   <data name="UpscalersQuality_balanced" xml:space="preserve"><value>Balanced</value></data>
   <data name="UpscalersQuality_performance" xml:space="preserve"><value>Performance</value></data>
   <data name="UpscalersMegabytes" xml:space="preserve"><value>{0} MB</value></data>
   <data name="UpscalersRecommended" xml:space="preserve"><value>Recommended</value></data>
-  <data name="UpscalersInstall" xml:space="preserve"><value>Install</value></data>
-  <data name="UpscalersRemove" xml:space="preserve"><value>Remove</value></data>
   <data name="UpscalersProgressPrepare" xml:space="preserve"><value>Preparing…</value></data>
   <data name="UpscalersProgressDownloadStart" xml:space="preserve"><value>Downloading…</value></data>
   <data name="UpscalersProgressDownload" xml:space="preserve"><value>Downloading · {0} / {1} MB</value></data>
   <data name="UpscalersProgressInstall" xml:space="preserve"><value>Installing…</value></data>
   <data name="UpscalersProgressRestore" xml:space="preserve"><value>Restoring the original files…</value></data>
-  <data name="UpscalersInstalledOk" xml:space="preserve"><value>Installed: {0}</value></data>
+  <data name="UpscalersInstalledOk" xml:space="preserve"><value>{0} installed. Play a bit to check it.</value></data>
   <data name="UpscalersRemovedOk" xml:space="preserve"><value>Removed. The original files are back.</value></data>
   <data name="UpscalersUnconfirmed" xml:space="preserve"><value>Couldn't confirm the result. Reopen the panel.</value></data>
   <data name="UpscalersErrRunning" xml:space="preserve"><value>Close the game first.</value></data>
@@ -574,6 +565,20 @@
     <value>Sharper image and more FPS in your games</value>
   </data>
   <data name="UpscalersUntested" xml:space="preserve">
-    <value>Not tested on your GPU</value>
+    <value>May not run on your GPU</value>
   </data>
+  <data name="UpscalersExperimentalLabel" xml:space="preserve"><value>Experimental</value></data>
+  <data name="UpscalersBack" xml:space="preserve"><value>Games</value></data>
+  <data name="UpscalersStatusNone" xml:space="preserve"><value>No Panel de Control upscaler</value></data>
+  <data name="UpscalersStatusInstalled" xml:space="preserve"><value>{0} installed</value></data>
+  <data name="UpscalersStatusPending" xml:space="preserve"><value>Play a bit to check it</value></data>
+  <data name="UpscalersForeignTitle" xml:space="preserve"><value>It already has an OptiScaler that isn't Panel de Control's</value></data>
+  <data name="UpscalersSubUses" xml:space="preserve"><value>Uses {0}</value></data>
+  <data name="UpscalersAdvanced" xml:space="preserve"><value>Advanced</value></data>
+  <data name="UpscalersExe" xml:space="preserve"><value>Game executable</value></data>
+  <data name="UpscalersApis" xml:space="preserve"><value>Graphics APIs</value></data>
+  <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
+  <data name="UpscalersModel_full" xml:space="preserve"><value>Full</value></data>
+  <data name="UpscalersActivate" xml:space="preserve"><value>Turn on {0}</value></data>
+  <data name="UpscalersDeactivate" xml:space="preserve"><value>Turn off {0}</value></data>
 </root>

@@ -21,6 +21,9 @@ public enum UpscalersOperation
 
     [EnumMember(Value = "job")]
     Job = 4,
+
+    [EnumMember(Value = "cover")]
+    Cover = 5,
 }
 
 [DataContract]
@@ -90,6 +93,8 @@ public sealed class UpscalersRequest
 
     public static UpscalersRequest Job() => new(UpscalersOperation.Job);
 
+    public static UpscalersRequest Cover(string appId) => new(UpscalersOperation.Cover, appId: appId);
+
     public static UpscalersRequest Install(string appId, string build, string? quality, string? model, bool experimental) =>
         new(UpscalersOperation.Install, appId, build, quality, model, experimental);
 
@@ -108,7 +113,7 @@ public sealed class UpscalersRequest
         {
             UpscalersOperation.Overview or UpscalersOperation.Job =>
                 Absent(AppId) && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null,
-            UpscalersOperation.Game => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null,
+            UpscalersOperation.Game or UpscalersOperation.Cover => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null,
             UpscalersOperation.Install => appId && Token(Build) && Optional(Quality) && Optional(Model),
             UpscalersOperation.Uninstall => appId && Absent(Build) && Absent(Quality) && Absent(Model),
             _ => false,
@@ -151,6 +156,10 @@ public sealed class UpscalerGameSummary
     /// <summary>False when the folder scan for another tool's upscaler did not finish in time: <c>none</c> is then unconfirmed.</summary>
     [DataMember(Name = "scanned", Order = 8, IsRequired = true)]
     public bool Scanned { get; set; } = true;
+
+    /// <summary>What the installed build is called, as the Linux pill says it (<c>FSR 4.1.2 Lite</c>): never the build id.</summary>
+    [DataMember(Name = "label", Order = 9, EmitDefaultValue = false)]
+    public string? Label { get; set; }
 }
 
 [DataContract]
@@ -170,6 +179,10 @@ public sealed class UpscalersOverview
 
     [DataMember(Name = "games", Order = 5, IsRequired = true)]
     public UpscalerGameSummary[] Games { get; set; } = new UpscalerGameSummary[0];
+
+    /// <summary>The adapter's own name (<c>NVIDIA GeForce RTX 5090 Laptop GPU</c>); <see cref="Gpu"/> stays the family the rules use.</summary>
+    [DataMember(Name = "gpu_name", Order = 6, EmitDefaultValue = false)]
+    public string? GpuName { get; set; }
 }
 
 [DataContract]
@@ -266,6 +279,9 @@ public sealed class UpscalerInstallEntry
     /// <summary><c>installed</c> or <c>missing</c>, from the game's own manifest.</summary>
     [DataMember(Name = "status", Order = 8, IsRequired = true)]
     public string Status { get; set; } = UpscalerGameStates.Missing;
+
+    [DataMember(Name = "label", Order = 9, EmitDefaultValue = false)]
+    public string? Label { get; set; }
 }
 
 [DataContract]
@@ -342,6 +358,20 @@ public sealed class UpscalerJobStatus
     public string? Detail { get; set; }
 }
 
+/// <summary>A game's cover, already downscaled: <see cref="UpscalersWireCodec.MaximumCoverBytes"/> at most, base64 in <see cref="Data"/>.</summary>
+[DataContract]
+public sealed class UpscalerCover
+{
+    public const string Jpeg = "image/jpeg";
+    public const string Png = "image/png";
+
+    [DataMember(Name = "mime", Order = 1, IsRequired = true)]
+    public string Mime { get; set; } = Jpeg;
+
+    [DataMember(Name = "data", Order = 2, IsRequired = true)]
+    public string Data { get; set; } = "";
+}
+
 [DataContract]
 public sealed class UpscalersResponse
 {
@@ -360,6 +390,9 @@ public sealed class UpscalersResponse
     [DataMember(Name = "job", Order = 5, EmitDefaultValue = false)]
     public UpscalerJobStatus? Job { get; set; }
 
+    [DataMember(Name = "cover", Order = 6, EmitDefaultValue = false)]
+    public UpscalerCover? Cover { get; set; }
+
     public static UpscalersResponse Rejected(string errorCode, UpscalerJobStatus? job = null) =>
         new() { Status = UpscalersResponseStatus.Rejected, ErrorCode = errorCode, Job = job };
 
@@ -369,7 +402,8 @@ public sealed class UpscalersResponse
     internal void Validate()
     {
         var valid = (Status == UpscalersResponseStatus.Ok) == (ErrorCode is null)
-            && (Overview is null || Overview.Games is not null && Overview.Games.Select(game => game.AppId).Distinct().Count() == Overview.Games.Length);
+            && (Overview is null || Overview.Games is not null && Overview.Games.Select(game => game.AppId).Distinct().Count() == Overview.Games.Length)
+            && (Cover is null || Cover.Mime is UpscalerCover.Jpeg or UpscalerCover.Png && Cover.Data is { Length: > 0 and <= UpscalersWireCodec.MaximumCoverBytes / 3 * 4 + 4 });
         if (!valid)
         {
             throw new InvalidDataException("Upscalers response is invalid.");
@@ -381,6 +415,8 @@ public static class UpscalersWireCodec
 {
     public const int MaximumRequestLength = 1024;
     public const int MaximumResponseLength = 512 * 1024;
+    public const int MaximumCoverBytes = 256 * 1024;
+    public const int MaximumCoverWidth = 200;
 
     private static readonly DataContractJsonSerializer RequestSerializer = new(typeof(UpscalersRequest));
     private static readonly DataContractJsonSerializer ResponseSerializer = new(typeof(UpscalersResponse));

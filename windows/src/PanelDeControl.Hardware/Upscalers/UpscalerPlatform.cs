@@ -186,8 +186,13 @@ public sealed class SteamGames
 {
     public const int MaximumGames = 1000;
 
+    /// <summary>Steamworks Common Redistributables: installed by Steam itself, listed with the games but never one.</summary>
+    public const string SteamworksRedistributablesAppId = "228980";
+
     private readonly IReadOnlyFileSystem fileSystem;
     private readonly Func<IReadOnlyList<string>> roots;
+    private readonly Dictionary<string, string> types = new(StringComparer.Ordinal);
+    private readonly object typesLock = new();
 
     public SteamGames(IReadOnlyFileSystem fileSystem, Func<IReadOnlyList<string>> roots)
     {
@@ -197,9 +202,37 @@ public sealed class SteamGames
 
     public IReadOnlyList<string> Libraries() => SteamLibrary.LibraryPaths(fileSystem, roots());
 
+    public IReadOnlyList<string> Roots() => roots();
+
     public SteamApp? Find(string appId) => SteamLibrary.FindInstalled(fileSystem, Libraries(), appId);
 
+    /// <summary>Installed games only, as on Linux: whatever Steam files as a tool (runtimes, redistributables) is left out.</summary>
     public IReadOnlyList<SteamApp> All()
+    {
+        var apps = AllInstalled().Where(app => app.AppId != SteamworksRedistributablesAppId).ToList();
+        var tools = Types(apps.Select(app => app.AppId));
+        return apps.Where(app => !(tools.TryGetValue(app.AppId, out var type) && type == SteamAppInfo.Tool)).ToList();
+    }
+
+    private IReadOnlyDictionary<string, string> Types(IEnumerable<string> appIds)
+    {
+        var wanted = new HashSet<string>(appIds, StringComparer.Ordinal);
+        lock (typesLock)
+        {
+            wanted.ExceptWith(types.Keys);
+            if (wanted.Count > 0)
+            {
+                foreach (var entry in SteamAppInfo.Types(fileSystem, roots(), wanted))
+                {
+                    types[entry.Key] = entry.Value;
+                }
+            }
+
+            return new Dictionary<string, string>(types, StringComparer.Ordinal);
+        }
+    }
+
+    private IReadOnlyList<SteamApp> AllInstalled()
     {
         var libraries = Libraries();
         var apps = new List<SteamApp>();

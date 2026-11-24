@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading;
 using System.Threading.Tasks;
 using PanelDeControl.Core.Upscalers;
 using Windows.ApplicationModel.Resources;
+using Windows.Storage.Streams;
 using Windows.UI;
 using Windows.UI.Text;
 using Windows.UI.Xaml;
@@ -11,52 +14,74 @@ using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Automation.Peers;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Imaging;
 
 namespace PanelDeControl.GameBar;
 
 /// <summary>
-/// Escaladores on Windows, experimental: installed Steam games, the build and quality to install, and the real
-/// outcome of the companion's install or removal job.
+/// Escaladores on Windows, experimental: installed Steam games, one view per game with the build and quality to
+/// install, and the real outcome of the companion's install or removal job.
 /// </summary>
 public sealed class UpscalersView : UserControl
 {
     private static readonly ResourceLoader Strings = ResourceLoader.GetForViewIndependentUse();
     private static readonly string[] Qualities = { "native", "quality", "balanced", "performance" };
+    private static readonly string[] OwnInputs = { "dlss", "fsr31", "fsr2", "xess" };
     private const string DefaultQuality = "quality";
     private const int MaximumPollFailures = 12;
+    private const int MaximumCoverRequests = 2;
+    private const int EagerRows = 6;
+    private const double PrefetchDistance = 240;
 
     private readonly UpscalersClient client = new();
     private readonly DispatcherTimer pollTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private readonly ToggleSwitch experimentalToggle = new();
     private readonly StackPanel content = new() { Spacing = 10, Visibility = Visibility.Collapsed };
+    private readonly StackPanel listPanel = new() { Spacing = 10 };
     private readonly TextBlock gpuText = new();
     private readonly TextBlock statusText = new();
     private readonly StackPanel gameList = new() { Spacing = 4 };
-    private readonly StackPanel detailPanel = new() { Spacing = 8, Visibility = Visibility.Collapsed };
+    private readonly StackPanel gamePanel = new() { Spacing = 10, Visibility = Visibility.Collapsed };
+    private readonly Button backButton = new();
+    private readonly Border headerCover = new();
+    private readonly Image headerImage = new();
     private readonly TextBlock detailTitle = new();
-    private readonly TextBlock detailInfo = new();
-    private readonly TextBlock recipeText = new();
-    private readonly TextBlock installedText = new();
+    private readonly TextBlock detailSubtitle = new();
+    private readonly TextBlock statusTitle = new();
+    private readonly TextBlock statusSub = new();
+    private readonly StackPanel pickerPanel = new() { Spacing = 6 };
     private readonly TextBlock buildLabel = new();
     private readonly StackPanel buildList = new() { Spacing = 4 };
+    private readonly StackPanel qualityPanel = new() { Spacing = 6 };
     private readonly TextBlock qualityLabel = new();
     private readonly Grid qualityRow = new() { ColumnSpacing = 4 };
     private readonly Border qualityHost;
     private readonly TextBlock hintText = new();
     private readonly Button actionButton = new();
-    private readonly ProgressBar progressBar = new() { Minimum = 0, Maximum = 1, Visibility = Visibility.Collapsed };
+    private readonly StackPanel progressPanel = new() { Spacing = 6, Visibility = Visibility.Collapsed };
+    private readonly ProgressBar progressBar = new() { Minimum = 0, Maximum = 1 };
     private readonly TextBlock progressText = new();
     private readonly TextBlock resultText = new();
+    private readonly Button advancedButton = new();
+    private readonly StackPanel advancedPanel = new() { Spacing = 4, Visibility = Visibility.Collapsed };
+    private readonly TextBlock advancedExe = new();
+    private readonly TextBlock advancedApis = new();
+    private readonly Dictionary<string, Task<BitmapImage?>> covers = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim coverGate = new(MaximumCoverRequests);
 
     private UpscalerGameSummary[] games = Array.Empty<UpscalerGameSummary>();
     private UpscalerGameDetail? detail;
+    private string gpuFamily = "unknown";
     private string? selectedAppId;
     private string? selectedBuild;
+    private string? selectedModel;
     private string selectedQuality = DefaultQuality;
+    private bool advancedOpen;
     private bool refreshing;
     private bool loadingGame;
     private bool jobRunning;
     private bool polling;
+    private bool progressShown;
     private int pollFailures;
     private string jobKind = "";
     private string jobAppId = "";
@@ -64,7 +89,12 @@ public sealed class UpscalersView : UserControl
 
     public UpscalersView()
     {
-        var title = new TextBlock { Style = Resource<Style>("PdcTitleStyle"), VerticalAlignment = VerticalAlignment.Center, Text = Localized("UpscalersTitle") };
+        var experimentalLabel = new TextBlock
+        {
+            Style = Resource<Style>("PdcBodyStyle"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Text = Localized("UpscalersExperimentalLabel"),
+        };
         experimentalToggle.OnContent = string.Empty;
         experimentalToggle.OffContent = string.Empty;
         experimentalToggle.MinWidth = 0;
@@ -77,7 +107,7 @@ public sealed class UpscalersView : UserControl
         var header = new Grid { ColumnSpacing = 12 };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.Children.Add(title);
+        header.Children.Add(experimentalLabel);
         Grid.SetColumn(experimentalToggle, 1);
         header.Children.Add(experimentalToggle);
 
@@ -85,27 +115,43 @@ public sealed class UpscalersView : UserControl
         intro.Margin = new Thickness(0, 4, 0, 0);
 
         gpuText.Style = Resource<Style>("PdcCaptionStyle");
+        gpuText.TextWrapping = TextWrapping.WrapWholeWords;
         statusText.Style = Resource<Style>("PdcMutedStyle");
         statusText.TextWrapping = TextWrapping.WrapWholeWords;
+
+        backButton.Style = Resource<Style>("PdcChipButtonStyle");
+        backButton.Content = "‹  " + Localized("UpscalersBack");
+        backButton.HorizontalAlignment = HorizontalAlignment.Left;
+        backButton.Padding = new Thickness(12, 8, 12, 8);
+        AutomationProperties.SetName(backButton, Localized("UpscalersBack"));
+        backButton.Click += BackButton_Click;
+
+        BuildCover(headerCover, headerImage, 48, 72);
         detailTitle.Style = Resource<Style>("PdcTitleStyle");
         detailTitle.TextWrapping = TextWrapping.WrapWholeWords;
-        foreach (var line in new[] { detailInfo, recipeText, installedText, hintText, progressText })
-        {
-            line.Style = Resource<Style>("PdcCaptionStyle");
-            line.TextWrapping = TextWrapping.WrapWholeWords;
-        }
+        detailSubtitle.Style = Resource<Style>("PdcMutedStyle");
+        detailSubtitle.TextWrapping = TextWrapping.WrapWholeWords;
+        var titles = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center, Children = { detailTitle, detailSubtitle } };
+        var identity = new Grid { ColumnSpacing = 12 };
+        identity.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        identity.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        identity.Children.Add(headerCover);
+        Grid.SetColumn(titles, 1);
+        identity.Children.Add(titles);
 
-        hintText.Foreground = Resource<Brush>("PdcWarnBrush");
+        statusTitle.Style = Resource<Style>("PdcBodyStyle");
+        statusTitle.FontWeight = FontWeights.SemiBold;
+        statusTitle.TextWrapping = TextWrapping.WrapWholeWords;
+        statusSub.Style = Resource<Style>("PdcCaptionStyle");
+        statusSub.TextWrapping = TextWrapping.WrapWholeWords;
+        var statusCard = Card(new StackPanel { Spacing = 4, Children = { statusTitle, statusSub } });
+
         buildLabel.Style = Resource<Style>("PdcBodyStyle");
         buildLabel.Text = Localized("UpscalersBuildLabel");
+        pickerPanel.Children.Add(buildLabel);
+        pickerPanel.Children.Add(buildList);
         qualityLabel.Style = Resource<Style>("PdcBodyStyle");
         qualityLabel.Text = Localized("UpscalersQualityLabel");
-        resultText.Style = Resource<Style>("PdcCaptionStyle");
-        resultText.TextWrapping = TextWrapping.WrapWholeWords;
-        AutomationProperties.SetLiveSetting(resultText, AutomationLiveSetting.Polite);
-        AutomationProperties.SetLiveSetting(progressText, AutomationLiveSetting.Polite);
-        progressBar.Foreground = Resource<Brush>("PdcAccentBrush");
-
         for (var index = 0; index < Qualities.Length; index++)
         {
             qualityRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -127,31 +173,60 @@ public sealed class UpscalersView : UserControl
             Background = Resource<Brush>("PdcLayerBrush"),
             Child = qualityRow,
         };
+        qualityPanel.Children.Add(qualityLabel);
+        qualityPanel.Children.Add(qualityHost);
 
+        hintText.Style = Resource<Style>("PdcCaptionStyle");
+        hintText.TextWrapping = TextWrapping.WrapWholeWords;
+        hintText.Foreground = Resource<Brush>("PdcWarnBrush");
         actionButton.Style = Resource<Style>("PdcChipButtonStyle");
-        actionButton.Padding = new Thickness(14, 9, 14, 9);
-        actionButton.HorizontalAlignment = HorizontalAlignment.Left;
+        actionButton.Padding = new Thickness(14, 10, 14, 10);
+        actionButton.HorizontalAlignment = HorizontalAlignment.Stretch;
+        actionButton.HorizontalContentAlignment = HorizontalAlignment.Center;
+        actionButton.FontWeight = FontWeights.SemiBold;
         actionButton.Click += ActionButton_Click;
 
-        detailPanel.Children.Add(detailTitle);
-        detailPanel.Children.Add(detailInfo);
-        detailPanel.Children.Add(recipeText);
-        detailPanel.Children.Add(installedText);
-        detailPanel.Children.Add(buildLabel);
-        detailPanel.Children.Add(buildList);
-        detailPanel.Children.Add(qualityLabel);
-        detailPanel.Children.Add(qualityHost);
-        detailPanel.Children.Add(hintText);
-        detailPanel.Children.Add(actionButton);
+        progressText.Style = Resource<Style>("PdcCaptionStyle");
+        progressText.TextWrapping = TextWrapping.WrapWholeWords;
+        progressBar.Foreground = Resource<Brush>("PdcAccentBrush");
+        AutomationProperties.SetLiveSetting(progressText, AutomationLiveSetting.Polite);
+        progressPanel.Children.Add(progressText);
+        progressPanel.Children.Add(progressBar);
+        resultText.Style = Resource<Style>("PdcCaptionStyle");
+        resultText.TextWrapping = TextWrapping.WrapWholeWords;
+        AutomationProperties.SetLiveSetting(resultText, AutomationLiveSetting.Polite);
 
-        content.Children.Add(gpuText);
-        content.Children.Add(statusText);
-        content.Children.Add(gameList);
-        content.Children.Add(detailPanel);
-        content.Children.Add(progressBar);
-        content.Children.Add(progressText);
-        content.Children.Add(resultText);
-        foreach (var line in new[] { gpuText, statusText, hintText, progressText, resultText, detailInfo, recipeText, installedText })
+        advancedButton.Style = Resource<Style>("PdcSoftButtonStyle");
+        advancedButton.Background = new SolidColorBrush(Colors.Transparent);
+        advancedButton.Foreground = Resource<Brush>("PdcTextMutedBrush");
+        advancedButton.HorizontalAlignment = HorizontalAlignment.Left;
+        advancedButton.Padding = new Thickness(0, 8, 8, 8);
+        advancedButton.Click += AdvancedButton_Click;
+        foreach (var line in new[] { advancedExe, advancedApis })
+        {
+            line.Style = Resource<Style>("PdcCaptionStyle");
+            line.TextWrapping = TextWrapping.WrapWholeWords;
+            advancedPanel.Children.Add(line);
+        }
+
+        gamePanel.Children.Add(backButton);
+        gamePanel.Children.Add(identity);
+        gamePanel.Children.Add(statusCard);
+        gamePanel.Children.Add(pickerPanel);
+        gamePanel.Children.Add(qualityPanel);
+        gamePanel.Children.Add(hintText);
+        gamePanel.Children.Add(actionButton);
+        gamePanel.Children.Add(progressPanel);
+        gamePanel.Children.Add(resultText);
+        gamePanel.Children.Add(advancedButton);
+        gamePanel.Children.Add(advancedPanel);
+
+        listPanel.Children.Add(gpuText);
+        listPanel.Children.Add(statusText);
+        listPanel.Children.Add(gameList);
+        content.Children.Add(listPanel);
+        content.Children.Add(gamePanel);
+        foreach (var line in new[] { gpuText, statusText, hintText, resultText, statusSub, detailSubtitle, advancedExe, advancedApis })
         {
             CollapseWhenEmpty(line);
         }
@@ -178,7 +253,7 @@ public sealed class UpscalersView : UserControl
             var job = await client.JobAsync();
             if (job.Status == UpscalersResponseStatus.Ok && job.Job is { State: UpscalerJobStates.Running } running)
             {
-                ResumeJob(running);
+                await ResumeJobAsync(running);
                 return;
             }
 
@@ -200,7 +275,8 @@ public sealed class UpscalersView : UserControl
         }
         else
         {
-            resultText.Text = string.Empty;
+            ShowResult(string.Empty, true);
+            CloseGame();
         }
     }
 
@@ -212,19 +288,28 @@ public sealed class UpscalersView : UserControl
             return;
         }
 
+        foreach (var failed in covers.Where(entry => entry.Value.IsCompleted && entry.Value.Result is null).Select(entry => entry.Key).ToList())
+        {
+            covers.Remove(failed);
+        }
+
         if (response.Status != UpscalersResponseStatus.Ok || response.Overview is null)
         {
             games = Array.Empty<UpscalerGameSummary>();
             gpuText.Text = string.Empty;
             statusText.Text = ErrorMessage(response.ErrorCode);
             RenderGames();
+            RenderView();
             return;
         }
 
         var overview = response.Overview;
         games = overview.Games.OrderBy(game => game.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
-        var family = overview.Gpu == "unknown" ? Localized("UpscalersGpuUnknown") : overview.Gpu;
-        gpuText.Text = string.Format(Localized("UpscalersGpu"), family);
+        gpuFamily = overview.Gpu;
+        var gpu = !string.IsNullOrWhiteSpace(overview.GpuName)
+            ? overview.GpuName!
+            : overview.Gpu == "unknown" ? Localized("UpscalersGpuUnknown") : overview.Gpu;
+        gpuText.Text = string.Format(Localized("UpscalersGpu"), gpu);
         statusText.Text = !overview.SteamFound
             ? Localized("UpscalersNoSteam")
             : games.Length == 0 ? Localized("UpscalersNoGames") : string.Empty;
@@ -241,17 +326,20 @@ public sealed class UpscalersView : UserControl
         }
         else
         {
-            RenderDetail();
+            RenderView();
         }
     }
 
     private void RenderGames()
     {
         gameList.Children.Clear();
+        var position = 0;
         foreach (var game in games)
         {
-            var selected = game.AppId == selectedAppId;
-            var text = new StackPanel();
+            var image = new Image { Stretch = Stretch.UniformToFill };
+            var cover = new Border();
+            BuildCover(cover, image, 32, 48);
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(new TextBlock { Text = game.Name, Style = Resource<Style>("PdcBodyStyle"), TextTrimming = TextTrimming.CharacterEllipsis });
             var state = GameState(game);
             if (state.Length > 0)
@@ -259,18 +347,25 @@ public sealed class UpscalersView : UserControl
                 text.Children.Add(new TextBlock { Text = state, Style = Resource<Style>("PdcCaptionStyle"), TextWrapping = TextWrapping.WrapWholeWords });
             }
 
+            var row = new Grid { ColumnSpacing = 12 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.Children.Add(cover);
+            Grid.SetColumn(text, 1);
+            row.Children.Add(text);
             var button = new Button
             {
                 Tag = game.AppId,
-                Content = text,
+                Content = row,
                 Style = Resource<Style>("PdcChipButtonStyle"),
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                Padding = new Thickness(12, 8, 12, 8),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                Padding = new Thickness(10, 8, 12, 8),
                 IsEnabled = !jobRunning,
-                Background = selected ? AccentFill() : Resource<Brush>("PdcLayerBrush"),
+                Background = Resource<Brush>("PdcLayerBrush"),
             };
             AutomationProperties.SetName(button, game.Name + (state.Length > 0 ? ". " + state : string.Empty));
             button.Click += GameButton_Click;
+            LoadCoverWhenVisible(button, image, game.AppId, position++ < EagerRows);
             gameList.Children.Add(button);
         }
     }
@@ -281,8 +376,7 @@ public sealed class UpscalersView : UserControl
         switch (game.State)
         {
             case UpscalerGameStates.Installed:
-                var version = Join(game.Build, game.Version);
-                parts.Add(version.Length > 0 ? string.Format(Localized("UpscalersStateInstalledBuild"), version) : Localized("UpscalersStateInstalled"));
+                parts.Add(!string.IsNullOrEmpty(game.Label) ? game.Label! : Localized("UpscalersStateInstalled"));
                 break;
             case UpscalerGameStates.Missing:
                 parts.Add(Localized("UpscalersStateMissing"));
@@ -305,8 +399,87 @@ public sealed class UpscalersView : UserControl
         return string.Join(" · ", parts);
     }
 
-    private static string Join(string? build, string? version) =>
-        string.Join(" ", new[] { build, version }.Where(part => !string.IsNullOrEmpty(part)));
+    private void BuildCover(Border host, Image image, double width, double height)
+    {
+        host.Width = width;
+        host.Height = height;
+        host.CornerRadius = new CornerRadius(4);
+        host.Background = Resource<Brush>("PdcLayerStrongBrush");
+        host.VerticalAlignment = VerticalAlignment.Center;
+        host.Child = image;
+        image.Stretch = Stretch.UniformToFill;
+        AutomationProperties.SetAccessibilityView(host, AccessibilityView.Raw);
+    }
+
+    private void LoadCoverWhenVisible(FrameworkElement trigger, Image image, string appId, bool immediately)
+    {
+        var requested = false;
+        async void Request()
+        {
+            if (requested)
+            {
+                return;
+            }
+
+            requested = true;
+            if (await CoverAsync(appId) is { } bitmap)
+            {
+                image.Source = bitmap;
+            }
+        }
+
+        if (immediately)
+        {
+            trigger.Loaded += (_, _) => Request();
+        }
+
+        trigger.EffectiveViewportChanged += (_, args) =>
+        {
+            if (args.BringIntoViewDistanceY <= PrefetchDistance)
+            {
+                Request();
+            }
+        };
+    }
+
+    private Task<BitmapImage?> CoverAsync(string appId)
+    {
+        if (!covers.TryGetValue(appId, out var task))
+        {
+            task = FetchCoverAsync(appId);
+            covers[appId] = task;
+        }
+
+        return task;
+    }
+
+    private async Task<BitmapImage?> FetchCoverAsync(string appId)
+    {
+        await coverGate.WaitAsync();
+        try
+        {
+            var response = await client.CoverAsync(appId);
+            if (response.Status != UpscalersResponseStatus.Ok || response.Cover is not { } cover)
+            {
+                return null;
+            }
+
+            var bitmap = new BitmapImage();
+            using var stream = new InMemoryRandomAccessStream();
+            await stream.WriteAsync(Convert.FromBase64String(cover.Data).AsBuffer());
+            stream.Seek(0);
+            await bitmap.SetSourceAsync(stream);
+            return bitmap;
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            coverGate.Release();
+        }
+    }
 
     private async void GameButton_Click(object sender, RoutedEventArgs args)
     {
@@ -318,10 +491,41 @@ public sealed class UpscalersView : UserControl
         selectedAppId = appId;
         selectionGeneration++;
         detail = null;
-        resultText.Text = string.Empty;
-        RenderGames();
-        RenderDetail();
+        ShowResult(string.Empty, true);
+        RenderView();
+        backButton.Focus(FocusState.Programmatic);
         await LoadGameAsync();
+    }
+
+    private void BackButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (jobRunning)
+        {
+            return;
+        }
+
+        var appId = selectedAppId;
+        CloseGame();
+        if (appId is not null)
+        {
+            gameList.Children.OfType<Button>().FirstOrDefault(button => Equals(button.Tag, appId))?.Focus(FocusState.Programmatic);
+        }
+    }
+
+    private void CloseGame()
+    {
+        selectedAppId = null;
+        selectionGeneration++;
+        detail = null;
+        loadingGame = false;
+        ShowResult(string.Empty, true);
+        RenderView();
+    }
+
+    private void AdvancedButton_Click(object sender, RoutedEventArgs args)
+    {
+        advancedOpen = !advancedOpen;
+        RenderAdvanced();
     }
 
     private async Task LoadGameAsync()
@@ -334,7 +538,7 @@ public sealed class UpscalersView : UserControl
 
         var generation = selectionGeneration;
         loadingGame = true;
-        RenderDetail();
+        RenderView();
         var response = await client.GameAsync(appId);
         loadingGame = false;
         if (generation != selectionGeneration || appId != selectedAppId || !Experimental)
@@ -353,6 +557,10 @@ public sealed class UpscalersView : UserControl
                     : detail.Preferred is { } preferred && detail.Builds.Any(entry => entry.Id == preferred)
                         ? preferred
                         : detail.Builds.FirstOrDefault()?.Id;
+            var models = detail.Builds.FirstOrDefault(entry => entry.Id == selectedBuild)?.Models ?? Array.Empty<string>();
+            selectedModel = installed?.Build == selectedBuild && installed?.Model is { } model && models.Contains(model)
+                ? model
+                : selectedModel is not null && models.Contains(selectedModel) ? selectedModel : models.FirstOrDefault();
             if (installed?.Quality is { } quality && Qualities.Contains(quality))
             {
                 selectedQuality = quality;
@@ -361,108 +569,243 @@ public sealed class UpscalersView : UserControl
         else
         {
             detail = null;
-            resultText.Text = ErrorMessage(response.ErrorCode);
+            ShowResult(ErrorMessage(response.ErrorCode), false);
         }
 
-        RenderDetail();
+        RenderView();
     }
 
-    private void RenderDetail()
+    private void RenderView()
     {
-        if (selectedAppId is null)
+        var inGame = selectedAppId is not null;
+        listPanel.Visibility = inGame ? Visibility.Collapsed : Visibility.Visible;
+        gamePanel.Visibility = inGame ? Visibility.Visible : Visibility.Collapsed;
+        if (!inGame)
         {
-            detailPanel.Visibility = Visibility.Collapsed;
+            UpdateActionState();
             return;
         }
 
-        detailPanel.Visibility = Visibility.Visible;
         var summary = games.FirstOrDefault(game => game.AppId == selectedAppId);
         detailTitle.Text = summary?.Name ?? string.Empty;
-        var showControls = detail is not null;
-        actionButton.Visibility = showControls ? Visibility.Visible : Visibility.Collapsed;
+        detailSubtitle.Text = Subtitle(summary);
+        if (!headerCoverLoaded.Equals(selectedAppId))
+        {
+            headerCoverLoaded = selectedAppId!;
+            headerImage.Source = null;
+            _ = ShowHeaderCoverAsync(selectedAppId!);
+        }
+
+        RenderStatus();
+        var choosing = detail is not null && detail.Install is null;
+        var choice = choosing ? Visibility.Visible : Visibility.Collapsed;
+        pickerPanel.Visibility = choice;
+        qualityPanel.Visibility = choice;
+        RenderBuilds();
+        RenderAdvanced();
+        UpdateActionState();
+    }
+
+    private string headerCoverLoaded = string.Empty;
+
+    private async Task ShowHeaderCoverAsync(string appId)
+    {
+        if (await CoverAsync(appId) is { } bitmap && appId == selectedAppId)
+        {
+            headerImage.Source = bitmap;
+        }
+    }
+
+    private string Subtitle(UpscalerGameSummary? summary)
+    {
         if (detail is null)
         {
-            foreach (var element in new UIElement[] { buildLabel, buildList, qualityLabel, qualityHost })
+            return string.Empty;
+        }
+
+        if (detail.Install is { Status: UpscalerGameStates.Installed } installed && !string.IsNullOrEmpty(installed.Label))
+        {
+            return installed.Label!;
+        }
+
+        if (detail.Foreign is not null || summary?.State == UpscalerGameStates.Foreign)
+        {
+            return Localized("UpscalersStateForeign");
+        }
+
+        var uses = detail.Inputs.Select(input => input.Kind).Where(OwnInputs.Contains).Select(InputName).Distinct().ToArray();
+        return uses.Length > 0 ? string.Format(Localized("UpscalersSubUses"), string.Join(", ", uses)) : string.Empty;
+    }
+
+    private static string InputName(string kind) => kind switch
+    {
+        "dlss" => "DLSS",
+        "fsr31" => "FSR 3.1",
+        "fsr2" => "FSR 2",
+        _ => "XeSS",
+    };
+
+    private void RenderStatus()
+    {
+        var title = string.Empty;
+        var sub = string.Empty;
+        if (detail is null)
+        {
+            title = loadingGame ? Localized("UpscalersLoading") : string.Empty;
+        }
+        else if (detail.Install is { } installed)
+        {
+            if (installed.Status == UpscalerGameStates.Missing)
             {
-                element.Visibility = Visibility.Collapsed;
+                title = Localized("UpscalersStateMissing");
+            }
+            else
+            {
+                title = string.IsNullOrEmpty(installed.Label) ? Localized("UpscalersStateInstalled") : string.Format(Localized("UpscalersStatusInstalled"), installed.Label);
+                sub = resultText.Text.Length == 0 ? Localized("UpscalersStatusPending") : string.Empty;
+            }
+        }
+        else if (detail.Foreign is not null || detail.Game.State == UpscalerGameStates.Foreign)
+        {
+            title = Localized("UpscalersForeignTitle");
+            sub = Localized("UpscalersErrForeign");
+        }
+        else
+        {
+            title = Localized("UpscalersStatusNone");
+        }
+
+        statusTitle.Text = title;
+        statusSub.Text = sub;
+    }
+
+    private void RenderAdvanced()
+    {
+        var exe = detail?.Exe;
+        var apis = detail is null ? Array.Empty<string>() : detail.Apis.Where(api => !string.Equals(api, "dxgi", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var any = !string.IsNullOrEmpty(exe) || apis.Length > 0;
+        advancedButton.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+        advancedButton.Content = (advancedOpen ? "▾  " : "▸  ") + Localized("UpscalersAdvanced");
+        AutomationProperties.SetName(advancedButton, Localized("UpscalersAdvanced"));
+        advancedPanel.Visibility = any && advancedOpen ? Visibility.Visible : Visibility.Collapsed;
+        advancedExe.Text = string.IsNullOrEmpty(exe) ? string.Empty : Localized("UpscalersExe") + ": " + exe;
+        advancedApis.Text = apis.Length == 0 ? string.Empty : Localized("UpscalersApis") + ": " + string.Join(", ", apis);
+    }
+
+    private sealed class BuildOption
+    {
+        public BuildOption(UpscalerBuildEntry build, string? model, string label, string? note)
+        {
+            Build = build;
+            Model = model;
+            Label = label;
+            Note = note;
+        }
+
+        public UpscalerBuildEntry Build { get; }
+
+        public string? Model { get; }
+
+        public string Label { get; }
+
+        public string? Note { get; }
+    }
+
+    private List<BuildOption> Options()
+    {
+        var options = new List<BuildOption>();
+        if (detail is null)
+        {
+            return options;
+        }
+
+        var shown = new List<UpscalerBuildEntry>();
+        foreach (var build in detail.Builds.OrderByDescending(entry => entry.Supported))
+        {
+            if (!build.Supported)
+            {
+                if (gpuFamily.StartsWith("rdna", StringComparison.Ordinal))
+                {
+                    if (detail.Builds.Any(other => other.Supported && other.Family == build.Family && other.Version == build.Version))
+                    {
+                        continue;
+                    }
+                }
+                else if (shown.Any(other => !other.Supported && other.Family == build.Family && other.Version == build.Version && other.Channel == build.Channel))
+                {
+                    continue;
+                }
             }
 
-            detailInfo.Text = loadingGame ? Localized("UpscalersLoading") : string.Empty;
-            recipeText.Text = string.Empty;
-            installedText.Text = string.Empty;
-            hintText.Text = string.Empty;
-            return;
+            shown.Add(build);
         }
 
-        var installed = detail.Install;
-        var info = new List<string>();
-        if (!string.IsNullOrEmpty(detail.Exe))
+        foreach (var build in shown)
         {
-            info.Add(detail.Exe!);
+            var name = FamilyName(build.Family) + " " + build.Version + (build.Channel == "beta" ? " " + Localized("UpscalersBeta") : string.Empty);
+            var note = new List<string>();
+            if (build.Id == detail.Preferred)
+            {
+                note.Add(Localized("UpscalersRecommended"));
+            }
+
+            if (!build.Supported)
+            {
+                note.Add(Localized("UpscalersUntested"));
+            }
+
+            if (build.DownloadBytes > 0)
+            {
+                note.Add(string.Format(Localized("UpscalersMegabytes"), Megabytes(build.DownloadBytes)));
+            }
+
+            var joined = note.Count > 0 ? string.Join(" · ", note) : null;
+            if (build.Models.Length == 0)
+            {
+                options.Add(new BuildOption(build, null, name, joined));
+                continue;
+            }
+
+            foreach (var model in build.Models)
+            {
+                options.Add(new BuildOption(build, model, name + " " + (model == "full" ? Localized("UpscalersModel_full") : model == "lite" ? "Lite" : model), joined));
+            }
         }
 
-        if (detail.Apis.Length > 0)
-        {
-            info.Add(string.Join(", ", detail.Apis));
-        }
-
-        detailInfo.Text = string.Join(" · ", info);
-        recipeText.Text = detail.Recipe is null
-            ? Localized("UpscalersRecipeNone")
-            : !detail.Recipe.Installable
-                ? Localized("UpscalersRecipeUnsupported")
-                : detail.Recipe.Status == "verified" ? Localized("UpscalersRecipeVerified") : Localized("UpscalersRecipeExperimental");
-        installedText.Text = installed is null
-            ? string.Empty
-            : string.Format(
-                Localized("UpscalersInstalledInfo"),
-                Join(installed.Build, installed.Version)
-                + (installed.Status == UpscalerGameStates.Missing ? " · " + Localized("UpscalersStateMissing") : string.Empty));
-
-        var choosing = installed is null;
-        var choice = choosing ? Visibility.Visible : Visibility.Collapsed;
-        buildLabel.Visibility = choice;
-        buildList.Visibility = choice;
-        qualityLabel.Visibility = choice;
-        qualityHost.Visibility = choice;
-        RenderBuilds();
-        UpdateActionState();
+        var repeated = options.GroupBy(option => option.Label).Where(group => group.Count() > 1).Select(group => group.Key).ToHashSet();
+        return options
+            .Select(option => repeated.Contains(option.Label) && option.Build.Id.Contains("rdna2", StringComparison.Ordinal)
+                ? new BuildOption(option.Build, option.Model, option.Label + " · RDNA 2", option.Note)
+                : option)
+            .ToList();
     }
 
     private void RenderBuilds()
     {
         buildList.Children.Clear();
-        if (detail is null)
+        if (detail is null || detail.Install is not null)
         {
             return;
         }
 
-        foreach (var build in detail.Builds)
+        foreach (var option in Options())
         {
-            var label = $"{FamilyName(build.Family)} {build.Version}";
-            if (build.DownloadBytes > 0)
+            var text = new StackPanel();
+            text.Children.Add(new TextBlock { Text = option.Label, Style = Resource<Style>("PdcBodyStyle"), TextWrapping = TextWrapping.WrapWholeWords });
+            if (option.Note is not null)
             {
-                label += " · " + string.Format(Localized("UpscalersMegabytes"), Megabytes(build.DownloadBytes));
-            }
-
-            if (build.Id == detail.Preferred)
-            {
-                label += " · " + Localized("UpscalersRecommended");
-            }
-
-            if (!build.Supported)
-            {
-                label += " · " + Localized("UpscalersUntested");
+                text.Children.Add(new TextBlock { Text = option.Note, Style = Resource<Style>("PdcCaptionStyle"), TextWrapping = TextWrapping.WrapWholeWords });
             }
 
             var chip = new Button
             {
-                Tag = build.Id,
-                Content = label,
+                Tag = option,
+                Content = text,
                 Style = Resource<Style>("PdcChipButtonStyle"),
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Padding = new Thickness(12, 8, 12, 8),
             };
+            AutomationProperties.SetName(chip, option.Label + (option.Note is not null ? ". " + option.Note : string.Empty));
             chip.Click += BuildChip_Click;
             buildList.Children.Add(chip);
         }
@@ -478,12 +821,13 @@ public sealed class UpscalersView : UserControl
 
     private void BuildChip_Click(object sender, RoutedEventArgs args)
     {
-        if (jobRunning || sender is not Button { Tag: string build })
+        if (jobRunning || sender is not Button { Tag: BuildOption option })
         {
             return;
         }
 
-        selectedBuild = build;
+        selectedBuild = option.Build.Id;
+        selectedModel = option.Model;
         UpdateActionState();
     }
 
@@ -498,11 +842,19 @@ public sealed class UpscalersView : UserControl
         UpdateActionState();
     }
 
+    private string SelectedBadge()
+    {
+        var build = detail?.Builds.FirstOrDefault(entry => entry.Id == selectedBuild);
+        return build is null
+            ? string.Empty
+            : UpscalerLabel.Badge(build.Family, build.Version, build.Models, selectedModel);
+    }
+
     private void UpdateActionState()
     {
         foreach (var chip in buildList.Children.OfType<Button>())
         {
-            var active = Equals(chip.Tag, selectedBuild);
+            var active = chip.Tag is BuildOption option && option.Build.Id == selectedBuild && option.Model == selectedModel;
             chip.Background = active ? AccentFill() : Resource<Brush>("PdcLayerBrush");
             chip.FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal;
             chip.IsEnabled = !jobRunning;
@@ -522,12 +874,16 @@ public sealed class UpscalersView : UserControl
         }
 
         experimentalToggle.IsEnabled = !jobRunning;
+        backButton.IsEnabled = !jobRunning;
         string? reason = null;
         if (detail is not null)
         {
             var summary = detail.Game;
             var installed = detail.Install is not null;
-            actionButton.Content = Localized(installed ? "UpscalersRemove" : "UpscalersInstall");
+            actionButton.Content = installed
+                ? string.Format(Localized("UpscalersDeactivate"), string.IsNullOrEmpty(detail.Install!.Label) ? Localized("UpscalersStateInstalled") : detail.Install.Label)
+                : string.Format(Localized("UpscalersActivate"), SelectedBadge());
+            actionButton.Background = installed ? Resource<Brush>("PdcLayerBrush") : AccentFill();
             if (summary.Running == true)
             {
                 reason = "running";
@@ -557,6 +913,7 @@ public sealed class UpscalersView : UserControl
             }
         }
 
+        actionButton.Visibility = detail is not null ? Visibility.Visible : Visibility.Collapsed;
         hintText.Text = !jobRunning && reason is not null ? ErrorMessage(reason) : string.Empty;
         actionButton.IsEnabled = detail is not null && !jobRunning && !loadingGame && reason is null;
     }
@@ -570,14 +927,14 @@ public sealed class UpscalersView : UserControl
 
         var appId = selectedAppId;
         var installing = detail.Install is null;
-        resultText.Text = string.Empty;
+        ShowResult(string.Empty, true);
         jobRunning = true;
         jobKind = installing ? "install" : "uninstall";
         jobAppId = appId;
         ShowProgress(null);
         UpdateActionState();
         var response = installing
-            ? await client.InstallAsync(appId, selectedBuild ?? string.Empty, selectedQuality, null, Experimental)
+            ? await client.InstallAsync(appId, selectedBuild ?? string.Empty, selectedQuality, selectedModel, Experimental)
             : await client.UninstallAsync(appId, Experimental);
         if (response.Status == UpscalersResponseStatus.Ok && response.Job is { } job)
         {
@@ -588,26 +945,33 @@ public sealed class UpscalersView : UserControl
 
         if (response.ErrorCode == "busy" && response.Job is { State: UpscalerJobStates.Running } running)
         {
-            ResumeJob(running);
-            resultText.Text = ErrorMessage("busy");
+            await ResumeJobAsync(running);
+            ShowResult(ErrorMessage("busy"), false);
             return;
         }
 
         jobRunning = false;
         HideProgress();
-        resultText.Text = ErrorMessage(response.ErrorCode ?? "upscalers_response_unavailable");
+        ShowResult(ErrorMessage(response.ErrorCode ?? "upscalers_response_unavailable"), false);
         UpdateActionState();
     }
 
-    private void ResumeJob(UpscalerJobStatus job)
+    private async Task ResumeJobAsync(UpscalerJobStatus job)
     {
         jobRunning = true;
         jobKind = job.Kind;
         jobAppId = job.AppId;
-        RenderGames();
-        UpdateActionState();
+        if (selectedAppId != job.AppId)
+        {
+            selectedAppId = job.AppId;
+            selectionGeneration++;
+            detail = null;
+        }
+
         ShowProgress(job);
         StartPolling();
+        await LoadOverviewAsync();
+        ShowProgress(job);
     }
 
     private void StartPolling()
@@ -661,6 +1025,7 @@ public sealed class UpscalersView : UserControl
         var message = job is null
             ? Localized("UpscalersUnconfirmed")
             : job.State == UpscalerJobStates.Error ? ErrorMessage(job.Error) : string.Empty;
+        var good = false;
         jobRunning = false;
         await LoadOverviewAsync();
         if (job is { State: UpscalerJobStates.Done })
@@ -673,18 +1038,27 @@ public sealed class UpscalersView : UserControl
             }
             else if (kind == "install")
             {
-                message = installed is not null && installed.Status == UpscalerGameStates.Installed
-                    ? string.Format(Localized("UpscalersInstalledOk"), Join(installed.Build, installed.Version))
+                good = installed is not null && installed.Status == UpscalerGameStates.Installed;
+                message = good
+                    ? string.Format(Localized("UpscalersInstalledOk"), installed!.Label ?? string.Empty)
                     : Localized("UpscalersUnconfirmed");
             }
             else
             {
-                message = installed is null ? Localized("UpscalersRemovedOk") : Localized("UpscalersUnconfirmed");
+                good = installed is null;
+                message = good ? Localized("UpscalersRemovedOk") : Localized("UpscalersUnconfirmed");
             }
         }
 
-        resultText.Text = message;
+        ShowResult(message, good);
+        RenderStatus();
         UpdateActionState();
+    }
+
+    private void ShowResult(string text, bool good)
+    {
+        resultText.Text = text;
+        resultText.Foreground = Resource<Brush>(good ? "PdcOkBrush" : "PdcWarnBrush");
     }
 
     private void ShowProgress(UpscalerJobStatus? job)
@@ -700,18 +1074,25 @@ public sealed class UpscalersView : UserControl
             "restore" => Localized("UpscalersProgressRestore"),
             _ => Localized("UpscalersProgressPrepare"),
         };
-        progressBar.Visibility = Visibility.Visible;
+        progressPanel.Visibility = Visibility.Visible;
         progressBar.IsIndeterminate = !(stage == "download" && total > 0);
         if (!progressBar.IsIndeterminate)
         {
             progressBar.Value = Math.Min(1.0, (double)done / total);
         }
+
+        if (!progressShown)
+        {
+            progressShown = true;
+            progressPanel.StartBringIntoView();
+        }
     }
 
     private void HideProgress()
     {
+        progressShown = false;
         progressText.Text = string.Empty;
-        progressBar.Visibility = Visibility.Collapsed;
+        progressPanel.Visibility = Visibility.Collapsed;
         progressBar.IsIndeterminate = false;
     }
 
@@ -742,6 +1123,14 @@ public sealed class UpscalersView : UserControl
         };
         return Localized(key);
     }
+
+    private static Border Card(UIElement child) => new()
+    {
+        Padding = new Thickness(12),
+        CornerRadius = Resource<CornerRadius>("PdcRadiusInset"),
+        Background = Resource<Brush>("PdcLayerBrush"),
+        Child = child,
+    };
 
     private static Brush AccentFill()
     {

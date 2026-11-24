@@ -54,6 +54,204 @@ public sealed class UpscalerServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task OverviewNamesTheAdapterAndLabelsTheInstalledBuildLikeLinux()
+    {
+        var installed = AddGame("200", "Patched");
+        WriteManifest(Target(installed));
+        var service = Service(store => store.SetInstall("200", Install("fsr-3.1", Target(installed)), 10), gpu: new GpuFamilyResult("nvidia", "pci", "NVIDIA GeForce RTX 5090 Laptop GPU"));
+
+        var overview = (await service.HandleAsync(UpscalersRequest.Overview(), CancellationToken.None)).Overview!;
+
+        Assert.Equal(("nvidia", "NVIDIA GeForce RTX 5090 Laptop GPU"), (overview.Gpu, overview.GpuName));
+        Assert.Equal("FSR 3.1.5", overview.Games.Single().Label);
+        var detail = (await service.HandleAsync(UpscalersRequest.Game("200"), CancellationToken.None)).Game!;
+        Assert.Equal("FSR 3.1.5", detail.Install!.Label);
+    }
+
+    [Fact]
+    public async Task OnlyGamesAreListedNeverSteamworksRedistributablesOrTools()
+    {
+        AddGame("100", "Real Game");
+        AddGame("228980", "Steamworks Common Redistributables");
+        AddGame("1493710", "Proton Experimental");
+        AddGame("999", "Not cached");
+        WriteAppInfo(("100", "Game"), ("1493710", "Tool"));
+
+        var overview = (await Service().HandleAsync(UpscalersRequest.Overview(), CancellationToken.None)).Overview!;
+
+        Assert.Equal(new[] { "100", "999" }, overview.Games.Select(game => game.AppId).OrderBy(id => id, StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
+    public async Task RedistributablesStayOutEvenWhenSteamsCacheIsUnreadable()
+    {
+        AddGame("100", "Real Game");
+        AddGame("228980", "Steamworks Common Redistributables");
+        Directory.CreateDirectory(Path.Combine(library, "appcache"));
+        File.WriteAllBytes(Path.Combine(library, "appcache", "appinfo.vdf"), new byte[] { 9, 9, 9 });
+
+        var overview = (await Service().HandleAsync(UpscalersRequest.Overview(), CancellationToken.None)).Overview!;
+
+        Assert.Equal("100", overview.Games.Single().AppId);
+    }
+
+    [Fact]
+    public async Task ACoverIsFoundShrunkAndKeptInMemory()
+    {
+        AddGame("100", "Plain");
+        Write(Path.Combine(library, "appcache", "librarycache", "100", "abc123"), "library_600x900.jpg", "portrait");
+        Write(Path.Combine(library, "appcache", "librarycache", "100"), "header.jpg", "header");
+        var scaled = new List<string>();
+        var service = Service(scaleCover: (source, width) =>
+        {
+            scaled.Add(Encoding.UTF8.GetString(source) + width);
+            return new ScaledCover(new byte[] { 1, 2, 3 }, UpscalerCover.Jpeg);
+        });
+
+        var first = await service.HandleAsync(UpscalersRequest.Cover("100"), CancellationToken.None);
+        var again = await service.HandleAsync(UpscalersRequest.Cover("100"), CancellationToken.None);
+
+        Assert.Equal(UpscalersResponseStatus.Ok, first.Status);
+        Assert.Equal((UpscalerCover.Jpeg, Convert.ToBase64String(new byte[] { 1, 2, 3 })), (first.Cover!.Mime, first.Cover.Data));
+        Assert.Equal(first.Cover.Data, again.Cover!.Data);
+        Assert.Equal(new[] { "portrait" + UpscalersWireCodec.MaximumCoverWidth }, scaled);
+    }
+
+    [Fact]
+    public async Task ACoverFallsBackToTheHeaderAndAGameWithoutOneIsRejected()
+    {
+        AddGame("100", "Plain");
+        AddGame("200", "Bare");
+        Write(Path.Combine(library, "appcache", "librarycache"), "100_header.jpg", "legacy header");
+        var service = Service(scaleCover: (source, _) => new ScaledCover(source, UpscalerCover.Jpeg));
+
+        var found = await service.HandleAsync(UpscalersRequest.Cover("100"), CancellationToken.None);
+        var none = await service.HandleAsync(UpscalersRequest.Cover("200"), CancellationToken.None);
+
+        Assert.Equal("legacy header", Encoding.UTF8.GetString(Convert.FromBase64String(found.Cover!.Data)));
+        Assert.Equal((UpscalersResponseStatus.Rejected, "no_cover"), (none.Status, none.ErrorCode));
+    }
+
+    [Fact]
+    public async Task AnImageTheScalerCannotReadIsRejected()
+    {
+        AddGame("100", "Plain");
+        Write(Path.Combine(library, "appcache", "librarycache", "100"), "library_600x900.jpg", "not an image");
+        var service = Service(scaleCover: (_, _) => null);
+
+        var response = await service.HandleAsync(UpscalersRequest.Cover("100"), CancellationToken.None);
+
+        Assert.Equal((UpscalersResponseStatus.Rejected, "no_cover"), (response.Status, response.ErrorCode));
+    }
+
+    [Fact]
+    public void ARealPictureIsShrunkToTheCoverWidthAndKeepsItsFormat()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var scaled = CoverImages.Scale(Png(600, 900), UpscalersWireCodec.MaximumCoverWidth);
+
+        Assert.NotNull(scaled);
+        Assert.Equal(UpscalerCover.Png, scaled!.Mime);
+        Assert.InRange(scaled.Data.Length, 1, UpscalersWireCodec.MaximumCoverBytes);
+        Assert.Equal((200, 300), (ReadInt(scaled.Data, 16), ReadInt(scaled.Data, 20)));
+        Assert.Null(CoverImages.Scale(Encoding.UTF8.GetBytes("nope"), 200));
+    }
+
+    private static int ReadInt(byte[] data, int offset) => (data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3];
+
+    private static byte[] Png(int width, int height)
+    {
+        var raw = new byte[(width * 3 + 1) * height];
+        for (var row = 0; row < height; row++)
+        {
+            for (var column = 0; column < width; column++)
+            {
+                raw[row * (width * 3 + 1) + 1 + column * 3] = (byte)(column * 255 / width);
+            }
+        }
+
+        using var compressed = new MemoryStream();
+        using (var zlib = new System.IO.Compression.ZLibStream(compressed, System.IO.Compression.CompressionLevel.Fastest, leaveOpen: true))
+        {
+            zlib.Write(raw);
+        }
+
+        using var output = new MemoryStream();
+        output.Write(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A });
+        var header = new byte[13];
+        BitConverter.GetBytes(IPAddress.HostToNetworkOrder(width)).CopyTo(header, 0);
+        BitConverter.GetBytes(IPAddress.HostToNetworkOrder(height)).CopyTo(header, 4);
+        header[8] = 8;
+        header[9] = 2;
+        Chunk(output, "IHDR", header);
+        Chunk(output, "IDAT", compressed.ToArray());
+        Chunk(output, "IEND", Array.Empty<byte>());
+        return output.ToArray();
+    }
+
+    private static void Chunk(Stream output, string type, byte[] data)
+    {
+        output.Write(BitConverter.GetBytes(IPAddress.HostToNetworkOrder(data.Length)));
+        var body = Encoding.ASCII.GetBytes(type).Concat(data).ToArray();
+        output.Write(body);
+        uint crc = 0xFFFFFFFF;
+        foreach (var value in body)
+        {
+            crc ^= value;
+            for (var bit = 0; bit < 8; bit++)
+            {
+                crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320 : crc >> 1;
+            }
+        }
+
+        output.Write(BitConverter.GetBytes(IPAddress.HostToNetworkOrder((int)~crc)));
+    }
+
+    private void WriteAppInfo(params (string AppId, string Type)[] apps)
+    {
+        var entries = new MemoryStream();
+        using (var writer = new BinaryWriter(entries, Encoding.UTF8, leaveOpen: true))
+        {
+            foreach (var (appId, type) in apps)
+            {
+                var body = new MemoryStream();
+                using (var data = new BinaryWriter(body, Encoding.UTF8, leaveOpen: true))
+                {
+                    data.Write(new byte[60]);
+                    data.Write((byte)0);
+                    data.Write(Encoding.UTF8.GetBytes("appinfo\0"));
+                    data.Write((byte)0);
+                    data.Write(Encoding.UTF8.GetBytes("common\0"));
+                    data.Write((byte)1);
+                    data.Write(Encoding.UTF8.GetBytes("type\0" + type + "\0"));
+                    data.Write(new byte[] { 8, 8, 8 });
+                }
+
+                writer.Write(uint.Parse(appId));
+                writer.Write((uint)body.Length);
+                writer.Write(body.ToArray());
+            }
+
+            writer.Write(0u);
+        }
+
+        var file = new MemoryStream();
+        using (var writer = new BinaryWriter(file, Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(0x07564428u);
+            writer.Write(1u);
+            writer.Write(entries.ToArray());
+        }
+
+        Directory.CreateDirectory(Path.Combine(library, "appcache"));
+        File.WriteAllBytes(Path.Combine(library, "appcache", "appinfo.vdf"), file.ToArray());
+    }
+
+    [Fact]
     public async Task OverviewReportsARunningAndAnUpdatingGame()
     {
         var busy = AddGame("100", "Open");
@@ -260,7 +458,7 @@ public sealed class UpscalerServiceTests : IDisposable
         return UpscalersWireCodec.DeserializeResponse(line!);
     }
 
-    private UpscalerService Service(Action<UpscalerStateStore>? seed = null, Action? prepare = null)
+    private UpscalerService Service(Action<UpscalerStateStore>? seed = null, Action? prepare = null, GpuFamilyResult? gpu = null, Func<byte[], int, ScaledCover?>? scaleCover = null)
     {
         var store = new UpscalerStateStore(StatePath);
         seed?.Invoke(store);
@@ -272,7 +470,7 @@ public sealed class UpscalerServiceTests : IDisposable
             PhysicalFileSystem.Instance,
             new SteamGames(PhysicalFileSystem.Instance, () => new[] { library }),
             () => running.ToList(),
-            () => new GpuFamilyResult("rdna35", "name"),
+            () => gpu ?? new GpuFamilyResult("rdna35", "name"),
             () => "rog_ally_x",
             () => 1000,
             (_, _) => { },
@@ -280,7 +478,8 @@ public sealed class UpscalerServiceTests : IDisposable
             {
                 deferred.Add(job);
                 return Task.CompletedTask;
-            });
+            },
+            scaleCover);
     }
 
     private async Task RunDeferredAsync()
