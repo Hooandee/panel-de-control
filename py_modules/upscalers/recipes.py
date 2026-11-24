@@ -67,6 +67,8 @@ class Recipe:
     protect_dlls: bool = False
     # (file under the prefix's user folder, XML element, text) set on install and put back on removal.
     game_config: tuple[tuple[str, str, str], ...] = ()
+    # False when the game fails to start with FSR 4's loader in place of its FSR 3.1 amd_fidelityfx_dx12.dll.
+    legacy_ffx_swap: bool = True
 
 
 RECIPES: dict[str, Recipe] = {
@@ -110,7 +112,10 @@ RECIPES: dict[str, Recipe] = {
         # RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it.
         Recipe("1174180", game_config=(("Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml", "API",
                                         "kSettingAPI_DX12"),)),
-        Recipe("2322010", anr_settings=(("Frame Generation (Generación de fotogramas)", "Nvidia DLSS-FG"),)),
+        # God of War Ragnarök shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped (PDC-XAZS);
+        # OptiScaler on the same install reached FSR.
+        Recipe("2322010", anr_settings=(("Frame Generation (Generación de fotogramas)", "Nvidia DLSS-FG"),),
+               legacy_ffx_swap=False),
     )
 }
 

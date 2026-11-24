@@ -427,8 +427,8 @@ class UpscalerService:
         entry = self._game_state(appid)
         identity = self._identity(installed, entry)
         recipe = self._recipe(appid, identity, installed)
-        analysis = NATIVE_ANALYSIS if installed.native else games.analyze(
-            installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
+        analysis = NATIVE_ANALYSIS if installed.native else _dll_route(games.analyze(
+            installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe), recipe)
         install = entry.get("install")
         automatic = None
         recipe_info = _recipe_info(recipe)
@@ -779,7 +779,8 @@ class UpscalerService:
         if games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
         recipe = self._recipe(appid, self._identity(installed, self._game_state(appid)), installed)
-        analysis = games.analyze(installed.root, self._game_state(appid).get("exe"), recipe.exe if recipe else installed.exe)
+        analysis = _dll_route(games.analyze(installed.root, self._game_state(appid).get("exe"),
+                                            recipe.exe if recipe else installed.exe), recipe)
         if not analysis["target"]:
             raise UpscalerError("no_exe")
         if analysis["anti_cheat"] and not confirm_anti_cheat:
@@ -1158,7 +1159,8 @@ class UpscalerService:
         if (root / games.MANIFEST_DIR).exists():
             raise UpscalerError("dll_conflict")
         if left is not None:
-            analysis = games.analyze(root, entry.get("exe"), analysis["exe"])
+            recipe = self._recipe(appid, self._identity(installed, entry), installed)
+            analysis = _dll_route(games.analyze(root, entry.get("exe"), analysis["exe"]), recipe)
             targets = analysis.get("dll_targets", [])
         if not targets:
             raise UpscalerError("dll_no_target")
@@ -2297,7 +2299,7 @@ class UpscalerService:
                 report["proton_prefix"] = diagnostics.proton_prefix(self.home, appid)
                 report["game_crash"] = diagnostics.game_crash(self.home, appid)
         info = _recipe_info(recipe)
-        report["recipe"] = diagnostics.fields(info, ("status", "broken", "linux", "optipatcher", "proxy", "declined_proxy"))
+        report["recipe"] = diagnostics.fields(info, ("status", "broken", "linux", "optipatcher", "proxy", "declined_proxy", "dll_blocked"))
         mod = self.user_mods.status(appid)
         if mod:
             report["mod"] = {"count": mod["count"], "native_dlls": mod["native_dlls"],
@@ -2471,6 +2473,16 @@ def _set_writable(path: Path, writable: bool) -> None:
         pass
 
 
+def _dll_route(analysis: dict, recipe) -> dict:
+    """The analysis without the FSR 3.1 library a recipe says the game cannot start without."""
+    if not recipe or getattr(recipe, "legacy_ffx_swap", True) or not analysis.get("dll_targets"):
+        return analysis
+    kept = [path for path in analysis["dll_targets"] if Path(path).name.lower() != "amd_fidelityfx_dx12.dll"]
+    if len(kept) == len(analysis["dll_targets"]):
+        return analysis
+    return {**analysis, "dll_targets": kept, "dll_blocked": "recipe_legacy_ffx"}
+
+
 def _recipe_proxy(recipe) -> str | None:
     if not recipe or recipe.proxy not in catalog.PROXIES:
         return None
@@ -2485,6 +2497,7 @@ def _recipe_info(recipe) -> dict | None:
     return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": _recipe_proxy(recipe), "args": list(recipe.args),
             # The wiki's proxy when Panel installs another one instead: the first suspect when OptiScaler loads idle.
             "declined_proxy": recipe.proxy if recipe.proxy and recipe.proxy != _recipe_proxy(recipe) else None,
+            "dll_blocked": None if getattr(recipe, "legacy_ffx_swap", True) else "recipe_legacy_ffx",
             "status": recipe.status, "inputs": list(recipe.inputs), "linux": recipe.linux, "optipatcher": recipe.optipatcher,
             "page": recipe.page, "settings": dict(recipe.wiki_settings), "suggestions": dict(recipe.wiki_suggestions),
             "recommended_input": recipe.recommended_input,
