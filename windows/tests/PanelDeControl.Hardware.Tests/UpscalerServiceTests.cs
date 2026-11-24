@@ -289,7 +289,8 @@ public sealed class UpscalerServiceTests : IDisposable
         Assert.False(detail.AntiCheat);
         Assert.Null(detail.Install);
         Assert.Contains(detail.Builds, build => build.Id == "fsr-3.1");
-        Assert.DoesNotContain(detail.Builds, build => build.Id.EndsWith("-dll", StringComparison.Ordinal));
+        Assert.Contains(detail.Builds, build => build.Id.EndsWith("-dll", StringComparison.Ordinal));
+        Assert.DoesNotContain(detail.Builds, build => build.Id == "hlx-fsr4");
         Assert.Equal(detail.Preferred, Data.Catalog.Preferred["rdna35"]);
     }
 
@@ -353,7 +354,7 @@ public sealed class UpscalerServiceTests : IDisposable
     [InlineData("nope", null, null, "unknown_build")]
     [InlineData("fsr-3.1", "ultra-fast", null, "invalid_quality")]
     [InlineData("fsr-3.1", null, "no-such-model", "invalid_model")]
-    [InlineData("fsr-4.1.2-dll", null, null, "engine_unsupported")]
+    [InlineData("hlx-fsr4", null, null, "engine_unsupported")]
     public async Task BadChoicesAreRefusedBeforeAnyJob(string build, string? quality, string? model, string code)
     {
         AddGame("100", "Plain");

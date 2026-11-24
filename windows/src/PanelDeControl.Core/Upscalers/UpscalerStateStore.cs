@@ -319,6 +319,9 @@ public sealed class UpscalerStateStore
                 Model = Text(options?.Get("model")),
             },
             FrameGenRoute = Text(install.Get("fg_route")),
+            DllTargets = install.Get("dll_targets") is DataArray targets
+                ? targets.Items.OfType<DataString>().Select(item => item.Value).ToList()
+                : new List<string>(),
             Managed = managed,
             Components = components,
         };
@@ -353,6 +356,7 @@ public sealed class UpscalerStateStore
                 Member("sha256", new DataString(pair.Value)),
             })).ToList())),
             Member("managed", new DataArray(install.Managed.Select(key => (DataValue)new DataString(key)).ToList())),
+            Member("dll_targets", new DataArray(install.DllTargets.Select(path => (DataValue)new DataString(path)).ToList())),
         });
     }
 

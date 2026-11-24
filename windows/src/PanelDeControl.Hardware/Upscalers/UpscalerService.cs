@@ -222,7 +222,7 @@ public sealed class UpscalerService : IUpscalersController
 
         var generation = Gpu.Generation;
         var builds = UpscalerPlanner.Describe(data.Catalog, generation, Device ?? "")
-            .Where(build => build.Engine == "optiscaler" && build.Available)
+            .Where(build => build.Engine is "optiscaler" or "dll" && build.Available)
             .Select(build => new UpscalerBuildEntry
             {
                 Id = build.Id,
@@ -273,7 +273,7 @@ public sealed class UpscalerService : IUpscalersController
             throw new UpscalerException("unknown_build");
         }
 
-        if (build.Engine != "optiscaler")
+        if (build.Engine is not ("optiscaler" or "dll"))
         {
             throw new UpscalerException("engine_unsupported");
         }
@@ -290,7 +290,7 @@ public sealed class UpscalerService : IUpscalersController
 
         var app = steam.Find(appId) ?? throw new UpscalerException("not_installed");
         var recipe = Recipe(app);
-        if (recipe is not null && (recipe.Dependencies.Count > 0 || recipe.Configuration.Count > 0))
+        if (build.Engine == "optiscaler" && recipe is not null && (recipe.Dependencies.Count > 0 || recipe.Configuration.Count > 0))
         {
             throw new UpscalerException("recipe_unsupported");
         }
@@ -338,16 +338,24 @@ public sealed class UpscalerService : IUpscalersController
                 }
             });
             var previous = store.Install(appId);
-            var installer = new OptiScalerInstaller(catalog, cache, Gpu.Generation);
-            var request = new OptiScalerInstallRequest { Build = buildId, Choice = choice };
-            var install = await installer.InstallAsync(
-                () => Analyze(app, recipe),
-                recipe,
-                request,
-                previous?.Install,
-                folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder)),
-                progress,
-                CancellationToken.None).ConfigureAwait(false);
+            var install = plan.Engine == "dll"
+                ? await new DllInstaller(catalog, cache).InstallAsync(
+                    buildId,
+                    app.Root,
+                    () => Analyze(app, recipe),
+                    recipe?.LegacyFfxSwap ?? true,
+                    previous?.Install,
+                    false,
+                    progress,
+                    CancellationToken.None).ConfigureAwait(false)
+                : await new OptiScalerInstaller(catalog, cache, Gpu.Generation).InstallAsync(
+                    () => Analyze(app, recipe),
+                    recipe,
+                    new OptiScalerInstallRequest { Build = buildId, Choice = choice },
+                    previous?.Install,
+                    folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder)),
+                    progress,
+                    CancellationToken.None).ConfigureAwait(false);
             try
             {
                 var installedAt = clock();

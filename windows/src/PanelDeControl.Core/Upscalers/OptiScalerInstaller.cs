@@ -21,6 +21,9 @@ public sealed class InstalledUpscaler
 
     public string? FrameGenRoute { get; set; }
 
+    /// <summary>The game libraries the DLL mode swapped, relative to <see cref="Target"/>.</summary>
+    public IReadOnlyList<string> DllTargets { get; set; } = Array.Empty<string>();
+
     /// <summary>OptiScaler.ini keys Panel owns, sorted as Linux stores them.</summary>
     public IReadOnlyList<string> Managed { get; set; } = Array.Empty<string>();
 

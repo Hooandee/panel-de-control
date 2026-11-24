@@ -109,6 +109,9 @@ public sealed class GameRecipe
 
     public IReadOnlyList<string> OptiScalerRootFiles { get; internal set; } = Array.Empty<string>();
 
+    /// <summary>False when swapping the game's own <c>amd_fidelityfx_dx12.dll</c> breaks it (DLL mode).</summary>
+    public bool LegacyFfxSwap { get; internal set; } = true;
+
     public bool ReframeworkUpscaler { get; internal set; }
 
     public bool OptiScalerFrameGeneration { get; internal set; } = true;
