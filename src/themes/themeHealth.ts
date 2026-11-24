@@ -214,18 +214,16 @@ export function displayReport(display: SteamDisplayState): Record<string, number
   };
 }
 
-/** Catalog themes that restyle the interface: a keyboard theme only dresses Steam's keyboard and runs next to them. */
-export function interfaceThemeNames(releases: Iterable<Pick<PublishedThemeRelease, "cssLoaderName" | "exclusiveGroup">>): Set<string> {
-  return new Set([...releases].filter((release) => !isKeyboardTheme(release)).map((release) => release.cssLoaderName));
-}
-
-// Without the catalog there is no telling keyboard themes apart: every theme of ours counts, as before #1488.
-export function interfaceOrKeep(
+/**
+ * Catalog themes that restyle the interface: a keyboard theme only dresses Steam's keyboard and runs next to them.
+ * Without the catalog there is no telling them apart, so every theme of ours (`ours`) counts.
+ */
+export function interfaceThemeNames(
   releases: Iterable<Pick<PublishedThemeRelease, "cssLoaderName" | "exclusiveGroup">>,
-  keep: ReadonlySet<string>,
+  ours: ReadonlySet<string>,
 ): ReadonlySet<string> {
-  const names = interfaceThemeNames(releases);
-  return names.size ? names : keep;
+  const names = new Set([...releases].filter((release) => !isKeyboardTheme(release)).map((release) => release.cssLoaderName));
+  return names.size ? names : ours;
 }
 
 export function hooandeeNames(backend: ThemeHealthBackend, catalogNames: Iterable<string>): Set<string> {
@@ -256,7 +254,7 @@ export function diagnoseThemeHealth(
     .map((theme) => theme.displayName || theme.name);
   const activeProfiles = foreign.filter((theme) => profiles.has(theme.name)).map((theme) => theme.displayName || theme.name);
   // Someone's own CSS Loader theme only competes with an interface theme of ours; next to a keyboard
-  // theme or with none of ours on, it is their setup, not a problem to clean up (#1488).
+  // theme or with none of ours on, it is their setup, not a problem to clean up.
   const oursActive = enabled.some((theme) => interfaceThemes.has(theme.name));
   if (oursActive && others.length) findings.push({ id: "other_active", severity: "problem", names: others });
   if (oursActive && activeProfiles.length) findings.push({ id: "profile_active", severity: "problem", names: activeProfiles });

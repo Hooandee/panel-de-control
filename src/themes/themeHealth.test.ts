@@ -275,10 +275,12 @@ describe("CSS Loader styles", () => {
   });
 
   it("never counts a keyboard theme as a second interface theme", () => {
+    const ours = new Set(["Hooandee Vida", "Hooandee Terciopelo"]);
     const names = interfaceThemeNames([
       { cssLoaderName: "Hooandee Vida" },
       { cssLoaderName: "Hooandee Terciopelo", exclusiveGroup: "keyboard" },
-    ]);
+    ], ours);
     expect([...names]).toEqual(["Hooandee Vida"]);
+    expect(interfaceThemeNames([], ours)).toBe(ours);
   });
 });

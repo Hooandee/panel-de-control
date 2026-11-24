@@ -63,8 +63,6 @@ export function gameHero(appid: number | string): { url: string; source: HeroSou
   return { url: libraryHeroUrl(appid), source: "plain" };
 }
 
-export const gameHeroUrl = (appid: number | string): string => gameHero(appid).url;
-
 const APP_ART = /\/(?:assets|customimages)\/(\d+)(?:[_/.p])/;
 
 /** The game a piece of Steam art belongs to (store assets, or a non-Steam shortcut's custom art). */

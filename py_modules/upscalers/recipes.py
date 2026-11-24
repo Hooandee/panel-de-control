@@ -112,8 +112,7 @@ RECIPES: dict[str, Recipe] = {
         # RDR2 starts in Vulkan, where FSR 2 through OptiScaler quits the game; DirectX 12 runs it.
         Recipe("1174180", game_config=(("Documents/Rockstar Games/Red Dead Redemption 2/Settings/system.xml", "API",
                                         "kSettingAPI_DX12"),)),
-        # God of War Ragnarök shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped (PDC-XAZS);
-        # OptiScaler on the same install reached FSR.
+        # God of War Ragnarök shows a Windows error at start once its amd_fidelityfx_dx12.dll is swapped; OptiScaler works.
         Recipe("2322010", anr_settings=(("Frame Generation (Generación de fotogramas)", "Nvidia DLSS-FG"),),
                legacy_ffx_swap=False),
     )
@@ -242,12 +241,12 @@ def with_engine(recipe: Recipe | None, appid: str, root: Path) -> Recipe | None:
     # REFramework opens its own menu with Insert too: OptiScaler's moves to Home (VK 0x24).
     keys = {"ini": {**base.ini, "Menu.ShortcutKey": "0x24"}, "menu_key": "home"}
     files = dict(base.files)
-    if "reframework-nightly" not in files.values() and not any(
-            name.lower() == "dinput8.dll" for name in (*files, *_dependency_files(base))):
+    placed = {name.lower() for name in (*files, *_dependency_files(base))}
+    if "reframework-nightly" not in files.values() and "dinput8.dll" not in placed:
         files.update(REFRAMEWORK)
-    dinput8 = any(name.lower() == "dinput8.dll" for name in (*files, *_dependency_files(base)))
+        placed.add("dinput8.dll")
     native_dlls = {}
-    for name in (*base.native_dlls, *(("dinput8",) if dinput8 else ())):
+    for name in (*base.native_dlls, *(("dinput8",) if "dinput8.dll" in placed else ())):
         native_dlls.setdefault(name.lower(), name)
     return replace(base, files=files, native_dlls=tuple(native_dlls.values()),
                    needs=tuple(n for n in base.needs if n != "reframework"), **keys)

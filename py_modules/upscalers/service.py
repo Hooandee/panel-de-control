@@ -2474,28 +2474,26 @@ def _set_writable(path: Path, writable: bool) -> None:
 
 
 def _dll_route(analysis: dict, recipe) -> dict:
-    """The analysis without the FSR 3.1 library a recipe says the game cannot start without."""
-    if not recipe or getattr(recipe, "legacy_ffx_swap", True) or not analysis.get("dll_targets"):
+    """The analysis without the FSR 3.1 library a recipe says must stay the game's own."""
+    if not recipe or recipe.legacy_ffx_swap:
         return analysis
-    kept = [path for path in analysis["dll_targets"] if Path(path).name.lower() != "amd_fidelityfx_dx12.dll"]
-    if len(kept) == len(analysis["dll_targets"]):
-        return analysis
-    return {**analysis, "dll_targets": kept, "dll_blocked": "recipe_legacy_ffx"}
+    targets = analysis.get("dll_targets", [])
+    kept = [path for path in targets if Path(path).name.lower() != "amd_fidelityfx_dx12.dll"]
+    return analysis if len(kept) == len(targets) else {**analysis, "dll_targets": kept, "dll_blocked": "recipe_legacy_ffx"}
 
 
 def _recipe_proxy(recipe) -> str | None:
-    if not recipe or recipe.proxy not in catalog.PROXIES:
-        return None
-    return recipe.proxy
+    return recipe.proxy if recipe and recipe.proxy in catalog.PROXIES else None
 
 
 def _recipe_info(recipe) -> dict | None:
     if not recipe:
         return None
-    return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": _recipe_proxy(recipe), "args": list(recipe.args),
+    proxy = _recipe_proxy(recipe)
+    return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": proxy, "args": list(recipe.args),
             # A wiki proxy Panel cannot place: the first suspect when OptiScaler loads idle.
-            "declined_proxy": recipe.proxy if recipe.proxy and recipe.proxy != _recipe_proxy(recipe) else None,
-            "dll_blocked": None if getattr(recipe, "legacy_ffx_swap", True) else "recipe_legacy_ffx",
+            "declined_proxy": recipe.proxy if recipe.proxy and not proxy else None,
+            "dll_blocked": None if recipe.legacy_ffx_swap else "recipe_legacy_ffx",
             "status": recipe.status, "inputs": list(recipe.inputs), "linux": recipe.linux, "optipatcher": recipe.optipatcher,
             "page": recipe.page, "settings": dict(recipe.wiki_settings), "suggestions": dict(recipe.wiki_suggestions),
             "recommended_input": recipe.recommended_input,

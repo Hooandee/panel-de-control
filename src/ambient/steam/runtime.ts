@@ -750,6 +750,8 @@ export class AmbientRuntime {
 
   private async resolve(ref: string): Promise<string | null> {
     const effective = this.optimized.get(`${ref}|${this.settings()?.background.videoQuality ?? "fluid"}`) ?? ref;
+    // Not cached: custom art or a newly downloaded hash can change the hero at any time.
+    if (effective.startsWith("steam:")) return gameHero(effective.slice(6)).url;
     const cached = this.urls.get(effective);
     if (cached) return cached;
     if (this.noSpace.has(effective)) return null;
@@ -758,8 +760,7 @@ export class AmbientRuntime {
     const generation = this.cacheGeneration;
     const request = (async () => {
       let url: string | null = null;
-      if (effective.startsWith("steam:")) url = gameHero(effective.slice(6)).url;
-      else if (effective.startsWith("remote:")) {
+      if (effective.startsWith("remote:")) {
         const collection = this.snapshot.items.find((item) => item.ref === ref)?.collection ?? "";
         const served = await rpc.cacheAmbientRemote(effective.slice(7), collection).catch(() => ({ error: "unreachable" }) as rpc.Served);
         if (this.stopped || generation !== this.cacheGeneration) return null;
@@ -767,7 +768,7 @@ export class AmbientRuntime {
         url = "url" in served ? served.url : null;
       } else url = await rpc.getAmbientMediaUrl(effective).catch(() => null);
       if (this.stopped || generation !== this.cacheGeneration) return null;
-      if (url && !effective.startsWith("steam:")) this.urls.set(effective, url);
+      if (url) this.urls.set(effective, url);
       return url;
     })();
     this.pendingUrls.set(effective, request);

@@ -421,15 +421,17 @@ def _steam_ui_exception_detail(line: str) -> dict:
     return detail
 
 
+def _frontend_origin(plugin_name: str) -> str:
+    return _KNOWN_FRONTEND_ORIGINS.get(re.sub(r"[^a-z0-9]", "", plugin_name.lower()), "other_plugin")
+
+
 def _frontend_exception_detail(line: str) -> dict:
     error = _FRONTEND_EXCEPTION_TYPE.search(line)
     origin = "decky"
     match = _DECKY_ORIGIN.search(line)
     path = (match.group("path") if match else None) or ""
     if path.startswith("/plugins/"):
-        folder = urllib.parse.unquote(path[len("/plugins/"):].split("/", 1)[0])
-        slug = re.sub(r"[^a-z0-9]", "", folder.lower())
-        origin = _KNOWN_FRONTEND_ORIGINS.get(slug, "other_plugin")
+        origin = _frontend_origin(urllib.parse.unquote(path[len("/plugins/"):].split("/", 1)[0]))
     detail = {
         "error_type": error.group("error") if error else "unknown",
         "origin": origin,
@@ -541,11 +543,10 @@ def frontend_crash_diagnostics(
                 plugin_load_error = True
             match = _PLUGIN_LOAD_EXCEPTION.search(raw_line)
             if match:
-                slug = re.sub(r"[^a-z0-9]", "", match.group("name").lower())
                 plugin = {
                     "error_type": _PLUGIN_ERROR_TYPES[match.group("error").lower()],
                     "source": source,
-                    "origin": _KNOWN_FRONTEND_ORIGINS.get(slug, "other_plugin"),
+                    "origin": _frontend_origin(match.group("name")),
                 }
                 key = (plugin["error_type"], source, plugin["origin"])
                 if (

@@ -43,8 +43,8 @@ interface ThemeActionFeedback {
 }
 
 const ACTION_FEEDBACK_MS = 2500;
-// Steam keeps focus on the same button, now "Deactivate"; a second press while the theme is still
-// painting (PDC-AHYE: 1.4–2.3 s after each activation) silently turned it off again.
+// Focus stays on the same button, now "Deactivate": a second press while the theme is still painting
+// (about 2 s) would switch it off again.
 const ACTIVATION_HOLD_MS = 4000;
 
 const gamepadNavigation = createThemeNavigationAccess();
