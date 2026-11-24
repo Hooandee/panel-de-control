@@ -52,6 +52,36 @@ public sealed class GpuFamilyParityTests
     }
 
     [Fact]
+    public void AnNvidiaDiscreteGpuBeatsTheIntegratedOneOnAHybridLaptop()
+    {
+        var gpus = new[] { GpuFamily.FromPnpId(@"PCI\VEN_8086&DEV_7D67")!, GpuFamily.FromPnpId(@"PCI\VEN_10DE&DEV_2C19")! };
+        var result = Rules.DetectDiscrete(GpuFamily.CpuVendor("GenuineIntel"), "Intel(R) Core(TM) Ultra 9 275HX", gpus);
+        Assert.Equal("nvidia", result.Generation);
+        Assert.Equal("pci", result.Source);
+        Assert.Equal("intel", Rules.Detect(GpuFamily.CpuVendor("GenuineIntel"), "Intel(R) Core(TM) Ultra 9 275HX", gpus).Generation);
+    }
+
+    [Fact]
+    public void AnAmdDiscreteGpuBeatsTheApuItSitsBeside()
+    {
+        var gpus = new[] { new PciGpu("0x1002", "0x15bf"), new PciGpu("0x1002", "0x7550") };
+        var result = Rules.DetectDiscrete(GpuFamily.CpuVendor("AuthenticAMD"), "AMD Ryzen 9 7940HS", gpus);
+        Assert.Equal("rdna4", result.Generation);
+        Assert.Equal("pci", result.Source);
+    }
+
+    [Theory]
+    [InlineData("AuthenticAMD", "AMD Ryzen Z2 Extreme", "0x1002", "0x150e", "rdna35", "name")]
+    [InlineData("GenuineIntel", "Intel Core Ultra 7 258V", "0x8086", "0x64a0", "intel", "name")]
+    [InlineData("", "", "0x1002", "0x9999", "rdna3", "pci")]
+    public void WithoutADiscreteGpuTheUsualRulesApply(string vendor, string chip, string pciVendor, string device, string generation, string source)
+    {
+        var result = Rules.DetectDiscrete(GpuFamily.CpuVendor(vendor), chip, new[] { new PciGpu(pciVendor, device) });
+        Assert.Equal(generation, result.Generation);
+        Assert.Equal(source, result.Source);
+    }
+
+    [Fact]
     public void WithoutRulesEveryGpuIsUnknown()
     {
         var result = GpuFamily.None.Detect("amd", "AMD Ryzen Z2 Extreme", new[] { new PciGpu("0x1002", "0x150e") });

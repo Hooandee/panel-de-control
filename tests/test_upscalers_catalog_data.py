@@ -33,7 +33,7 @@ def _canonical(value):
 
 
 def snapshot() -> dict:
-    gpus = (*catalog.EVERY_GPU, "nvidia")
+    gpus = catalog.EVERY_GPU
     return {
         "data": {name: _canonical(getattr(catalog, name)) for name in DATA_NAMES},
         "describe": {f"{gpu}/{device}": _canonical(catalog.describe(gpu, device)) for gpu in gpus for device in DEVICES},

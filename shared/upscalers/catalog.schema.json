@@ -132,6 +132,36 @@
       ],
       "additionalProperties": false
     },
+    "tracks": {
+      "description": "Assets that follow their repository's newest release on GitHub: the newest release carrying an asset whose name fully matches the regex and a sha256 digest replaces the pinned asset. Only tools whose newest release keeps the layout Panel installs belong here.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+          },
+          "name": {
+            "description": "Regular expression the whole asset file name must match.",
+            "type": "string",
+            "minLength": 1
+          },
+          "prerelease": {
+            "description": "Accept prereleases (nightlies).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "repo",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
     "notes": {
       "description": "Maintainer notes; not read by the apps.",
       "type": "object",
@@ -164,6 +194,7 @@
     "base_ini",
     "ffx_loader",
     "anr",
+    "tracks",
     "assets",
     "builds"
   ],
@@ -181,7 +212,8 @@
         "rdna35",
         "rdna4",
         "intel",
-        "unknown"
+        "unknown",
+        "nvidia"
       ]
     },
     "gpus": {

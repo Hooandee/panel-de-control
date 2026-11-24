@@ -136,6 +136,9 @@ public sealed class BuildCatalog
     /// <summary>The OptiScaler 10 build ANR FG goes in with, per GPU family.</summary>
     public IReadOnlyDictionary<string, string> AnrBuilds { get; private set; } = new Dictionary<string, string>();
 
+    /// <summary>Assets that follow their repository's newest GitHub release, by asset id.</summary>
+    public IReadOnlyDictionary<string, ReleaseTrack> Tracks { get; private set; } = new Dictionary<string, ReleaseTrack>();
+
     public static BuildCatalog Parse(byte[] utf8) => Parse(DataValue.Parse(utf8));
 
     public static BuildCatalog Parse(string json) => Parse(DataValue.Parse(json));
@@ -143,7 +146,7 @@ public sealed class BuildCatalog
     private static BuildCatalog Parse(DataValue document)
     {
         var raw = Fields(document, new[] { "schema_version", "archives", "gpu_groups", "preferred", "quality_ratios", "easy_modes",
-            "sharpness", "proxies", "base_ini", "ffx_loader", "anr", "assets", "builds" }, new[] { "notes" });
+            "sharpness", "proxies", "base_ini", "ffx_loader", "anr", "tracks", "assets", "builds" }, new[] { "notes" });
         if (!(raw.Get("schema_version") is DataNumber { Integer: { } version } && version == 1))
         {
             throw new DataFormatException("unsupported_schema");
@@ -173,8 +176,10 @@ public sealed class BuildCatalog
         var anrBuilds = Mapping(anr.Get("builds")!);
         Check(anr.Get("asset") is DataString { Value.Length: > 0 } anrAsset && assetIds.Contains(anrAsset.Value)
             && anr.Get("provider") is DataString { Value.Length: > 0 } && anrBuilds.Values.All(buildIds.Contains), "missing_anr");
+        var tracks = ReadTracks(raw.Get("tracks")!);
         return new BuildCatalog
         {
+            Tracks = tracks,
             Amd = Strings(groups.Get("amd")!),
             EveryGpu = Strings(groups.Get("every")!),
             Archives = archiveMap,
@@ -191,6 +196,30 @@ public sealed class BuildCatalog
             AnrProvider = ((DataString)anr.Get("provider")!).Value,
             AnrBuilds = anrBuilds,
         };
+    }
+
+    private static Dictionary<string, ReleaseTrack> ReadTracks(DataValue value)
+    {
+        Check(value is DataObject, "invalid_track");
+        var tracks = new Dictionary<string, ReleaseTrack>(StringComparer.Ordinal);
+        foreach (var member in ((DataObject)value).Members)
+        {
+            var item = Fields(member.Value, new[] { "repo", "name" }, new[] { "prerelease" });
+            var repo = (item.Get("repo") as DataString)?.Value ?? "";
+            Check(System.Text.RegularExpressions.Regex.IsMatch(repo, @"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\z")
+                && item.Get("name") is DataString { Value.Length: > 0 } && (item.Get("prerelease") is null || item.Get("prerelease") is DataBool), "invalid_track");
+            var name = ((DataString)item.Get("name")!).Value;
+            try
+            {
+                _ = new System.Text.RegularExpressions.Regex(name);
+            }
+            catch (ArgumentException)
+            {
+                throw new DataFormatException("invalid_track");
+            }
+            tracks[member.Key] = new ReleaseTrack(repo, name, item.Get("prerelease") is DataBool { Value: true });
+        }
+        return tracks;
     }
 
     public UpscalerBuild? Build(string id) => Builds.FirstOrDefault(build => build.Id == id);

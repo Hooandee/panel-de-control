@@ -1011,7 +1011,8 @@ null
 "rdna35",
 "rdna4",
 "intel",
-"unknown"
+"unknown",
+"nvidia"
 ]
 },
 "BUILDS": {
@@ -2254,7 +2255,8 @@ true
 "rdna35",
 "rdna4",
 "intel",
-"unknown"
+"unknown",
+"nvidia"
 ]
 }
 ],
@@ -2377,7 +2379,8 @@ true
 "rdna35",
 "rdna4",
 "intel",
-"unknown"
+"unknown",
+"nvidia"
 ]
 }
 ],
@@ -24583,7 +24586,7 @@ true
 ],
 [
 "supported",
-false
+true
 ],
 [
 "download_bytes",
@@ -24663,7 +24666,7 @@ true
 ],
 [
 "supported",
-false
+true
 ],
 [
 "download_bytes",
@@ -25744,7 +25747,7 @@ true
 ],
 [
 "supported",
-false
+true
 ],
 [
 "download_bytes",
@@ -25824,7 +25827,7 @@ true
 ],
 [
 "supported",
-false
+true
 ],
 [
 "download_bytes",
@@ -26905,7 +26908,7 @@ true
 ],
 [
 "supported",
-false
+true
 ],
 [
 "download_bytes",
@@ -26985,7 +26988,7 @@ true
 ],
 [
 "supported",
-false
+true
 ],
 [
 "download_bytes",

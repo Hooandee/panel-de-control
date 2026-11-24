@@ -25,7 +25,7 @@ public sealed class GpuFamilyResult
         Source = source;
     }
 
-    /// <summary><c>rdna2</c>, <c>rdna3</c>, <c>rdna35</c>, <c>rdna4</c>, <c>intel</c> or <c>unknown</c>.</summary>
+    /// <summary><c>rdna2</c>, <c>rdna3</c>, <c>rdna35</c>, <c>rdna4</c>, <c>intel</c>, <c>nvidia</c> or <c>unknown</c>.</summary>
     public string Generation { get; }
 
     /// <summary><c>name</c>, <c>pci</c> or <c>unknown</c>.</summary>
@@ -43,10 +43,12 @@ public sealed class GpuFamily
     private readonly Dictionary<string, string> _pciVendors;
     private readonly Dictionary<string, string> _amdPci;
     private readonly string _unknownAmd;
+    private readonly HashSet<string> _discreteAmd;
 
     private GpuFamily(Dictionary<string, string> vendors, List<(string, string[], Regex?)> nameRules, Dictionary<string, string> pciVendors,
-        Dictionary<string, string> amdPci, string unknownAmd)
+        Dictionary<string, string> amdPci, string unknownAmd, HashSet<string> discreteAmd)
     {
+        _discreteAmd = discreteAmd;
         _vendors = vendors;
         _nameRules = nameRules;
         _pciVendors = pciVendors;
@@ -55,12 +57,12 @@ public sealed class GpuFamily
     }
 
     /// <summary>Rules that know no GPU, for when the file cannot be read: every family is <c>unknown</c>.</summary>
-    public static GpuFamily None { get; } = new(new(), new(), new(), new(), "unknown");
+    public static GpuFamily None { get; } = new(new(), new(), new(), new(), "unknown", new());
 
     public static GpuFamily Parse(byte[] utf8)
     {
         var raw = BuildCatalog.Fields(DataValue.Parse(utf8),
-            new[] { "schema_version", "vendors", "name_rules", "pci_vendors", "amd_pci", "unknown_amd" }, new[] { "notes" });
+            new[] { "schema_version", "vendors", "name_rules", "pci_vendors", "amd_pci", "unknown_amd" }, new[] { "notes", "discrete_amd" });
         if (!(raw.Get("schema_version") is DataNumber { Integer: { } version } && version == 1))
         {
             throw new DataFormatException("unsupported_schema");
@@ -73,7 +75,8 @@ public sealed class GpuFamily
             var pattern = rule.Get("pattern") is { } text ? new Regex(Text(text), RegexOptions.CultureInvariant) : null;
             rules.Add((Text(rule.Get("generation")!), contains, pattern));
         }
-        return new GpuFamily(Map(raw.Get("vendors")), rules, Map(raw.Get("pci_vendors")), Map(raw.Get("amd_pci")), Text(raw.Get("unknown_amd")!));
+        return new GpuFamily(Map(raw.Get("vendors")), rules, Map(raw.Get("pci_vendors")), Map(raw.Get("amd_pci")), Text(raw.Get("unknown_amd")!),
+            raw.Get("discrete_amd") is { } discrete ? new HashSet<string>(Array(discrete).Select(item => Text(item).ToLowerInvariant())) : new HashSet<string>());
     }
 
     /// <summary>The vendor word the rules use, from Windows' <c>Win32_Processor.Manufacturer</c>.</summary>
@@ -100,6 +103,27 @@ public sealed class GpuFamily
         }
         var byPci = FromPci(displayGpus);
         return new GpuFamilyResult(byPci, byPci != "unknown" ? "pci" : "unknown");
+    }
+
+    /// <summary>
+    /// Like <see cref="Detect"/>, but on a laptop with both an integrated and a discrete GPU the discrete one decides:
+    /// the CPU's name and the first display adapter describe the iGPU, which is not what games render on.
+    /// </summary>
+    public GpuFamilyResult DetectDiscrete(string? vendor, string? chip, IReadOnlyList<PciGpu> displayGpus)
+    {
+        if (displayGpus.Any(gpu => _pciVendors.TryGetValue(gpu.Vendor, out var kind) && kind == "nvidia"))
+        {
+            return new GpuFamilyResult("nvidia", "pci");
+        }
+        foreach (var gpu in displayGpus)
+        {
+            if (_pciVendors.TryGetValue(gpu.Vendor, out var kind) && kind == "amd" && _discreteAmd.Contains(gpu.Device)
+                && _amdPci.TryGetValue(gpu.Device, out var generation))
+            {
+                return new GpuFamilyResult(generation, "pci");
+            }
+        }
+        return Detect(vendor, chip, displayGpus);
     }
 
     private string FromName(string? vendor, string? chip)
