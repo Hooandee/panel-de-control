@@ -8,7 +8,7 @@ import {
   coexistingThemes,
   diagnoseThemeHealth,
   hooandeeNames,
-  interfaceThemeNames,
+  interfaceOrKeep,
   readSteamSettings,
   removeCssLoaderStyles,
   SET_ASIDE_KINDS,
@@ -98,7 +98,7 @@ export function useThemeHealth(controller: ThemesController): ThemeHealthView {
   );
   const findings = useMemo(
     () => backend && display && keep
-      ? diagnoseThemeHealth(controller.snapshot, backend, display, keep, interfaceThemeNames(controller.cards.map((card) => card.release)))
+      ? diagnoseThemeHealth(controller.snapshot, backend, display, keep, interfaceOrKeep(controller.cards.map((card) => card.release), keep))
       : [],
     [backend, display, keep, controller.snapshot, controller.cards],
   );

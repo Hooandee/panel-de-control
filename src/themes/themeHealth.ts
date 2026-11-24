@@ -219,6 +219,15 @@ export function interfaceThemeNames(releases: Iterable<Pick<PublishedThemeReleas
   return new Set([...releases].filter((release) => !isKeyboardTheme(release)).map((release) => release.cssLoaderName));
 }
 
+// Without the catalog there is no telling keyboard themes apart: every theme of ours counts, as before #1488.
+export function interfaceOrKeep(
+  releases: Iterable<Pick<PublishedThemeRelease, "cssLoaderName" | "exclusiveGroup">>,
+  keep: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const names = interfaceThemeNames(releases);
+  return names.size ? names : keep;
+}
+
 export function hooandeeNames(backend: ThemeHealthBackend, catalogNames: Iterable<string>): Set<string> {
   return new Set([
     ...catalogNames,

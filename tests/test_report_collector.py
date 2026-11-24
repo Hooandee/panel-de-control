@@ -1,3 +1,4 @@
+import re
 import json
 import os
 import types
@@ -1735,9 +1736,11 @@ def test_kernel_logs_capture_session_crashes_behind_a_cef_disconnect():
     cmd = report_collector._KERNEL_CMDS["session_crashes"]
     assert cmd[cmd.index("-b") + 1 :][0] != "-1"
     assert "systemd-coredump" in cmd and "kernel" in cmd
-    pattern = cmd[cmd.index("--grep") + 1]
-    for token in ("dumped core", "segfault"):
-        assert token in pattern
+    pattern = re.compile(cmd[cmd.index("--grep") + 1])
+    assert pattern.search("Process 13440 (gamescope-wl) of user 1000 dumped core.")
+    assert pattern.search("steamwebhelper[5120]: segfault at 0 ip 0000 sp 0000 error 4")
+    assert not pattern.search("Process 9001 (MonsterHunterRi) of user 1000 dumped core.")
+    assert not pattern.search("wine64-preloader[812]: segfault at 10 ip 0000 sp 0000 error 6")
 
     def run(argv):
         if argv == cmd:
