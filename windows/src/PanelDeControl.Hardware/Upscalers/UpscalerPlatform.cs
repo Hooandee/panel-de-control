@@ -11,10 +11,16 @@ namespace PanelDeControl.Hardware.Upscalers;
 
 public static class UpscalerPaths
 {
-    public static string Root { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "PanelDeControl",
-        "upscalers");
+    // A packaged process sees %LOCALAPPDATA% redirected to the package's LocalCache, but tar.exe is not
+    // virtualized: both must use the physical folder or tar unpacks where the companion never looks.
+    public static string Root { get; } = Path.Combine(LocalData(), "PanelDeControl", "upscalers");
+
+    private static string LocalData()
+    {
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var family = PackagedPipeClient.CurrentFamilyName();
+        return string.IsNullOrEmpty(family) ? local : Path.Combine(local, "Packages", family, "LocalCache", "Local");
+    }
 
     public static string StateFile => Path.Combine(Root, "state.json");
 

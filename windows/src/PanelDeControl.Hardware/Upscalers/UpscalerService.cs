@@ -389,6 +389,7 @@ public sealed class UpscalerService : IUpscalersController
                 break;
         }
 
+        log($"upscalers.{action}", $"{appId} {build} {code} {detail}");
         jobs.Fail(code, detail);
         try
         {
