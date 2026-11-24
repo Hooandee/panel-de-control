@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getBatteryState: vi.fn(),
   setChargeLimit: vi.fn(),
   setChargeLimitFullOnce: vi.fn(),
+  recordUiEvent: vi.fn(),
 }));
 
 vi.mock("../api", () => ({
@@ -16,7 +17,10 @@ vi.mock("../api", () => ({
   setChargeLimitFullOnce: mocks.setChargeLimitFullOnce,
 }));
 
+vi.mock("./uiEvents", () => ({ recordUiEvent: mocks.recordUiEvent }));
+
 import { useBattery } from "./useBattery";
+import sliderReport from "./fixtures/battery-limit-slider-report.json";
 
 const CHARGE_LIMIT: ChargeLimit = {
   backend: "fake",
@@ -73,6 +77,53 @@ describe("useBattery mutation ordering", () => {
     vi.clearAllMocks();
   });
 
+  it.each(["before", "during"] as const)("preserves a confirmed choice when a poll started %s its write", async (readStarts) => {
+    const before = sliderReport.confirmedWrites.find(({ readback }) => readback === 65)!;
+    const chosen = sliderReport.confirmedWrites.find(({ readback }) => readback === 80)!;
+    const observedLimit = (percent: number): ChargeLimit => ({
+      ...CHARGE_LIMIT,
+      ...sliderReport.chargeLimit,
+      percent,
+      applied_percent: percent,
+    });
+    const stale: BatteryState = {
+      battery: sliderReport.battery,
+      charge_limit: observedLimit(before.readback),
+    };
+    let resolvePoll!: (state: BatteryState) => void;
+    mocks.getBatteryState.mockResolvedValueOnce(stale).mockReturnValueOnce(new Promise((resolve) => {
+      resolvePoll = resolve;
+    }));
+    mocks.setChargeLimit.mockResolvedValueOnce(observedLimit(chosen.readback));
+    const { result } = renderHook(() => useBattery());
+    await settle();
+    await act(async () => vi.advanceTimersByTimeAsync(readStarts === "before" ? 3000 : 2900));
+
+    act(() => result.current.setLimit(true, chosen.requested));
+    await act(async () => vi.advanceTimersByTimeAsync(250));
+    await settle();
+    expect(result.current.state?.charge_limit.percent).toBe(chosen.readback);
+
+    resolvePoll(stale);
+    await settle();
+    expect(result.current.state?.charge_limit.percent).toBe(chosen.readback);
+    expect(result.current.state?.charge_limit.applied_percent).toBe(chosen.readback);
+    expect(mocks.recordUiEvent).toHaveBeenCalledWith("battery", "stale_limit_read", {
+      superseded: readStarts === "before",
+      pendingAtStart: readStarts === "during",
+      observedPercent: before.readback,
+      confirmedPercent: chosen.readback,
+    });
+
+    mocks.getBatteryState.mockResolvedValueOnce({
+      ...stale,
+      charge_limit: observedLimit(sliderReport.chargeLimit.percent),
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(result.current.state?.charge_limit.percent).toBe(sliderReport.chargeLimit.percent);
+    expect(mocks.recordUiEvent).toHaveBeenCalledTimes(1);
+  });
+
   it("flushes a pending base-limit change before the temporary action", async () => {
     const { result } = renderHook(() => useBattery());
     await settle();
@@ -105,9 +156,27 @@ describe("useBattery mutation ordering", () => {
 
     expect(mocks.setChargeLimitFullOnce).not.toHaveBeenCalled();
 
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(mocks.recordUiEvent).not.toHaveBeenCalled();
+
     resolveLimit({ ...CHARGE_LIMIT, percent: 90, applied_percent: 90 });
     await settle();
 
     expect(mocks.setChargeLimitFullOnce).toHaveBeenCalledWith(true);
+  });
+
+  it("does not start another poll while one is still in flight", async () => {
+    let resolveRead: (s: BatteryState) => void = () => undefined;
+    mocks.getBatteryState.mockImplementation(
+      () => new Promise<BatteryState>((resolve) => { resolveRead = resolve; }),
+    );
+    renderHook(() => useBattery());
+    await settle();
+    expect(mocks.getBatteryState).toHaveBeenCalledTimes(1);
+    await act(async () => { vi.advanceTimersByTime(12_000); });
+    expect(mocks.getBatteryState).toHaveBeenCalledTimes(1);
+    await act(async () => { resolveRead(STATE); });
+    await act(async () => { vi.advanceTimersByTime(3_000); });
+    expect(mocks.getBatteryState).toHaveBeenCalledTimes(2);
   });
 });

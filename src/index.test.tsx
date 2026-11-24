@@ -63,6 +63,7 @@ vi.mock("./api", () => ({
   acknowledgeThemeActivation: vi.fn(),
   acknowledgeThemeInstallRollback: vi.fn(),
   recordThemeFailure: vi.fn(),
+  recordUiEvent: vi.fn(async () => true),
   beginThemeActivation: vi.fn(),
   checkThemeReleases: vi.fn(),
   commitThemeInstall: vi.fn(),

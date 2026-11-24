@@ -8,6 +8,7 @@ import { useDesktopState } from "../desktop/useDesktop";
 import { desktopUiActive } from "../desktop/presentation";
 import { resolveAutoView } from "../tdp/autoView";
 import { DesktopPowerCard, DesktopPowerRecoveryCard } from "../components/DesktopPowerCard";
+import { TdpWattsControl } from "../components/TdpWattsControl";
 import { SteamPerformanceCard } from "../components/SteamPerformanceCard";
 import { useDevice } from "../system/useDevice";
 
@@ -44,6 +45,23 @@ const TdpCoreBlock: FC = () => {
       refreshPresets={c.refreshPresets}
       onApplyPreset={c.onApplyPreset}
       consoleManaged={consoleManaged}
+      steamControlled={c.steamOsManagerActive}
+      onReleaseControl={c.steamOsManagerActive && !c.monitorOnly ? () => void c.onReleaseControl() : undefined}
+    />
+  );
+};
+
+const TdpWattsBlock: FC = () => {
+  const c = usePotencia();
+  return (
+    <TdpWattsControl
+      tdp={c.tdp}
+      scope={c.scope}
+      power={c.power}
+      onWatts={c.onWatts}
+      monitorOnly={c.monitorOnly}
+      steamControlled={c.steamOsManagerActive}
+      onReactivate={c.onReactivate}
     />
   );
 };
@@ -99,6 +117,7 @@ const SteamPerformanceBlock: FC = () => {
 
 export function registerPowerBlocks(): void {
   registerBlock("tdp", { sectionId: "power", Component: TdpCoreBlock });
+  registerBlock("tdpWatts", { sectionId: "power", Component: TdpWattsBlock });
   registerBlock("desktopPower", { sectionId: "power", Component: DesktopPowerCard });
   registerBlock("steamPerformance", {
     sectionId: "power",

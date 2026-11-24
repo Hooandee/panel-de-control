@@ -2,6 +2,7 @@ import json
 import hashlib
 import os
 import shlex
+import threading
 import time
 from pathlib import Path
 
@@ -276,6 +277,30 @@ def test_analyze_prefers_the_game_exe_over_its_launcher(steam, monkeypatch):
     assert result["anti_cheat"] is False and result["foreign"] is False
 
 
+def test_analyze_picks_the_unity_player_over_anti_cheat_and_helper_exes(tmp_path):
+    for name in ("AntiCheatExpert/ACE-Service64.exe", "CefView/CefViewWing.exe", "PlatformProcess.exe", "QtWebEngineProcess.exe", "Endfield.exe"):
+        _write(tmp_path / name, "x")
+    (tmp_path / "Endfield_Data").mkdir()
+    result = games.analyze(tmp_path)
+    assert result["exe"] == "Endfield.exe"
+    assert result["target"] == str(tmp_path)
+    assert "AntiCheatExpert/ACE-Service64.exe" not in [c["exe"] for c in result["candidates"]]
+
+
+def test_analyze_breaks_a_tie_for_the_exe_that_creates_the_device(tmp_path, monkeypatch):
+    # Elden Ring ships Unity extras (guide, artbook) whose _Data folder scores as much as the game exe.
+    for extra in ("AdvGuide/ELDEN RING Adventure Guide", "ArtbookOST/ELDEN RING Digital Artbook & Soundtrack"):
+        _write(tmp_path / f"{extra}.exe", "x")
+        (tmp_path / f"{extra}_Data").mkdir()
+    _write(tmp_path / "Game/start_protected_game.exe", "x")
+    with open(tmp_path / "Game/eldenring.exe", "wb") as handle:
+        handle.truncate(86_973_008)
+    monkeypatch.setattr(games.pe, "graphics_apis", lambda path: ["d3d12", "dxgi"] if path.endswith("eldenring.exe") else [])
+    result = games.analyze(tmp_path)
+    assert result["exe"] == "Game/eldenring.exe"
+    assert result["target"] == str(tmp_path / "Game")
+
+
 def test_agility_sdk_beside_the_exe_means_d3d12(steam, monkeypatch):
     # RE Engine games (RE4, Requiem, Onimusha) import only d3d11/dxgi and load D3D12 at runtime.
     from upscalers import solution_plan
@@ -465,7 +490,7 @@ def test_log_reader_takes_real_optiscaler_lines(tmp_path):
     assert facts["version"] == "0.9.4-final"
     assert facts["proxy"] == "dxgi.dll"
     assert facts["upscaler"] == "fsr31"
-    assert facts["input"] == "DLSS"
+    assert "input" not in facts
     assert facts["initial_resolution"] == {"render": [936, 624], "output": [1440, 960]}
     assert "resolution" not in facts
     assert facts["resolution_source"] == "initialization_only"
@@ -956,6 +981,90 @@ def test_lsfg_installs_the_layer_and_writes_per_game_profiles(steam, tmp_path):
     assert not (home / ".local" / lsfg.LAYER_FILES[0]).exists() and not (home / lsfg.CONFIG).exists()
 
 
+def _lsfg_tool(steam, tmp_path):
+    home, _ = steam
+    library = home / ".local/share/Steam"
+    _write(library / "steamapps/appmanifest_993090.acf", '"AppState"\n{\n "appid" "993090"\n}\n')
+    _write(library / "steamapps/common/Lossless Scaling/lsfg-vk.dll", b"dll")
+    tool = lsfg.Lsfg(str(home), tmp_path / "state")
+    tool.install(_lsfg_bundle(tmp_path / "bundle"), "lsfg-vk-2.0.0")
+    return home, tool
+
+
+def _flow_scale(home):
+    import tomllib
+    return tomllib.loads((home / lsfg.CONFIG).read_text())["profile"][0]["flow_scale"]
+
+
+def test_lsfg_flow_scale_keeps_the_previous_value_when_untouched(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    tool.set_game("1", "Game", {"multiplier": 2, "performance": True})
+    assert _flow_scale(home) == 0.75
+    tool.set_game("1", "Game", {"multiplier": 2, "flow": "fastest", "performance": True})
+    assert _flow_scale(home) == 0.25
+
+
+def test_lsfg_flow_scale_writes_the_chosen_value(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    result = tool.set_game("1", "Game", {"multiplier": 3, "flow_scale": 0.85, "performance": False})
+    assert _flow_scale(home) == 0.85
+    assert result["profile"]["flow_scale"] == 0.85
+    assert tool.status()["profiles"]["1"]["flow_scale"] == 0.85
+    tool.set_game("1", "Game", {"multiplier": 3, "flow_scale": 0.333, "performance": False})
+    assert _flow_scale(home) == 0.33
+
+
+def test_lsfg_flow_scale_tells_presets_from_manual_and_remembers_the_manual_value(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    manual = tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 0.6, "flow_manual": True})["profile"]
+    assert (manual["flow_manual"], manual["manual_scale"], _flow_scale(home)) == (True, 0.6, 0.6)
+    preset = tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 1.0, "flow_manual": False, "manual_scale": 0.6})["profile"]
+    assert (preset["flow_manual"], preset["manual_scale"], _flow_scale(home)) == (False, 0.6, 1.0)
+    assert tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 0.75})["profile"]["manual_scale"] is None
+    # An off-preset value is manual even when the caller did not say so.
+    assert tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": 0.4, "flow_manual": False})["profile"]["flow_manual"] is True
+
+
+def test_lsfg_flow_scale_migrates_a_saved_value_to_a_preset_or_manual(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    tool.set_game("1", "Game", {"multiplier": 2})
+    tool.set_game("2", "Other", {"multiplier": 2})
+    data = tool._manifest()
+    data["profiles"]["1"].update(flow_scale=0.5)
+    data["profiles"]["2"].update(flow_scale=0.65)
+    for profile in data["profiles"].values():
+        profile.pop("flow_manual")
+    tool._save(data)
+    profiles = tool.status()["profiles"]
+    assert (profiles["1"]["flow_manual"], profiles["2"]["flow_manual"]) == (False, True)
+
+
+def test_lsfg_flow_scale_accepts_the_lsfg_vk_range_and_nothing_else(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    for edge in (0.25, 1.0):
+        tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": edge})
+        assert _flow_scale(home) == edge
+    for bad in (0.24, 1.01, 0, -1, float("nan"), float("inf"), "0.5", True, None):
+        with pytest.raises(lsfg.LsfgError, match="lsfg_invalid"):
+            tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": bad})
+    assert _flow_scale(home) == 1.0
+
+
+def test_lsfg_flow_scale_reads_a_profile_saved_with_a_preset(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    tool.set_game("1", "Game", {"multiplier": 2, "flow": "performance"})
+    data = tool._manifest()
+    data["profiles"]["1"] = {key: value for key, value in data["profiles"]["1"].items() if key != "flow_scale"}
+    data["profiles"]["1"]["flow"] = "quality"
+    tool._save(data)
+    assert tool.status()["profiles"]["1"]["flow_scale"] == 1.0
+    tool.set_game("2", "Other", {"multiplier": 2})
+    tool._write_config(tool._manifest())
+    import tomllib
+    scales = {p["name"]: p["flow_scale"] for p in tomllib.loads((home / lsfg.CONFIG).read_text())["profile"]}
+    assert scales == {"pdc-1": 1.0, "pdc-2": 0.75}
+
+
 def test_lsfg_never_writes_over_another_tools_setup(steam, tmp_path):
     home, _ = steam
     _write(home / lsfg.CONFIG, "version = 2\n[global]\nallow_fp16 = true\n")
@@ -1124,10 +1233,58 @@ def test_recipe_proxy_and_args_apply_unless_the_user_picked(steam, fake_catalog,
     assert result["overrides"] == ["version=n,b"]
 
 
-def test_recipe_proxy_panel_cannot_install_is_left_out(steam, fake_catalog, proc, monkeypatch):
+def test_recipe_keeps_libraries_a_launcher_purges(steam, fake_catalog, proc, monkeypatch):
+    # Warframe's launcher purges unknown .dll files at each start but fails on read-only ones.
+    without_bundled_recipes(monkeypatch)
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="winmm.dll", protect_dlls=True))
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    _, game = steam
+    target = Path(service.game(APPID)["install"]["target"])
+    # The game's own files stay writable, also where Panel's copy replaced one.
+    writable = {target / "nvngx_dlss.dll", target / "amd_fidelityfx_upscaler_dx12.dll"}
+    ours = [path for path in target.rglob("*.dll") if path not in writable]
+    assert {"winmm.dll", "D3D12Core.dll"} <= {path.name for path in ours}
+    assert ".pdc-upscaler" in {part for path in ours for part in path.parts}
+    assert all(not path.stat().st_mode & 0o222 for path in ours)
+    assert all(path.stat().st_mode & 0o200 for path in writable)
+    assert (target / "OptiScaler.ini").stat().st_mode & 0o200
+    service.uninstall(APPID)
+    assert {path.name for path in target.rglob("*.dll")} == {"nvngx_dlss.dll", "amd_fidelityfx_upscaler_dx12.dll"}
+    assert (target / "amd_fidelityfx_upscaler_dx12.dll").stat().st_mode & 0o200
+    service.install(APPID, {"build": "fsr-test"})
+    service.install(APPID, {"build": "fsr-test"})
+    assert (target / "winmm.dll").is_file()
+
+
+def test_protected_install_still_rolls_back_with_its_scaler_transition(steam, fake_catalog, proc, monkeypatch):
+    # Read-only libraries must not look like a game update to the rollback.
+    without_bundled_recipes(monkeypatch)
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="winmm.dll", protect_dlls=True))
+    service = _service(steam, fake_catalog, proc)
+    checkpoint = service.begin_scaler_transition(APPID)
+    service.install(APPID, {"build": "fsr-test"})
+    service.finish_scaler_transition(APPID, checkpoint["token"], True)
+    assert service.game(APPID)["install"] is None
+    _, game = steam
+    assert not list(game.rglob("winmm.dll"))
+
+
+def test_endfield_recipe_installs_the_d3d12_proxy(steam, fake_catalog, proc, monkeypatch):
+    # Under Proton, OptiScaler as dxgi.dll makes Endfield quit seconds after init; d3d12.dll keeps it running.
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll"))
     service = _service(steam, fake_catalog, proc)
-    assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["dxgi=n,b"]
+    result = service.install(APPID, {"build": "fsr-test"})
+    assert result["overrides"] == ["d3d12=n,b"]
+    _, game = steam
+    assert (game / "bin/x64_dx12/d3d12.dll").is_file() and not (game / "bin/x64_dx12/dxgi.dll").exists()
+
+
+def test_endfield_curated_recipe_launches_in_directx11():
+    # FSR 4 only runs through the D3D11 to D3D12 bridge; the Vulkan path falls back to FSR 2.2.
+    entry = recipes.recipe_catalog.bundled().match("4732690", "optiscaler", "linux", "x86_64")
+    assert entry is not None and entry.exe == "Endfield.exe" and entry.args == ("-force-d3d11",)
+    assert "4732690" not in recipes.RECIPES
 
 
 @pytest.fixture
@@ -1368,6 +1525,21 @@ def test_the_exe_is_only_searched_when_no_library_was_found(tmp_path, monkeypatc
     _write(root / "nvngx_dlss.dll")
     monkeypatch.setattr(games, "embedded_upscalers", lambda exe: pytest.fail("must not scan"))
     assert games.shipped_upscalers(root) == ["DLSS"]
+
+
+def test_the_exe_scan_finds_entry_points_across_read_boundaries_and_caches(tmp_path, monkeypatch):
+    exe = tmp_path / "Game.exe"
+    needle = b"ffxFsr3UpscalerContextCreate"
+    monkeypatch.setattr(games, "_EMBEDDED_CHUNK", 64)
+    exe.write_bytes(b"MZ" + b"\0" * 50 + needle + b"\0" * 100 + b"xessD3D12CreateContext")
+    assert games.embedded_upscalers(exe) == {"fsr31", "xess"}
+    opened = []
+    real_open = open
+    monkeypatch.setattr("builtins.open", lambda *a, **k: opened.append(a[0]) or real_open(*a, **k))
+    assert games.embedded_upscalers(exe) == {"fsr31", "xess"}
+    assert opened == []
+    exe.write_bytes(b"MZ" + b"\0" * 300)
+    assert games.embedded_upscalers(exe) == set()
 
 
 def test_files_panel_leaves_in_a_game_belong_to_the_games_owner(steam, fake_catalog, proc, monkeypatch):
@@ -1837,3 +2009,193 @@ def test_a_missing_record_still_asks_the_bridge_and_accepts_not_installed(steam,
     service.uninstall(APPID)
     assert service.helix.calls == [("remove",)]
     assert service.game(APPID)["install"] is None
+
+
+def _mod_zip(path, members):
+    import zipfile
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, content in members.items():
+            archive.writestr(name, content)
+    return path
+
+
+def test_mod_layout_follows_the_exe_folder():
+    from upscalers import user_mods
+    assert user_mods.layout(["Game/ERSS-FG.dll", "Game/ERSS2/a.ini"], "Game") == {"ERSS-FG.dll": "Game/ERSS-FG.dll", "ERSS2/a.ini": "Game/ERSS2/a.ini"}
+    assert user_mods.layout(["ERSS-FG v4/D3D12.dll", "ERSS-FG v4/ERSS2/a.ini"], "Game") == {"D3D12.dll": "ERSS-FG v4/D3D12.dll", "ERSS2/a.ini": "ERSS-FG v4/ERSS2/a.ini"}
+    # A folder the game already has is part of where the mod goes, not a wrapper.
+    assert user_mods.layout(["reframework/plugins/x.dll"], "", {"reframework"}) == {"reframework/plugins/x.dll": "reframework/plugins/x.dll"}
+    assert user_mods.native_dlls(["D3D12.dll", "ERSS-FG.dll", "ERSS2/dxgi.dll", "dinput8.dll"]) == ["d3d12", "dinput8"]
+    # A wrapper around the game's own path, and mods that reach elsewhere in the game.
+    assert user_mods.layout(["ELDEN RING/Game/D3D12.dll"], "Game", set(), {"Game", "AdvGuide"}) == {"D3D12.dll": "ELDEN RING/Game/D3D12.dll"}
+    with pytest.raises(user_mods.ModError, match="layout"):
+        user_mods.layout(["bin/x64/version.dll", "r6/scripts/x.reds"], "bin/x64", set(), {"bin", "r6"})
+    with pytest.raises(user_mods.ModError, match="layout"):
+        user_mods.layout(["Game/Binaries/Win64/dxgi.dll", "Game/Content/Paks/~mods/x.pak"], "Game/Binaries/Win64", set(), {"Game", "Engine"})
+
+
+def test_a_users_mod_goes_in_with_optiscaler_and_leaves_with_it(steam, fake_catalog, proc):
+    home, game = steam
+    target = game / "bin/x64_dx12"
+    _write(target / "D3D12.dll", b"game's own")
+    archive = _mod_zip(home / "Downloads/ERSS-FG free v4.zip",
+                       {"ERSS-FG/D3D12.dll": b"loader", "ERSS-FG/dxgi.dll": b"mod dxgi", "ERSS-FG/ERSS2/ERSS.ini": b"[x]"})
+    service = _service(steam, fake_catalog, proc)
+    assert service.mod_candidates(APPID)["candidates"][0]["filename"] == "ERSS-FG free v4.zip"
+    detail = service.add_mod(APPID, str(archive))
+    assert detail["mod"]["count"] == 3 and detail["mod"]["applied"] is False
+    assert detail["mod"]["native_dlls"] == ["d3d12", "dxgi"]
+
+    result = service.install(APPID, {"build": "fsr-test"})
+    install = service.game(APPID)["install"]
+    assert install["proxy"] != "dxgi.dll", "the mod's dxgi.dll keeps its name; OptiScaler moves aside"
+    assert (target / install["proxy"]).is_file()
+    assert (target / "dxgi.dll").read_bytes() == b"mod dxgi"
+    assert (target / "D3D12.dll").read_bytes() == b"loader"
+    assert (target / "ERSS2/ERSS.ini").is_file()
+    assert {"d3d12", "dxgi"} <= set(install["native_dlls"])
+    assert any("d3d12" in override for override in result["overrides"])
+    assert service.game(APPID)["mod"]["applied"] is True
+    (target / "ERSS2/ERSS.ini").write_bytes(b"[rewritten by the mod]")
+
+    service.uninstall(APPID)
+    assert (target / "D3D12.dll").read_bytes() == b"game's own"
+    assert not (target / "dxgi.dll").exists() and not (target / "ERSS2").exists()
+
+
+def test_a_mod_that_overwrites_optiscalers_files_is_refused(steam, fake_catalog, proc):
+    home, _ = steam
+    archive = _mod_zip(home / "Downloads/bad.zip", {"OptiScaler.ini": b"[x]", "nvngx.dll": b"x"})
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    # Refused when added, before an automatic reinstall could take the working upscaler out.
+    with pytest.raises(UpscalerError, match="mod_conflict"):
+        service.add_mod(APPID, str(archive))
+    assert service.game(APPID)["install"] is not None and service.game(APPID)["mod"] is None
+
+
+def test_a_mod_archive_escaping_the_game_folder_is_refused(steam, fake_catalog, proc):
+    home, _ = steam
+    archive = _mod_zip(home / "Downloads/evil.zip", {"../../evil.dll": b"x"})
+    service = _service(steam, fake_catalog, proc)
+    with pytest.raises(UpscalerError, match="mod_unsafe_archive"):
+        service.add_mod(APPID, str(archive))
+    assert service.game(APPID)["mod"] is None
+
+
+def test_a_new_copy_of_the_mod_with_the_same_name_still_needs_a_reinstall(steam, fake_catalog, proc):
+    home, game = steam
+    archive = _mod_zip(home / "Downloads/ERSS-FG.zip", {"D3D12.dll": b"v1"})
+    service = _service(steam, fake_catalog, proc)
+    service.add_mod(APPID, str(archive))
+    service.install(APPID, {"build": "fsr-test"})
+    assert service.game(APPID)["mod"]["applied"] is True
+    _mod_zip(home / "Downloads/ERSS-FG.zip", {"D3D12.dll": b"v2"})
+    assert service.add_mod(APPID, str(archive))["mod"]["applied"] is False
+    removed = service.remove_mod(APPID)["mod"]
+    assert removed["removed"] is True and removed["applied"] is False, "its files stay in the game until the reinstall"
+
+
+def test_a_mod_download_in_progress_is_reported(steam, fake_catalog, proc):
+    home, _ = steam
+    _write(home / "Downloads/ERSS-FG-v4.14.1-Release.7z.crdownload", b"x" * 2048)
+    service = _service(steam, fake_catalog, proc)
+    found = service.mod_candidates(APPID)
+    assert found["downloading"] == {"filename": "ERSS-FG-v4.14.1-Release.7z.crdownload", "size": 2048}
+    assert found["candidates"] == []
+
+
+def test_a_password_protected_mod_asks_for_its_password(tmp_path, monkeypatch):
+    # ERSS-FG ships as a 7z whose files are all encrypted (7zAES); the password is in its Patreon post.
+    import subprocess
+    from upscalers import user_mods
+    archive = tmp_path / "ERSS-FG-v4.14.1-Release.7z"
+    archive.write_bytes(b"7z")
+    listing = ("Path = D3D12.dll\nSize = 4\nAttributes = A_ -rw-r--r--\nEncrypted = +\n\n"
+               "Path = ERSS2/bin/ffx_cas_x64.dll\nSize = 4\nAttributes = A_ -rw-r--r--\nEncrypted = +\n")
+    commands = []
+
+    def run(command, timeout):
+        commands.append(command)
+        if command[1] == "l":
+            return subprocess.CompletedProcess(command, 0, listing.encode(), b"")
+        if "-pfree" not in command:
+            return subprocess.CompletedProcess(command, 2, b"", b"ERROR: Wrong password : D3D12.dll")
+        staging = Path(next(arg for arg in command if arg.startswith("-o"))[2:])
+        (staging / "ERSS2/bin").mkdir(parents=True)
+        (staging / "D3D12.dll").write_bytes(b"MZ")
+        (staging / "ERSS2/bin/ffx_cas_x64.dll").write_bytes(b"MZ")
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    monkeypatch.setattr(user_mods, "_seven_zip", lambda: True)
+    monkeypatch.setattr(user_mods.user_deps, "run_archiver", run)
+    store = user_mods.Store(tmp_path / "store")
+    with pytest.raises(user_mods.ModError, match="^password$"):
+        store.adopt("1245620", archive, "Game", set(), {"Game"})
+    with pytest.raises(user_mods.ModError, match="password_wrong"):
+        store.adopt("1245620", archive, "Game", set(), {"Game"}, "nope")
+    assert store.adopt("1245620", archive, "Game", set(), {"Game"}, "free")["count"] == 2
+    assert all(command[0] == "7z" for command in commands)
+
+
+def test_a_recipe_prepares_the_mod_it_needs_without_the_user(steam, fake_catalog, proc, monkeypatch):
+    # Elden Ring + ERSS-FG: VC++ runtime in the prefix, anti-cheat launcher swapped, FSR and FSR-FG on in its settings.
+    from upscalers import prefix_dependencies, recipes, service as service_module, user_mods
+    home, game = steam
+    target = game / "bin/x64_dx12"
+    _write(target / "ERSS2/ERSS-FG.toml", b'OverlayToggleKey = "Home"\n\n[Renderer]\nScalingMode = "None"\nIsHDR = true\n')
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(
+        APPID, mod_launch_exe=("start_protected_game.exe", "eldenring.exe"),
+        mod_settings={"ERSS2/ERSS-FG.toml": {"Renderer.ScalingMode": '"FSR3U"', "FrameGeneration.FrameGenMode": "1"}},
+        mod_frame_generation="ERSS-FG"))
+    monkeypatch.setattr(user_mods.pe, "imported_dlls", lambda path: {"msvcp140.dll", "kernel32.dll"} if path.endswith("ERSS-FG.dll") else set())
+    prepared = []
+    monkeypatch.setattr(prefix_dependencies, "prepare", lambda home, installed, verbs, *a, **k: prepared.append(tuple(verbs)))
+    archive = _mod_zip(home / "Downloads/ERSS-FG.zip", {"D3D12.dll": b"MZ", "ERSS-FG.dll": b"MZ"})
+    service = _service(steam, fake_catalog, proc)
+    assert service.add_mod(APPID, str(archive))["mod"]["applied"] is False
+
+    result = service.install(APPID, {"build": "fsr-test"})
+    assert prepared == [("vcrun2022",)]
+    script = home / ".local/share/panel-de-control/bin/pdc-launch-exe"
+    assert result["wrappers"] == [str(script)] and result["env"] == {"PDC_LAUNCH_EXE": "start_protected_game.exe:eldenring.exe"}
+    assert '"${@/%"$from"/"$to"}"' in script.read_text() and script.stat().st_mode & 0o111
+    settings = (target / "ERSS2/ERSS-FG.toml").read_text()
+    assert 'ScalingMode="FSR3U"' in settings and "FrameGenMode=1" in settings and "IsHDR = true" in settings
+    assert service.overview()["installs"][APPID]["mod_fg"] == "ERSS-FG"
+
+    (target / "ERSS2/ERSS-FG.toml").write_text("rewritten by the mod while playing")
+    service.uninstall(APPID)
+    assert APPID not in service.overview()["installs"]
+    assert (target / "ERSS2/ERSS-FG.toml").read_bytes() == b'OverlayToggleKey = "Home"\n\n[Renderer]\nScalingMode = "None"\nIsHDR = true\n'
+    assert not (target / "ERSS-FG.dll").exists()
+    assert service_module._launch_result({}) == {}
+
+
+def test_report_publishes_the_recorded_game_before_the_slow_disk_reads(steam, fake_catalog, proc, monkeypatch):
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    started, release = threading.Event(), threading.Event()
+    real = service.diagnose
+
+    def slow(appid):
+        started.set()
+        release.wait(5)
+        return real(appid)
+
+    monkeypatch.setattr(service, "diagnose", slow)
+    partial: dict = {}
+    worker = threading.Thread(target=service.report, kwargs={"partial": partial})
+    worker.start()
+    try:
+        assert started.wait(5)
+        recorded = partial["games"][0]
+        assert recorded["appid"] == APPID and recorded["scanned"] is False
+        assert recorded["install"]["build"] == "fsr-test"
+        assert recorded["history"][-1]["build"] == "fsr-test"
+    finally:
+        release.set()
+        worker.join(5)
+    assert partial["games"][0].get("scanned") is not False
+    assert partial["games"][0]["elapsed_ms"] >= 0

@@ -1,6 +1,13 @@
 """Serialized transaction for all CPU controls."""
 
 from dataclasses import dataclass
+import time
+
+_RECOVERY_DELAY_S = 0.2
+
+
+class _StaleResume(Exception):
+    pass
 
 
 @dataclass(frozen=True)
@@ -12,6 +19,7 @@ class CpuCoordinatorResult:
     error_code: str | None = None
     error_type: str | None = None
     frequency_status: str | None = None
+    recovery: dict | None = None
 
 
 class CpuCoordinator:
@@ -29,11 +37,13 @@ class CpuCoordinator:
     def _current(name, control):
         return control.active() if name == "cores" else control.enabled()
 
-    def _set_changed(self, name, control, target, completed):
+    def _set_changed(self, name, control, target, completed, resume_current=None):
         if not self._supported(control) or target is None:
             return True
         if self._current(name, control) == target:
             return True
+        if resume_current is not None and not resume_current():
+            raise _StaleResume
         if name not in completed:
             completed.append(name)
         return control.set(target)
@@ -67,7 +77,46 @@ class CpuCoordinator:
             ),
         }
 
-    def _rollback(self, completed, snapshot):
+    def _apply_frequency(self, frequency):
+        if frequency.get("manual"):
+            return self._frequency.set_window(
+                frequency.get("min_khz"), frequency.get("max_khz")
+            )
+        return self._frequency.set_auto()
+
+    def _recover_readback(self, frequency, first):
+        """One late retry when boost is on and the hardware ceiling allows the target."""
+        rows = [row for row in (first or {}).get("policies", ()) if row.get("target")]
+        if not (
+            rows
+            and self._supported(self._boost)
+            and self._boost.enabled()
+            and all(
+                row.get("hardware_bounds")
+                and row["hardware_bounds"][1] >= row["target"][1]
+                for row in rows
+            )
+        ):
+            return None, None
+        time.sleep(_RECOVERY_DELAY_S)
+        retry = self._apply_frequency(frequency)
+        recovery = {
+            "attempted": True,
+            "recovered": bool(retry.ok),
+            "boost": 1,
+            "delay_ms": int(_RECOVERY_DELAY_S * 1000),
+            "first_failure": first,
+        }
+        if not retry.ok:
+            second = self._frequency.diagnostics().get("last_failure") or {}
+            recovery["retry_reason"] = retry.reason
+            recovery["retry"] = {
+                row.get("name"): {"applied": row.get("applied"), "writes": row.get("writes")}
+                for row in second.get("policies", ())
+            }
+        return retry, recovery
+
+    def _rollback(self, completed, snapshot, resume_current=None):
         ok = True
         completed = set(completed)
         boost_first = snapshot.get("boost_changes_frequency_bounds", False)
@@ -106,10 +155,16 @@ class CpuCoordinator:
                 ok = False
         if not boost_first and "boost" in completed and not self._boost.set(snapshot["boost"]):
             ok = False
-        if "smt" in completed and not self._smt.set(snapshot["smt"]):
-            ok = False
-        if "cores" in completed and not self._cores.set(snapshot["cores"]):
-            ok = False
+        # A pre-suspend snapshot can contain parked threads. Keep frequency recovery,
+        # but leave the topology restored by the sleep service online after wake.
+        if "smt" in completed and (resume_current is None or resume_current() or snapshot["smt"]):
+            if not self._smt.set(snapshot["smt"]):
+                ok = False
+        if "cores" in completed and (
+            resume_current is None or resume_current() or snapshot["cores"] == self._cores.max_cores
+        ):
+            if not self._cores.set(snapshot["cores"]):
+                ok = False
         return {"attempted": bool(completed), "ok": ok if completed else None}
 
     def _release_all(self, generation, preserve_frequency_ownership=False):
@@ -166,7 +221,7 @@ class CpuCoordinator:
 
     def apply(
         self, intent, generation, enabled=True, eco=False,
-        preserve_frequency_ownership=False,
+        preserve_frequency_ownership=False, resume_current=None,
     ):
         if not enabled:
             return self._release_all(
@@ -176,6 +231,7 @@ class CpuCoordinator:
         snapshot = self._snapshot()
         completed = []
         frequency_status = None
+        recovery = None
         try:
             targets = {
                 "cores": (
@@ -193,7 +249,7 @@ class CpuCoordinator:
                 if not self._set_changed(
                     "smt", self._smt, True, completed
                 ):
-                    rollback = self._rollback(completed, snapshot)
+                    rollback = self._rollback(completed, snapshot, resume_current)
                     return CpuCoordinatorResult(
                         False,
                         "failed" if rollback["ok"] is not False else "partial",
@@ -205,7 +261,7 @@ class CpuCoordinator:
                     "cores", self._cores,
                     getattr(self._cores, "max_cores", None), completed,
                 ):
-                    rollback = self._rollback(completed, snapshot)
+                    rollback = self._rollback(completed, snapshot, resume_current)
                     return CpuCoordinatorResult(
                         False,
                         "failed" if rollback["ok"] is not False else "partial",
@@ -216,7 +272,7 @@ class CpuCoordinator:
                 if not self._set_changed(
                     "boost", self._boost, targets["boost"], completed
                 ):
-                    rollback = self._rollback(completed, snapshot)
+                    rollback = self._rollback(completed, snapshot, resume_current)
                     return CpuCoordinatorResult(
                         False,
                         "failed" if rollback["ok"] is not False else "partial",
@@ -225,12 +281,13 @@ class CpuCoordinator:
                         "boost_write_failed",
                     )
 
-                if frequency.get("manual"):
-                    freq_result = self._frequency.set_window(
-                        frequency.get("min_khz"), frequency.get("max_khz")
+                freq_result = self._apply_frequency(frequency)
+                if not freq_result.ok and freq_result.reason == "readback_mismatch":
+                    retry, recovery = self._recover_readback(
+                        frequency, self._frequency.diagnostics().get("last_failure"),
                     )
-                else:
-                    freq_result = self._frequency.set_auto()
+                    if retry is not None:
+                        freq_result = retry
                 frequency_status = freq_result.status
                 safe_auto_noop = (
                     not frequency.get("manual")
@@ -238,7 +295,7 @@ class CpuCoordinator:
                     and freq_result.reason == "baseline_unavailable"
                 )
                 if not freq_result.ok and not safe_auto_noop:
-                    rollback = self._rollback(completed, snapshot)
+                    rollback = self._rollback(completed, snapshot, resume_current)
                     return CpuCoordinatorResult(
                         False,
                         "partial" if rollback["ok"] is False or freq_result.status == "partial" else "failed",
@@ -246,6 +303,7 @@ class CpuCoordinator:
                         rollback,
                         f"frequency_{freq_result.reason or 'apply_failed'}",
                         frequency_status=frequency_status,
+                        recovery=recovery,
                     )
                 if freq_result.ok:
                     completed.append("frequency")
@@ -255,9 +313,9 @@ class CpuCoordinator:
                     ("cores", self._cores),
                 ):
                     if not self._set_changed(
-                        name, control, targets[name], completed
+                        name, control, targets[name], completed, resume_current
                     ):
-                        rollback = self._rollback(completed, snapshot)
+                        rollback = self._rollback(completed, snapshot, resume_current)
                         return CpuCoordinatorResult(
                             False,
                             "failed" if rollback["ok"] is not False else "partial",
@@ -273,9 +331,9 @@ class CpuCoordinator:
                     ("boost", self._boost),
                 ):
                     if not self._set_changed(
-                        name, control, targets[name], completed
+                        name, control, targets[name], completed, resume_current
                     ):
-                        rollback = self._rollback(completed, snapshot)
+                        rollback = self._rollback(completed, snapshot, resume_current)
                         return CpuCoordinatorResult(
                             False,
                             "failed" if rollback["ok"] is not False else "partial",
@@ -290,9 +348,15 @@ class CpuCoordinator:
                 generation,
                 {"attempted": False, "ok": None},
                 frequency_status=frequency_status,
+                recovery=recovery,
+            )
+        except _StaleResume:
+            return CpuCoordinatorResult(
+                False, "rejected", generation, {"attempted": False, "ok": None},
+                "stale_resume",
             )
         except Exception as error:  # noqa: BLE001
-            rollback = self._rollback(completed, snapshot)
+            rollback = self._rollback(completed, snapshot, resume_current)
             return CpuCoordinatorResult(
                 False,
                 "failed" if rollback["ok"] is not False else "partial",

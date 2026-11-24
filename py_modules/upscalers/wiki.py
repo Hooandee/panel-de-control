@@ -23,13 +23,13 @@ TIMEOUT_S = 8
 MAX_BYTES = 4 * 1024 * 1024
 PAGE_MAX_BYTES = 256 * 1024
 # Bumped whenever parse() keeps new facts, so a copy saved by an older Panel is fetched again.
-FORMAT = 2
+FORMAT = 3
 # Bumped when parse_page learns something new, so pages cached by an older parser are fetched whole again.
 PAGE_FORMAT = 2
 
 _ROW = re.compile(r"^\|(?P<cells>.+)\|\s*$")
 _LINK = re.compile(r"\[([^\]]+)\]\(((?:[^()]|\([^()]*\))+)\)")
-_DX12 = re.compile(r"(?<![\w-])-dx12\b", re.I)
+_DX12 = re.compile(r"(?<![\w-])-dx12\b|(?<!not )(?<!n't )\buse\s+dx\s?12\b", re.I)
 _PROXY = re.compile(r"\b(?:as|rename(?:d)? (?:it )?to|use)\s+`?(winmm|version|dbghelp|wininet|winhttp|dxgi|d3d12)\.dll`?", re.I)
 _STORE_ONLY = re.compile(r"\b(?:xbox|game ?pass|ms store|microsoft store)\b", re.I)
 _LINUX = re.compile(r"\b(?:linux|steamos|steam ?deck|proton|wine|bazzite|cachyos)\b", re.I)
@@ -49,6 +49,7 @@ _AMD = re.compile(r"\b(?:amd|radeon|rdna)\b", re.I)
 _AUTOAPPLIED = re.compile(r"auto-?applied", re.I)
 _FILENAME = re.compile(r"`?([A-Za-z0-9_]+\.(?:dll|asi))`?", re.I)
 _SECTIONS = {"upscaler mods support": "mod", "luma unreal engine": "luma"}
+_NAME_ALIASES = {"resident evil village": "resident evil 8 village"}
 
 
 def clean(name: str) -> str:
@@ -238,10 +239,14 @@ class WikiCache:
 
     def lookup(self, *names: str | None) -> dict | None:
         rows = self.rows()
-        for name in names:
-            for key in variants(name or ""):
-                if key and key in rows:
-                    return rows[key]
+        keys = list(dict.fromkeys(key for name in names for key in variants(name or "") if key))
+        for key in keys:
+            if key in rows:
+                return rows[key]
+        for key in keys:
+            if alias := _NAME_ALIASES.get(key):
+                if alias in rows:
+                    return rows[alias]
         return None
 
     def _fetch(self, url: str, etag: str | None, limit: int, fetch) -> tuple[str, bytes | None, str | None]:

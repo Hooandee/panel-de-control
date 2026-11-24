@@ -1849,3 +1849,69 @@ def test_other_devices_do_not_probe_steamos_service(Plugin, device):
     plugin._steamos_manager_detector.active = unexpected_probe
     result = asyncio.run(plugin.get_tdp_conflict())
     assert result["steamos_manager_active"] is False
+
+
+def test_report_environment_records_steam_layout_settings_redacted(Plugin):
+    """A theme broke for many users with Home → «Fondo ampliado» on and the bundle never
+    said so: the layout-affecting Steam settings ride in environment, booleans/enums only."""
+    plugin = Plugin()
+    plugin._init()
+
+    env = plugin._report_environment({
+        "steam_client_layout": {
+            "status": "captured",
+            "settings": {
+                "library_home_big_art": True,
+                "library_low_perf_mode": False,
+                "library_display_size": 2,
+                "show_store_content_on_home": "secret text",
+                "unlisted_setting": True,
+                "library_low_bandwidth_mode": float("nan"),
+            },
+        },
+    })
+
+    assert env["steam_client_layout"] == {
+        "status": "captured",
+        "settings": {
+            "library_home_big_art": True,
+            "library_low_perf_mode": False,
+            "library_display_size": 2,
+            "show_store_content_on_home": None,
+            "library_low_bandwidth_mode": None,
+        },
+    }
+
+
+@pytest.mark.parametrize("context", [None, {}, {"steam_client_layout": "junk"},
+                                     {"steam_client_layout": {"status": "x" * 200}}])
+def test_report_environment_marks_missing_steam_layout(Plugin, context):
+    plugin = Plugin()
+    plugin._init()
+
+    layout = plugin._report_environment(context)["steam_client_layout"]
+
+    assert layout["status"] in {"not_provided", "unavailable"}
+    assert layout["settings"] == {}
+
+
+def test_launch_frontend_does_not_duplicate_steam_layout(Plugin):
+    plugin = Plugin()
+    plugin._init()
+
+    frontend = plugin._launch_report_state({"steam_client_layout": {"status": "captured"}})["frontend"]
+
+    assert "steam_client_layout" not in frontend
+
+
+def test_hide_steamos_card_persists_and_reaches_the_state(Plugin):
+    p = Plugin()
+    p._init()
+    assert asyncio.run(p.get_tdp_state())["hide_tdp_steamos_card"] is False
+    assert asyncio.run(p.set_hide_tdp_steamos_card(True)) is True
+    assert asyncio.run(p.get_tdp_state())["hide_tdp_steamos_card"] is True
+    p2 = Plugin()
+    p2._init()
+    assert p2._settings["hide_tdp_steamos_card"] is True
+    assert asyncio.run(p2.get_tdp_state())["tdp_control_enabled"] is True
+    assert asyncio.run(p2.set_hide_tdp_steamos_card(False)) is False

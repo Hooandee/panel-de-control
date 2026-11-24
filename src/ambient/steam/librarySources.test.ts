@@ -1,11 +1,52 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
 
-import { installedGameAppIds, isStoreApp, libraryHeroUrl, neighborAppIdsIn, selectedAppIdFromHero, selectedAppIdIn } from "./librarySources";
+import { gameHero, installedGameAppIds, isStoreApp, libraryHeroUrl, neighborAppIdsIn, selectedAppIdFromHero, selectedAppIdIn } from "./librarySources";
 
 describe("library sources", () => {
   afterEach(() => {
     delete (globalThis as { collectionStore?: unknown }).collectionStore;
+    delete (globalThis as { appStore?: unknown }).appStore;
+    delete (globalThis as { appDetailsStore?: unknown }).appDetailsStore;
+  });
+
+  // Steam Deck LCD, Steam client captured over CDP: /assets/548430/library_hero.jpg is 404 while the hashed path is 200.
+  describe("gameHero", () => {
+    const stores = (custom: string[], heroes: string[]) => {
+      Object.assign(globalThis, {
+        appStore: { GetAppOverviewByAppID: (id: number) => ({ appid: id }), GetCustomHeroImageURLs: () => custom },
+        appDetailsStore: { GetHeroImagesForAppId: () => ({ rgHeroImages: heroes }) },
+      });
+    };
+    const hash = "35c4a38067592e934fbb389098eccb0d8a8de000";
+
+    it("keeps the plain path when Steam exposes nothing else", () => {
+      expect(gameHero(588650).url).toBe("https://steamloopback.host/assets/588650/library_hero.jpg");
+      stores([], ["https://shared.steamstatic.com/store_item_assets/steam/apps/588650/library_hero.jpg?t=0"]);
+      expect(gameHero(588650).url).toBe("https://steamloopback.host/assets/588650/library_hero.jpg");
+    });
+
+    it("serves hashed store art from the local asset path", () => {
+      stores([], [`https://shared.steamstatic.com/store_item_assets/steam/apps/548430/${hash}/library_hero.jpg?t=0`]);
+      expect(gameHero(548430)).toEqual({ url: `https://steamloopback.host/assets/548430/${hash}/library_hero.jpg`, source: "hashed" });
+    });
+
+    it("ignores hashed art that belongs to another app", () => {
+      stores([], [`https://shared.steamstatic.com/store_item_assets/steam/apps/1/${hash}/library_hero.jpg`]);
+      expect(gameHero(2).url).toBe("https://steamloopback.host/assets/2/library_hero.jpg");
+    });
+
+    it("prefers the user's custom hero, also for non-Steam shortcuts", () => {
+      stores(["/customimages/2953644062_hero.png?v=1"], [`https://shared.steamstatic.com/store_item_assets/steam/apps/2953644062/${hash}/library_hero.jpg`]);
+      expect(gameHero("2953644062")).toEqual({ url: "https://steamloopback.host/customimages/2953644062_hero.png?v=1", source: "custom" });
+    });
+
+    it("ignores custom art outside Steam's own asset paths and survives broken stores", () => {
+      stores(["https://example.com/x.png", "/other/x.png"], []);
+      expect(gameHero(7).url).toBe("https://steamloopback.host/assets/7/library_hero.jpg");
+      Object.assign(globalThis, { appStore: { GetAppOverviewByAppID: () => { throw new Error("gone"); } } });
+      expect(gameHero(7).url).toBe("https://steamloopback.host/assets/7/library_hero.jpg");
+    });
   });
 
   it("lists installed games only", () => {

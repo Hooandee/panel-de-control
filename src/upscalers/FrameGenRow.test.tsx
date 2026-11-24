@@ -1,13 +1,14 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const api = vi.hoisted(() => ({ refreshFrameGenEngine: vi.fn(), getMakoStatus: vi.fn(), installMako: vi.fn(), setMakoGame: vi.fn(), getUpscalerLaunchReceipt: vi.fn(), managedLaunch: vi.fn(), readAppDetails: vi.fn(), getLsfgStatus: vi.fn(), adoptForeignLsfg: vi.fn(), installLsfg: vi.fn(), setLsfgGame: vi.fn(), restoreForeignLsfg: vi.fn(), writeLaunchOptions: vi.fn() }));
+const api = vi.hoisted(() => ({ refreshFrameGenEngine: vi.fn(), getMakoStatus: vi.fn(), installMako: vi.fn(), dismissMakoNotice: vi.fn(), setMakoGame: vi.fn(), getUpscalerLaunchReceipt: vi.fn(), managedLaunch: vi.fn(), readAppDetails: vi.fn(), getLsfgStatus: vi.fn(), adoptForeignLsfg: vi.fn(), installLsfg: vi.fn(), setLsfgGame: vi.fn(), restoreForeignLsfg: vi.fn(), writeLaunchOptions: vi.fn() }));
 vi.mock("../api", () => api);
 vi.mock("../components/ContainedSlider", () => ({ ContainedSlider: ({ label, value, min, max, step, disabled, onChange }: any) => <input type="range" aria-label={label} value={value} min={min} max={max} step={step} disabled={disabled} onChange={e => onChange(Number(e.target.value))} /> }));
 vi.mock("./managedLaunch", () => ({ applyManagedLaunch: api.managedLaunch }));
 vi.mock("./losslessBranch", () => ({ readLosslessBranch: async () => ({ selected: "lsfg-vk", available: true, supported: true }), switchLosslessBranch: vi.fn() }));
 vi.mock("../launch/steamApi", () => ({ readAppDetails: api.readAppDetails, writeLaunchOptions: api.writeLaunchOptions }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock("../components/NoticeCard", () => ({ NoticeCard: ({ title, dismissLabel, onDismiss }: any) => <div><span>{title}</span><button onClick={onDismiss}>{dismissLabel}</button></div> }));
 vi.mock("../components/ExperimentalBadge", () => ({ ExperimentalBadge: ({ children }: any) => <span>{children}</span> }));
 vi.mock("./parts", () => ({
   Note: ({ children }: any) => <div>{children}</div>,
@@ -53,11 +54,11 @@ it("offers detected foreign Lossless without changing it until explicit adoption
   await waitFor(() => expect(onOptiscaler).toHaveBeenCalledWith("off", null));
   expect(api.adoptForeignLsfg).toHaveBeenCalledOnce();
   expect(api.installLsfg).toHaveBeenCalledOnce();
-  expect(api.setLsfgGame).toHaveBeenCalledWith("1", { multiplier: 2, flow: "balanced", performance: true });
+  expect(api.setLsfgGame).toHaveBeenCalledWith("1", { multiplier: 2, flow_scale: 0.75, flow_manual: false, performance: true });
 });
 
 it("keeps restoration out of the main controls and renders it through advanced options", async () => {
-  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false, foreign_backup: true, profiles: { "1": { multiplier: 3, flow: "balanced", performance: false } } });
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false, foreign_backup: true, profiles: { "1": { multiplier: 3, flow_scale: 0.75, performance: false } } });
   const view = (open: boolean) => <FrameGenRow appid="1" liveAppid={1} isNonSteam={false} gameRunning={false} routes={{}} inputs={{}} optiscaler={{ fg: "off", route: "game" }} installedRoute={null} gpu="amd" onOptiscaler={vi.fn()} renderAdvanced={restore => open ? <section aria-label="advanced">{restore}</section> : null} />;
   const { rerender } = render(view(false));
   await screen.findByRole("combobox", { name: "up.lsfg.multiplier" });
@@ -85,8 +86,41 @@ it("only activates managed Lossless after pressing Activate", async () => {
   fireEvent.click((await screen.findByRole("button", { name: "up.activate" })));
   await waitFor(() => expect(api.setLsfgGame).toHaveBeenCalledOnce());
 });
+const lsfgProfile = (extra: object) => ({ multiplier: 3, flow_scale: 0.75, performance: false, ...extra });
+const withLsfg = (profile: object) => {
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, installed: true, foreign: false, profiles: { "1": profile } });
+  api.setLsfgGame.mockResolvedValue({ env: { LSFGVK_PROFILE: "pdc-1" } });
+  api.writeLaunchOptions.mockReturnValue(true);
+  render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
+};
+const flowPicker = () => screen.findByRole("combobox", { name: "up.lsfg.flow" }) as Promise<HTMLSelectElement>;
+it("shows a saved preset value as that preset, without the slider", async () => {
+  withLsfg(lsfgProfile({ flow_scale: 0.5 }));
+  expect((await flowPicker()).value).toBe("performance");
+  expect(screen.queryByRole("slider", { name: "up.lsfg.flowScale" })).toBeNull();
+});
+it("shows any other saved value as Manual with that value on the slider", async () => {
+  withLsfg(lsfgProfile({ flow_scale: 0.65 }));
+  expect((await flowPicker()).value).toBe("manual");
+  expect((screen.getByRole("slider", { name: "up.lsfg.flowScale" }) as HTMLInputElement).value).toBe("65");
+});
+it("applies a preset's value and keeps the last manual one", async () => {
+  withLsfg(lsfgProfile({ flow_scale: 0.6, flow_manual: true, manual_scale: 0.6 }));
+  fireEvent.change(await flowPicker(), { target: { value: "quality" } });
+  await waitFor(() => expect(api.setLsfgGame).toHaveBeenCalledWith("1", lsfgProfile({ flow_scale: 1, flow_manual: false, manual_scale: 0.6 })));
+});
+it("returns to the last manual value when Manual is chosen again", async () => {
+  withLsfg(lsfgProfile({ flow_scale: 1, flow_manual: false, manual_scale: 0.6 }));
+  fireEvent.change(await flowPicker(), { target: { value: "manual" } });
+  await waitFor(() => expect(api.setLsfgGame).toHaveBeenCalledWith("1", lsfgProfile({ flow_scale: 0.6, flow_manual: true, manual_scale: 0.6 })));
+});
+it("saves the slider value as the manual one with the rest of the Lossless profile", async () => {
+  withLsfg(lsfgProfile({ flow_scale: 0.65, flow_manual: true }));
+  fireEvent.change(await screen.findByRole("slider", { name: "up.lsfg.flowScale" }), { target: { value: "40" } });
+  await waitFor(() => expect(api.setLsfgGame).toHaveBeenCalledWith("1", lsfgProfile({ flow_scale: 0.4, flow_manual: true, manual_scale: 0.4 })));
+});
 it("deactivates an active Lossless profile explicitly", async () => {
-  api.getLsfgStatus.mockResolvedValue({ ...foreign, installed: true, foreign: false, profiles: { "1": { multiplier: 2, flow: "balanced", performance: true } } });
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, installed: true, foreign: false, profiles: { "1": { multiplier: 2, flow_scale: 0.75, performance: true } } });
   api.setLsfgGame.mockResolvedValue({ env: {} });
   api.writeLaunchOptions.mockReturnValue(true);
   render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
@@ -133,11 +167,35 @@ it("stages Mako then configures it and its owned launcher on explicit activation
   api.getMakoStatus.mockResolvedValue(makoReady);
   api.setMakoGame.mockResolvedValue({ env: { MAKO_CONFIG: "/config/mako/1.toml" }, wrappers: ["/private/mako-launch"] });
   render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
-  await screen.findByRole("option", { name: "Mako" });
+  await screen.findByRole("option", { name: "Mako 4 Lossless" });
   fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
   expect(api.setMakoGame).not.toHaveBeenCalled();
   fireEvent.click((await screen.findByRole("button", { name: "up.activate" })));
   await waitFor(() => expect(api.managedLaunch).toHaveBeenCalledWith("1", 1, "mako", { env: { MAKO_CONFIG: "/config/mako/1.toml" }, wrappers: ["/private/mako-launch"] }, { isNonSteam: false, requireComplete: true }));
+});
+it("activates Mako 5 with its own model and no Lossless.dll", async () => {
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false });
+  api.getMakoStatus.mockResolvedValue({ ...makoReady, dll: false, v5: { installed: false, ready: false, reason: "mako_not_installed", version: null } });
+  api.installMako.mockResolvedValue({ ...makoReady, dll: false, v5: { installed: true, ready: true, reason: null, version: "5.0.0" } });
+  api.setMakoGame.mockResolvedValue({ env: { MAKO_CONFIG: "/config/mako/1.toml" }, wrappers: ["/private/mako5-launch"], profile: {} });
+  render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
+  await screen.findByRole("option", { name: "Mako 5" });
+  fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako5" } });
+  expect(screen.queryByText("up.mako.requirement")).toBeNull();
+  fireEvent.click((await screen.findByRole("button", { name: "up.activate" })));
+  await waitFor(() => expect(api.installMako).toHaveBeenCalledWith(5));
+  await waitFor(() => expect(api.setMakoGame).toHaveBeenCalledWith("1", expect.objectContaining({ engine: 5, fg_mode: "balanced", performance: false })));
+});
+it("tells once that Mako 4 uses Lossless Scaling and remembers the dismissal", async () => {
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false });
+  api.getMakoStatus.mockResolvedValue(makoReady);
+  api.dismissMakoNotice.mockResolvedValue({ ...makoReady, notice_dismissed: true });
+  render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
+  await screen.findByRole("option", { name: "Mako 4 Lossless" });
+  fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
+  fireEvent.click(await screen.findByRole("button", { name: "up.mako.notice.dismiss" }));
+  await waitFor(() => expect(screen.queryByText("up.mako.notice.title")).toBeNull());
+  expect(api.dismissMakoNotice).toHaveBeenCalled();
 });
 it("offers to clear another tool's Mako setup before using Panel's", async () => {
   api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false });
@@ -145,7 +203,7 @@ it("offers to clear another tool's Mako setup before using Panel's", async () =>
   api.readAppDetails.mockResolvedValue({ launch: "MAKO_PROFILE=custom ~/.local/bin/mako-run %command% -dx11" });
   api.writeLaunchOptions.mockImplementation((_appid: number, value: string) => { api.readAppDetails.mockResolvedValue({ launch: value }); return true; });
   render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
-  await screen.findByRole("option", { name: "Mako" });
+  await screen.findByRole("option", { name: "Mako 4 Lossless" });
   fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
   expect(await screen.findByText("up.mako.leftover")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "up.activate" })).toBeNull();
@@ -161,7 +219,7 @@ it("rolls back Mako configuration when launch composition fails", async () => {
   api.setMakoGame.mockResolvedValue({ env: {}, wrappers: [] });
   api.managedLaunch.mockResolvedValue({ ok: false, preserved: { env: [], wrappers: [] } });
   render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
-  await screen.findByRole("option", { name: "Mako" });
+  await screen.findByRole("option", { name: "Mako 4 Lossless" });
   fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
   fireEvent.click((await screen.findByRole("button", { name: "up.activate" })));
   expect(await screen.findByText("up.lsfg.launchFailed")).toBeTruthy();
@@ -169,16 +227,16 @@ it("rolls back Mako configuration when launch composition fails", async () => {
 });
 
 it("retires newly configured Mako when the previous generator cannot be disabled", async () => {
-  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false, profiles: { "1": { multiplier: 2, flow: "balanced", performance: true } } });
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false, profiles: { "1": { multiplier: 2, flow_scale: 0.75, performance: true } } });
   api.getMakoStatus.mockResolvedValue(makoReady);
   api.setMakoGame.mockResolvedValue({ env: {}, wrappers: [] });
   api.setLsfgGame.mockRejectedValue(new Error("disk"));
   render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
-  await screen.findByRole("option", { name: "Mako" });
+  await screen.findByRole("option", { name: "Mako 4 Lossless" });
   fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
   fireEvent.click((await screen.findByRole("button", { name: "up.save" })));
   expect(await screen.findByText("up.error.generic")).toBeTruthy();
-  expect(api.setMakoGame).toHaveBeenLastCalledWith("1", { enabled: false });
+  expect(api.setMakoGame).toHaveBeenLastCalledWith("1", null);
   await waitFor(() => expect(api.getLsfgStatus).toHaveBeenCalledTimes(2));
 });
 
@@ -186,7 +244,7 @@ it("explains ambiguous shortcuts and prevents claiming another entry's Mako sett
   api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false });
   api.getMakoStatus.mockResolvedValue({ ...makoReady, ready: false, reason: "mako_identity_ambiguous" });
   render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
-  await screen.findByRole("option", { name: "Mako" });
+  await screen.findByRole("option", { name: "Mako 4 Lossless" });
   fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
   expect(screen.getByText("up.mako.identity")).toBeTruthy();
   expect(((await screen.findByRole("button", { name: "up.activate" })) as HTMLButtonElement).disabled).toBe(true);
@@ -199,7 +257,7 @@ it("shows activating while the Mako engine download is pending and clears it on 
   let fail!: (error: Error) => void;
   api.installMako.mockReturnValue(new Promise((_resolve, reject) => { fail = reject; }));
   render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
-  await screen.findByRole("option", { name: "Mako" });
+  await screen.findByRole("option", { name: "Mako 4 Lossless" });
   fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
   fireEvent.click((await screen.findByRole("button", { name: "up.activate" })));
   expect(await screen.findByRole("button", { name: "up.activating" })).toBeTruthy();
@@ -216,7 +274,7 @@ it("checks on selection and updates an installed engine before allowing activati
   api.refreshFrameGenEngine.mockResolvedValueOnce({ state: "available", version: "4.6.0", available: "4.6.1" })
     .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   render(<FrameGenRow appid="1" liveAppid={1} isNonSteam={false} gameRunning={false} routes={{}} inputs={{}} optiscaler={{ fg: "off", route: "game" }} installedRoute={null} gpu="amd" onOptiscaler={vi.fn()} />);
-  await screen.findByRole("option", { name: "Mako" });
+  await screen.findByRole("option", { name: "Mako 4 Lossless" });
   fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
   expect(await screen.findByRole("button", { name: "up.engine.updating" })).toHaveProperty("disabled", true);
   expect(api.refreshFrameGenEngine.mock.calls).toEqual([["mako", false], ["mako", true]]);
@@ -229,7 +287,7 @@ it("keeps the installed engine usable after an offline update check", async () =
   api.getMakoStatus.mockResolvedValue(installedMako);
   api.refreshFrameGenEngine.mockResolvedValue({ state: "failed", version: "4.6.0" });
   render(<FrameGenRow appid="1" liveAppid={1} isNonSteam={false} gameRunning={false} routes={{}} inputs={{}} optiscaler={{ fg: "off", route: "game" }} installedRoute={null} gpu="amd" onOptiscaler={vi.fn()} />);
-  await screen.findByRole("option", { name: "Mako" });
+  await screen.findByRole("option", { name: "Mako 4 Lossless" });
   fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
   expect(await screen.findByText("up.engine.failed")).toBeTruthy();
   expect(await screen.findByRole("button", { name: "up.activate" })).toHaveProperty("disabled", false);
@@ -254,7 +312,7 @@ it("keeps the newly created Mako profile while its launch write is pending", asy
   api.setMakoGame.mockResolvedValue({ env: {}, wrappers: [] });
   api.managedLaunch.mockResolvedValue({ ok: false, pending: true, preserved: { env: [], wrappers: [] } });
   render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
-  await screen.findByRole("option", { name: "Mako" });
+  await screen.findByRole("option", { name: "Mako 4 Lossless" });
   fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
   fireEvent.click(await screen.findByRole("button", { name: "up.activate" }));
   expect(await screen.findByText("up.lsfg.launchFailed")).toBeTruthy();

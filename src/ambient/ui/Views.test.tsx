@@ -20,6 +20,7 @@ vi.mock("./NowPlaying", () => ({
 vi.mock("./primitives", () => ({
   Button: ({ label, onActivate }: any) => <button onClick={onActivate}>{label}</button>,
   Caption: ({ children }: any) => <div>{children}</div>,
+  Hint: ({ children }: any) => <span>{children}</span>,
   ChoiceRow: ({ label }: any) => <div>{label}</div>,
   ValueRow: ({ label }: any) => <div>{label}</div>,
   SliderRow: ({ label }: any) => <div>{label}</div>,
@@ -45,7 +46,7 @@ function fixture(enabled = true, pinned = "") {
     } },
     current: { kind: "video", ref: "local:clip", name: "Clip", collection: "folder" },
     items: [{ ref: "local:clip" }], previewUrl: "http://localhost/clip", previews: {},
-    scan: { music: [], collections: {} }, coveredBy: [], optimizing: false,
+    scan: { music: [], collections: {} }, coveredBy: [], decision: { background: "panel" }, optimizing: false,
     player: { track: null, status: "idle" }, motion: "play",
   } as unknown as AmbientSnapshot;
   return { runtime, snapshot };
@@ -64,6 +65,17 @@ it("shows only the background switch while disabled, even with pending media sta
   fireEvent.click(screen.getByRole("checkbox"));
   const update = vi.mocked(props.runtime.updateSettings).mock.calls[0][0];
   expect(update(props.snapshot.state!.settings).background.enabled).toBe(true);
+});
+
+it("explains that no trailers play while the theme's background is in charge", () => {
+  const props = fixture();
+  render(<BackgroundView {...props} />);
+  expect(screen.queryByText("ambient.game.trailers.covered")).toBeNull();
+  cleanup();
+  const covered = fixture();
+  Object.assign(covered.snapshot, { decision: { background: "theme" }, coveredBy: ["hooandee-loop"] });
+  render(<BackgroundView {...covered} />);
+  expect(screen.getByText("ambient.game.trailers.covered")).toBeTruthy();
 });
 
 it("places the background switch first and library directly below the enabled preview", () => {

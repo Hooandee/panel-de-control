@@ -1,6 +1,8 @@
 import os
 import subprocess
 
+import pytest
+
 from cpu.sleep_guard import UNIT_NAME, UNIT_TEXT, SleepCoreGuard
 
 
@@ -78,3 +80,33 @@ def test_remove_without_reload_keeps_unload_fast(tmp_path):
     assert guard.remove(reload=False) is True
     assert not guard.installed
     assert calls == [("daemon-reload",)]
+
+
+@pytest.mark.parametrize("active_cores", [4, 8])
+def test_sleep_unit_enables_smt_with_limited_or_all_physical_cores(tmp_path, active_cores):
+    cpu = tmp_path / "sys/devices/system/cpu"
+    (cpu / "smt").mkdir(parents=True)
+    (cpu / "smt/control").write_text("off")
+    (cpu / "smt/active").write_text("1\n")
+    for index in range(1, 16):
+        (cpu / f"cpu{index}").mkdir()
+        online = index < active_cores
+        (cpu / f"cpu{index}/online").write_text("1" if online else "0")
+    line = next(row for row in UNIT_TEXT.splitlines() if row.startswith("ExecStart="))
+    script = line.split("-c '", 1)[1].rsplit("'", 1)[0].replace("$$", "$")
+    script = script.replace("/sys/devices/system/cpu", str(cpu))
+    result = subprocess.run(["/bin/sh", "-c", script], check=True, capture_output=True, text=True)
+    assert result.stdout.strip() == "pdc-sleep-cores rc=0 smt_active=1"
+    assert (cpu / "smt/control").read_text().strip() == "on"
+    assert all((cpu / f"cpu{i}/online").read_text().strip() == "1" for i in range(1, 16))
+
+
+@pytest.mark.parametrize("mode", ["on", "forceoff", "notsupported"])
+def test_sleep_unit_preserves_other_smt_states(tmp_path, mode):
+    cpu = tmp_path / "sys/devices/system/cpu"
+    (cpu / "smt").mkdir(parents=True)
+    (cpu / "smt/control").write_text(mode)
+    line = next(row for row in UNIT_TEXT.splitlines() if row.startswith("ExecStart="))
+    script = line.split("-c '", 1)[1].rsplit("'", 1)[0].replace("$$", "$")
+    subprocess.run(["/bin/sh", "-c", script.replace("/sys/devices/system/cpu", str(cpu))], check=True)
+    assert (cpu / "smt/control").read_text().strip() == mode

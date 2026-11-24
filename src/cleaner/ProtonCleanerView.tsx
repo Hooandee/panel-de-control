@@ -9,12 +9,13 @@ import { CleanerButton, CleanerNotice, CleanerResult, cleanerCaption, cleanerCol
 import { cleanerReasonKey } from "./errors";
 import { formatBytes } from "./model";
 import { readInstalledProtonMetadata } from "./steamMetadata";
+import { recordUiEvent } from "../system/uiEvents";
 import type { ProtonCleanerController } from "./useProtonCleaner";
 
 type ProtonFilter = "all" | "recommended" | "selected";
 const FILTERS: ProtonFilter[] = ["all", "recommended", "selected"];
 
-export const ProtonCleanerView: FC<{ controller: ProtonCleanerController }> = ({ controller }) => {
+export const ProtonCleanerView: FC<{ controller: ProtonCleanerController; active: boolean }> = ({ controller, active }) => {
   const { t, lang } = useI18n();
   const [selected, setSelected] = useState(new Set<string>());
   const [filter, setFilter] = useState<ProtonFilter>("all");
@@ -34,6 +35,23 @@ export const ProtonCleanerView: FC<{ controller: ProtonCleanerController }> = ({
   const recommended = shown.filter((entry) => entry.recommended && entry.selectable);
   const allRecommendedSelected = recommended.length > 0 && recommended.every((entry) => selected.has(entry.id));
   const chosenBytes = chosen.reduce((sum, entry) => sum + (entry.bytes ?? 0), 0);
+  const { state, loading, busy, pending } = controller;
+  const entryCount = state ? entries.length : null;
+  const selectableCount = state ? entries.filter((entry) => entry.selectable).length : null;
+  const protectedCount = entryCount === null || selectableCount === null ? null : entryCount - selectableCount;
+  const selectedCount = chosen.length;
+  const status = state?.status ?? "unknown";
+  const coverageComplete = state?.coverage_complete ?? null;
+
+  useEffect(() => {
+    if (!active) return;
+    recordUiEvent("proton", "selection_state", {
+      status, loading, busy, pending: pending ?? "none", entry_count: entryCount,
+      selectable_count: selectableCount, protected_count: protectedCount,
+      selected_count: selectedCount, coverage_complete: coverageComplete,
+    });
+  }, [active, status, loading, busy, pending, entryCount, selectableCount, protectedCount, selectedCount, coverageComplete]);
+
   const error = controller.error || controller.state?.error;
 
   return <div style={cleanerColumn}>

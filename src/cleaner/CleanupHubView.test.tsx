@@ -1,10 +1,13 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { CleanerController } from "./useSteamCleaner";
 import type { MediaCleanerController } from "./useMediaCleaner";
 import type { ProtonCleanerController } from "./useProtonCleaner";
+import type { ProtonEntry } from "./protonTypes";
+import protectedTools from "./fixtures/proton-protected-tools.json";
+import { setUiEventSink } from "../system/uiEvents";
 
 vi.mock("@decky/ui", () => ({
   PanelSectionRow: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
@@ -42,7 +45,7 @@ const proton = (): ProtonCleanerController => ({
   refresh: vi.fn(async () => {}), queueScan: vi.fn(), scan: vi.fn(async () => {}), clean: vi.fn(async () => {}), dismissResult: vi.fn(),
 });
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); setUiEventSink(null); vi.useRealTimers(); });
 
 it("keeps one understandable summary and persistent selections across tabs", () => {
   const mediaController = media();
@@ -132,4 +135,62 @@ it("takes the hidden tabs out of gamepad navigation so focus cannot walk into th
   fireEvent.click(screen.getByRole("tab", { name: "cleaner.tab.media" }));
   expect(gamesPanel.getAttribute("data-child-focus-disabled")).toBe("true");
   expect(mediaPanel.getAttribute("data-child-focus-disabled")).toBe("false");
+});
+
+
+it("records visible Proton state from the protected inventory without tool identities or hidden updates", () => {
+  vi.useFakeTimers();
+  const events: Array<{ area: string; action: string; fields: unknown; detail: string }> = [];
+  setUiEventSink((area, action, detail) => { events.push({ area, action, fields: JSON.parse(detail), detail }); });
+  const p = proton();
+  if (!p.state) throw new Error("missing test state");
+  p.state = { ...p.state, status: "ready", coverage_complete: protectedTools.coverage_complete,
+    entries: protectedTools.rows.map((row, index) => ({ ...row, id: `private-entry-${index}`, name: `private-name-${index}`,
+      tool_name: `private-tool-${index}`, appid: `private-app-${index}`, bytes: 1 })) as ProtonEntry[] };
+  const props = { games: games(), media: media(), proton: p, onRefresh: vi.fn(), refreshing: false };
+  const { rerender } = render(<CleanupHubView {...props} />);
+  const flush = () => act(() => { vi.advanceTimersByTime(1000); });
+  flush();
+  expect(events).toHaveLength(0);
+
+  fireEvent.click(screen.getByRole("tab", { name: "cleaner.tab.proton" }));
+  flush();
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({ area: "proton", action: "selection_state", fields: {
+    status: "ready", loading: false, busy: false, pending: "none", entry_count: 8,
+    selectable_count: 0, protected_count: 8, selected_count: 0, coverage_complete: true,
+  } });
+  expect(new TextEncoder().encode(events[0].detail).length).toBeLessThanOrEqual(400);
+  expect(events[0].detail).not.toMatch(/private-|tool_name|appid|name|reason|path|scan_id/);
+
+  rerender(<CleanupHubView {...props} proton={{ ...p, state: { ...p.state, entries: [...p.state.entries] } }} />);
+  flush();
+  expect(events).toHaveLength(1);
+  fireEvent.click(screen.getByRole("tab", { name: "cleaner.tab.games" }));
+  const queued = { ...p, loading: true, pending: "scan" as const, busy: true };
+  rerender(<CleanupHubView {...props} proton={queued} />);
+  flush();
+  expect(events).toHaveLength(1);
+
+  fireEvent.click(screen.getByRole("tab", { name: "cleaner.tab.proton" }));
+  flush();
+  expect(events).toHaveLength(2);
+  expect(events[1].fields).toMatchObject({ loading: true, busy: true, pending: "scan", entry_count: 8, selectable_count: 0 });
+  rerender(<CleanupHubView {...props} />);
+  flush();
+  expect(events).toHaveLength(3);
+  expect(events[2].fields).toMatchObject({ loading: false, busy: false, pending: "none", protected_count: 8 });
+  expect(p.clean).not.toHaveBeenCalled();
+});
+
+it("records unknown Proton inventory as null while its visible scan is pending", () => {
+  vi.useFakeTimers();
+  const events: unknown[] = [];
+  setUiEventSink((_area, _action, detail) => { events.push(JSON.parse(detail)); });
+  const p = { ...proton(), state: null, loading: true, pending: "scan" as const, busy: true };
+  render(<CleanupHubView games={games()} media={media()} proton={p} onRefresh={vi.fn()} refreshing />);
+  fireEvent.click(screen.getByRole("tab", { name: "cleaner.tab.proton" }));
+  act(() => { vi.advanceTimersByTime(1000); });
+  expect(events).toEqual([{ status: "unknown", loading: true, busy: true, pending: "scan", entry_count: null,
+    selectable_count: null, protected_count: null, selected_count: 0, coverage_complete: null }]);
 });

@@ -255,6 +255,7 @@ export const SonidoSection: FC = () => {
                     {pr.name}
                   </Focusable>
                   <Focusable
+                    data-pdc-part="icon-action"
                     style={{ display: "flex", cursor: "pointer", color: theme.color.textMuted }}
                     onActivate={() => deleteProfile(pr.name)}
                     onClick={() => deleteProfile(pr.name)}
@@ -330,6 +331,7 @@ export const SonidoSection: FC = () => {
             summary={presetLabel(state.preset)}
             action={
               <Focusable
+                data-pdc-part="icon-action"
                 style={{ display: "flex", alignItems: "center", padding: 4, borderRadius: theme.radius.sm, color: theme.color.textMuted, cursor: "pointer" }}
                 onActivate={() => openEqCurveModal(refresh)}
                 onClick={() => openEqCurveModal(refresh)}

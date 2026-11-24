@@ -18,6 +18,8 @@ export interface BuildInfo {
   engine?: "optiscaler" | "helixsr" | "proton" | "dll";
   way?: "fsr" | "scaler" | null;
   may_fallback?: string | null;
+  /** Runs OptiScaler 10, so ANR FG can go in with it. */
+  anr?: boolean;
 }
 
 export interface UpscalerJob {
@@ -34,6 +36,8 @@ export interface UpscalerJob {
   result?: {
     overrides?: string[]; args?: string[]; kept?: string[]; launcher?: "heroic" | "lutris" | "portproton";
     removed_overrides?: string[]; removed_args?: string[]; env?: Record<string, string | null>;
+    /** Panel's own launch wrappers (the anti-cheat launcher swap a mod needs), placed before %command%. */
+    wrappers?: string[];
   };
 }
 
@@ -42,19 +46,23 @@ export interface UpscalersOverview {
   device?: string;
   display: [number, number] | null;
   preferred: string;
+  /** The build ANR FG goes in with on this GPU; null where it is not offered. */
+  anr_build?: string | null;
   builds: BuildInfo[];
   cached: string[];
-  installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice> }>;
+  installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice>; fallback?: ScalerFallback | null;
+    /** Frame generation the recipe turns on inside the user's mod (ERSS-FG). */
+    mod_fg?: string | null }>;
   /** Mako and Lossless Scaling per game: they never show up as an install. */
   engines?: Record<string, {
-    mako?: { spatial: boolean; fg: boolean; multiplier: number | null };
+    mako?: { spatial: boolean; fg: boolean; multiplier: number | null; engine?: 4 | 5 };
     lossless?: { multiplier: number | null };
   }>;
   job: UpscalerJob | null;
   helixsr?: { downloaded: boolean };
 }
 
-export type FgRoute = "game" | "optiscaler";
+export type FgRoute = "game" | "optiscaler" | "anr";
 
 export interface FgPlan {
   input: string;
@@ -92,13 +100,20 @@ export interface UpscalerChoice {
   env?: string;
 }
 
+/** FSR 4 was installed but the game's log shows another scaler (or a failed texture hand-off). */
+export interface ScalerFallback {
+  requested: string;
+  observed: string | null;
+  reason: "vulkan_textures" | "backend_changed";
+}
+
 export interface HistoryEntry {
   build: string;
   proxy: string;
   at: number;
   result: UpscalerStatus;
   exe: string | null;
-  facts?: { fg?: string; upscaler?: string; fsr4?: string; version?: string; resolution?: { render: number[]; output: number[] }; initial_resolution?: { render: number[]; output: number[] } };
+  facts?: { fallback?: ScalerFallback; fg?: string; upscaler?: string; fsr4?: string; version?: string; resolution?: { render: number[]; output: number[] }; initial_resolution?: { render: number[]; output: number[] } };
 }
 
 export interface GameDetail {
@@ -125,10 +140,13 @@ export interface GameDetail {
     proxy: string;
     exe: string | null;
     installed_at: number;
+    anti_cheat_accepted?: boolean;
     options: { quality: Quality | null; sharpness: Sharpness | null; fg?: "on" | "off"; fg_route?: FgRoute | null; model?: string | null };
     status: UpscalerStatus;
     /** From the first launch after the quality last changed: whether the game asked OptiScaler for its size. */
     quality_check?: { result: "respected" | "ignored"; input: string | null; ratio: number } | null;
+    /** Settings Panel set in the game's own config (RDR2's API); "missing" until the game wrote that file. */
+    game_config?: { tag: string; state: "set" | "already" | "missing" | "failed" }[];
   } | null;
   history: HistoryEntry[];
   recipe: boolean;
@@ -140,6 +158,8 @@ export interface GameDetail {
   native: boolean;
   fg_plan: FgPlan | null;
   identity: { steam_appid: number | null; name: string | null; source: string } | null;
+  mod?: GameMod | null;
+  mod_download?: string | null;
 }
 
 export interface VerifyResult {
@@ -173,6 +193,17 @@ export interface UserFile {
   state: "missing" | "ready" | "avoid" | "other_version";
 }
 
+/** A mod the user brought for one game, installed beside the exe with OptiScaler. */
+export interface GameMod {
+  filename: string | null;
+  count: number;
+  files: string[];
+  native_dlls: string[];
+  applied: boolean;
+  /** Removed here; its files stay in the game until the upscaler reinstalls. */
+  removed?: boolean;
+}
+
 export interface UserFileCandidate {
   path: string;
   filename: string;
@@ -182,6 +213,9 @@ export interface UserFileCandidate {
 export interface RecipeInfo {
   user_files?: UserFile[];
   game_settings?: { setting: string; value: string }[];
+  /** Panel sets a game setting itself on install (RDR2's API): the page only asks while it could not. */
+  game_config?: boolean;
+  anr_settings?: { setting: string; value: string }[];
   fps_counter?: boolean;
   quality_on_exit?: boolean;
   recommended_input?: "dlss" | "fsr31" | "fsr2" | "xess" | null;

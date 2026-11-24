@@ -5,7 +5,7 @@ import { LuListPlus, LuTrash2 } from "react-icons/lu";
 import { useI18n } from "../../i18n";
 import { theme } from "../../theme";
 import { filterChannels, topGroups } from "../core/playlists";
-import type { Channel, Playlist, Station } from "../core/types";
+import type { Channel, MediaItem, Playlist, Station } from "../core/types";
 import { channelToStation, type AmbientRuntime } from "../steam/runtime";
 import { Button } from "./primitives";
 import { Chip, Empty, ROW_HEIGHT, oneLine, useMeasuredHeight } from "./stationsParts";
@@ -15,13 +15,15 @@ import { VirtualList } from "./VirtualList";
 interface Props {
   runtime: AmbientRuntime;
   playlists: readonly Playlist[];
+  localLists?: readonly MediaItem[];
   header: ReactNode;
   row: (station: Station) => ReactNode;
 }
 
 /** M3U lists (IPTV, radio bundles): pick a list, filter by group or name, play a channel. */
-export const PlaylistsTab: FC<Props> = ({ runtime, playlists, header, row }) => {
+export const PlaylistsTab: FC<Props> = ({ runtime, playlists: saved, localLists = [], header, row }) => {
   const { t } = useI18n();
+  const playlists = useMemo<Playlist[]>(() => [...saved, ...localLists.map((l) => ({ id: l.id, name: l.name, url: "" }))], [saved, localLists]);
   const [selected, setSelected] = useState<string | null>(playlists[0]?.id ?? null);
   const [channels, setChannels] = useState<Channel[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +77,7 @@ export const PlaylistsTab: FC<Props> = ({ runtime, playlists, header, row }) => 
             />
           )}
         </div>
-        {current && <Button label={<LuTrash2 size={14} />} onActivate={() => void runtime.removePlaylist(current.id).then(() => setSelected(null))} style={{ height: 40 }} />}
+        {current && !current.id.startsWith("local:") && <Button label={<LuTrash2 size={14} />} onActivate={() => void runtime.removePlaylist(current.id).then(() => setSelected(null))} style={{ height: 40 }} />}
         <Button primary label={<><LuListPlus size={14} /> {t("ambient.lists.add")}</>} onActivate={addList} style={{ height: 40 }} />
       </div>
 

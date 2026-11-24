@@ -39,6 +39,15 @@ export function tdpConflict(i: ConflictInput): ConflictResult {
   return { conflict, rivals, takeoverAvailable };
 }
 
+/** SteamOS Manager is the only manager flagged: the card it triggers can be closed for good. */
+export function steamOnlyConflict(rivals: ConflictResult["rivals"]): boolean {
+  return rivals.steamOsManager === true && !rivals.sdtdp && !rivals.hhd && !rivals.powerstation;
+}
+
+export function conflictCardVisible(result: ConflictResult, hidden: boolean): boolean {
+  return result.conflict && !(hidden && steamOnlyConflict(result.rivals));
+}
+
 /** Monitor-only when the hardware can't do TDP or the master switch is off. */
 export function monitorOnly(tdpSupported: boolean, weControl: boolean): boolean {
   return !tdpSupported || !weControl;

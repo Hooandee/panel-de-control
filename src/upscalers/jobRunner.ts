@@ -120,9 +120,11 @@ async function applyLaunch(job: UpscalerJob, game: JobGame): Promise<JobNotice> 
   if (!result.overrides && !result.env && !job.leftover) return null;
   const kind = job.state === "done" ? job.kind : "install";
   const env = kind === "install" ? Object.fromEntries(Object.entries(result.env ?? {}).filter((pair): pair is [string, string] => pair[1] !== null)) : {};
+  // Anything else (an uninstall, an install without them) takes Panel's wrappers out again through the receipt.
+  const wrappers = kind === "install" && job.state === "done" ? result.wrappers ?? [] : [];
   let added: string[] = [];
   let addedOverrides: string[] = [];
-  const managed = await applyManagedLaunch(game.appid, game.liveAppid, "upscaler", { env }, {
+  const managed = await applyManagedLaunch(game.appid, game.liveAppid, "upscaler", { env, wrappers }, {
     isNonSteam: game.isNonSteam,
     ...(kind === "install" && job.state === "done" && transitions.has(job.id)
       ? { beforeApply: () => recordUpscalerArgs(game.appid, added, addedOverrides, []).then(() => undefined) } : {}),
@@ -148,9 +150,9 @@ async function applyLaunch(job: UpscalerJob, game: JobGame): Promise<JobNotice> 
   return result.kept?.length ? { key: "up.kept", params: { count: result.kept.length } } : null;
 }
 
-export async function saveExclusiveMakoProfile(game: JobGame, config: Partial<MakoProfile>): Promise<void> {
+export async function saveExclusiveMakoProfile(game: JobGame, config: Partial<MakoProfile>, reclaim = false): Promise<void> {
   if (!config.scaling_enabled) {
-    await saveMakoProfile(game.appid, game.liveAppid, config, game.isNonSteam);
+    await saveMakoProfile(game.appid, game.liveAppid, config, game.isNonSteam, reclaim);
     return;
   }
   const detail = await getUpscalersGame(game.appid);
@@ -166,7 +168,7 @@ export async function saveExclusiveMakoProfile(game: JobGame, config: Partial<Ma
       const result = await getUpscalersJob();
       if (result?.id !== job.id || result.result?.kept?.length) throw new Error("foreign");
     }
-    await saveMakoProfile(game.appid, game.liveAppid, config, game.isNonSteam);
+    await saveMakoProfile(game.appid, game.liveAppid, config, game.isNonSteam, reclaim);
   } catch (error) {
     await transition?.finish(false);
     throw transition?.previousRemoved ? new Error("transition_failed_clean") : error;

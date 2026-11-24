@@ -1,3 +1,5 @@
+import re
+import json
 import os
 import types
 
@@ -8,6 +10,7 @@ from pdc_report.collector import (
     controller_daemon_cmds,
     decky_plugins,
     frontend_crash_diagnostics,
+    theme_diagnostic_lines,
     kernel_logs,
     redact_obj,
     redact_text,
@@ -336,12 +339,29 @@ def test_frontend_crash_diagnostics_names_plugin_and_crash(tmp_path):
         {
             "error_type": "TypeError",
             "source": "cef_log.previous.txt",
+            "origin": "panel",
         }
     ]
     assert {signal["kind"] for signal in diagnostics["signals"]} == {
         "plugin_load_error",
         "shared_context_crash",
     }
+
+
+def test_plugin_load_error_names_a_known_plugin_by_fixed_origin(tmp_path):
+    # PDC-AHYE: 17 load errors under Decky 4.0.0-pre1 without saying whether CSS Loader was one.
+    current = tmp_path / "cef_log.txt"
+    _write(
+        current,
+        "Decky PluginLoader: Error loading plugin CSS Loader (v2.1.3) TypeError: boom\n"
+        "Decky PluginLoader: Error loading plugin CSS Loader (v2.1.3) TypeError: boom\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(current)])
+
+    assert diagnostics["plugin_load_errors"] == [
+        {"error_type": "TypeError", "source": "cef_log.txt", "origin": "css_loader"},
+    ]
 
 
 def test_frontend_crash_diagnostics_does_not_parse_error_from_plugin_name(tmp_path):
@@ -357,8 +377,8 @@ def test_frontend_crash_diagnostics_does_not_parse_error_from_plugin_name(tmp_pa
     diagnostics = frontend_crash_diagnostics([str(previous)])
 
     assert diagnostics["plugin_load_errors"] == [
-        {"error_type": "TypeError", "source": "cef_log.previous.txt"},
-        {"error_type": "ReferenceError", "source": "cef_log.previous.txt"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
+        {"error_type": "ReferenceError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
     ]
 
 
@@ -416,8 +436,9 @@ def test_frontend_crash_diagnostics_never_includes_free_form_cef_text(tmp_path):
     ):
         assert secret not in serialized
     assert diagnostics["plugin_load_errors"] == [
-        {"error_type": "TypeError", "source": "cef_log.previous.txt"},
-        {"error_type": "ReferenceError", "source": "cef_log.previous.txt"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "panel"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
+        {"error_type": "ReferenceError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
     ]
     assert all("line" not in signal for signal in diagnostics["signals"])
 
@@ -1546,3 +1567,185 @@ def test_panel_exception_names_the_bundle_line_and_a_fixed_property(tmp_path):
          "line": 7, "reading": "other"},
     ]
     assert "MyPrivateKey" not in str(signals)
+
+
+def test_theme_diagnostic_lines_read_webhelper_js_without_private_text(tmp_path):
+    (tmp_path / "webhelper_js.previous.txt").write_text(
+        "[2026-11-14 17:00:00] SteamUI: WARNING: [Duo] login waiting for account\n", encoding="utf-8")
+    (tmp_path / "webhelper_js.txt").write_text(
+        "[2026-11-14 18:00:00] SteamUI: WARNING: [Duo] home-hidden detached path=/library/home window=1280x800 sheets=3\n"
+        "[2026-11-14 18:00:01] SteamUI: WARNING: [Duo] covers-late 4 user@example.com \u00e9t\u00e9\n"
+        "[2026-11-14 18:00:02] SteamUI: unrelated line\n",
+        encoding="utf-8",
+    )
+    result = theme_diagnostic_lines(str(tmp_path))
+    lines = result["lines"]
+    assert [(line["source"], line["event"]) for line in lines] == [
+        ("webhelper_js.previous.txt", "login"), ("webhelper_js.txt", "home-hidden"), ("webhelper_js.txt", "covers-late")]
+    assert lines[1]["detail"] == "detached path=/library/home window=1280x800 sheets=3"
+    assert "example.com" not in lines[2]["detail"] and "\u00e9" not in lines[2]["detail"]
+    assert theme_diagnostic_lines(str(tmp_path / "missing"))["lines"] == []
+
+
+
+def test_sysfs_snapshot_preserves_reported_fan_curve_nodes(tmp_path):
+    import json
+    from pathlib import Path
+
+    fixtures = json.loads((Path(__file__).parent / "data/fan_curve_report_topology.json").read_text())["chips"]
+    for index, fixture in enumerate(fixtures):
+        chip = tmp_path / f"sys/class/hwmon/hwmon{index}"
+        _mk(str(chip / "name"), fixture["name"])
+        for name, facts in fixture["nodes"].items():
+            # MSI curve values were not captured; ASUS values are a real readback.
+            # Empty reads model unknown values without supplying numeric ones.
+            _mk(str(chip / name), facts["value"] if facts["value"] is not None else "")
+            if facts["writable"] is False:
+                os.chmod(chip / name, 0o444)
+
+    chips = {chip["name"]: chip["fan_nodes"] for chip in sysfs_snapshot(root=str(tmp_path))["hwmon"]}
+
+    for fixture in fixtures:
+        nodes = chips[fixture["name"]]
+        assert set(nodes) == set(fixture["nodes"])
+        for name, facts in fixture["nodes"].items():
+            assert nodes[name]["value"] == facts["value"]
+            if facts["writable"] is not None:
+                assert nodes[name]["writable"] is facts["writable"]
+
+
+def test_hwmon_curve_capture_bounds_indices_and_rejects_non_numeric_values(tmp_path):
+    for name, value in {
+        "pwm2_auto_point8_pwm": "255",
+        "pwm2_auto_point8_temp": "private-path-or-token",
+        "pwm1_auto_point1_pwm": "999999999999999999999999",
+        "pwm1_auto_point1_temp": "2147483648",
+        "pwm3_auto_point1_temp": "40",
+        "pwm1_auto_point9_temp": "40",
+        "pwm1_auto_point1_extra": "40",
+    }.items():
+        _mk(str(tmp_path / name), value)
+
+    nodes = report_collector._hwmon_fan_nodes(str(tmp_path))
+
+    assert set(nodes) == {
+        "pwm2_auto_point8_pwm", "pwm2_auto_point8_temp",
+        "pwm1_auto_point1_pwm", "pwm1_auto_point1_temp",
+    }
+    assert nodes["pwm2_auto_point8_pwm"]["value"] == "255"
+    assert all(nodes[name]["value"] is None for name in nodes if name != "pwm2_auto_point8_pwm")
+
+
+def test_inputplumber_lifecycle_filter_excludes_per_input_debug():
+    import re
+
+    commands = controller_daemon_cmds("inputplumber")
+    cmd = commands["controller_lifecycle"]
+    assert commands["controller"][-3:] == ["-n", "300", "--no-pager"]
+    assert "-b" in cmd and cmd[cmd.index("-n") + 1] == "120"
+    pattern = re.compile(cmd[cmd.index("--grep") + 1])
+    for message in (
+        "Loading device profile `Default` from: /usr/share/inputplumber/profiles/default.yaml",
+        "Setting target devices: []", "Setting intercept mode to: Pass",
+        "Device added: test", "Device removed: test", "Failed running device test",
+        "Found missing input device, adding source device test",
+        "POSSIBLE DEADLOCK: timed out waiting for response", "channel closed",
+    ):
+        assert pattern.search(message), message
+    for message in (
+        "Send event NativeEvent at sleep time 80",
+        "Found matching intercept event: Gamepad(Button(Guide))",
+        "More events needed to activate intercept mode.",
+        "Output capabilities changed: {LED(Color)}",
+    ):
+        assert not pattern.search(message), message
+    assert "controller_lifecycle" not in controller_daemon_cmds("hhd")
+
+
+def test_controller_lifecycle_capture_is_byte_bounded_and_reports_limits():
+    extra = controller_daemon_cmds("inputplumber")
+    text = "\n".join("Loading device profile /home/test/é" for _ in range(120))
+    out = kernel_logs(lambda cmd: text, cap=500, extra=extra)
+    assert len(out["controller_lifecycle"].encode("utf-8")) <= 500
+    assert "/home/test" not in out["controller_lifecycle"]
+    assert out["controller_lifecycle_capture"] == {
+        "status": "captured", "window": "current_boot_tail",
+        "line_limit": 120, "line_limit_reached": True,
+        "byte_limit": 500, "byte_truncated": True,
+    }
+
+
+def test_controller_lifecycle_no_entries_and_command_failure_remain_distinct():
+    extra = controller_daemon_cmds("inputplumber")
+    for value, status in ((None, "unavailable"), ("", "empty"),
+                          ("-- No entries --\n", "empty"),
+                          ("[exit 1] ", "command_exit"),
+                          ("[exit 1] permission denied", "command_exit")):
+        out = kernel_logs(lambda cmd: value, extra=extra)
+        assert out["controller_lifecycle_capture"]["status"] == status
+        assert not out["controller_lifecycle_capture"]["byte_truncated"]
+    def broken(cmd):
+        raise TimeoutError("journal unavailable")
+    out = kernel_logs(broken, extra=extra)
+    assert out["controller_lifecycle_capture"]["status"] == "unavailable"
+    assert out["controller_lifecycle"] is None
+
+
+def test_bundle_keeps_only_observed_sleep_events_by_boot():
+    messages = [
+        "[main][INFO]: CEF has disconnected...",
+        "[CSS_Loader] Connected to Steam Browser",
+        "[main][INFO]: Loading Decky frontend!",
+        "pdc-sleep-cores rc=1 smt_active=unknown",
+        "unrelated /home/private-user",
+    ]
+
+    def run(cmd):
+        if "--output-fields=MESSAGE" not in cmd:
+            return None
+        if "-1" not in cmd:
+            return "-- No entries --"
+        assert "--reverse" in cmd
+        stamps = [1, 3, 2, 4, 5]  # The wall clock moved back during reconnect.
+        return "\n".join(json.dumps({
+            "__REALTIME_TIMESTAMP": str(1_000_000 * stamp), "MESSAGE": message,
+            "_HOSTNAME": "private-host", "_BOOT_ID": "private-boot",
+        }) for stamp, message in reversed(list(zip(stamps, messages))))
+
+    bundle = build_bundle(app="pdc", categories=[], text="", environment={}, capabilities={},
+                          state={}, stores={}, logs=[], kernel=kernel_logs(run))
+    assert bundle["kernel"]["previous_boot_sleep_userspace"] == [
+        {"t": 1, "event": "cef_disconnected"},
+        {"t": 3, "event": "steam_browser_connected"},
+        {"t": 2, "event": "decky_frontend_loading"},
+        {"t": 4, "event": "sleep_core_guard", "ok": False, "smt_active": None},
+    ]
+    assert bundle["kernel"]["sleep_userspace"] == []
+    assert kernel_logs(lambda cmd: None)["sleep_userspace"] is None
+
+    def journalctl(cmd, **_kwargs):
+        stderr = "No journal boot entry found for the specified boot (-1)." if "-1" in cmd else ""
+        return types.SimpleNamespace(returncode=1, stdout="", stderr=stderr)
+
+    missing = kernel_logs(lambda cmd: report_collector.capture_command(cmd, run=journalctl))
+    assert missing["sleep_userspace"] == []
+    assert missing["previous_boot_sleep_userspace"] is None
+
+
+def test_kernel_logs_capture_session_crashes_behind_a_cef_disconnect():
+    cmd = report_collector._KERNEL_CMDS["session_crashes"]
+    pattern = re.compile(cmd[cmd.index("--grep") + 1])
+    assert pattern.search("Process 13440 (gamescope-wl) of user 1000 dumped core.")
+    assert pattern.search("steamwebhelper[5120]: segfault at 0 ip 0000 sp 0000 error 4")
+    assert pattern.search("traps: gamescope-wl[2211] general protection fault ip:7f1c sp:7ffd error:0 in libc.so.6")
+    assert not pattern.search("Process 9001 (MonsterHunterRi) of user 1000 dumped core.")
+    assert not pattern.search("wine64-preloader[812]: segfault at 10 ip 0000 sp 0000 error 6")
+
+    def run(argv):
+        if argv == cmd:
+            return ("systemd-coredump[14702]: Process 13440 (gamescope-wl) of user 1000 "
+                    "dumped core.")
+        return None
+
+    out = kernel_logs(run)
+    assert "gamescope-wl" in out["session_crashes"]

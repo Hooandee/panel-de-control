@@ -28,6 +28,10 @@ public sealed class ThemesClient
 
     public Task<ThemesResponse> SteamHomeAsync() => SendAsync(ThemesRequest.SteamHome());
 
+    public Task<ThemesResponse> GameBarShownAsync() => SendAsync(ThemesRequest.GameBarShown());
+
+    public Task<ThemesResponse> GameBarHiddenAsync(long shownMilliseconds) => SendAsync(ThemesRequest.GameBarHidden(shownMilliseconds));
+
     public Task<ThemesResponse> UninstallAsync(string name) => SendAsync(ThemesRequest.Uninstall(name));
 
     private static async Task<ThemesResponse> SendAsync(ThemesRequest request)

@@ -639,3 +639,92 @@ def test_charger_change_while_asleep_waits_for_the_resume_reapply():
     ac["v"] = True
     lm.check(now=7.0)            # an ordinary charger change once awake still applies at once
     assert full == [False, True]
+
+
+def _poll(manager, now, *, ac=False, wakeup=5, suspended=0.0):
+    manager.check(now, samples=[
+        ("read_wakeup", True, wakeup),
+        ("read_ac", True, ac),
+        ("read_suspend", True, suspended),
+    ])
+
+
+def test_charger_change_waits_for_delayed_wakeup_count_or_expiry():
+    for wakeup in (5, 6):
+        writes = []
+        manager = LifecycleManager(apply_cb=writes.append, reassert_cb=lambda _: None)
+        _poll(manager, 0)
+        _poll(manager, 2, ac=True, suspended=168.155)
+        _poll(manager, 3, ac=True, suspended=None)
+        _poll(manager, 4, ac=True, suspended=None, wakeup=wakeup)
+        assert writes == []
+        _poll(manager, 8, ac=True, wakeup=wakeup, suspended=None)
+        assert writes == ([True] if wakeup == 6 else [])
+        _poll(manager, 14, ac=True, wakeup=wakeup, suspended=None)
+        assert writes == [True]
+        assert manager.diagnostics()["resume_count"] == int(wakeup == 6)
+
+
+def test_new_resume_replaces_retries_and_uses_latest_charger_state():
+    calls = []
+    manager = LifecycleManager(
+        apply_cb=lambda ac: calls.append(("full", ac)),
+        reassert_cb=lambda ac: calls.append(("tdp", ac)),
+    )
+    _poll(manager, 0)
+    _poll(manager, 2, ac=True)
+    assert calls == [("full", True)]
+    calls.clear()
+    _poll(manager, 4, ac=True, suspended=168.155)
+    _poll(manager, 6, ac=True, wakeup=6, suspended=168.155)
+    _poll(manager, 8, wakeup=6, suspended=168.155)
+    assert calls == []
+    for now in (10, 12, 15, 19, 21):
+        _poll(manager, now, wakeup=6, suspended=168.155)
+    assert calls == [("full", False)] + [("tdp", False)] * 3
+
+
+def test_two_charger_changes_during_wakeup_pairing_do_not_start_a_flapping_episode():
+    calls = []
+    manager = LifecycleManager(apply_cb=calls.append)
+    _poll(manager, 0)
+    _poll(manager, 2, ac=True, suspended=30)
+    _poll(manager, 4, suspended=30)
+    _poll(manager, 4.5, wakeup=6, suspended=30)
+    assert calls == []
+    _poll(manager, 8.5, wakeup=6, suspended=30)
+    assert calls == [False]
+
+
+def test_charger_flapping_at_resume_extends_quiet_period_from_last_change():
+    writes = []
+    manager = LifecycleManager(apply_cb=writes.append, reassert_cb=lambda _: None)
+    _poll(manager, 0)
+    for now, ac in ((2, True), (4, False), (6, True)):
+        _poll(manager, now, ac=ac)
+    writes.clear()
+    _poll(manager, 8, wakeup=6, suspended=30)
+    _poll(manager, 12, wakeup=6, suspended=30)
+    assert writes == []
+    _poll(manager, 13, wakeup=6, suspended=30)
+    assert writes == [False]
+
+
+def test_temporarily_unreadable_wakeup_counter_cannot_confirm_resume(tmp_path):
+    counter = tmp_path / "sys/power/wakeup_count"
+    counter.parent.mkdir(parents=True)
+    counter.write_text("5")
+    suspended = [0.0]
+    manager = LifecycleManager(
+        root=tmp_path, apply_cb=lambda _: None, read_suspend=lambda: suspended[0],
+    )
+    manager.check(now=0)
+    suspended[0] = 30.0
+    counter.write_text("")
+    manager.check(now=2)
+    counter.write_text("5")
+    manager.check(now=4)
+    assert manager.diagnostics()["resume_count"] == 0
+    counter.write_text("6")
+    manager.check(now=6)
+    assert manager.diagnostics()["resume_count"] == 1

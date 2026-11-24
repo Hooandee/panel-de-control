@@ -338,3 +338,133 @@ def test_namespace_scan_limit_fails_closed(setup, monkeypatch):
             pass
     monkeypatch.setattr(mako.os, 'scandir', lambda path: Entries())
     assert not manager._process_matches(3714, 898084)
+
+
+def test_mako5_installs_beside_mako4_and_needs_no_dll(setup, monkeypatch, tmp_path):
+    manager, cache, dll, calls = setup
+    manager.install(cache)
+    archive = tmp_path / 'mako5.tar.xz'
+    with tarfile.open(archive, 'w:xz') as handle:
+        for name in mako.PAYLOAD5:
+            content = b'#!/bin/sh\nexit 0\n' if name.startswith('bin/') else b'payload'
+            info = tarfile.TarInfo('./' + name)
+            info.size = len(content)
+            handle.addfile(info, io.BytesIO(content))
+    monkeypatch.setattr(mako, 'ASSET5', SimpleNamespace(sha256=hashlib.sha256(archive.read_bytes()).hexdigest()))
+    manager.install(SimpleNamespace(ensure=lambda *args: archive), line=5)
+    dll.unlink()
+    status = manager.status()
+    assert status['installed'] and status['v5'] == {'installed': True, 'ready': True, 'reason': None, 'version': '5.0.0'}
+    assert (manager.prefix5 / 'lib/mako-fg/mako-fg-host').stat().st_mode & 0o111
+    result = manager.set_game('7', 'Game', {'engine': 5, 'fg_mode': 'performance', 'flow': 'manual', 'flow_scale': 0.6})
+    config = Path(result['env']['MAKO_CONFIG']).read_text()
+    assert 'frame_generation_model = "mako-fg"' in config and 'mako_fg_mode = "performance"' in config
+    assert 'flow_scale = 0.6' in config and 'performance_mode = false' in config
+    assert result['wrappers'] == [str(manager.prefix5 / 'bin/mako-launch')]
+    assert not any('inspect-dll' in call for call in calls)
+    with pytest.raises(mako.MakoError, match='mako_dll_missing'):
+        manager.set_game('8', 'Old', {'engine': 4})
+
+
+@pytest.mark.parametrize('config', [{'engine': 6}, {'engine': True}, {'fg_mode': 'ultra'}, {'flow': 'manual', 'flow_scale': 0.1}])
+def test_mako5_options_are_bounded(setup, config):
+    manager, cache, _, _ = setup
+    manager.install(cache)
+    with pytest.raises(mako.MakoError, match='mako_options'):
+        manager.set_game('9', 'Game', config)
+
+
+def test_mako5_install_falls_back_to_pinned_release_when_lookup_breaks(monkeypatch):
+    import http.client
+    from upscalers import engine_updates
+    from upscalers.service import UpscalerService
+    installs, actions = [], []
+    manager = SimpleNamespace(status=lambda: {'installed': True, 'v5': {'installed': False}},
+                              install=lambda cache, **kwargs: installs.append(kwargs) or 'installed')
+    service = SimpleNamespace(mako=manager, cache=object(), record_action=lambda *args: actions.append(args))
+    def broken(*args):
+        raise http.client.IncompleteRead(b'')
+    monkeypatch.setattr(engine_updates, 'discover', broken)
+    assert UpscalerService.mako_install(service, 5) == 'installed'
+    assert installs == [{'line': 5}] and actions[0][2] == 'failed'
+
+
+def test_mako5_install_falls_back_to_pinned_release_when_the_newest_has_another_layout(monkeypatch):
+    from upscalers import engine_updates
+    from upscalers.service import UpscalerService
+    installs = []
+    def install(cache, **kwargs):
+        installs.append(kwargs)
+        if 'asset' in kwargs:
+            raise mako.MakoError('mako_archive')
+        return 'installed'
+    manager = SimpleNamespace(status=lambda: {'installed': True, 'v5': {'installed': False}}, install=install)
+    service = SimpleNamespace(mako=manager, cache=object(), record_action=lambda *args: None)
+    monkeypatch.setattr(engine_updates, 'discover', lambda *args: {'version': '5.9.0'})
+    monkeypatch.setattr(engine_updates, 'prepare', lambda *args: object())
+    assert UpscalerService.mako_install(service, 5) == 'installed'
+    assert installs[-1] == {'line': 5}
+
+
+def test_status_answers_while_the_archive_downloads(setup):
+    import threading
+    manager, cache, _, _ = setup
+    answered = []
+    def slow_ensure(*args):
+        reader = threading.Thread(target=lambda: answered.append(manager.status()['installed']))
+        reader.start()
+        reader.join(2)
+        return cache.ensure(*args)
+    manager.install(SimpleNamespace(ensure=slow_ensure))
+    assert answered == [False] and manager.status()['installed'] is True
+
+
+def test_mako4_upgrade_skips_paused_mako5_profiles(setup, monkeypatch, tmp_path):
+    manager, cache, _, _ = setup
+    manager.install(cache)
+    archive = tmp_path / 'mako5.tar.xz'
+    with tarfile.open(archive, 'w:xz') as handle:
+        for name in mako.PAYLOAD5:
+            info = tarfile.TarInfo('./' + name)
+            info.size = 1
+            handle.addfile(info, io.BytesIO(b'x'))
+    monkeypatch.setattr(mako, 'ASSET5', SimpleNamespace(sha256=hashlib.sha256(archive.read_bytes()).hexdigest()))
+    manager.install(SimpleNamespace(ensure=lambda *args: archive), line=5)
+    manager.set_game('7', 'Game', {'engine': 5})
+    manager.set_game('7', 'Game', None)
+    validated = []
+    def run(args, **kwargs):
+        if args[1] == 'validate':
+            validated.append(Path(args[3]).read_text())
+        kwargs['stdout'].write(b'{"compatible":true}')
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(mako.subprocess, 'run', run)
+    manager.install(cache, asset=mako.ASSET, version='4.6.1')
+    assert manager.status()['version'] == '4.6.1'
+    assert not any('mako-fg' in content for content in validated)
+
+
+@pytest.mark.parametrize('line', [4, 5])
+def test_install_replaces_prefix_left_without_install_record(setup, line, monkeypatch):
+    manager, cache, _, _ = setup
+    if line == 5:
+        monkeypatch.setattr(mako, 'ASSET5', mako.ASSET)
+        monkeypatch.setattr(mako, 'PAYLOAD5', mako.PAYLOAD)
+    prefix = manager.prefix5 if line == 5 else manager.prefix
+    write(prefix / 'bin/stale-from-wiped-state')
+    assert manager.status()['installed'] is False
+    manager.install(cache, line=line)
+    assert (manager.status()['v5'] if line == 5 else manager.status())['installed'] is True
+    assert not (prefix / 'bin/stale-from-wiped-state').exists()
+    assert not [path for path in prefix.parent.iterdir() if path.name.startswith('.mako-')]
+
+
+def test_install_still_refuses_symlinked_prefix(setup, tmp_path):
+    manager, cache, _, _ = setup
+    elsewhere = tmp_path / 'elsewhere'
+    elsewhere.mkdir()
+    manager.prefix.parent.mkdir(parents=True)
+    manager.prefix.symlink_to(elsewhere)
+    with pytest.raises(mako.MakoError, match='mako_conflict'):
+        manager.install(cache)
+    assert list(elsewhere.iterdir()) == []

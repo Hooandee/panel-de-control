@@ -4,13 +4,16 @@ import { useEffect, useState, type FC } from "react";
 import { addUpscalerUserFile, getUpscalerUserFileCandidates, removeUpscalerUserFile } from "../api";
 import { useI18n } from "../i18n";
 import { upscalerErrorCode } from "./errorCode";
+import { holdPage } from "./pageMemory";
 import { ListCard, ListRow, Note } from "./parts";
 import type { GameDetail, UserFile, UserFileCandidate } from "./types";
-import { cancelUserFileWatch, downloadUserFile, onUserFileWatch, watchingFor } from "./userFileWatch";
+import { cancelUserFileWatch, downloadUserFile, forgetWatchFailure, onUserFileWatch, watchFailure, watchingFor } from "./userFileWatch";
 
 const EXTENSIONS = ["zip", "7z", "rar", "dll"];
 
 const shortPage = (url: string) => url.replace(/^https:\/\/(www\.)?/, "");
+
+const failureKey = (code: string) => code === "user_file_wrong" || code === "watch_expired" ? `up.error.${code}` : "up.error.user_file_unreadable";
 
 /** Files only the user can download, right under the upscaler: what is missing, which version is in, and where the
  *  file already in Downloads can be picked up with one press. */
@@ -30,7 +33,10 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
   const [folder, setFolder] = useState<string | null>(null);
   const [found, setFound] = useState<UserFileCandidate[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => {
+    const code = watchFailure(appid, file.id);
+    return code ? t(failureKey(code)) : null;
+  });
   const missing = file.state === "missing";
   const [waiting, setWaiting] = useState(() => watchingFor(appid, file.id));
 
@@ -38,7 +44,8 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
     if (event.appid !== appid || event.dependency !== file.id) return;
     setWaiting(event.type === "watching");
     if (event.type === "adopted") onDetail(event.detail);
-    if (event.type === "failed") setError(t(event.code === "user_file_wrong" ? "up.error.user_file_wrong" : "up.error.user_file_unreadable"));
+    const code = watchFailure(appid, file.id);
+    if (code) setError(t(failureKey(code)));
   }), [appid, file.id, onDetail, t]);
 
   useEffect(() => {
@@ -52,17 +59,20 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
   const run = async (action: () => Promise<GameDetail>) => {
     setBusy(true);
     setError(null);
+    forgetWatchFailure(appid, file.id);
     try {
       onDetail(await action());
     } catch (failure) {
       const code = upscalerErrorCode(failure);
-      setError(t(code === "busy" ? "up.error.busy" : code === "user_file_wrong" ? "up.error.user_file_wrong" : "up.error.user_file_unreadable"));
+      setError(t(code === "busy" ? "up.error.busy" : failureKey(code)));
     } finally {
       setBusy(false);
     }
   };
   const adopt = (path: string) => run(() => addUpscalerUserFile(appid, file.id, path));
   const pick = async () => {
+    // The picker opens in Steam's main window and closes the QAM: the game page comes back with the panel.
+    holdPage();
     const picked = await openFilePicker(0 as never, folder ?? "/home", true, true, undefined, EXTENSIONS).catch(() => null);
     if (picked?.realpath) await adopt(picked.realpath);
   };
@@ -83,7 +93,7 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
             caption={candidate.version ?? undefined} disabled={disabled || busy} onPress={() => void adopt(candidate.path)} />
         ))}
         {waiting
-          ? <ListRow label={t("up.userFile.waiting")} caption={t("up.userFile.waitingCaption")} busy detail={t("up.cancel")} onPress={cancelUserFileWatch} />
+          ? <ListRow label={t("up.userFile.waiting")} caption={t("up.userFile.waitingCaption")} spinner detail={t("up.cancel")} onPress={cancelUserFileWatch} />
           : file.state !== "ready" && <ListRow label={t("up.userFile.download")} chevron disabled={disabled || busy} onPress={() => void downloadUserFile(appid, file)} />}
         <ListRow label={t(missing ? "up.userFile.choose" : "up.userFile.change")} chevron disabled={disabled || busy} onPress={() => void pick()} />
         {!missing && (

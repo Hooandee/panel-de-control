@@ -1,4 +1,8 @@
 import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from test_upscalers import APPID, _service, _write, steam, fake_catalog, proc
 from upscalers import catalog, diagnostics
@@ -33,6 +37,23 @@ def test_removed_install_keeps_previous_observation(steam, fake_catalog, proc):
     assert report['actions'][-1]['state'] == 'done'
 
 
+def test_removed_install_keeps_the_log_lines_that_explain_it(steam, fake_catalog, proc):
+    # PDC-7EKZ (#1459)
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {'build': 'fsr-test'})
+    target = Path(service.game(APPID)['install']['target'])
+    errors = ['[10:00:01.000] [E] StreamlineHooks::streamlineLogCallback [streamline][error] failed'] * 3
+    errors += ["[10:00:02.000] [E] `anonymous-namespace'::FindCreateModel Expected one model creation call"]
+    (target / 'OptiScaler.log').write_text('[10:00:00.000] [I] Creating new FSR 3.X upscaler\n' + '\n'.join(errors) + '\n')
+    service.begin('uninstall', APPID)
+    service.run(service.uninstall, APPID)
+    previous = service.report()['games'][0]['previous']
+    assert previous['observed']['errors'] == 4
+    assert previous['observed']['error_sources'] == {'StreamlineHooks::streamlineLogCallback': 3, 'FindCreateModel': 1}
+    assert any('FindCreateModel' in line for line in previous['log_excerpt'])
+    assert 'log_excerpt' not in service.report()['games'][0]['current']
+
+
 def test_active_and_job_precede_report_limit(steam, fake_catalog, proc):
     service = _service(steam, fake_catalog, proc)
     for i in range(15):
@@ -62,7 +83,8 @@ def test_report_keeps_other_games_when_one_diagnostic_fails(steam, fake_catalog,
         return original(home, appid, entry, installed)
     monkeypatch.setattr(diagnostics, 'game_report', report)
     result = service.report()['games']
-    assert {k: v for k, v in result[0].items() if k != 'elapsed_ms'} == {'appid': 'bad', 'error': 'OSError'}
+    assert result[0]['appid'] == 'bad' and result[0]['error'] == 'OSError'
+    assert result[0]['history'] and 'private detail' not in json.dumps(result[0])
     assert result[1]['appid'] == 'good'
 
 
@@ -105,7 +127,7 @@ def test_advanced_records_known_values_but_omits_paths_and_free_text(tmp_path):
 
 def test_lsfg_request_and_applied_profile_are_preserved(steam, fake_catalog, proc, monkeypatch):
     service = _service(steam, fake_catalog, proc)
-    knobs = {'multiplier': 3, 'flow': 'quality', 'performance': False}
+    knobs = {'multiplier': 3, 'flow_scale': 0.85, 'performance': False}
     monkeypatch.setattr(service.lsfg, 'status', lambda: {'profiles': {APPID: {**knobs, 'exe': 'private'}}})
     service.record_action(APPID, 'lsfg_game', 'done', {**knobs, 'enabled': True, 'env': 'secret'})
     event = service.report()['games'][0]['actions'][-1]
@@ -173,6 +195,91 @@ def test_report_lists_the_games_own_upscalers_loaders_and_store_files(steam, fak
     assert files["store_files"] == ["steam_settings"]
 
 
+def test_reframework_inventory_reports_only_typed_prerequisites_and_configuration(tmp_path, monkeypatch):
+    root = tmp_path / "private-folder"
+    target = root / "bin"
+    _write(target / "PDPerfPlugin.dll")
+    _write(target / "libxess.dll")
+    _write(target / "reframework/plugins/private-name.dll")
+    _write(target / "re2_fw_config.txt", "\ufeffTemporalUpscaler_Enabled=true\n"
+           "TemporalUpscaler_UseNativeResolution=false\nTemporalUpscaler_UpscaleQuality=2\n"
+           "PrivatePath=/home/private-user/secret\n")
+    reads, enumerated = [], []
+    original = Path.iterdir
+
+    def enumerate_folder(path):
+        enumerated.append(path)
+        return original(path)
+
+    def version(path):
+        reads.append(Path(path).name)
+        return {"FileVersion": "1, 1, 2, 0" if Path(path).name == "PDPerfPlugin.dll" else "private-version",
+                "ProductVersion": "private-version", "CompanyName": "private-company"}
+
+    monkeypatch.setattr(Path, "iterdir", enumerate_folder)
+    monkeypatch.setattr(diagnostics.pe, "version_strings", version)
+    result = diagnostics.game_files(SimpleNamespace(root=root), {"target": str(target)}, [])["reframework_upscaler"]
+    assert result == {"pdperf_root_present": True, "pdperf_version": [1, 1, 2, 0],
+                      "xess_root_present": True, "xess_version": None, "config_present": True,
+                      "config_readable": True, "temporal_enabled": True, "native_resolution": False, "quality": 2}
+    assert reads == ["PDPerfPlugin.dll", "libxess.dll"]
+    assert enumerated == [target, root]
+    assert "private" not in json.dumps(result) and "active" not in result
+
+
+@pytest.mark.parametrize("text,readable", [
+    (b"TemporalUpscaler_Enabled=true\nTemporalUpscaler_Enabled=false\n"
+     b"TemporalUpscaler_UseNativeResolution=private-token\nTemporalUpscaler_UpscaleQuality=99", True),
+    (b"TemporalUpscaler_Enabled=true\n" + b"x" * 16384, False),
+    (b"TemporalUpscaler_Enabled=true\n\xff", False),
+])
+def test_reframework_inventory_keeps_invalid_or_unreadable_configuration_unknown(tmp_path, text, readable):
+    _write(tmp_path / "re2_fw_config.txt", text)
+    result = diagnostics.game_files(SimpleNamespace(root=tmp_path), {"target": str(tmp_path)}, [])["reframework_upscaler"]
+    assert result == {"pdperf_root_present": False, "pdperf_version": None, "xess_root_present": False,
+                      "xess_version": None, "config_present": True, "config_readable": readable,
+                      "temporal_enabled": None, "native_resolution": None, "quality": None}
+
+
+def test_reframework_inventory_does_not_turn_enumeration_failure_into_absence(tmp_path, monkeypatch):
+    def denied(path):
+        raise PermissionError("private-name")
+
+    monkeypatch.setattr(Path, "iterdir", denied)
+    result = diagnostics.game_files(SimpleNamespace(root=tmp_path), {"target": str(tmp_path)}, [])["reframework_upscaler"]
+    assert result and all(value is None for value in result.values())
+
+
+@pytest.mark.parametrize("version", ["1.2.3.4.5", "65536.2", "1.2-private-token"])
+def test_reframework_inventory_never_returns_free_form_or_unbounded_versions(tmp_path, monkeypatch, version):
+    _write(tmp_path / "PDPerfPlugin.dll")
+    monkeypatch.setattr(diagnostics.pe, "version_strings", lambda path: {"FileVersion": version})
+    result = diagnostics.game_files(SimpleNamespace(root=tmp_path), {"target": str(tmp_path)}, [])["reframework_upscaler"]
+    assert result["pdperf_root_present"] is True and result["pdperf_version"] is None
+    assert version not in json.dumps(result)
+
+
+def test_reframework_inventory_does_not_read_linked_files_or_directories(tmp_path, monkeypatch):
+    root, outside = tmp_path / "game", tmp_path / "outside"
+    root.mkdir()
+    _write(outside / "PDPerfPlugin.dll")
+    _write(outside / "libxess.dll")
+    _write(outside / "re2_fw_config.txt", "TemporalUpscaler_Enabled=true")
+    for name in ("PDPerfPlugin.dll", "libxess.dll", "re2_fw_config.txt"):
+        (root / name).symlink_to(outside / name)
+
+    def unexpected_read(path):
+        raise AssertionError("linked PE must not be read")
+
+    monkeypatch.setattr(diagnostics.pe, "version_strings", unexpected_read)
+    result = diagnostics.game_files(SimpleNamespace(root=root), {"target": str(root)}, [])["reframework_upscaler"]
+    assert all(value is None for value in result.values())
+    linked = root / "linked"
+    linked.symlink_to(outside, target_is_directory=True)
+    result = diagnostics.game_files(SimpleNamespace(root=root), {"target": str(linked)}, [])["reframework_upscaler"]
+    assert all(value is None for value in result.values())
+
+
 def test_report_keeps_what_the_user_did_and_each_install_state_once():
     snapshot = {"applied": {"build": "fsr-4.1.2-beta"}}
     actions = ([{"action": "refresh_wiki", "state": "done", "snapshot": snapshot}] * 15
@@ -221,7 +328,7 @@ def test_partial_report_keeps_what_was_read_before_a_stuck_game(steam, fake_cata
         service.report(partial=partial)
     except KeyboardInterrupt:
         pass
-    assert [g['appid'] for g in partial['games']] == ['fast']
+    assert [(g['appid'], g.get('scanned', True)) for g in partial['games']] == [('fast', True), ('stuck', False)]
     assert partial['reading'] == 'stuck'
     assert partial['gpu'] == service.gpu
 

@@ -59,6 +59,26 @@ describe("PanelThemeInstaller", () => {
     );
   });
 
+  it("keeps the backend's reason for a rejected package (PDC-TM74)", async () => {
+    const installer = new PanelThemeInstaller(host({
+      prepareRemote: vi.fn(async () => ({ ok: false, code: "unsafe_archive", reason: "Remote theme manifest profile is invalid" })),
+    }));
+
+    await expect(installer.prepare(REQUEST)).rejects.toEqual(
+      new ThemeInstallError("unsafe_archive", "Theme package installation failed: Remote theme manifest profile is invalid"),
+    );
+  });
+
+  it("drops a reason that is not a short plain sentence", async () => {
+    const installer = new PanelThemeInstaller(host({
+      prepareRemote: vi.fn(async () => ({ ok: false, code: "unsafe_archive", reason: "/home/deck/secret: x".repeat(10) })),
+    }));
+
+    await expect(installer.prepare(REQUEST)).rejects.toEqual(
+      new ThemeInstallError("unsafe_archive", "Theme package installation failed"),
+    );
+  });
+
   it("validates transaction acknowledgements and pending recoveries", async () => {
     const installer = new PanelThemeInstaller(host({
       recoveries: vi.fn(async () => ({

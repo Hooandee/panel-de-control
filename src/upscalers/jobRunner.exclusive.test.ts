@@ -35,7 +35,7 @@ it("retires the managed scaler and confirms launch before activating spatial Mak
   job = { ...job, state: "done", result: { overrides: ["dxgi=n,b"], args: [] } };
   await vi.advanceTimersByTimeAsync(250);
   await result;
-  expect(mocks.saveMakoProfile).toHaveBeenCalledWith(game.appid, game.liveAppid, request, false);
+  expect(mocks.saveMakoProfile).toHaveBeenCalledWith(game.appid, game.liveAppid, request, false, false);
   expect(mocks.finish).toHaveBeenCalledWith(true);
 });
 it("restores the checkpoint when activation fails after uninstall", async () => {
@@ -99,7 +99,7 @@ it("does not uninstall again what opening the transition already took out (Helix
   const request = { scaling_enabled: true };
   await saveExclusiveMakoProfile(game, request);
   expect(mocks.uninstallUpscaler).not.toHaveBeenCalled();
-  expect(mocks.saveMakoProfile).toHaveBeenCalledWith(game.appid, game.liveAppid, request, false);
+  expect(mocks.saveMakoProfile).toHaveBeenCalledWith(game.appid, game.liveAppid, request, false, false);
 });
 
 it("says HelixSR is gone when spatial Mako fails after the switch took it out", async () => {

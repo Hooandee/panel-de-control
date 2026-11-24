@@ -101,7 +101,7 @@ public sealed class InstallParityTests : IDisposable
             step["ini"]!.GetValue<string>());
         var written = File.ReadAllText(Path.Combine(game, GameManifest.Folder, GameManifest.FileName));
         Assert.StartsWith("{\"files\": {\"dxgi.dll\": \"", written);
-        Assert.Contains("\"OptiScaler.ini\": null}, \"backups\": [\"amd_fidelityfx_upscaler_dx12.dll\"], \"dirs\": [\"OptiScaler/D3D12_Optiscaler\"], \"configuration\": {}}", written);
+        Assert.Contains("\"OptiScaler.ini\": null}, \"backups\": [\"amd_fidelityfx_upscaler_dx12.dll\"], \"dirs\": [\"OptiScaler/D3D12_Optiscaler\"], \"configuration\": {}, \"owned\": []}", written);
     }
 
     [Theory]
@@ -150,7 +150,7 @@ public sealed class InstallParityTests : IDisposable
                 input => input.Key, input => (IReadOnlyList<string>)input.Value!.AsArray().Select(path => path!.GetValue<string>()).ToList());
             var effective = UpscalerPlanner.ForGame(catalog, catalog.Build(parts[0])!, inputs, parts[1], Array.Empty<string>());
             var generation = catalog.Assets.First(asset => asset.Id == effective.Archive).Generation;
-            var plan = UpscalerPlanner.FrameGenPlanFor(parts[1], inputs, null, generation, new[] { "d3d12" }, 2, null);
+            var plan = UpscalerPlanner.FrameGenPlanFor(catalog, parts[1], inputs, null, generation, new[] { "d3d12" }, 2, null);
             var recipe = panel["recipes"]![parts[3]];
             var choice = panel["choices"]![int.Parse(parts[4], System.Globalization.CultureInfo.InvariantCulture)]!.AsObject();
             var result = PanelIni.Compute(catalog, effective,

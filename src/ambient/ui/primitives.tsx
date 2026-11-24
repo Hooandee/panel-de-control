@@ -31,6 +31,11 @@ export const Caption: FC<{ children: ReactNode; style?: CSSProperties }> = ({ ch
   <div style={{ ...theme.sectionLabel, ...style }}>{children}</div>
 );
 
+/** A muted line explaining the setting right above it. */
+export const Hint: FC<{ children: ReactNode }> = ({ children }) => (
+  <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, padding: "0 2px", marginTop: -4 }}>{children}</span>
+);
+
 export const Hairline: FC = () => <div style={{ height: 1, background: theme.color.hairline }} />;
 
 export const Button: FC<{ label: ReactNode; primary?: boolean; onActivate: () => void; disabled?: boolean; style?: CSSProperties }> = ({ label, primary, onActivate, disabled, style }) => (

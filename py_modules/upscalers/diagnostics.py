@@ -1,5 +1,6 @@
 """Everything needed to explain a failing upscaler install from the support bundle alone."""
 
+import copy
 import math
 import os
 import platform
@@ -10,24 +11,24 @@ from pathlib import Path
 
 from steam_cleaner import vdf
 
-from . import games, helixsr, ini, logread, pe
+from . import catalog, games, helixsr, ini, logread, pe
 from .assets import sha256
 
 INI_KEYS = (
     "Upscalers.Dx11Upscaler", "Upscalers.Dx12Upscaler", "Upscalers.VulkanUpscaler",
     "FSR.Fsr4GpuSupport", "FSR.Fsr4Model", "FSR.Fsr4Update", "FSR.Fsr4ForceEnableInt8", "FSR.Fsr4ForceModel", "FSR.UpscalerIndex",
-    "FrameGen.Enabled", "FrameGen.FGInput", "FrameGen.FGOutput", "OptiFG.HUDFix",
+    "FrameGen.Enabled", "FrameGen.FGInput", "FrameGen.FGOutput", "FrameGen.FGNvngxReplacement", "FrameGen.DisableHudless", "OptiFG.HUDFix",
     *(f"QualityOverrides.QualityRatio{mode}" for mode in ("DLAA", "UltraQuality", "Quality", "Balanced", "Performance", "UltraPerformance")),
     "QualityOverrides.QualityRatioOverrideEnabled", "Sharpness.OverrideSharpness", "Sharpness.Sharpness", "CAS.Enabled", "CAS.MotionSharpnessEnabled", "HelixSR.Int8",
     "Plugins.LoadAsiPlugins", "Plugins.LoadCustomAmdxc64OnRdna2", "Spoofing.Dxgi", "Log.LogLevel",
 )
-_NOTEWORTHY = re.compile(r"\[(?:W|E|C)\]|Creating new|FSR4|Fsr4|FrameGen|FG |XeFG|Nukem|OptiFG|working as|Adapter Desc", re.I)
+_NOTEWORTHY = re.compile(r"\[(?:W|E|C)\]|Creating new|FSR4|Fsr4|FrameGen|FG |XeFG|Nukem|OptiFG|working as|Adapter Desc|custom|dlssg", re.I)
 _SKIP = re.compile(r"VulkanSpoofing|freely downloadable|GitHub :|Nexus  :|paid for these|MULTIPLAYER|-{10}")
 LOG_LINES = 60
 LINE_CHARS = 220
 
 
-REQUEST_KEYS = ("build", "model", "quality", "fg", "fg_route", "proxy", "sharpness", "hud_fix", "confirm_anti_cheat", "key", "value", "key_action", "value_omitted", "multiplier", "flow", "performance", "enabled", "mode", "target_fps", "max_multiplier", "int8", "scaling_enabled", "scaling_factor", "scaling_sharpness")
+REQUEST_KEYS = ("build", "model", "quality", "fg", "fg_route", "proxy", "sharpness", "hud_fix", "confirm_anti_cheat", "key", "value", "key_action", "value_omitted", "multiplier", "flow", "flow_scale", "performance", "enabled", "mode", "target_fps", "max_multiplier", "int8", "scaling_enabled", "scaling_factor", "scaling_sharpness", "engine", "fg_mode")
 
 
 def fields(value, keys, limit=160):
@@ -64,11 +65,43 @@ def report_actions(actions) -> list[dict]:
     return result
 
 
+def _selector_snapshot(value: dict) -> dict:
+    result = {key: value[key] for key in ("steam_rows", "shortcut_rows", "filtered", "no_metadata", "not_game", "unreadable", "recovered")
+              if type(value.get(key)) is int and 0 <= value[key] <= 1_000_000}
+    if type(value.get("observed_at")) is int and 0 <= value["observed_at"] <= 4_294_967_295:
+        result["observed_at"] = value["observed_at"]
+    if "complete" in value and (value["complete"] is None or type(value["complete"]) is bool):
+        result["complete"] = value["complete"]
+    if value.get("compatibility") in ("pending", "ready", "partial"):
+        result["compatibility"] = value["compatibility"]
+    rejected = value.get("manifest_rejected")
+    if isinstance(rejected, dict):
+        result["manifest_rejected"] = {key: rejected[key] for key in ("not_installed", "no_folder", "invalid", "unreadable")
+                                       if type(rejected.get(key)) is int and 0 <= rejected[key] <= 1_000_000}
+    result["samples"] = []
+    samples = value.get("samples")
+    for sample in samples[:12] if isinstance(samples, list) else ():
+        if (isinstance(sample, dict) and type(sample.get("appid")) is int and 0 < sample["appid"] < 2**31
+                and type(sample.get("collection")) is bool and type(sample.get("manifest")) is bool
+                and sample.get("local") in ("true", "false", "missing", "unreadable") and sample.get("row") in ("visible", "unavailable")):
+            result["samples"].append({key: sample[key] for key in ("appid", "collection", "manifest", "local", "row")})
+    omissions = value.get("omissions")
+    if isinstance(omissions, list):
+        result["omissions"] = [{"appid": item["appid"], "reason": item["reason"]} for item in omissions[:12]
+                               if isinstance(item, dict) and type(item.get("appid")) is int and 0 < item["appid"] < 2**31
+                               and item.get("reason") in ("no_metadata", "unreadable")]
+    return result
+
+
 def frontend_context(value) -> dict:
     value = value if isinstance(value, dict) else {}
     running = value.get("running")
     result = {key: value[key][:40] for key in ("collected_at", "status") if isinstance(value.get(key), str)}
     result["status"] = result.get("status") if result.get("status") in ("available", "unavailable") else "unavailable"
+    if value.get("selector_status") in ("unopened", "failed", "observed"):
+        result["selector_status"] = value["selector_status"]
+        if value["selector_status"] == "observed" and isinstance(value.get("selector"), dict):
+            result["selector"] = _selector_snapshot(value["selector"])
     badges = value.get("badges") if isinstance(value.get("badges"), dict) else {}
     result["badges"] = {
         "covers": badges.get("covers") if isinstance(badges.get("covers"), bool) else None,
@@ -200,29 +233,30 @@ def solution(plan) -> dict | None:
     def fg_route(value):
         if not isinstance(value, dict):
             return None
-        return {"input": enum(value.get("input"), {"upscaler", "dlssg", "nukems", "fsrfg", "xefg"}),
-                "output": enum(value.get("output"), {"fsrfg", "xefg", "nukems"}),
-                "source": enum(value.get("source"), {"game", "optiscaler"}),
+        return {"input": enum(value.get("input"), {"upscaler", "dlssg", "nukems", "fsrfg", "xefg", "nvngxfg"}),
+                "output": enum(value.get("output"), {"fsrfg", "xefg", "nukems", "auto"}),
+                "source": enum(value.get("source"), {"game", "optiscaler", "anr"}),
                 "follows_game": value.get("follows_game") is True,
                 "experimental": value.get("experimental") is True}
     for key in ("fg_plan", "offered_fg_plan"):
         fg = plan.get(key)
         if isinstance(fg, dict):
             routes = fg.get("routes") if isinstance(fg.get("routes"), dict) else {}
-            result[key] = {**fg_route(fg), "route": enum(fg.get("route"), {"game", "optiscaler"}),
-                           "routes": {name: fg_route(routes[name]) for name in ("game", "optiscaler")
+            result[key] = {**fg_route(fg), "route": enum(fg.get("route"), {"game", "optiscaler", "anr"}),
+                           "routes": {name: fg_route(routes[name]) for name in ("game", "optiscaler", "anr")
                                       if isinstance(routes.get(name), dict)}}
     return result
 
 
-def snapshot(install) -> dict:
+def snapshot(install, excerpt: bool = False) -> dict:
+    """`excerpt` keeps the log lines too, for an install about to go: its log goes with it."""
     try:
-        return _snapshot(install)
+        return _snapshot(install, excerpt)
     except Exception as error:
         return {"at": time.time(), "observed": {"result": "unknown", "error": type(error).__name__}}
 
 
-def _snapshot(install) -> dict:
+def _snapshot(install, excerpt: bool = False) -> dict:
     result = {"at": time.time(), "applied": None, "observed": {"result": "not_installed"}}
     if not isinstance(install, dict):
         return result
@@ -249,11 +283,17 @@ def _snapshot(install) -> dict:
     else:
         facts = logread.read(Path(install.get("target", "")), since=verification_since(install))
         verdict = logread.verdict(facts)
+        if excerpt and install.get("target"):
+            result["log_excerpt"] = _log_excerpt(Path(install["target"]))
     observed = fields(facts, ("present", "stale", "modified", "upscaler", "input", "fg", "errors", "unverifiable"))
+    if facts.get("error_sources"):
+        observed["error_sources"] = facts["error_sources"]
     observed.update(result=verdict, source="game_log" if engine not in ("dll", "proton") else "unavailable",
                     injector_version=facts.get("version"),
                     **logread.provider_observation(facts if engine == "optiscaler" else {}))
     observed["resolution_source"] = facts.get("resolution_source", "unavailable")
+    if engine == "optiscaler" and (fallen := logread.fallback(install, facts)):
+        observed["fallback"] = fallen
     for name in ("resolution", "initial_resolution"):
         resolution = facts.get(name)
         if isinstance(resolution, dict):
@@ -319,28 +359,25 @@ def _manifest_check(target: Path) -> dict:
             "backups": manifest.get("backups", [])}
 
 
-def _log_excerpt(target: Path) -> list[str]:
+def _chunk(path: Path, size: int, head: bool = False) -> list[str]:
     try:
-        with open(target / logread.LOG_NAME, "rb") as handle:
-            handle.seek(0, os.SEEK_END)
-            size = handle.tell()
-            handle.seek(max(0, size - logread.MAX_BYTES))
-            lines = handle.read().decode("utf-8", "replace").splitlines()
+        with open(path, "rb") as handle:
+            if not head:
+                handle.seek(0, os.SEEK_END)
+                handle.seek(max(0, handle.tell() - size))
+            return handle.read(size).decode("utf-8", "replace").splitlines()
     except OSError:
         return []
+
+
+def _log_excerpt(target: Path) -> list[str]:
+    lines = _chunk(target / logread.LOG_NAME, logread.MAX_BYTES)
     picked = [line[:LINE_CHARS] for line in lines if _NOTEWORTHY.search(line) and not _SKIP.search(line)]
     return picked[-LOG_LINES:]
 
 
 def _tail(path: Path) -> list[str]:
-    try:
-        with open(path, "rb") as handle:
-            handle.seek(0, os.SEEK_END)
-            handle.seek(max(0, handle.tell() - 64 * 1024))
-            lines = handle.read().decode("utf-8", "replace").splitlines()
-    except OSError:
-        return []
-    return [line[:LINE_CHARS] for line in lines[-LOG_LINES:]]
+    return [line[:LINE_CHARS] for line in _chunk(path, 64 * 1024)[-LOG_LINES:]]
 
 
 _LAUNCH_DLLS = {name.removesuffix('.dll').lower() for name in games.PROXY_NAMES} | {
@@ -351,9 +388,16 @@ _LAUNCH_WRAPPERS = {'mako': 'mako', 'mako-run': 'mako', 'mako-launch': 'mako', '
                     'mangohud': 'mangohud', 'gamemoderun': 'gamemoderun'}
 
 
+_LAUNCH_FG_ENV = {
+    'ENABLE_GAMESCOPE_WSI': 'switch', 'DISABLE_LSFGVK': 'switch',
+    'LSFGVK_PROFILE': 'profile', 'MAKO_PROFILE': 'profile',
+    'LSFGVK_CONFIG': 'path', 'MAKO_CONFIG': 'path', 'MAKO_LAUNCH_CONFIG': 'path',
+}
+
+
 def launch_diagnostics(value) -> dict:
     result = {'command_placeholder': False, 'render_flags': [], 'wrappers': [],
-              'dll_overrides': [], 'omitted_count': 0, 'reshade_redirected': False}
+              'dll_overrides': [], 'omitted_count': 0, 'reshade_redirected': False, 'framegen_env': {}}
     if not isinstance(value, str):
         return result
     try:
@@ -368,6 +412,19 @@ def launch_diagnostics(value) -> dict:
             flag = 'dx11' if token.lower() in ('-dx11', '-d3d11') else 'dx12'
             if flag not in result['render_flags']:
                 result['render_flags'].append(flag)
+        elif (name := token.partition('=')[0]) in _LAUNCH_FG_ENV and '=' in token:
+            value_class = 'empty'
+            assigned = token.partition('=')[2]
+            kind = _LAUNCH_FG_ENV[name]
+            if assigned:
+                if kind == 'switch':
+                    value_class = assigned if assigned in ('0', '1') else 'other'
+                elif kind == 'profile':
+                    # A pdc-shaped name is syntax, not ownership or observed activity.
+                    value_class = 'pdc' if re.fullmatch(r'pdc-(?:[0-9]{1,20}|none)', assigned) else 'other'
+                else:
+                    value_class = 'set'
+            result['framegen_env'][name] = value_class
         elif token.startswith('RESHADE_BASE_PATH_OVERRIDE='):
             result['reshade_redirected'] = bool(token.partition('=')[2])
         elif token.startswith('WINEDLLOVERRIDES='):
@@ -456,6 +513,8 @@ def _report_install(install):
     result['solution'] = solution(install.get('solution'))
     result['recipe_dependencies'] = [verb for verb in install.get('recipe_dependencies', [])[:16]
                                      if isinstance(verb, str) and re.fullmatch(r'[a-z0-9-]{1,80}', verb)]
+    result['game_config'] = [fields(entry, ('tag', 'value', 'before', 'state')) for entry in install.get('game_config', [])[:4]
+                             if isinstance(entry, dict)]
     result['native_dlls'] = [name for name in install.get('native_dlls', [])[:16]
                              if isinstance(name, str) and name.lower().removesuffix('.dll') in _LAUNCH_DLLS]
     return result
@@ -472,6 +531,13 @@ def _report_history(history):
         clean['facts'] = fields(item.get('facts'), ('present', 'stale', 'upscaler', 'input', 'fg', 'errors', 'version'))
         result.append(clean)
     return result
+
+
+def recorded_state(appid: str, entry: dict) -> dict:
+    """Panel's own record of a game, read from memory only: no folder, log or Steam file is touched."""
+    return {"appid": appid, "scanned": False, "actions": report_actions(entry.get("actions")),
+            "previous": copy.deepcopy(entry.get("previous")), "install": _report_install(entry.get("install")),
+            "history": _report_history(entry.get("history"))}
 
 
 def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
@@ -512,6 +578,8 @@ def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
     elif install:
         target = Path(install.get("target", ""))
         facts = logread.read(target, since=verification_since(install))
+        if fallen := logread.fallback(install, facts):
+            facts["fallback"] = fallen
         report.update({
             "manifest": _manifest_check(target),
             "ini": ini_values(target / "OptiScaler.ini"),
@@ -519,7 +587,32 @@ def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
             "log_facts": facts,
             "log_excerpt": _log_excerpt(target),
         })
+        if install.get("anr"):
+            report["anr_log"] = _anr_log(target)
     return report
+
+
+def _anr_log(target: Path) -> dict:
+    """ANR FG writes its own log per launch beside its provider; the newest is the one support asks for."""
+    folder = target / "OptiScaler" / "custom" / catalog.ANR_PROVIDER / "dlssg"
+    try:
+        logs = sorted(((path.stat().st_mtime, path) for path in folder.glob("nr_fg-*.log")), key=lambda item: item[0])
+    except OSError:
+        logs = []
+    provider = folder / "nvngx_dlssg.dll"
+    return {"provider": provider.is_file() and not provider.is_symlink(), "logs": len(logs),
+            "newest_at": logs[-1][0] if logs else None, "head": _anr_head(logs[-1][1]) if logs else [],
+            "tail": _tail(logs[-1][1]) if logs else []}
+
+
+# ANR's start-up says what it generates for (output size, format, GPU path); its pacing lines soon fill the tail.
+_ANR_HEAD = re.compile(r"\] \[(?:info|warn|warning|error)\] (?!step:|pacing:|slow evaluate)")
+ANR_HEAD_LINES = 20
+
+
+def _anr_head(path: Path) -> list[str]:
+    lines = _chunk(path, 32 * 1024, head=True)
+    return [line[:LINE_CHARS] for line in lines if _ANR_HEAD.search(line) and "DLSS-G provider in" not in line][:ANR_HEAD_LINES]
 
 
 # Files that load code into a game besides the game itself: whose they are is the first support question.
@@ -531,6 +624,73 @@ _LOADER_DIRS = ("reframework", "OptiScaler", "Luma", "D3D12_Optiscaler", "plugin
 # Steam ownership facts the frontend adds.
 _STORE_FILES = ("steam_emu.ini", "steam_settings", "ColdClientLoader.ini", "OnlineFix.ini", "OnlineFix64.dll",
                 "cream_api.ini", "SmartSteamEmu.ini", "CODEX.ini", "steam_interfaces.txt")
+_REFRAMEWORK_FIELDS = ("pdperf_root_present", "pdperf_version", "xess_root_present", "xess_version",
+                      "config_present", "config_readable", "temporal_enabled", "native_resolution", "quality")
+
+
+def _reframework_inventory(root: Path, target: Path, names: dict) -> dict:
+    result = dict.fromkeys(_REFRAMEWORK_FIELDS)
+    if not target.is_relative_to(root):
+        return result
+    relative = target.relative_to(root)
+    if any((root / part).is_symlink() for part in (relative, *relative.parents)):
+        return result
+
+    def file(name, present):
+        entries = [entry for key, entry in names.items() if key.lower() == name.lower()]
+        if not entries:
+            result[present] = False
+            return None
+        entry = entries[0]
+        if len(entries) != 1 or entry.is_symlink() or not entry.is_file():
+            return None
+        result[present] = True
+        return entry
+
+    for name, present, version_key in (("PDPerfPlugin.dll", "pdperf_root_present", "pdperf_version"),
+                                       ("libxess.dll", "xess_root_present", "xess_version")):
+        if entry := file(name, present):
+            strings = pe.version_strings(str(entry))
+            for key in ("FileVersion", "ProductVersion"):
+                value = strings.get(key, "")
+                if re.fullmatch(r"\d{1,5}(?:\s*[.,]\s*\d{1,5}){1,3}", value):
+                    numbers = [int(part) for part in re.split(r"\s*[.,]\s*", value)]
+                    if all(number <= 65535 for number in numbers):
+                        result[version_key] = numbers
+                        break
+    config = file("re2_fw_config.txt", "config_present")
+    if config is None:
+        return result
+    result["config_readable"] = False
+    try:
+        with config.open("rb") as stream:
+            if os.fstat(stream.fileno()).st_size > 16 * 1024:
+                return result
+            raw = stream.read(16 * 1024)
+            if os.fstat(stream.fileno()).st_size > len(raw):
+                return result
+        text = raw.decode("utf-8-sig")
+    except (OSError, UnicodeError):
+        return result
+    result["config_readable"] = True
+    allowed = {"TemporalUpscaler_Enabled": "temporal_enabled",
+               "TemporalUpscaler_UseNativeResolution": "native_resolution", "TemporalUpscaler_UpscaleQuality": "quality"}
+    seen = set()
+    for line in text.splitlines():
+        key, separator, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if not separator or key not in allowed:
+            continue
+        output = allowed[key]
+        if key in seen:
+            result[output] = None
+            continue
+        seen.add(key)
+        if output == "quality":
+            result[output] = int(value) if value in ("0", "1", "2", "3") else None
+        elif value in ("true", "false"):
+            result[output] = value == "true"
+    return result
 
 
 def game_files(installed, analysis: dict, owned: list[str]) -> dict:
@@ -542,6 +702,7 @@ def game_files(installed, analysis: dict, owned: list[str]) -> dict:
                     "anti_cheat": bool(analysis.get("anti_cheat")),
                     "foreign_identity": fields(analysis.get("foreign_identity"), ("engine", "variant", "manifest_error")),
                     "inputs": {}, "loaders": [], "store_files": []}
+    result["reframework_upscaler"] = dict.fromkeys(_REFRAMEWORK_FIELDS)
     mine = {str(name).lower() for name in owned}
     target_prefix = f"{target.relative_to(root).as_posix()}/" if target and target != root and target.is_relative_to(root) else ""
 
@@ -570,6 +731,8 @@ def game_files(installed, analysis: dict, owned: list[str]) -> dict:
             names = {entry.name: entry for entry in folder.iterdir()}
         except OSError:
             continue
+        if folder == target:
+            result["reframework_upscaler"] = _reframework_inventory(root, target, names)
         for name in _LOADER_FILES + _LOADER_DIRS:
             entry = names.get(name) or next((e for n, e in names.items() if n.lower() == name.lower()), None)
             if entry is None:
@@ -579,8 +742,9 @@ def game_files(installed, analysis: dict, owned: list[str]) -> dict:
         for name in _STORE_FILES:
             if any(n.lower() == name.lower() for n in names):
                 result["store_files"].append(name)
-    # REFramework writes its own folder beside the dinput8.dll Panel placed: it comes with Panel's install.
-    if any(item["path"].lower().endswith("dinput8.dll") and item["owner"] == "panel" for item in result["loaders"]):
+    # REFramework writes its own folder beside the dinput8.dll (or ReShade64.dll) Panel placed: it comes with Panel's install.
+    if any(item["path"].lower().endswith(("dinput8.dll", "reshade64.dll")) and item["owner"] == "panel"
+           for item in result["loaders"]):
         for item in result["loaders"]:
             if item["dir"] and item["path"].lower().rsplit("/", 1)[-1] == "reframework":
                 item["owner"] = "panel_runtime"

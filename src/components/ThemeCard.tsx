@@ -133,6 +133,7 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
   return (
     <Focusable
       data-testid={`theme-card-${card.id}`}
+      data-pdc-part="surface-action"
       data-pdc-focus-radius="true"
       role="button"
       aria-labelledby={`${nameId} ${statusId}`}

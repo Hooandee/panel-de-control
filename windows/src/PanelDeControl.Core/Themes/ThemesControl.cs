@@ -36,9 +36,17 @@ public enum ThemesOperation
     [EnumMember(Value = "uninstall")]
     Uninstall = 8,
 
-    /// <summary>Game Bar opened from the Xbox button, which Windows kept from Steam: Steam's Home for the theme.</summary>
+    /// <summary>Steam's Home asked from Panel's widget in Game Bar: Game Bar closes and Big Picture comes Home over the game.</summary>
     [EnumMember(Value = "steam_home")]
     SteamHome = 9,
+
+    /// <summary>Game Bar came to the foreground: the Xbox button, which Windows kept from Steam.</summary>
+    [EnumMember(Value = "game_bar_shown")]
+    GameBarShown = 10,
+
+    /// <summary>Game Bar left the foreground; <see cref="ThemesRequest.Value"/> is how long it was shown, in milliseconds.</summary>
+    [EnumMember(Value = "game_bar_hidden")]
+    GameBarHidden = 11,
 }
 
 /// <summary>Why themes can or cannot reach Steam, as the widget explains it.</summary>
@@ -143,6 +151,17 @@ public sealed class ThemesRequest
 
     public static ThemesRequest SteamHome() => new(ThemesOperation.SteamHome);
 
+    public static ThemesRequest GameBarShown() => new(ThemesOperation.GameBarShown);
+
+    public static ThemesRequest GameBarHidden(long shownMilliseconds) =>
+        new(ThemesOperation.GameBarHidden, value: System.Math.Max(0, shownMilliseconds).ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>How long Game Bar was shown, for <see cref="ThemesOperation.GameBarHidden"/>.</summary>
+    public long? ShownMilliseconds =>
+        Operation == ThemesOperation.GameBarHidden && long.TryParse(Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var milliseconds)
+            ? milliseconds
+            : null;
+
     internal void Validate()
     {
         bool Present(string? field) => !string.IsNullOrWhiteSpace(field) && field!.Length <= MaximumFieldLength;
@@ -151,8 +170,10 @@ public sealed class ThemesRequest
         var pathExpected = Operation == ThemesOperation.InstallEarly;
         var valid = Operation switch
         {
-            ThemesOperation.Get or ThemesOperation.RefreshCatalog or ThemesOperation.EnableSteamDebugging or ThemesOperation.RestartSteam or ThemesOperation.SteamHome =>
+            ThemesOperation.Get or ThemesOperation.RefreshCatalog or ThemesOperation.EnableSteamDebugging or ThemesOperation.RestartSteam
+                or ThemesOperation.SteamHome or ThemesOperation.GameBarShown =>
                 Absent(CatalogId) && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
+            ThemesOperation.GameBarHidden => ShownMilliseconds is not null && Absent(CatalogId) && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option),
             ThemesOperation.Install => Present(CatalogId) && Present(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
             ThemesOperation.InstallEarly => Present(CatalogId) && ArchivePath is not null && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
             ThemesOperation.Uninstall => Present(Name) && Enabled is null && Absent(CatalogId) && Absent(Version) && Absent(Option) && Absent(Value),
@@ -347,6 +368,10 @@ public sealed class ThemesResponse
 
     [DataMember(Name = "runtime_errors", Order = 6, EmitDefaultValue = false)]
     public string[]? RuntimeErrors { get; set; }
+
+    /// <summary>Steam runs a game behind its UI; the widget then offers Steam's Home.</summary>
+    [DataMember(Name = "game_running", Order = 7, EmitDefaultValue = false)]
+    public bool GameRunning { get; set; }
 
     internal void Validate()
     {

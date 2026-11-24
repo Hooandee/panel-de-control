@@ -42,6 +42,8 @@ que necesitas sin gastar batería de más.
 
 🌀 **Ventiladores.** Temperaturas y RPM en directo, y curvas que dibujas con el dedo. Con el uso
 aprende cómo se calienta cada juego y te propone una curva pensada para él.
+En ventiladores que solo ofrecen porcentaje, se muestra ese dato en lugar de RPM.
+La curva personalizada de cada perfil se conserva al cambiar de modo y se recupera al volver a Personalizado.
 
 🎨 **Pantalla.** Colores de un toque (Nativo, Cine, Vivo, Cómodo) o ajuste fino si te gusta
 trastear, aspecto OLED para pantallas LCD, modo nocturno con horario y HDR donde el panel lo
@@ -59,6 +61,9 @@ salen, dónde y con qué colores.
 
 🚀 **Parámetros.** Las opciones de lanzamiento de cada juego convertidas en interruptores con su
 explicación. FSR4, HDR, escalado y compañía, pero solo lo que tu versión de Proton soporta.
+
+🎮 **Escaladores.** Elige un juego instalado para configurar su escalado y la generación de frames.
+La lista también reconoce juegos instalados en otras bibliotecas de Steam.
 
 🧹 **Limpieza.** Descubre cuánto ocupan la Shader Cache y los prefijos de tus juegos y recupera
 espacio en un momento.
@@ -79,7 +84,11 @@ Todo se maneja con el mando, y las actualizaciones llegan solas al menú rápido
 ## 📺 Ambiente
 
 Pon de fondo en Inicio tus fotos, tus vídeos o el arte de tus juegos, y al pasar por un juego deja
-que suene su banda sonora o se vea su tráiler.
+que suene su banda sonora o se vea su tráiler, y elige cuál de los dos manda. Si no se leen bien las
+portadas, difumina u oscurece el fondo, o añade una viñeta, con la intensidad que quieras.
+
+Si has elegido conservar el fondo de un tema, Ambiente te permite recuperarlo para Panel con
+**Mostrar el mío igualmente**, sin perder tus imágenes ni la configuración.
 
 Además es un reproductor para todo: tu música, radios de todo el mundo en un mapa, YouTube, Twitch
 o canales de tele con listas M3U. Lo pones en cola, eliges repetir o aleatorio y te lo llevas a la

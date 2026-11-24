@@ -52,7 +52,8 @@
    "version.dll",
    "dbghelp.dll",
    "wininet.dll",
-   "winhttp.dll"
+   "winhttp.dll",
+   "d3d12.dll"
   ],
   "base_ini": {
    "Log.LogToFile": "true",
@@ -116,6 +117,18 @@
     "size": 72315137,
     "urls": [
      "https://github.com/optiscaler/OptiScaler-nightly/releases/download/nightly-20261102/OptiScaler_v10.0.0-pre1_20261102.7z"
+    ],
+    "archive": true,
+    "member": null,
+    "generation": 10
+   },
+   {
+    "id": "anr-fg-addon",
+    "filename": "anr-fg-V.B19-addon.zip",
+    "sha256": "70107373e0f9744875fcbb7f46133432202ce7f132fdfff14259b8a85fba3f13",
+    "size": 3418118,
+    "urls": [
+     "https://github.com/apex-compute/ANR/releases/download/FG-V.B19/anr-fg-V.B19-addon.zip"
     ],
     "archive": true,
     "member": null,
@@ -743,7 +756,7 @@
  },
  "recipes": {
   "schema_version": 2,
-  "catalog_version": 13,
+  "catalog_version": 18,
   "assets": {
    "luma-ff7-800": {
     "id": "luma-ff7-800",
@@ -790,6 +803,15 @@
     "filename": "RE7.zip",
     "format": "zip"
    },
+   "refw-pdup-re8": {
+    "id": "refw-pdup-re8",
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/RE8.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "27e8fffe7df10d2f905facdf9a03f733def6140c197db3a4a3d651aab5cbeaf7",
+    "size": 13397060,
+    "filename": "RE8.zip",
+    "format": "zip"
+   },
    "refw-pdup-dmc5": {
     "id": "refw-pdup-dmc5",
     "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/DMC5.zip",
@@ -806,6 +828,69 @@
     "sha256": "a8b51b2f33b37e3a8a2fb424ae1b999cb28b00d1fd2f89a62a8092d87bbea16e",
     "size": 37256003,
     "filename": "Luma-Persona_5_Royal.zip",
+    "format": "zip"
+   },
+   "luma-mrf-840": {
+    "id": "luma-mrf-840",
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Metaphor_ReFantazio.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "13737994d3fd562e5c326b45da0984ebb5cbb07cf1688c7b9bc6cc4c80fd35b1",
+    "size": 37461871,
+    "filename": "Luma-Metaphor_ReFantazio.zip",
+    "format": "zip"
+   },
+   "luma-gbfr-840": {
+    "id": "luma-gbfr-840",
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Granblue_Fantasy_Relink.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "e4aa1a7cf5404ab74382cb2611559c92fb2c84bb9063c85910c345bd1e5abc78",
+    "size": 131761937,
+    "filename": "Luma-Granblue_Fantasy_Relink.zip",
+    "format": "zip"
+   },
+   "luma-qb-840": {
+    "id": "luma-qb-840",
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Quantum_Break.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "9cabd90b2ea4a956a28792bb848bcf43afab341ba75b195928366d399b2d1a6a",
+    "size": 37290336,
+    "filename": "Luma-Quantum_Break.zip",
+    "format": "zip"
+   },
+   "luma-prey-840": {
+    "id": "luma-prey-840",
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Prey.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "e736869eb22280c5288ce30589f8c43f1dddf2c2241494e475cb108a521c3c65",
+    "size": 37614831,
+    "filename": "Luma-Prey.zip",
+    "format": "zip"
+   },
+   "luma-dh2-840": {
+    "id": "luma-dh2-840",
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Dishonored_2.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "1b5cc9ba363d376803e3e00ea27a2ec8abd36f9a196d0108875cdfa6fc257a31",
+    "size": 37305020,
+    "filename": "Luma-Dishonored_2.zip",
+    "format": "zip"
+   },
+   "luma-wd2-840": {
+    "id": "luma-wd2-840",
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Watch_Dogs_2.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "d876be72637d0ae70fa348a23b7ae1f82cd41c1ad21acd5b64888f3a5a95b19f",
+    "size": 37452768,
+    "filename": "Luma-Watch_Dogs_2.zip",
+    "format": "zip"
+   },
+   "luma-ue-840": {
+    "id": "luma-ue-840",
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-840/Luma-Unreal_Engine.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+    "sha256": "3a0770d9240733db749a47d5f110b23b1858b25786e4e5fa3e6aa7da227e6d78",
+    "size": 131735667,
+    "filename": "Luma-Unreal_Engine.zip",
     "format": "zip"
    }
   },
@@ -1100,6 +1185,22 @@
     "avoid_versions": [],
     "download_url": null
    },
+   "refw-pdup-re8": {
+    "id": "refw-pdup-re8",
+    "kind": "game_files",
+    "asset": "refw-pdup-re8",
+    "files": {
+     "dinput8.dll": "dinput8.dll"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
    "refw-pdup-dmc5": {
     "id": "refw-pdup-dmc5",
     "kind": "game_files",
@@ -1186,6 +1287,813 @@
     "version": null,
     "avoid_versions": [],
     "download_url": null
+   },
+   "luma-mrf": {
+    "id": "luma-mrf",
+    "kind": "game_files",
+    "asset": "luma-mrf-840",
+    "files": {
+     "ReShade64.dll": "dxgi.dll",
+     "Luma-Metaphor ReFantazio.addon": "Luma-Metaphor ReFantazio.addon",
+     "nvngx_dlss.dll": "nvngx_dlss.dll",
+     "Luma/d3dcompiler_47.dll": "Luma/d3dcompiler_47.dll",
+     "Luma/Global/Luma_CopyDepth_CS.hlsl": "Luma/Global/Luma_CopyDepth_CS.hlsl",
+     "Luma/Global/Luma_Copy_PS.hlsl": "Luma/Global/Luma_Copy_PS.hlsl",
+     "Luma/Global/Luma_Copy_VS.hlsl": "Luma/Global/Luma_Copy_VS.hlsl",
+     "Luma/Global/Luma_DisplayComposition.hlsl": "Luma/Global/Luma_DisplayComposition.hlsl",
+     "Luma/Global/Luma_DrawColor_CS.hlsl": "Luma/Global/Luma_DrawColor_CS.hlsl",
+     "Luma/Global/Luma_DrawColor_PS.hlsl": "Luma/Global/Luma_DrawColor_PS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl",
+     "Luma/Global/Luma_KarisAverage.hlsl": "Luma/Global/Luma_KarisAverage.hlsl",
+     "Luma/Global/Luma_NormalizeLUT3D.hlsl": "Luma/Global/Luma_NormalizeLUT3D.hlsl",
+     "Luma/Global/Luma_RCAS_PS.hlsl": "Luma/Global/Luma_RCAS_PS.hlsl",
+     "Luma/Global/Luma_SanitizeAlpha.hlsl": "Luma/Global/Luma_SanitizeAlpha.hlsl",
+     "Luma/Global/Luma_SanitizeRGBA.hlsl": "Luma/Global/Luma_SanitizeRGBA.hlsl",
+     "Luma/Global/Luma_SanitizeRGBAMipped.hlsl": "Luma/Global/Luma_SanitizeRGBAMipped.hlsl",
+     "Luma/Global/Luma_Scale_PS.hlsl": "Luma/Global/Luma_Scale_PS.hlsl",
+     "Luma/Global/Luma_Scale_VS.hlsl": "Luma/Global/Luma_Scale_VS.hlsl",
+     "Luma/Includes/ACES.hlsl": "Luma/Includes/ACES.hlsl",
+     "Luma/Includes/Bloom.hlsl": "Luma/Includes/Bloom.hlsl",
+     "Luma/Includes/CInfinityRolloff.hlsl": "Luma/Includes/CInfinityRolloff.hlsl",
+     "Luma/Includes/Color.hlsl": "Luma/Includes/Color.hlsl",
+     "Luma/Includes/ColorGradingLUT.hlsl": "Luma/Includes/ColorGradingLUT.hlsl",
+     "Luma/Includes/Common.hlsl": "Luma/Includes/Common.hlsl",
+     "Luma/Includes/DarktableUCS.hlsl": "Luma/Includes/DarktableUCS.hlsl",
+     "Luma/Includes/DgVoodoo.hlsl": "Luma/Includes/DgVoodoo.hlsl",
+     "Luma/Includes/DICE.hlsl": "Luma/Includes/DICE.hlsl",
+     "Luma/Includes/FXAA.hlsl": "Luma/Includes/FXAA.hlsl",
+     "Luma/Includes/HardwareBlendsEmulation.hlsl": "Luma/Includes/HardwareBlendsEmulation.hlsl",
+     "Luma/Includes/JzAzBz.hlsl": "Luma/Includes/JzAzBz.hlsl",
+     "Luma/Includes/LensDistortion.hlsl": "Luma/Includes/LensDistortion.hlsl",
+     "Luma/Includes/MacLeodBoynton.hlsl": "Luma/Includes/MacLeodBoynton.hlsl",
+     "Luma/Includes/Math.hlsl": "Luma/Includes/Math.hlsl",
+     "Luma/Includes/Oklab.hlsl": "Luma/Includes/Oklab.hlsl",
+     "Luma/Includes/RCAS.hlsl": "Luma/Includes/RCAS.hlsl",
+     "Luma/Includes/Reinhard.hlsl": "Luma/Includes/Reinhard.hlsl",
+     "Luma/Includes/Settings.hlsl": "Luma/Includes/Settings.hlsl",
+     "Luma/Includes/SMAA.hlsl": "Luma/Includes/SMAA.hlsl",
+     "Luma/Includes/SMAA_Passes.hlsl": "Luma/Includes/SMAA_Passes.hlsl",
+     "Luma/Includes/Tonemap.hlsl": "Luma/Includes/Tonemap.hlsl",
+     "Luma/Includes/UI.hlsl": "Luma/Includes/UI.hlsl",
+     "Luma/Includes/XeGTAO.hlsl": "Luma/Includes/XeGTAO.hlsl",
+     "Luma/Metaphor ReFantazio/AO_0x1A75C9AE.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/AO_0x1A75C9AE.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Blur15_0x3635cfde.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Blur15_0x3635cfde.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Blur8_0x59f6c52e.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Blur8_0x59f6c52e.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Final_0x1F993880.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Final_0x1F993880.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Luma_CopyDepth.hlsl": "Luma/Metaphor ReFantazio/Luma_CopyDepth.hlsl",
+     "Luma/Metaphor ReFantazio/Luma_CopyDsrResult.hlsl": "Luma/Metaphor ReFantazio/Luma_CopyDsrResult.hlsl",
+     "Luma/Metaphor ReFantazio/Luma_CreateBiasMask.hlsl": "Luma/Metaphor ReFantazio/Luma_CreateBiasMask.hlsl",
+     "Luma/Metaphor ReFantazio/Luma_GaussianBlur.hlsl": "Luma/Metaphor ReFantazio/Luma_GaussianBlur.hlsl",
+     "Luma/Metaphor ReFantazio/Luma_PrepareMotionVector.hlsl": "Luma/Metaphor ReFantazio/Luma_PrepareMotionVector.hlsl",
+     "Luma/Metaphor ReFantazio/Luma_PrepareOceanData.hlsl": "Luma/Metaphor ReFantazio/Luma_PrepareOceanData.hlsl",
+     "Luma/Metaphor ReFantazio/Luma_TemporalAADepth.hlsl": "Luma/Metaphor ReFantazio/Luma_TemporalAADepth.hlsl",
+     "Luma/Metaphor ReFantazio/LUT_Background_0xD8196629.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/LUT_Background_0xD8196629.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Ocean_0x10401BC4.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Ocean_0x10401BC4.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Ocean_0x43A6029F.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Ocean_0x43A6029F.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Ocean_0x90D867D7.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Ocean_0x90D867D7.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Ocean_0xA74FE1E5.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Ocean_0xA74FE1E5.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Ocean_0xB2510239.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Ocean_0xB2510239.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x0457B469.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x0457B469.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x0626E62A.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x0626E62A.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x06974A0D.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x06974A0D.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x0D23069A.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x0D23069A.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x13CA235D.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x13CA235D.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x155F917A.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x155F917A.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x19F7088B.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x19F7088B.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x1A870BC3.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x1A870BC3.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x29F2DD5F.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x29F2DD5F.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x32EA4F16.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x32EA4F16.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x3BEAEE64.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x3BEAEE64.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x40C3609D.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x40C3609D.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x42C641AC.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x42C641AC.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x4444523E.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x4444523E.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x4556846C.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x4556846C.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x4570848A.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x4570848A.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x4738BD67.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x4738BD67.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x48B83083.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x48B83083.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x4BA795B0.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x4BA795B0.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x4F8411AC.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x4F8411AC.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x5263AEB4.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x5263AEB4.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x59100809.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x59100809.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x596A7EF4.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x596A7EF4.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x5AF9F60E.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x5AF9F60E.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x5BD11C4A.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x5BD11C4A.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x60258879.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x60258879.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x66D1D047.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x66D1D047.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x698E18C4.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x698E18C4.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x6B4BFF34.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x6B4BFF34.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x74C65285.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x74C65285.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x74CE22E3.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x74CE22E3.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x791D21BB.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x791D21BB.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x8074A956.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x8074A956.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x83245268.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x83245268.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x83600C7A.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x83600C7A.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x8E41F8DB.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x8E41F8DB.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x8FC43E56.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x8FC43E56.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0x942BB234.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0x942BB234.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xA7A61EEF.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xA7A61EEF.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xA98201C3.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xA98201C3.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xAA5FA872.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xAA5FA872.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xAC0C30DA.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xAC0C30DA.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xAC5361B3.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xAC5361B3.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xB60A4BD4.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xB60A4BD4.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xB8A229B4.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xB8A229B4.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xBC1CB334.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xBC1CB334.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xBC35C89E.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xBC35C89E.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xBF5FF106.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xBF5FF106.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xCA9890B9.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xCA9890B9.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xCC0E1722.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xCC0E1722.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xD24AA7C9.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xD24AA7C9.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xD4E02B75.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xD4E02B75.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xE30ADBA6.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xE30ADBA6.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xE52D3977.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xE52D3977.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xE74080FF.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xE74080FF.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xEA628D0C.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xEA628D0C.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xEAC4051F.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xEAC4051F.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xEF234E0D.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xEF234E0D.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xF02623E0.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xF02623E0.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xF1C91A88.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xF1C91A88.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xF428E7C9.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xF428E7C9.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xF48CCAC1.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xF48CCAC1.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xF9DBB0A3.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xF9DBB0A3.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Outline_0xFD1E6280.vs_5_0.hlsl": "Luma/Metaphor ReFantazio/Outline_0xFD1E6280.vs_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Output_0xAC103037.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Output_0xAC103037.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/PaintingFilter_0x14BF2C48.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/PaintingFilter_0x14BF2C48.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Sprite_0xE7F75BFE.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Sprite_0xE7F75BFE.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Tonemapper_Background_0xC1787BC6.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Tonemapper_Background_0xC1787BC6.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Tonemapper_Background_2_0xA7108284.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Tonemapper_Background_2_0xA7108284.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0x0588D60D.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0x0588D60D.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0x0AA797C9.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0x0AA797C9.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0x1211EC61.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0x1211EC61.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0x177304E4.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0x177304E4.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0x4635A537.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0x4635A537.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0x99537E25.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0x99537E25.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0x9D742F00.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0x9D742F00.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0xB6DF47F2.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0xB6DF47F2.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0xB8FC831F.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0xB8FC831F.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0xD3D5EE6D.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0xD3D5EE6D.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0xE467A708.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0xE467A708.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Water_0xFCD6C791.ps_5_0.hlsl": "Luma/Metaphor ReFantazio/Water_0xFCD6C791.ps_5_0.hlsl",
+     "Luma/Metaphor ReFantazio/Includes/Bloom.hlsl": "Luma/Metaphor ReFantazio/Includes/Bloom.hlsl",
+     "Luma/Metaphor ReFantazio/Includes/Common.hlsl": "Luma/Metaphor ReFantazio/Includes/Common.hlsl",
+     "Luma/Metaphor ReFantazio/Includes/GameCBuffers.hlsl": "Luma/Metaphor ReFantazio/Includes/GameCBuffers.hlsl",
+     "Luma/Metaphor ReFantazio/Includes/ictcp_portable.hlsl": "Luma/Metaphor ReFantazio/Includes/ictcp_portable.hlsl",
+     "Luma/Metaphor ReFantazio/Includes/Outline.hlsl": "Luma/Metaphor ReFantazio/Includes/Outline.hlsl",
+     "Luma/Metaphor ReFantazio/Includes/Sample.hlsl": "Luma/Metaphor ReFantazio/Includes/Sample.hlsl",
+     "Luma/Metaphor ReFantazio/Includes/Settings.hlsl": "Luma/Metaphor ReFantazio/Includes/Settings.hlsl",
+     "Luma/Metaphor ReFantazio/Includes/Tonemapper.hlsl": "Luma/Metaphor ReFantazio/Includes/Tonemapper.hlsl"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "luma-gbfr": {
+    "id": "luma-gbfr",
+    "kind": "game_files",
+    "asset": "luma-gbfr-840",
+    "files": {
+     "amd_fidelityfx_loader_dx12.dll": "amd_fidelityfx_loader_dx12.dll",
+     "amd_fidelityfx_upscaler_dx12.dll": "amd_fidelityfx_upscaler_dx12.dll",
+     "ReShade64.dll": "dxgi.dll",
+     "libxess.dll": "libxess.dll",
+     "libxess_dx11.dll": "libxess_dx11.dll",
+     "Luma-Granblue Fantasy Relink.addon": "Luma-Granblue Fantasy Relink.addon",
+     "nvngx_dlss.dll": "nvngx_dlss.dll",
+     "Licenses/FidelityFX_LICENSE.md": "Licenses/FidelityFX_LICENSE.md",
+     "Licenses/XeSS_LICENSE.txt": "Licenses/XeSS_LICENSE.txt",
+     "Licenses/XeSS_third-party-programs.txt": "Licenses/XeSS_third-party-programs.txt",
+     "Luma/d3dcompiler_47.dll": "Luma/d3dcompiler_47.dll",
+     "Luma/Global/Luma_CopyDepth_CS.hlsl": "Luma/Global/Luma_CopyDepth_CS.hlsl",
+     "Luma/Global/Luma_Copy_PS.hlsl": "Luma/Global/Luma_Copy_PS.hlsl",
+     "Luma/Global/Luma_Copy_VS.hlsl": "Luma/Global/Luma_Copy_VS.hlsl",
+     "Luma/Global/Luma_DisplayComposition.hlsl": "Luma/Global/Luma_DisplayComposition.hlsl",
+     "Luma/Global/Luma_DrawColor_CS.hlsl": "Luma/Global/Luma_DrawColor_CS.hlsl",
+     "Luma/Global/Luma_DrawColor_PS.hlsl": "Luma/Global/Luma_DrawColor_PS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl",
+     "Luma/Global/Luma_KarisAverage.hlsl": "Luma/Global/Luma_KarisAverage.hlsl",
+     "Luma/Global/Luma_NormalizeLUT3D.hlsl": "Luma/Global/Luma_NormalizeLUT3D.hlsl",
+     "Luma/Global/Luma_RCAS_PS.hlsl": "Luma/Global/Luma_RCAS_PS.hlsl",
+     "Luma/Global/Luma_SanitizeAlpha.hlsl": "Luma/Global/Luma_SanitizeAlpha.hlsl",
+     "Luma/Global/Luma_SanitizeRGBA.hlsl": "Luma/Global/Luma_SanitizeRGBA.hlsl",
+     "Luma/Global/Luma_SanitizeRGBAMipped.hlsl": "Luma/Global/Luma_SanitizeRGBAMipped.hlsl",
+     "Luma/Global/Luma_Scale_PS.hlsl": "Luma/Global/Luma_Scale_PS.hlsl",
+     "Luma/Global/Luma_Scale_VS.hlsl": "Luma/Global/Luma_Scale_VS.hlsl",
+     "Luma/Granblue Fantasy Relink/bloom_downscale_0x4E1187FF.ps_5_0.hlsl": "Luma/Granblue Fantasy Relink/bloom_downscale_0x4E1187FF.ps_5_0.hlsl",
+     "Luma/Granblue Fantasy Relink/cutscene_gamma_0x1085E11F.ps_5_0.hlsl": "Luma/Granblue Fantasy Relink/cutscene_gamma_0x1085E11F.ps_5_0.hlsl",
+     "Luma/Granblue Fantasy Relink/cutscene_grading_0x50BE35B0.ps_5_0.hlsl": "Luma/Granblue Fantasy Relink/cutscene_grading_0x50BE35B0.ps_5_0.hlsl",
+     "Luma/Granblue Fantasy Relink/cutscene_overlay_0x4517077B.ps_5_0.hlsl": "Luma/Granblue Fantasy Relink/cutscene_overlay_0x4517077B.ps_5_0.hlsl",
+     "Luma/Granblue Fantasy Relink/decal_0x11BDD356.ps_5_0.hlsl": "Luma/Granblue Fantasy Relink/decal_0x11BDD356.ps_5_0.hlsl",
+     "Luma/Granblue Fantasy Relink/decal_0x5CBA8620.ps_5_0.hlsl": "Luma/Granblue Fantasy Relink/decal_0x5CBA8620.ps_5_0.hlsl",
+     "Luma/Granblue Fantasy Relink/decal_0x932520F8.ps_5_0.hlsl": "Luma/Granblue Fantasy Relink/decal_0x932520F8.ps_5_0.hlsl",
+     "Luma/Granblue Fantasy Relink/Luma_GBFR_CutsceneColorGrade.hlsl": "Luma/Granblue Fantasy Relink/Luma_GBFR_CutsceneColorGrade.hlsl",
+     "Luma/Granblue Fantasy Relink/Luma_GBFR_CutsceneGamma.hlsl": "Luma/Granblue Fantasy Relink/Luma_GBFR_CutsceneGamma.hlsl",
+     "Luma/Granblue Fantasy Relink/Luma_GBFR_CutsceneOverlayBlend_PS.hlsl": "Luma/Granblue Fantasy Relink/Luma_GBFR_CutsceneOverlayBlend_PS.hlsl",
+     "Luma/Granblue Fantasy Relink/Luma_GBFR_CutsceneOverlay_VS.hlsl": "Luma/Granblue Fantasy Relink/Luma_GBFR_CutsceneOverlay_VS.hlsl",
+     "Luma/Granblue Fantasy Relink/Luma_GBFR_FullscreenUV_VS.hlsl": "Luma/Granblue Fantasy Relink/Luma_GBFR_FullscreenUV_VS.hlsl",
+     "Luma/Granblue Fantasy Relink/Luma_GBFR_PatchSceneBuffer.hlsl": "Luma/Granblue Fantasy Relink/Luma_GBFR_PatchSceneBuffer.hlsl",
+     "Luma/Granblue Fantasy Relink/Luma_GBFR_PostSREncode.hlsl": "Luma/Granblue Fantasy Relink/Luma_GBFR_PostSREncode.hlsl",
+     "Luma/Granblue Fantasy Relink/Luma_GBFR_PreSREncode.hlsl": "Luma/Granblue Fantasy Relink/Luma_GBFR_PreSREncode.hlsl",
+     "Luma/Granblue Fantasy Relink/Luma_GBFR_Tonemap.hlsl": "Luma/Granblue Fantasy Relink/Luma_GBFR_Tonemap.hlsl",
+     "Luma/Granblue Fantasy Relink/Luma_GBFR_UIBackgroundCopy.hlsl": "Luma/Granblue Fantasy Relink/Luma_GBFR_UIBackgroundCopy.hlsl",
+     "Luma/Granblue Fantasy Relink/Luma_GBFR_UIEncode.hlsl": "Luma/Granblue Fantasy Relink/Luma_GBFR_UIEncode.hlsl",
+     "Luma/Granblue Fantasy Relink/MotionBlur_0x45841F6D.ps_5_0.hlsl": "Luma/Granblue Fantasy Relink/MotionBlur_0x45841F6D.ps_5_0.hlsl",
+     "Luma/Granblue Fantasy Relink/Outline_0xDA85F5BB.cs_5_0.hlsl": "Luma/Granblue Fantasy Relink/Outline_0xDA85F5BB.cs_5_0.hlsl",
+     "Luma/Granblue Fantasy Relink/output_0xF55707D4.ps_5_0.hlsl": "Luma/Granblue Fantasy Relink/output_0xF55707D4.ps_5_0.hlsl",
+     "Luma/Granblue Fantasy Relink/taa_0x478E345C.ps_5_0.hlsl": "Luma/Granblue Fantasy Relink/taa_0x478E345C.ps_5_0.hlsl",
+     "Luma/Granblue Fantasy Relink/tonemap_0x60F0256B.ps_5_0.hlsl": "Luma/Granblue Fantasy Relink/tonemap_0x60F0256B.ps_5_0.hlsl",
+     "Luma/Includes/ACES.hlsl": "Luma/Includes/ACES.hlsl",
+     "Luma/Includes/Bloom.hlsl": "Luma/Includes/Bloom.hlsl",
+     "Luma/Includes/CInfinityRolloff.hlsl": "Luma/Includes/CInfinityRolloff.hlsl",
+     "Luma/Includes/Color.hlsl": "Luma/Includes/Color.hlsl",
+     "Luma/Includes/ColorGradingLUT.hlsl": "Luma/Includes/ColorGradingLUT.hlsl",
+     "Luma/Includes/Common.hlsl": "Luma/Includes/Common.hlsl",
+     "Luma/Includes/DarktableUCS.hlsl": "Luma/Includes/DarktableUCS.hlsl",
+     "Luma/Includes/DgVoodoo.hlsl": "Luma/Includes/DgVoodoo.hlsl",
+     "Luma/Includes/DICE.hlsl": "Luma/Includes/DICE.hlsl",
+     "Luma/Includes/FXAA.hlsl": "Luma/Includes/FXAA.hlsl",
+     "Luma/Includes/HardwareBlendsEmulation.hlsl": "Luma/Includes/HardwareBlendsEmulation.hlsl",
+     "Luma/Includes/JzAzBz.hlsl": "Luma/Includes/JzAzBz.hlsl",
+     "Luma/Includes/LensDistortion.hlsl": "Luma/Includes/LensDistortion.hlsl",
+     "Luma/Includes/MacLeodBoynton.hlsl": "Luma/Includes/MacLeodBoynton.hlsl",
+     "Luma/Includes/Math.hlsl": "Luma/Includes/Math.hlsl",
+     "Luma/Includes/Oklab.hlsl": "Luma/Includes/Oklab.hlsl",
+     "Luma/Includes/RCAS.hlsl": "Luma/Includes/RCAS.hlsl",
+     "Luma/Includes/Reinhard.hlsl": "Luma/Includes/Reinhard.hlsl",
+     "Luma/Includes/Settings.hlsl": "Luma/Includes/Settings.hlsl",
+     "Luma/Includes/SMAA.hlsl": "Luma/Includes/SMAA.hlsl",
+     "Luma/Includes/SMAA_Passes.hlsl": "Luma/Includes/SMAA_Passes.hlsl",
+     "Luma/Includes/Tonemap.hlsl": "Luma/Includes/Tonemap.hlsl",
+     "Luma/Includes/UI.hlsl": "Luma/Includes/UI.hlsl",
+     "Luma/Includes/XeGTAO.hlsl": "Luma/Includes/XeGTAO.hlsl",
+     "Luma/Granblue Fantasy Relink/Includes/Common.hlsl": "Luma/Granblue Fantasy Relink/Includes/Common.hlsl",
+     "Luma/Granblue Fantasy Relink/Includes/GameCBuffers.hlsl": "Luma/Granblue Fantasy Relink/Includes/GameCBuffers.hlsl",
+     "Luma/Granblue Fantasy Relink/Includes/macleod_boynton.hlsli": "Luma/Granblue Fantasy Relink/Includes/macleod_boynton.hlsli",
+     "Luma/Granblue Fantasy Relink/Includes/neutwo.hlsl": "Luma/Granblue Fantasy Relink/Includes/neutwo.hlsl",
+     "Luma/Granblue Fantasy Relink/Includes/psycho_test11.hlsl": "Luma/Granblue Fantasy Relink/Includes/psycho_test11.hlsl",
+     "Luma/Granblue Fantasy Relink/Includes/Settings.hlsl": "Luma/Granblue Fantasy Relink/Includes/Settings.hlsl",
+     "Luma/Granblue Fantasy Relink/Includes/Tonemap.hlsli": "Luma/Granblue Fantasy Relink/Includes/Tonemap.hlsli"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "luma-qb": {
+    "id": "luma-qb",
+    "kind": "game_files",
+    "asset": "luma-qb-840",
+    "files": {
+     "ReShade64.dll": "dxgi.dll",
+     "Luma-Quantum Break.addon": "Luma-Quantum Break.addon",
+     "nvngx_dlss.dll": "nvngx_dlss.dll",
+     "Luma/d3dcompiler_47.dll": "Luma/d3dcompiler_47.dll",
+     "Luma/Global/Luma_CopyDepth_CS.hlsl": "Luma/Global/Luma_CopyDepth_CS.hlsl",
+     "Luma/Global/Luma_Copy_PS.hlsl": "Luma/Global/Luma_Copy_PS.hlsl",
+     "Luma/Global/Luma_Copy_VS.hlsl": "Luma/Global/Luma_Copy_VS.hlsl",
+     "Luma/Global/Luma_DisplayComposition.hlsl": "Luma/Global/Luma_DisplayComposition.hlsl",
+     "Luma/Global/Luma_DrawColor_CS.hlsl": "Luma/Global/Luma_DrawColor_CS.hlsl",
+     "Luma/Global/Luma_DrawColor_PS.hlsl": "Luma/Global/Luma_DrawColor_PS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl",
+     "Luma/Global/Luma_KarisAverage.hlsl": "Luma/Global/Luma_KarisAverage.hlsl",
+     "Luma/Global/Luma_NormalizeLUT3D.hlsl": "Luma/Global/Luma_NormalizeLUT3D.hlsl",
+     "Luma/Global/Luma_RCAS_PS.hlsl": "Luma/Global/Luma_RCAS_PS.hlsl",
+     "Luma/Global/Luma_SanitizeAlpha.hlsl": "Luma/Global/Luma_SanitizeAlpha.hlsl",
+     "Luma/Global/Luma_SanitizeRGBA.hlsl": "Luma/Global/Luma_SanitizeRGBA.hlsl",
+     "Luma/Global/Luma_SanitizeRGBAMipped.hlsl": "Luma/Global/Luma_SanitizeRGBAMipped.hlsl",
+     "Luma/Global/Luma_Scale_PS.hlsl": "Luma/Global/Luma_Scale_PS.hlsl",
+     "Luma/Global/Luma_Scale_VS.hlsl": "Luma/Global/Luma_Scale_VS.hlsl",
+     "Luma/Includes/ACES.hlsl": "Luma/Includes/ACES.hlsl",
+     "Luma/Includes/Bloom.hlsl": "Luma/Includes/Bloom.hlsl",
+     "Luma/Includes/CInfinityRolloff.hlsl": "Luma/Includes/CInfinityRolloff.hlsl",
+     "Luma/Includes/Color.hlsl": "Luma/Includes/Color.hlsl",
+     "Luma/Includes/ColorGradingLUT.hlsl": "Luma/Includes/ColorGradingLUT.hlsl",
+     "Luma/Includes/Common.hlsl": "Luma/Includes/Common.hlsl",
+     "Luma/Includes/DarktableUCS.hlsl": "Luma/Includes/DarktableUCS.hlsl",
+     "Luma/Includes/DgVoodoo.hlsl": "Luma/Includes/DgVoodoo.hlsl",
+     "Luma/Includes/DICE.hlsl": "Luma/Includes/DICE.hlsl",
+     "Luma/Includes/FXAA.hlsl": "Luma/Includes/FXAA.hlsl",
+     "Luma/Includes/HardwareBlendsEmulation.hlsl": "Luma/Includes/HardwareBlendsEmulation.hlsl",
+     "Luma/Includes/JzAzBz.hlsl": "Luma/Includes/JzAzBz.hlsl",
+     "Luma/Includes/LensDistortion.hlsl": "Luma/Includes/LensDistortion.hlsl",
+     "Luma/Includes/MacLeodBoynton.hlsl": "Luma/Includes/MacLeodBoynton.hlsl",
+     "Luma/Includes/Math.hlsl": "Luma/Includes/Math.hlsl",
+     "Luma/Includes/Oklab.hlsl": "Luma/Includes/Oklab.hlsl",
+     "Luma/Includes/RCAS.hlsl": "Luma/Includes/RCAS.hlsl",
+     "Luma/Includes/Reinhard.hlsl": "Luma/Includes/Reinhard.hlsl",
+     "Luma/Includes/Settings.hlsl": "Luma/Includes/Settings.hlsl",
+     "Luma/Includes/SMAA.hlsl": "Luma/Includes/SMAA.hlsl",
+     "Luma/Includes/SMAA_Passes.hlsl": "Luma/Includes/SMAA_Passes.hlsl",
+     "Luma/Includes/Tonemap.hlsl": "Luma/Includes/Tonemap.hlsl",
+     "Luma/Includes/UI.hlsl": "Luma/Includes/UI.hlsl",
+     "Luma/Includes/XeGTAO.hlsl": "Luma/Includes/XeGTAO.hlsl",
+     "Luma/Quantum Break/BlackBars_0x3C685302.ps_5_0.hlsl": "Luma/Quantum Break/BlackBars_0x3C685302.ps_5_0.hlsl",
+     "Luma/Quantum Break/Luma_QB_PreSRDecode.hlsl": "Luma/Quantum Break/Luma_QB_PreSRDecode.hlsl",
+     "Luma/Quantum Break/Sky_0x0468C6D7.ps_5_0.hlsl": "Luma/Quantum Break/Sky_0x0468C6D7.ps_5_0.hlsl",
+     "Luma/Quantum Break/temporal_resolve_0x99274617.ps_5_0.hlsl": "Luma/Quantum Break/temporal_resolve_0x99274617.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0x17F0ECF6.ps_5_0.hlsl": "Luma/Quantum Break/tm_0x17F0ECF6.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0x3146CDE1.ps_5_0.hlsl": "Luma/Quantum Break/tm_0x3146CDE1.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0x49FE8ACE.ps_5_0.hlsl": "Luma/Quantum Break/tm_0x49FE8ACE.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0x5BF8A559.ps_5_0.hlsl": "Luma/Quantum Break/tm_0x5BF8A559.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0x5CA5E922.ps_5_0.hlsl": "Luma/Quantum Break/tm_0x5CA5E922.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0x6B82C898.ps_5_0.hlsl": "Luma/Quantum Break/tm_0x6B82C898.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0x6E15B1F2.ps_5_0.hlsl": "Luma/Quantum Break/tm_0x6E15B1F2.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0x715E2637.ps_5_0.hlsl": "Luma/Quantum Break/tm_0x715E2637.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0xACCF5A94.ps_5_0.hlsl": "Luma/Quantum Break/tm_0xACCF5A94.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0xE18D9E06.ps_5_0.hlsl": "Luma/Quantum Break/tm_0xE18D9E06.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0xE444CA76.ps_5_0.hlsl": "Luma/Quantum Break/tm_0xE444CA76.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_0xFD9D6A90.ps_5_0.hlsl": "Luma/Quantum Break/tm_0xFD9D6A90.ps_5_0.hlsl",
+     "Luma/Quantum Break/tm_main_0x00658735.ps_5_0.hlsl": "Luma/Quantum Break/tm_main_0x00658735.ps_5_0.hlsl",
+     "Luma/Quantum Break/Includes/CBuffer_cb_update_1.hlsli": "Luma/Quantum Break/Includes/CBuffer_cb_update_1.hlsli",
+     "Luma/Quantum Break/Includes/colorgrade.hlsli": "Luma/Quantum Break/Includes/colorgrade.hlsli",
+     "Luma/Quantum Break/Includes/filmgrain.hlsli": "Luma/Quantum Break/Includes/filmgrain.hlsli",
+     "Luma/Quantum Break/Includes/GameCBuffers.hlsl": "Luma/Quantum Break/Includes/GameCBuffers.hlsl",
+     "Luma/Quantum Break/Includes/quantum_break_common.hlsli": "Luma/Quantum Break/Includes/quantum_break_common.hlsli",
+     "Luma/Quantum Break/Includes/tonemap.hlsli": "Luma/Quantum Break/Includes/tonemap.hlsli"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "luma-prey": {
+    "id": "luma-prey",
+    "kind": "game_files",
+    "asset": "luma-prey-840",
+    "files": {
+     "ReShade64.dll": "dxgi.dll",
+     "Luma-Prey.addon": "Luma-Prey.addon",
+     "nvngx_dlss.dll": "nvngx_dlss.dll",
+     "Luma/d3dcompiler_47.dll": "Luma/d3dcompiler_47.dll",
+     "Luma/Global/Luma_CopyDepth_CS.hlsl": "Luma/Global/Luma_CopyDepth_CS.hlsl",
+     "Luma/Global/Luma_Copy_PS.hlsl": "Luma/Global/Luma_Copy_PS.hlsl",
+     "Luma/Global/Luma_Copy_VS.hlsl": "Luma/Global/Luma_Copy_VS.hlsl",
+     "Luma/Global/Luma_DisplayComposition.hlsl": "Luma/Global/Luma_DisplayComposition.hlsl",
+     "Luma/Global/Luma_DrawColor_CS.hlsl": "Luma/Global/Luma_DrawColor_CS.hlsl",
+     "Luma/Global/Luma_DrawColor_PS.hlsl": "Luma/Global/Luma_DrawColor_PS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl",
+     "Luma/Global/Luma_KarisAverage.hlsl": "Luma/Global/Luma_KarisAverage.hlsl",
+     "Luma/Global/Luma_NormalizeLUT3D.hlsl": "Luma/Global/Luma_NormalizeLUT3D.hlsl",
+     "Luma/Global/Luma_RCAS_PS.hlsl": "Luma/Global/Luma_RCAS_PS.hlsl",
+     "Luma/Global/Luma_SanitizeAlpha.hlsl": "Luma/Global/Luma_SanitizeAlpha.hlsl",
+     "Luma/Global/Luma_SanitizeRGBA.hlsl": "Luma/Global/Luma_SanitizeRGBA.hlsl",
+     "Luma/Global/Luma_SanitizeRGBAMipped.hlsl": "Luma/Global/Luma_SanitizeRGBAMipped.hlsl",
+     "Luma/Global/Luma_Scale_PS.hlsl": "Luma/Global/Luma_Scale_PS.hlsl",
+     "Luma/Global/Luma_Scale_VS.hlsl": "Luma/Global/Luma_Scale_VS.hlsl",
+     "Luma/Includes/ACES.hlsl": "Luma/Includes/ACES.hlsl",
+     "Luma/Includes/Bloom.hlsl": "Luma/Includes/Bloom.hlsl",
+     "Luma/Includes/CInfinityRolloff.hlsl": "Luma/Includes/CInfinityRolloff.hlsl",
+     "Luma/Includes/Color.hlsl": "Luma/Includes/Color.hlsl",
+     "Luma/Includes/ColorGradingLUT.hlsl": "Luma/Includes/ColorGradingLUT.hlsl",
+     "Luma/Includes/Common.hlsl": "Luma/Includes/Common.hlsl",
+     "Luma/Includes/DarktableUCS.hlsl": "Luma/Includes/DarktableUCS.hlsl",
+     "Luma/Includes/DgVoodoo.hlsl": "Luma/Includes/DgVoodoo.hlsl",
+     "Luma/Includes/DICE.hlsl": "Luma/Includes/DICE.hlsl",
+     "Luma/Includes/FXAA.hlsl": "Luma/Includes/FXAA.hlsl",
+     "Luma/Includes/HardwareBlendsEmulation.hlsl": "Luma/Includes/HardwareBlendsEmulation.hlsl",
+     "Luma/Includes/JzAzBz.hlsl": "Luma/Includes/JzAzBz.hlsl",
+     "Luma/Includes/LensDistortion.hlsl": "Luma/Includes/LensDistortion.hlsl",
+     "Luma/Includes/MacLeodBoynton.hlsl": "Luma/Includes/MacLeodBoynton.hlsl",
+     "Luma/Includes/Math.hlsl": "Luma/Includes/Math.hlsl",
+     "Luma/Includes/Oklab.hlsl": "Luma/Includes/Oklab.hlsl",
+     "Luma/Includes/RCAS.hlsl": "Luma/Includes/RCAS.hlsl",
+     "Luma/Includes/Reinhard.hlsl": "Luma/Includes/Reinhard.hlsl",
+     "Luma/Includes/Settings.hlsl": "Luma/Includes/Settings.hlsl",
+     "Luma/Includes/SMAA.hlsl": "Luma/Includes/SMAA.hlsl",
+     "Luma/Includes/SMAA_Passes.hlsl": "Luma/Includes/SMAA_Passes.hlsl",
+     "Luma/Includes/Tonemap.hlsl": "Luma/Includes/Tonemap.hlsl",
+     "Luma/Includes/UI.hlsl": "Luma/Includes/UI.hlsl",
+     "Luma/Includes/XeGTAO.hlsl": "Luma/Includes/XeGTAO.hlsl",
+     "Luma/Prey/ArkPostEffects_ArkFilterDistortion_0x0F27F171_0x785D77E9.ps_5_0.hlsl": "Luma/Prey/ArkPostEffects_ArkFilterDistortion_0x0F27F171_0x785D77E9.ps_5_0.hlsl",
+     "Luma/Prey/ArkPostEffects_ArkFullscreenTex_0x994768B0.ps_5_0.hlsl": "Luma/Prey/ArkPostEffects_ArkFullscreenTex_0x994768B0.ps_5_0.hlsl",
+     "Luma/Prey/CommonViewPass_ArkGlint_0x327F97C8.ps_5_0.hlsl": "Luma/Prey/CommonViewPass_ArkGlint_0x327F97C8.ps_5_0.hlsl",
+     "Luma/Prey/CommonViewPass_ArkGlint_0x6443F246.ps_5_0.hlsl": "Luma/Prey/CommonViewPass_ArkGlint_0x6443F246.ps_5_0.hlsl",
+     "Luma/Prey/CommonViewPass_ArkHighlight_0x190C1E5F.ps_5_0.hlsl": "Luma/Prey/CommonViewPass_ArkHighlight_0x190C1E5F.ps_5_0.hlsl",
+     "Luma/Prey/CommonViewPass_ArkHighlight_0x399ABE65.ps_5_0.hlsl": "Luma/Prey/CommonViewPass_ArkHighlight_0x399ABE65.ps_5_0.hlsl",
+     "Luma/Prey/CommonViewPass_ArkHighlight_0x3C6365F6.ps_5_0.hlsl": "Luma/Prey/CommonViewPass_ArkHighlight_0x3C6365F6.ps_5_0.hlsl",
+     "Luma/Prey/CommonViewPass_ArkHighlight_0x5BA67B70.ps_5_0.hlsl": "Luma/Prey/CommonViewPass_ArkHighlight_0x5BA67B70.ps_5_0.hlsl",
+     "Luma/Prey/DeferredShading_DirOccPass_0x944B65F0_0xDB98D83F.ps_5_0.hlsl": "Luma/Prey/DeferredShading_DirOccPass_0x944B65F0_0xDB98D83F.ps_5_0.hlsl",
+     "Luma/Prey/DeferredShading_ShadowMaskGen_0xB01E0A76.ps_5_0.hlsl": "Luma/Prey/DeferredShading_ShadowMaskGen_0xB01E0A76.ps_5_0.hlsl",
+     "Luma/Prey/DeferredShading_SSReflection_Comp_0xF355426A.ps_5_0.hlsl": "Luma/Prey/DeferredShading_SSReflection_Comp_0xF355426A.ps_5_0.hlsl",
+     "Luma/Prey/DeferredShading_SSR_Raytrace_0xAED014D7.ps_5_0.hlsl": "Luma/Prey/DeferredShading_SSR_Raytrace_0xAED014D7.ps_5_0.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRBloomGaussian_0x0A210C5D_0x246F473B.ps_5_0.hlsl": "Luma/Prey/HDRPostProcess_HDRBloomGaussian_0x0A210C5D_0x246F473B.ps_5_0.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRFinalScene.hlsl": "Luma/Prey/HDRPostProcess_HDRFinalScene.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRFinalScene_0xB5DC761A.ps_5_0.hlsl": "Luma/Prey/HDRPostProcess_HDRFinalScene_0xB5DC761A.ps_5_0.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRFinalScene_DistanceDesaturation_0x17272B5B.ps_5_0.hlsl": "Luma/Prey/HDRPostProcess_HDRFinalScene_DistanceDesaturation_0x17272B5B.ps_5_0.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRFinalScene_DistanceDesaturation_FXAA_0xF87B4963.ps_5_0.hlsl": "Luma/Prey/HDRPostProcess_HDRFinalScene_DistanceDesaturation_FXAA_0xF87B4963.ps_5_0.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRFinalScene_DistanceDesaturation_Sunshafts_0x81CE942F.ps_5_0.hlsl": "Luma/Prey/HDRPostProcess_HDRFinalScene_DistanceDesaturation_Sunshafts_0x81CE942F.ps_5_0.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRFinalScene_DistanceDesaturation_Sunshafts_FXAA_0xXXXXXXXX.ps_5_0.hlsl": "Luma/Prey/HDRPostProcess_HDRFinalScene_DistanceDesaturation_Sunshafts_FXAA_0xXXXXXXXX.ps_5_0.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRFinalScene_FXAA_0x83557B79.ps_5_0.hlsl": "Luma/Prey/HDRPostProcess_HDRFinalScene_FXAA_0x83557B79.ps_5_0.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRFinalScene_Sunshafts_0x37ACE8EF.ps_5_0.hlsl": "Luma/Prey/HDRPostProcess_HDRFinalScene_Sunshafts_0x37ACE8EF.ps_5_0.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRFinalScene_Sunshafts_FXAA_0x66FD11D0.ps_5_0.hlsl": "Luma/Prey/HDRPostProcess_HDRFinalScene_Sunshafts_FXAA_0x66FD11D0.ps_5_0.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRSampleBaseLum_0x86B14F15.ps_5_0.hlsl": "Luma/Prey/HDRPostProcess_HDRSampleBaseLum_0x86B14F15.ps_5_0.hlsl",
+     "Luma/Prey/HDRPostProcess_HDRSampleLumInitial_0x5E44BBBE.ps_5_0.hlsl": "Luma/Prey/HDRPostProcess_HDRSampleLumInitial_0x5E44BBBE.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_CameraLens_0xFDE17EBD.ps_5_0.hlsl": "Luma/Prey/LensOptics_CameraLens_0xFDE17EBD.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_CameraOrbsLens_0x047AB485.ps_5_0.hlsl": "Luma/Prey/LensOptics_CameraOrbsLens_0x047AB485.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_CameraOrbs_0xC48F8D96.vs_5_0.hlsl": "Luma/Prey/LensOptics_CameraOrbs_0xC48F8D96.vs_5_0.hlsl",
+     "Luma/Prey/LensOptics_CameraOrbs_0xDAA20F29.ps_5_0.hlsl": "Luma/Prey/LensOptics_CameraOrbs_0xDAA20F29.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_CameraOrbs_0xE6F11DCC.vs_5_0.hlsl": "Luma/Prey/LensOptics_CameraOrbs_0xE6F11DCC.vs_5_0.hlsl",
+     "Luma/Prey/LensOptics_CommonMesh_0xA7CE26CD.vs_5_0.hlsl": "Luma/Prey/LensOptics_CommonMesh_0xA7CE26CD.vs_5_0.hlsl",
+     "Luma/Prey/LensOptics_CommonMesh_0xF886A441.vs_5_0.hlsl": "Luma/Prey/LensOptics_CommonMesh_0xF886A441.vs_5_0.hlsl",
+     "Luma/Prey/LensOptics_Ghost_0x51F2811A.ps_5_0.hlsl": "Luma/Prey/LensOptics_Ghost_0x51F2811A.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_Ghost_0x843C05B1.vs_5_0.hlsl": "Luma/Prey/LensOptics_Ghost_0x843C05B1.vs_5_0.hlsl",
+     "Luma/Prey/LensOptics_Glow_0xDDDE2220.ps_5_0.hlsl": "Luma/Prey/LensOptics_Glow_0xDDDE2220.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_ImageSpaceShafts_shaftBlend_0x4BF252F6.vs_5_0.hlsl": "Luma/Prey/LensOptics_ImageSpaceShafts_shaftBlend_0x4BF252F6.vs_5_0.hlsl",
+     "Luma/Prey/LensOptics_ImageSpaceShafts_shaftBlend_0x9B2630A0.ps_5_0.hlsl": "Luma/Prey/LensOptics_ImageSpaceShafts_shaftBlend_0x9B2630A0.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_ImageSpaceShafts_shaftsOcc_0x4435D741.ps_5_0.hlsl": "Luma/Prey/LensOptics_ImageSpaceShafts_shaftsOcc_0x4435D741.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_ImageSpaceShafts_shaftsOcc_0xEAA8699D.vs_5_0.hlsl": "Luma/Prey/LensOptics_ImageSpaceShafts_shaftsOcc_0xEAA8699D.vs_5_0.hlsl",
+     "Luma/Prey/LensOptics_ImageSpaceShafts_shafts_0x1F112E23.vs_5_0.hlsl": "Luma/Prey/LensOptics_ImageSpaceShafts_shafts_0x1F112E23.vs_5_0.hlsl",
+     "Luma/Prey/LensOptics_ImageSpaceShafts_shafts_0xC54F3986.ps_5_0.hlsl": "Luma/Prey/LensOptics_ImageSpaceShafts_shafts_0xC54F3986.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_IrisShaft_0x9391298E.ps_5_0.hlsl": "Luma/Prey/LensOptics_IrisShaft_0x9391298E.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_IrisShaft_0x9D7A97B8.ps_5_0.hlsl": "Luma/Prey/LensOptics_IrisShaft_0x9D7A97B8.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_Streaks_0x53529823.ps_5_0.hlsl": "Luma/Prey/LensOptics_Streaks_0x53529823.ps_5_0.hlsl",
+     "Luma/Prey/LensOptics_Streaks_0xED01E418.ps_5_0.hlsl": "Luma/Prey/LensOptics_Streaks_0xED01E418.ps_5_0.hlsl",
+     "Luma/Prey/Luma_DrawFinalExposure.hlsl": "Luma/Prey/Luma_DrawFinalExposure.hlsl",
+     "Luma/Prey/Luma_PerfectPerspective.hlsl": "Luma/Prey/Luma_PerfectPerspective.hlsl",
+     "Luma/Prey/MotionBlur_MotionBlur_0x6DCC9E5D_0x76B51523_0xD0C2257A.ps_5_0.hlsl": "Luma/Prey/MotionBlur_MotionBlur_0x6DCC9E5D_0x76B51523_0xD0C2257A.ps_5_0.hlsl",
+     "Luma/Prey/MotionBlur_PackVelocities_0x85C08CB6_0x09633436.ps_5_0.hlsl": "Luma/Prey/MotionBlur_PackVelocities_0x85C08CB6_0x09633436.ps_5_0.hlsl",
+     "Luma/Prey/Particles_Particle_0x257C0A5E.ps_5_0.hlsl": "Luma/Prey/Particles_Particle_0x257C0A5E.ps_5_0.hlsl",
+     "Luma/Prey/Particles_Particle_0x2C8E3DB5.ps_5_0.hlsl": "Luma/Prey/Particles_Particle_0x2C8E3DB5.ps_5_0.hlsl",
+     "Luma/Prey/Particles_Particle_0x7D24CCF0.ps_5_0.hlsl": "Luma/Prey/Particles_Particle_0x7D24CCF0.ps_5_0.hlsl",
+     "Luma/Prey/Particles_Particle_0x8ED16436.ps_5_0.hlsl": "Luma/Prey/Particles_Particle_0x8ED16436.ps_5_0.hlsl",
+     "Luma/Prey/PostAA_AA.hlsl": "Luma/Prey/PostAA_AA.hlsl",
+     "Luma/Prey/PostAA_AA_FXAA_0xD8072D98.ps_5_0.hlsl": "Luma/Prey/PostAA_AA_FXAA_0xD8072D98.ps_5_0.hlsl",
+     "Luma/Prey/PostAA_AA_SMAA1TX_0xE9D92B11.ps_5_0.hlsl": "Luma/Prey/PostAA_AA_SMAA1TX_0xE9D92B11.ps_5_0.hlsl",
+     "Luma/Prey/PostAA_AA_SMAA2TX_0xBF813081.ps_5_0.hlsl": "Luma/Prey/PostAA_AA_SMAA2TX_0xBF813081.ps_5_0.hlsl",
+     "Luma/Prey/PostAA_BlendWeightSMAA_0x5636A813.ps_5_0.hlsl": "Luma/Prey/PostAA_BlendWeightSMAA_0x5636A813.ps_5_0.hlsl",
+     "Luma/Prey/PostAA_LumaEdgeDetectionSMAA_0x47B723BD.ps_5_0.hlsl": "Luma/Prey/PostAA_LumaEdgeDetectionSMAA_0x47B723BD.ps_5_0.hlsl",
+     "Luma/Prey/PostAA_NeighborhoodBlendingSMAA_0x2E9A5D4C.ps_5_0.hlsl": "Luma/Prey/PostAA_NeighborhoodBlendingSMAA_0x2E9A5D4C.ps_5_0.hlsl",
+     "Luma/Prey/PostAA_PostAAComposites.hlsl": "Luma/Prey/PostAA_PostAAComposites.hlsl",
+     "Luma/Prey/PostAA_PostAAComposites_0x496492FE.ps_5_0.hlsl": "Luma/Prey/PostAA_PostAAComposites_0x496492FE.ps_5_0.hlsl",
+     "Luma/Prey/PostAA_PostAAComposites_0x83AE9250.ps_5_0.hlsl": "Luma/Prey/PostAA_PostAAComposites_0x83AE9250.ps_5_0.hlsl",
+     "Luma/Prey/PostAA_PostAAComposites_0xED6287FE.ps_5_0.hlsl": "Luma/Prey/PostAA_PostAAComposites_0xED6287FE.ps_5_0.hlsl",
+     "Luma/Prey/PostAA_PostAAComposites_0xFAEE5EE9.ps_5_0.hlsl": "Luma/Prey/PostAA_PostAAComposites_0xFAEE5EE9.ps_5_0.hlsl",
+     "Luma/Prey/PostAA_UpscaleImage_0xC2F1D3F6.ps_5_0.hlsl": "Luma/Prey/PostAA_UpscaleImage_0xC2F1D3F6.ps_5_0.hlsl",
+     "Luma/Prey/PostEffectsGame_CombineColorGradingWithColorChart.hlsl": "Luma/Prey/PostEffectsGame_CombineColorGradingWithColorChart.hlsl",
+     "Luma/Prey/PostEffectsGame_CombineColorGradingWithColorChart_0x57B2FF36.ps_5_0.hlsl": "Luma/Prey/PostEffectsGame_CombineColorGradingWithColorChart_0x57B2FF36.ps_5_0.hlsl",
+     "Luma/Prey/PostEffectsGame_CombineColorGradingWithColorChart_0x8902E4CF.ps_5_0.hlsl": "Luma/Prey/PostEffectsGame_CombineColorGradingWithColorChart_0x8902E4CF.ps_5_0.hlsl",
+     "Luma/Prey/PostEffectsGame_MergeColorChart_0x65CDC30B_0x3B759722_0x446A3AC5.ps_5_0.hlsl": "Luma/Prey/PostEffectsGame_MergeColorChart_0x65CDC30B_0x3B759722_0x446A3AC5.ps_5_0.hlsl",
+     "Luma/Prey/PostEffectsGame_UberGamePostProcess_0x3CA47504_0x5A887BAD_0x214945FF_0xCBC8C051.ps_5_0.hlsl": "Luma/Prey/PostEffectsGame_UberGamePostProcess_0x3CA47504_0x5A887BAD_0x214945FF_0xCBC8C051.ps_5_0.hlsl",
+     "Luma/Prey/PostEffects_BlurInterpolation_0xDB7C2F45.ps_5_0.hlsl": "Luma/Prey/PostEffects_BlurInterpolation_0xDB7C2F45.ps_5_0.hlsl",
+     "Luma/Prey/PostEffects_ChromaticAberrationSharpening_0x8530FBB2.ps_5_0.hlsl": "Luma/Prey/PostEffects_ChromaticAberrationSharpening_0x8530FBB2.ps_5_0.hlsl",
+     "Luma/Prey/PostEffects_ClearUniform_0xB5B1C854.ps_5_0.hlsl": "Luma/Prey/PostEffects_ClearUniform_0xB5B1C854.ps_5_0.hlsl",
+     "Luma/Prey/PostEffects_DownsampleStable_0xD4E64E5D_0x86495915.ps_5_0.hlsl": "Luma/Prey/PostEffects_DownsampleStable_0xD4E64E5D_0x86495915.ps_5_0.hlsl",
+     "Luma/Prey/PostEffects_GaussBlurBilinear_0x8B135192.ps_5_0.hlsl": "Luma/Prey/PostEffects_GaussBlurBilinear_0x8B135192.ps_5_0.hlsl",
+     "Luma/Prey/PostEffects_GaussBlurBilinear_0xDF9D2265.vs_5_0.hlsl": "Luma/Prey/PostEffects_GaussBlurBilinear_0xDF9D2265.vs_5_0.hlsl",
+     "Luma/Prey/PostEffects_TextureToTextureResampled_Unknown_0xB969DC27.ps_5_0.hlsl": "Luma/Prey/PostEffects_TextureToTextureResampled_Unknown_0xB969DC27.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_0x26EC4EEF.ps_5_0.hlsl": "Luma/Prey/Scaleform_0x26EC4EEF.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_0x2B2C1F49.ps_5_0.hlsl": "Luma/Prey/Scaleform_0x2B2C1F49.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_0x328A47A2.ps_5_0.hlsl": "Luma/Prey/Scaleform_0x328A47A2.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_0x3C927D5E.ps_5_0.hlsl": "Luma/Prey/Scaleform_0x3C927D5E.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_0x62E6A660.ps_5_0.hlsl": "Luma/Prey/Scaleform_0x62E6A660.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_0x7CB6D4E5.ps_5_0.hlsl": "Luma/Prey/Scaleform_0x7CB6D4E5.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_0x8C1CA0AD.ps_5_0.hlsl": "Luma/Prey/Scaleform_0x8C1CA0AD.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_0x98496448.ps_5_0.hlsl": "Luma/Prey/Scaleform_0x98496448.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_0xBFC44469.ps_5_0.hlsl": "Luma/Prey/Scaleform_0xBFC44469.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_0xE6A12A63.ps_5_0.hlsl": "Luma/Prey/Scaleform_0xE6A12A63.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x0EECCD39.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x0EECCD39.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x13931B36.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x13931B36.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x2ACD9140.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x2ACD9140.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x387DF740.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x387DF740.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x3AB08F91.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x3AB08F91.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x3AD18D25.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x3AD18D25.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x3C837A43.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x3C837A43.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x3F1B1C30.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x3F1B1C30.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x49069F56.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x49069F56.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x5CEEE686.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x5CEEE686.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x6AFB4B4E.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x6AFB4B4E.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x8395DEE7.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x8395DEE7.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0x9965BDA8.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0x9965BDA8.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0xACF7F52E.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0xACF7F52E.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0xBC701A4E.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0xBC701A4E.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0xC677AADC.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0xC677AADC.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0xCEAAD252.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0xCEAAD252.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0xDA03C3A0.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0xDA03C3A0.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Blur_0xF890EA7D.ps_5_0.hlsl": "Luma/Prey/Scaleform_Blur_0xF890EA7D.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_CxformMultiplyTexture_0x5CB74382.ps_5_0.hlsl": "Luma/Prey/Scaleform_CxformMultiplyTexture_0x5CB74382.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_CxformTexture_0x4FB93E44.ps_5_0.hlsl": "Luma/Prey/Scaleform_CxformTexture_0x4FB93E44.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_GlyphAlphaTexture_0x6502E54B.ps_5_0.hlsl": "Luma/Prey/Scaleform_GlyphAlphaTexture_0x6502E54B.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_GlyphMultiplyTextureYUVA_0xDFCCBEF3.ps_5_0.hlsl": "Luma/Prey/Scaleform_GlyphMultiplyTextureYUVA_0xDFCCBEF3.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_GlyphMultiplyTextureYUV_0x34EC0165.ps_5_0.hlsl": "Luma/Prey/Scaleform_GlyphMultiplyTextureYUV_0x34EC0165.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_GlyphMultiplyTexture_0x56EB7254.ps_5_0.hlsl": "Luma/Prey/Scaleform_GlyphMultiplyTexture_0x56EB7254.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_GlyphTextureMatMul_0x762BCB93.ps_5_0.hlsl": "Luma/Prey/Scaleform_GlyphTextureMatMul_0x762BCB93.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_GlyphTextureMat_0xF4E69E2D.ps_5_0.hlsl": "Luma/Prey/Scaleform_GlyphTextureMat_0xF4E69E2D.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_GlyphTextureYUVA_0xDD6AB128.ps_5_0.hlsl": "Luma/Prey/Scaleform_GlyphTextureYUVA_0xDD6AB128.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_GlyphTextureYUV_0x18F8FE13.ps_5_0.hlsl": "Luma/Prey/Scaleform_GlyphTextureYUV_0x18F8FE13.ps_5_0.hlsl",
+     "Luma/Prey/Scaleform_Glyph_0xDF9981C9.vs_5_0.hlsl": "Luma/Prey/Scaleform_Glyph_0xDF9981C9.vs_5_0.hlsl",
+     "Luma/Prey/Scaleform_XY_0x9EE768AF.vs_5_0.hlsl": "Luma/Prey/Scaleform_XY_0x9EE768AF.vs_5_0.hlsl",
+     "Luma/Prey/Scaleform_XY_C_0xA5141472.vs_5_0.hlsl": "Luma/Prey/Scaleform_XY_C_0xA5141472.vs_5_0.hlsl",
+     "Luma/Prey/Scaleform_XY_C_F_0x92846B23.vs_5_0.hlsl": "Luma/Prey/Scaleform_XY_C_F_0x92846B23.vs_5_0.hlsl",
+     "Luma/Prey/Scaleform_XY_C_F_noTex_0x3C79EAB8.vs_5_0.hlsl": "Luma/Prey/Scaleform_XY_C_F_noTex_0x3C79EAB8.vs_5_0.hlsl",
+     "Luma/Prey/Scaleform_XY_C_F_T2_0x65DB239B.vs_5_0.hlsl": "Luma/Prey/Scaleform_XY_C_F_T2_0x65DB239B.vs_5_0.hlsl",
+     "Luma/Prey/Scaleform_XY_noTex_0x137508A0.vs_5_0.hlsl": "Luma/Prey/Scaleform_XY_noTex_0x137508A0.vs_5_0.hlsl",
+     "Luma/Prey/ShadowBlur_SSDO_Blur_0x1023CD1B.ps_5_0.hlsl": "Luma/Prey/ShadowBlur_SSDO_Blur_0x1023CD1B.ps_5_0.hlsl",
+     "Luma/Prey/SkyHDR_0x0985E036.ps_5_0.hlsl": "Luma/Prey/SkyHDR_0x0985E036.ps_5_0.hlsl",
+     "Luma/Prey/Stars_ArkSun_0x218AB78E.vs_5_0.hlsl": "Luma/Prey/Stars_ArkSun_0x218AB78E.vs_5_0.hlsl",
+     "Luma/Prey/Sunshafts_SunShaftsGen_0x95B73ADE.ps_5_0.hlsl": "Luma/Prey/Sunshafts_SunShaftsGen_0x95B73ADE.ps_5_0.hlsl",
+     "Luma/Prey/Sunshafts_SunShaftsMaskGen_0xF190287F.ps_5_0.hlsl": "Luma/Prey/Sunshafts_SunShaftsMaskGen_0xF190287F.ps_5_0.hlsl",
+     "Luma/Prey/Unknown_DrawColor_0x04F3917C.ps_5_0.hlsl": "Luma/Prey/Unknown_DrawColor_0x04F3917C.ps_5_0.hlsl",
+     "Luma/Prey/Unknown_DrawVideo_0x244FADF6.ps_5_0.hlsl": "Luma/Prey/Unknown_DrawVideo_0x244FADF6.ps_5_0.hlsl",
+     "Luma/Prey/Unknown_DrawVideo_0x79890C7E.ps_5_0.hlsl": "Luma/Prey/Unknown_DrawVideo_0x79890C7E.ps_5_0.hlsl",
+     "Luma/Prey/Includes/CBuffer_PerFrame.hlsl": "Luma/Prey/Includes/CBuffer_PerFrame.hlsl",
+     "Luma/Prey/Includes/CBuffer_PerViewGlobal.hlsl": "Luma/Prey/Includes/CBuffer_PerViewGlobal.hlsl",
+     "Luma/Prey/Includes/Common.hlsl": "Luma/Prey/Includes/Common.hlsl",
+     "Luma/Prey/Includes/GameCBuffers.hlsl": "Luma/Prey/Includes/GameCBuffers.hlsl",
+     "Luma/Prey/Includes/GBuffer.hlsl": "Luma/Prey/Includes/GBuffer.hlsl",
+     "Luma/Prey/Includes/LensOptics.hlsl": "Luma/Prey/Includes/LensOptics.hlsl",
+     "Luma/Prey/Includes/MotionBlur.hlsl": "Luma/Prey/Includes/MotionBlur.hlsl",
+     "Luma/Prey/Includes/Scaleform.hlsl": "Luma/Prey/Includes/Scaleform.hlsl",
+     "Luma/Prey/Includes/Settings.hlsl": "Luma/Prey/Includes/Settings.hlsl",
+     "Luma/Prey/Includes/XeGTAO.hlsl": "Luma/Prey/Includes/XeGTAO.hlsl"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "luma-dh2": {
+    "id": "luma-dh2",
+    "kind": "game_files",
+    "asset": "luma-dh2-840",
+    "files": {
+     "ReShade64.dll": "dxgi.dll",
+     "Luma-Dishonored 2.addon": "Luma-Dishonored 2.addon",
+     "nvngx_dlss.dll": "nvngx_dlss.dll",
+     "Luma/d3dcompiler_47.dll": "Luma/d3dcompiler_47.dll",
+     "Luma/Dishonored 2/AA_FXAA_High_0x44836908.ps_5_0.hlsl": "Luma/Dishonored 2/AA_FXAA_High_0x44836908.ps_5_0.hlsl",
+     "Luma/Dishonored 2/AA_FXAA_Low_0xE7F82801.ps_5_0.hlsl": "Luma/Dishonored 2/AA_FXAA_Low_0xE7F82801.ps_5_0.hlsl",
+     "Luma/Dishonored 2/AA_TAA_0x06BBC941_0x9F77B624.cs_5_0.hlsl": "Luma/Dishonored 2/AA_TAA_0x06BBC941_0x9F77B624.cs_5_0.hlsl",
+     "Luma/Dishonored 2/AA_TAA_0x8EDF67D9.cs_5_0.hlsl": "Luma/Dishonored 2/AA_TAA_0x8EDF67D9.cs_5_0.hlsl",
+     "Luma/Dishonored 2/BinkVideo_0xB2BC447A.ps_5_0.hlsl": "Luma/Dishonored 2/BinkVideo_0xB2BC447A.ps_5_0.hlsl",
+     "Luma/Dishonored 2/Denoise_0x4CD2BE39.ps_5_0.hlsl": "Luma/Dishonored 2/Denoise_0x4CD2BE39.ps_5_0.hlsl",
+     "Luma/Dishonored 2/Downsample_0x42873B15.ps_5_0.hlsl": "Luma/Dishonored 2/Downsample_0x42873B15.ps_5_0.hlsl",
+     "Luma/Dishonored 2/Downsample_0xAB0EAF9D.ps_5_0.hlsl": "Luma/Dishonored 2/Downsample_0xAB0EAF9D.ps_5_0.hlsl",
+     "Luma/Dishonored 2/Luma_PostDLSS_CS.hlsl": "Luma/Dishonored 2/Luma_PostDLSS_CS.hlsl",
+     "Luma/Dishonored 2/Luma_PreDLSS_CS.hlsl": "Luma/Dishonored 2/Luma_PreDLSS_CS.hlsl",
+     "Luma/Dishonored 2/Luma_XeGTAO.hlsl": "Luma/Dishonored 2/Luma_XeGTAO.hlsl",
+     "Luma/Dishonored 2/MotionBlurAndLensDistortionMVs_0xC97890C8.ps_5_0.hlsl": "Luma/Dishonored 2/MotionBlurAndLensDistortionMVs_0xC97890C8.ps_5_0.hlsl",
+     "Luma/Dishonored 2/MotionBlurAndLensDistortionMVs_0xE908E905.ps_5_0.hlsl": "Luma/Dishonored 2/MotionBlurAndLensDistortionMVs_0xE908E905.ps_5_0.hlsl",
+     "Luma/Dishonored 2/PostProcess_BlendDoFByDistance_0xA9F1F7BB.ps_5_0.hlsl": "Luma/Dishonored 2/PostProcess_BlendDoFByDistance_0xA9F1F7BB.ps_5_0.hlsl",
+     "Luma/Dishonored 2/PostProcess_Distortion_0x5502077F.ps_5_0.hlsl": "Luma/Dishonored 2/PostProcess_Distortion_0x5502077F.ps_5_0.hlsl",
+     "Luma/Dishonored 2/PostProcess_Downscale_0xFA5C8CF3.ps_5_0.hlsl": "Luma/Dishonored 2/PostProcess_Downscale_0xFA5C8CF3.ps_5_0.hlsl",
+     "Luma/Dishonored 2/PostProcess_Tonemap_0xA6F33860_0xD2F50617.ps_5_0.hlsl": "Luma/Dishonored 2/PostProcess_Tonemap_0xA6F33860_0xD2F50617.ps_5_0.hlsl",
+     "Luma/Dishonored 2/PostProcess_Unknown_0x30A77929.ps_5_0.hlsl": "Luma/Dishonored 2/PostProcess_Unknown_0x30A77929.ps_5_0.hlsl",
+     "Luma/Dishonored 2/PostProcess_UpscaleSharpen_0x1A0CD2AE.ps_5_0.hlsl": "Luma/Dishonored 2/PostProcess_UpscaleSharpen_0x1A0CD2AE.ps_5_0.hlsl",
+     "Luma/Dishonored 2/PostProcess_Vignette_0xFD4216EA.ps_5_0.hlsl": "Luma/Dishonored 2/PostProcess_Vignette_0xFD4216EA.ps_5_0.hlsl",
+     "Luma/Dishonored 2/SSAO_0x94445D2D.ps_5_0.hlsl": "Luma/Dishonored 2/SSAO_0x94445D2D.ps_5_0.hlsl",
+     "Luma/Dishonored 2/Sun_0x71DCCA26.vs_5_0.hlsl": "Luma/Dishonored 2/Sun_0x71DCCA26.vs_5_0.hlsl",
+     "Luma/Dishonored 2/UI_0x08F8ECFE.ps_4_0.hlsl": "Luma/Dishonored 2/UI_0x08F8ECFE.ps_4_0.hlsl",
+     "Luma/Dishonored 2/UI_0x28E5E21A.ps_4_0.hlsl": "Luma/Dishonored 2/UI_0x28E5E21A.ps_4_0.hlsl",
+     "Luma/Dishonored 2/UI_0x38E853C8.ps_4_0.hlsl": "Luma/Dishonored 2/UI_0x38E853C8.ps_4_0.hlsl",
+     "Luma/Dishonored 2/UI_0x6FE8114D.ps_4_0.hlsl": "Luma/Dishonored 2/UI_0x6FE8114D.ps_4_0.hlsl",
+     "Luma/Dishonored 2/UI_0xB9E43380.ps_4_0.hlsl": "Luma/Dishonored 2/UI_0xB9E43380.ps_4_0.hlsl",
+     "Luma/Dishonored 2/UI_0xBC1D41CE.ps_4_0.hlsl": "Luma/Dishonored 2/UI_0xBC1D41CE.ps_4_0.hlsl",
+     "Luma/Dishonored 2/UI_0xCC4FB5BF.ps_4_0.hlsl": "Luma/Dishonored 2/UI_0xCC4FB5BF.ps_4_0.hlsl",
+     "Luma/Dishonored 2/UI_0xD34DA30E.ps_4_0.hlsl": "Luma/Dishonored 2/UI_0xD34DA30E.ps_4_0.hlsl",
+     "Luma/Dishonored 2/UI_0xE3BB1976.ps_4_0.hlsl": "Luma/Dishonored 2/UI_0xE3BB1976.ps_4_0.hlsl",
+     "Luma/Dishonored 2/UI_0xEE4A38D2.ps_4_0.hlsl": "Luma/Dishonored 2/UI_0xEE4A38D2.ps_4_0.hlsl",
+     "Luma/Global/Luma_CopyDepth_CS.hlsl": "Luma/Global/Luma_CopyDepth_CS.hlsl",
+     "Luma/Global/Luma_Copy_PS.hlsl": "Luma/Global/Luma_Copy_PS.hlsl",
+     "Luma/Global/Luma_Copy_VS.hlsl": "Luma/Global/Luma_Copy_VS.hlsl",
+     "Luma/Global/Luma_DisplayComposition.hlsl": "Luma/Global/Luma_DisplayComposition.hlsl",
+     "Luma/Global/Luma_DrawColor_CS.hlsl": "Luma/Global/Luma_DrawColor_CS.hlsl",
+     "Luma/Global/Luma_DrawColor_PS.hlsl": "Luma/Global/Luma_DrawColor_PS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl",
+     "Luma/Global/Luma_KarisAverage.hlsl": "Luma/Global/Luma_KarisAverage.hlsl",
+     "Luma/Global/Luma_NormalizeLUT3D.hlsl": "Luma/Global/Luma_NormalizeLUT3D.hlsl",
+     "Luma/Global/Luma_RCAS_PS.hlsl": "Luma/Global/Luma_RCAS_PS.hlsl",
+     "Luma/Global/Luma_SanitizeAlpha.hlsl": "Luma/Global/Luma_SanitizeAlpha.hlsl",
+     "Luma/Global/Luma_SanitizeRGBA.hlsl": "Luma/Global/Luma_SanitizeRGBA.hlsl",
+     "Luma/Global/Luma_SanitizeRGBAMipped.hlsl": "Luma/Global/Luma_SanitizeRGBAMipped.hlsl",
+     "Luma/Global/Luma_Scale_PS.hlsl": "Luma/Global/Luma_Scale_PS.hlsl",
+     "Luma/Global/Luma_Scale_VS.hlsl": "Luma/Global/Luma_Scale_VS.hlsl",
+     "Luma/Includes/ACES.hlsl": "Luma/Includes/ACES.hlsl",
+     "Luma/Includes/Bloom.hlsl": "Luma/Includes/Bloom.hlsl",
+     "Luma/Includes/CInfinityRolloff.hlsl": "Luma/Includes/CInfinityRolloff.hlsl",
+     "Luma/Includes/Color.hlsl": "Luma/Includes/Color.hlsl",
+     "Luma/Includes/ColorGradingLUT.hlsl": "Luma/Includes/ColorGradingLUT.hlsl",
+     "Luma/Includes/Common.hlsl": "Luma/Includes/Common.hlsl",
+     "Luma/Includes/DarktableUCS.hlsl": "Luma/Includes/DarktableUCS.hlsl",
+     "Luma/Includes/DgVoodoo.hlsl": "Luma/Includes/DgVoodoo.hlsl",
+     "Luma/Includes/DICE.hlsl": "Luma/Includes/DICE.hlsl",
+     "Luma/Includes/FXAA.hlsl": "Luma/Includes/FXAA.hlsl",
+     "Luma/Includes/HardwareBlendsEmulation.hlsl": "Luma/Includes/HardwareBlendsEmulation.hlsl",
+     "Luma/Includes/JzAzBz.hlsl": "Luma/Includes/JzAzBz.hlsl",
+     "Luma/Includes/LensDistortion.hlsl": "Luma/Includes/LensDistortion.hlsl",
+     "Luma/Includes/MacLeodBoynton.hlsl": "Luma/Includes/MacLeodBoynton.hlsl",
+     "Luma/Includes/Math.hlsl": "Luma/Includes/Math.hlsl",
+     "Luma/Includes/Oklab.hlsl": "Luma/Includes/Oklab.hlsl",
+     "Luma/Includes/RCAS.hlsl": "Luma/Includes/RCAS.hlsl",
+     "Luma/Includes/Reinhard.hlsl": "Luma/Includes/Reinhard.hlsl",
+     "Luma/Includes/Settings.hlsl": "Luma/Includes/Settings.hlsl",
+     "Luma/Includes/SMAA.hlsl": "Luma/Includes/SMAA.hlsl",
+     "Luma/Includes/SMAA_Passes.hlsl": "Luma/Includes/SMAA_Passes.hlsl",
+     "Luma/Includes/Tonemap.hlsl": "Luma/Includes/Tonemap.hlsl",
+     "Luma/Includes/UI.hlsl": "Luma/Includes/UI.hlsl",
+     "Luma/Includes/XeGTAO.hlsl": "Luma/Includes/XeGTAO.hlsl",
+     "Luma/Dishonored 2/Includes/GameCBuffers.hlsl": "Luma/Dishonored 2/Includes/GameCBuffers.hlsl"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "luma-wd2": {
+    "id": "luma-wd2",
+    "kind": "game_files",
+    "asset": "luma-wd2-840",
+    "files": {
+     "ReShade64.dll": "dxgi.dll",
+     "Luma-Watch Dogs 2.addon": "Luma-Watch Dogs 2.addon",
+     "nvngx_dlss.dll": "nvngx_dlss.dll",
+     "Luma/d3dcompiler_47.dll": "Luma/d3dcompiler_47.dll",
+     "Luma/Global/Luma_CopyDepth_CS.hlsl": "Luma/Global/Luma_CopyDepth_CS.hlsl",
+     "Luma/Global/Luma_Copy_PS.hlsl": "Luma/Global/Luma_Copy_PS.hlsl",
+     "Luma/Global/Luma_Copy_VS.hlsl": "Luma/Global/Luma_Copy_VS.hlsl",
+     "Luma/Global/Luma_DisplayComposition.hlsl": "Luma/Global/Luma_DisplayComposition.hlsl",
+     "Luma/Global/Luma_DrawColor_CS.hlsl": "Luma/Global/Luma_DrawColor_CS.hlsl",
+     "Luma/Global/Luma_DrawColor_PS.hlsl": "Luma/Global/Luma_DrawColor_PS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl",
+     "Luma/Global/Luma_KarisAverage.hlsl": "Luma/Global/Luma_KarisAverage.hlsl",
+     "Luma/Global/Luma_NormalizeLUT3D.hlsl": "Luma/Global/Luma_NormalizeLUT3D.hlsl",
+     "Luma/Global/Luma_RCAS_PS.hlsl": "Luma/Global/Luma_RCAS_PS.hlsl",
+     "Luma/Global/Luma_SanitizeAlpha.hlsl": "Luma/Global/Luma_SanitizeAlpha.hlsl",
+     "Luma/Global/Luma_SanitizeRGBA.hlsl": "Luma/Global/Luma_SanitizeRGBA.hlsl",
+     "Luma/Global/Luma_SanitizeRGBAMipped.hlsl": "Luma/Global/Luma_SanitizeRGBAMipped.hlsl",
+     "Luma/Global/Luma_Scale_PS.hlsl": "Luma/Global/Luma_Scale_PS.hlsl",
+     "Luma/Global/Luma_Scale_VS.hlsl": "Luma/Global/Luma_Scale_VS.hlsl",
+     "Luma/Includes/ACES.hlsl": "Luma/Includes/ACES.hlsl",
+     "Luma/Includes/Bloom.hlsl": "Luma/Includes/Bloom.hlsl",
+     "Luma/Includes/CInfinityRolloff.hlsl": "Luma/Includes/CInfinityRolloff.hlsl",
+     "Luma/Includes/Color.hlsl": "Luma/Includes/Color.hlsl",
+     "Luma/Includes/ColorGradingLUT.hlsl": "Luma/Includes/ColorGradingLUT.hlsl",
+     "Luma/Includes/Common.hlsl": "Luma/Includes/Common.hlsl",
+     "Luma/Includes/DarktableUCS.hlsl": "Luma/Includes/DarktableUCS.hlsl",
+     "Luma/Includes/DgVoodoo.hlsl": "Luma/Includes/DgVoodoo.hlsl",
+     "Luma/Includes/DICE.hlsl": "Luma/Includes/DICE.hlsl",
+     "Luma/Includes/FXAA.hlsl": "Luma/Includes/FXAA.hlsl",
+     "Luma/Includes/HardwareBlendsEmulation.hlsl": "Luma/Includes/HardwareBlendsEmulation.hlsl",
+     "Luma/Includes/JzAzBz.hlsl": "Luma/Includes/JzAzBz.hlsl",
+     "Luma/Includes/LensDistortion.hlsl": "Luma/Includes/LensDistortion.hlsl",
+     "Luma/Includes/MacLeodBoynton.hlsl": "Luma/Includes/MacLeodBoynton.hlsl",
+     "Luma/Includes/Math.hlsl": "Luma/Includes/Math.hlsl",
+     "Luma/Includes/Oklab.hlsl": "Luma/Includes/Oklab.hlsl",
+     "Luma/Includes/RCAS.hlsl": "Luma/Includes/RCAS.hlsl",
+     "Luma/Includes/Reinhard.hlsl": "Luma/Includes/Reinhard.hlsl",
+     "Luma/Includes/Settings.hlsl": "Luma/Includes/Settings.hlsl",
+     "Luma/Includes/SMAA.hlsl": "Luma/Includes/SMAA.hlsl",
+     "Luma/Includes/SMAA_Passes.hlsl": "Luma/Includes/SMAA_Passes.hlsl",
+     "Luma/Includes/Tonemap.hlsl": "Luma/Includes/Tonemap.hlsl",
+     "Luma/Includes/UI.hlsl": "Luma/Includes/UI.hlsl",
+     "Luma/Includes/XeGTAO.hlsl": "Luma/Includes/XeGTAO.hlsl",
+     "Luma/Watch Dogs 2/AmbientOcclusionVolume_0x570E07E7.ps_5_0.hlsl": "Luma/Watch Dogs 2/AmbientOcclusionVolume_0x570E07E7.ps_5_0.hlsl",
+     "Luma/Watch Dogs 2/AmbientOcclusionVolume_0xC43EE4EC.ps_5_0.hlsl": "Luma/Watch Dogs 2/AmbientOcclusionVolume_0xC43EE4EC.ps_5_0.hlsl",
+     "Luma/Watch Dogs 2/ClothPreTransformed_0xD298ACCF.vs_5_0.hlsl": "Luma/Watch Dogs 2/ClothPreTransformed_0xD298ACCF.vs_5_0.hlsl",
+     "Luma/Watch Dogs 2/Luma_CopyDepth.hlsl": "Luma/Watch Dogs 2/Luma_CopyDepth.hlsl",
+     "Luma/Watch Dogs 2/Luma_CopyLuminance.hlsl": "Luma/Watch Dogs 2/Luma_CopyLuminance.hlsl",
+     "Luma/Watch Dogs 2/Luma_DecodeMotionVector.hlsl": "Luma/Watch Dogs 2/Luma_DecodeMotionVector.hlsl",
+     "Luma/Watch Dogs 2/SMAA_0xE82D1C86.ps_5_0.hlsl": "Luma/Watch Dogs 2/SMAA_0xE82D1C86.ps_5_0.hlsl",
+     "Luma/Watch Dogs 2/SMAA_TX2_0x50FCE30F.ps_5_0.hlsl": "Luma/Watch Dogs 2/SMAA_TX2_0x50FCE30F.ps_5_0.hlsl",
+     "Luma/Watch Dogs 2/SwapchainCopy_0x57A47ED1_0x5E003A74.ps_5_0.hlsl": "Luma/Watch Dogs 2/SwapchainCopy_0x57A47ED1_0x5E003A74.ps_5_0.hlsl",
+     "Luma/Watch Dogs 2/Includes/Common.hlsl": "Luma/Watch Dogs 2/Includes/Common.hlsl",
+     "Luma/Watch Dogs 2/Includes/GameCBuffers.hlsl": "Luma/Watch Dogs 2/Includes/GameCBuffers.hlsl",
+     "Luma/Watch Dogs 2/Includes/Settings.hlsl": "Luma/Watch Dogs 2/Includes/Settings.hlsl"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "luma-ue": {
+    "id": "luma-ue",
+    "kind": "game_files",
+    "asset": "luma-ue-840",
+    "files": {
+     "amd_fidelityfx_loader_dx12.dll": "amd_fidelityfx_loader_dx12.dll",
+     "amd_fidelityfx_upscaler_dx12.dll": "amd_fidelityfx_upscaler_dx12.dll",
+     "ReShade64.dll": "dxgi.dll",
+     "libxess.dll": "libxess.dll",
+     "libxess_dx11.dll": "libxess_dx11.dll",
+     "Luma-Unreal Engine.addon": "Luma-Unreal Engine.addon",
+     "nvngx_dlss.dll": "nvngx_dlss.dll",
+     "Licenses/FidelityFX_LICENSE.md": "Licenses/FidelityFX_LICENSE.md",
+     "Licenses/XeSS_LICENSE.txt": "Licenses/XeSS_LICENSE.txt",
+     "Licenses/XeSS_third-party-programs.txt": "Licenses/XeSS_third-party-programs.txt",
+     "Luma/d3dcompiler_47.dll": "Luma/d3dcompiler_47.dll",
+     "Luma/Global/Luma_CopyDepth_CS.hlsl": "Luma/Global/Luma_CopyDepth_CS.hlsl",
+     "Luma/Global/Luma_Copy_PS.hlsl": "Luma/Global/Luma_Copy_PS.hlsl",
+     "Luma/Global/Luma_Copy_VS.hlsl": "Luma/Global/Luma_Copy_VS.hlsl",
+     "Luma/Global/Luma_DisplayComposition.hlsl": "Luma/Global/Luma_DisplayComposition.hlsl",
+     "Luma/Global/Luma_DrawColor_CS.hlsl": "Luma/Global/Luma_DrawColor_CS.hlsl",
+     "Luma/Global/Luma_DrawColor_PS.hlsl": "Luma/Global/Luma_DrawColor_PS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl",
+     "Luma/Global/Luma_KarisAverage.hlsl": "Luma/Global/Luma_KarisAverage.hlsl",
+     "Luma/Global/Luma_NormalizeLUT3D.hlsl": "Luma/Global/Luma_NormalizeLUT3D.hlsl",
+     "Luma/Global/Luma_RCAS_PS.hlsl": "Luma/Global/Luma_RCAS_PS.hlsl",
+     "Luma/Global/Luma_SanitizeAlpha.hlsl": "Luma/Global/Luma_SanitizeAlpha.hlsl",
+     "Luma/Global/Luma_SanitizeRGBA.hlsl": "Luma/Global/Luma_SanitizeRGBA.hlsl",
+     "Luma/Global/Luma_SanitizeRGBAMipped.hlsl": "Luma/Global/Luma_SanitizeRGBAMipped.hlsl",
+     "Luma/Global/Luma_Scale_PS.hlsl": "Luma/Global/Luma_Scale_PS.hlsl",
+     "Luma/Global/Luma_Scale_VS.hlsl": "Luma/Global/Luma_Scale_VS.hlsl",
+     "Luma/Includes/ACES.hlsl": "Luma/Includes/ACES.hlsl",
+     "Luma/Includes/Bloom.hlsl": "Luma/Includes/Bloom.hlsl",
+     "Luma/Includes/CInfinityRolloff.hlsl": "Luma/Includes/CInfinityRolloff.hlsl",
+     "Luma/Includes/Color.hlsl": "Luma/Includes/Color.hlsl",
+     "Luma/Includes/ColorGradingLUT.hlsl": "Luma/Includes/ColorGradingLUT.hlsl",
+     "Luma/Includes/Common.hlsl": "Luma/Includes/Common.hlsl",
+     "Luma/Includes/DarktableUCS.hlsl": "Luma/Includes/DarktableUCS.hlsl",
+     "Luma/Includes/DgVoodoo.hlsl": "Luma/Includes/DgVoodoo.hlsl",
+     "Luma/Includes/DICE.hlsl": "Luma/Includes/DICE.hlsl",
+     "Luma/Includes/FXAA.hlsl": "Luma/Includes/FXAA.hlsl",
+     "Luma/Includes/HardwareBlendsEmulation.hlsl": "Luma/Includes/HardwareBlendsEmulation.hlsl",
+     "Luma/Includes/JzAzBz.hlsl": "Luma/Includes/JzAzBz.hlsl",
+     "Luma/Includes/LensDistortion.hlsl": "Luma/Includes/LensDistortion.hlsl",
+     "Luma/Includes/MacLeodBoynton.hlsl": "Luma/Includes/MacLeodBoynton.hlsl",
+     "Luma/Includes/Math.hlsl": "Luma/Includes/Math.hlsl",
+     "Luma/Includes/Oklab.hlsl": "Luma/Includes/Oklab.hlsl",
+     "Luma/Includes/RCAS.hlsl": "Luma/Includes/RCAS.hlsl",
+     "Luma/Includes/Reinhard.hlsl": "Luma/Includes/Reinhard.hlsl",
+     "Luma/Includes/Settings.hlsl": "Luma/Includes/Settings.hlsl",
+     "Luma/Includes/SMAA.hlsl": "Luma/Includes/SMAA.hlsl",
+     "Luma/Includes/SMAA_Passes.hlsl": "Luma/Includes/SMAA_Passes.hlsl",
+     "Luma/Includes/Tonemap.hlsl": "Luma/Includes/Tonemap.hlsl",
+     "Luma/Includes/UI.hlsl": "Luma/Includes/UI.hlsl",
+     "Luma/Includes/XeGTAO.hlsl": "Luma/Includes/XeGTAO.hlsl",
+     "Luma/Unreal Engine/Ashen_DepthDesaturation_0x5D8168DF.ps_5_0.hlsl": "Luma/Unreal Engine/Ashen_DepthDesaturation_0x5D8168DF.ps_5_0.hlsl",
+     "Luma/Unreal Engine/Ashen_PostProcess_0x0E11A2AB.ps_5_0.hlsl": "Luma/Unreal Engine/Ashen_PostProcess_0x0E11A2AB.ps_5_0.hlsl",
+     "Luma/Unreal Engine/Luma_MotionVec_UE4_Decode.hlsl": "Luma/Unreal Engine/Luma_MotionVec_UE4_Decode.hlsl",
+     "Luma/Unreal Engine/Luma_UpgradeTonemapLUT.hlsl": "Luma/Unreal Engine/Luma_UpgradeTonemapLUT.hlsl",
+     "Luma/Unreal Engine/TalesOfArise_output_0x8D5C5C52.ps_5_0.hlsl": "Luma/Unreal Engine/TalesOfArise_output_0x8D5C5C52.ps_5_0.hlsl",
+     "Luma/Unreal Engine/TalesOfArise_output_0xC89B89AF.ps_5_0.hlsl": "Luma/Unreal Engine/TalesOfArise_output_0xC89B89AF.ps_5_0.hlsl",
+     "Luma/Unreal Engine/TalesOfArise_output_0xDCFDF14D.ps_5_0.hlsl": "Luma/Unreal Engine/TalesOfArise_output_0xDCFDF14D.ps_5_0.hlsl",
+     "Luma/Unreal Engine/TalesOfArise_output_cutscene_0x7C1D6772.ps_5_0.hlsl": "Luma/Unreal Engine/TalesOfArise_output_cutscene_0x7C1D6772.ps_5_0.hlsl",
+     "Luma/Unreal Engine/TheAscent_HUD_0x67F5B2A7.ps_5_0.hlsl": "Luma/Unreal Engine/TheAscent_HUD_0x67F5B2A7.ps_5_0.hlsl",
+     "Luma/Unreal Engine/TheAscent_Overlay_0x9F7FC5A3.ps_5_0.hlsl": "Luma/Unreal Engine/TheAscent_Overlay_0x9F7FC5A3.ps_5_0.hlsl",
+     "Luma/Unreal Engine/TheAscent_SwapchainCopy_0xCB51E127.ps_5_0.hlsl": "Luma/Unreal Engine/TheAscent_SwapchainCopy_0xCB51E127.ps_5_0.hlsl",
+     "Luma/Unreal Engine/includes/Common.hlsl": "Luma/Unreal Engine/includes/Common.hlsl",
+     "Luma/Unreal Engine/includes/GameCBuffers.hlsl": "Luma/Unreal Engine/includes/GameCBuffers.hlsl",
+     "Luma/Unreal Engine/includes/Settings.hlsl": "Luma/Unreal Engine/includes/Settings.hlsl"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
    }
   },
   "games": {
@@ -1196,11 +2104,60 @@
      "windows": "unknown"
     }
    },
+   "1172380": {
+    "name": "STAR WARS Jedi: Fallen Order",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "1196590": {
+    "name": "Resident Evil Village",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "1332010": {
+    "name": "Stray",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "1370050": {
+    "name": "Trek to Yomi",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "1378990": {
+    "name": "Crash Bandicoot 4: It’s About Time",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "1384160": {
+    "name": "GUILTY GEAR -STRIVE-",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
    "1462040": {
     "name": "FINAL FANTASY VII REMAKE INTERGRADE",
     "statuses": {
      "linux": "tested",
      "windows": "untested"
+    }
+   },
+   "1549970": {
+    "name": "Aliens: Fireteam Elite",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
     }
    },
    "1687950": {
@@ -1217,8 +2174,29 @@
      "windows": "unknown"
     }
    },
+   "2679460": {
+    "name": "Metaphor: ReFantazio",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
    "292030": {
     "name": "The Witcher 3: Wild Hunt",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "355790": {
+    "name": "Styx: Shards of Darkness",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "403640": {
+    "name": "Dishonored 2",
     "statuses": {
      "linux": "tested",
      "windows": "unknown"
@@ -1231,8 +2209,141 @@
      "windows": "unknown"
     }
    },
+   "424840": {
+    "name": "Little Nightmares",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "427290": {
+    "name": "Vampyr",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "447040": {
+    "name": "Watch Dogs 2",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "447290": {
+    "name": "Redeemer Enhanced Edition",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "464060": {
+    "name": "RUINER",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "4732690": {
+    "name": "Arknights: Endfield",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "474960": {
+    "name": "Quantum Break",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "480490": {
+    "name": "Prey (2017)",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "517710": {
+    "name": "Redout Enhanced Edition",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "532210": {
+    "name": "Life is Strange 2",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "574090": {
+    "name": "MOTHERGUNSHIP",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
    "601150": {
     "name": "Devil May Cry 5",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "606280": {
+    "name": "Darksiders III",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "607080": {
+    "name": "Psychonauts 2",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "617290": {
+    "name": "Remnant: From the Ashes",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "692850": {
+    "name": "Bloodstained: Ritual of the Night",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "692890": {
+    "name": "Roboquest",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "738520": {
+    "name": "Breathedge",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "860510": {
+    "name": "Little Nightmares II",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "881020": {
+    "name": "Granblue Fantasy: Relink",
     "statuses": {
      "linux": "tested",
      "windows": "unknown"
@@ -1245,8 +2356,29 @@
      "windows": "unknown"
     }
    },
+   "921570": {
+    "name": "OCTOPATH TRAVELER",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
    "952060": {
     "name": "Resident Evil 3",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "954740": {
+    "name": "Terminator: Resistance",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "996580": {
+    "name": "Spyro Reignited Trilogy",
     "statuses": {
      "linux": "tested",
      "windows": "unknown"
@@ -1305,6 +2437,322 @@
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": []
+   },
+   "1172380|optiscaler|linux|x86_64": {
+    "appid": "1172380",
+    "name": "STAR WARS Jedi: Fallen Order",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/STAR-WARS-Jedi-Fallen-Order",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "1196590|optiscaler|linux|x86_64": {
+    "appid": "1196590",
+    "name": "Resident Evil Village",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "re8.exe",
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false",
+     "Menu.OverlayMenu": "true"
+    },
+    "dependencies": [
+     "refw-pdup-re8",
+     "puredark-upscaler-base"
+    ],
+    "source_urls": [
+     "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+     "https://github.com/optiscaler/OptiScaler/wiki/Resident-Evil-8-Village"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": "d3d12",
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [
+     "libxess.dll"
+    ],
+    "reframework_upscaler": true,
+    "optiscaler_fg": false,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "refw-pdup-re8",
+     "puredark-upscaler-base"
+    ]
+   },
+   "1332010|optiscaler|linux|x86_64": {
+    "appid": "1332010",
+    "name": "Stray",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "1370050|optiscaler|linux|x86_64": {
+    "appid": "1370050",
+    "name": "Trek to Yomi",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "1378990|optiscaler|linux|x86_64": {
+    "appid": "1378990",
+    "name": "Crash Bandicoot 4: It’s About Time",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "1384160|optiscaler|linux|x86_64": {
+    "appid": "1384160",
+    "name": "GUILTY GEAR -STRIVE-",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
    },
    "1462040|optiscaler|linux|x86_64": {
     "appid": "1462040",
@@ -1411,6 +2859,60 @@
     "ordered_dependencies": [
      "vc-redist-x64",
      "luma-ff7"
+    ]
+   },
+   "1549970|optiscaler|linux|x86_64": {
+    "appid": "1549970",
+    "name": "Aliens: Fireteam Elite",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
     ]
    },
    "1687950|optiscaler|linux|x86_64": {
@@ -1565,6 +3067,58 @@
      "puredark-upscaler-base"
     ]
    },
+   "2679460|optiscaler|linux|x86_64": {
+    "appid": "2679460",
+    "name": "Metaphor: ReFantazio",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "METAPHOR.exe",
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-mrf",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Metaphor-ReFantazio",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-mrf"
+    ]
+   },
    "292030|optiscaler|linux|x86_64": {
     "appid": "292030",
     "name": "The Witcher 3: Wild Hunt",
@@ -1601,6 +3155,112 @@
     "platform": "linux",
     "status": "tested",
     "ordered_dependencies": []
+   },
+   "355790|optiscaler|linux|x86_64": {
+    "appid": "355790",
+    "name": "Styx: Shards of Darkness",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "403640|optiscaler|linux|x86_64": {
+    "appid": "403640",
+    "name": "Dishonored 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "Dishonored2.exe",
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-dh2",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Dishonored-2",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-dh2"
+    ]
    },
    "418370|optiscaler|linux|x86_64": {
     "appid": "418370",
@@ -1646,6 +3306,578 @@
     "ordered_dependencies": [
      "refw-pdup-re7",
      "puredark-upscaler-base"
+    ]
+   },
+   "424840|optiscaler|linux|x86_64": {
+    "appid": "424840",
+    "name": "Little Nightmares",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "427290|optiscaler|linux|x86_64": {
+    "appid": "427290",
+    "name": "Vampyr",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "447040|optiscaler|linux|x86_64": {
+    "appid": "447040",
+    "name": "Watch Dogs 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "bin/WatchDogs2.exe",
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-wd2",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Watch-Dogs-2",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-wd2"
+    ]
+   },
+   "447290|optiscaler|linux|x86_64": {
+    "appid": "447290",
+    "name": "Redeemer Enhanced Edition",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "464060|optiscaler|linux|x86_64": {
+    "appid": "464060",
+    "name": "RUINER",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "4732690|optiscaler|linux|x86_64": {
+    "appid": "4732690",
+    "name": "Arknights: Endfield",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "Endfield.exe",
+    "args": [
+     "-force-d3d11"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/Arknights-Endfield"
+    ],
+    "tested_game_builds": [
+     "25728898"
+    ],
+    "tested_at": "2026-11-16",
+    "configuration": {},
+    "recommended_input": "dlss",
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "474960|optiscaler|linux|x86_64": {
+    "appid": "474960",
+    "name": "Quantum Break",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "dx11/QuantumBreak.exe",
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-qb",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Quantum-Break",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-qb"
+    ]
+   },
+   "480490|optiscaler|linux|x86_64": {
+    "appid": "480490",
+    "name": "Prey (2017)",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "Binaries/Danielle/x64/Release/Prey.exe",
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-prey",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Prey-Luma-Remastered-mod",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-prey"
+    ]
+   },
+   "517710|optiscaler|linux|x86_64": {
+    "appid": "517710",
+    "name": "Redout Enhanced Edition",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "532210|optiscaler|linux|x86_64": {
+    "appid": "532210",
+    "name": "Life is Strange 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Life-is-Strange-2",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "574090|optiscaler|linux|x86_64": {
+    "appid": "574090",
+    "name": "MOTHERGUNSHIP",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
     ]
    },
    "601150|optiscaler|linux|x86_64": {
@@ -1694,6 +3926,435 @@
      "puredark-upscaler-base"
     ]
    },
+   "606280|optiscaler|linux|x86_64": {
+    "appid": "606280",
+    "name": "Darksiders III",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "607080|optiscaler|linux|x86_64": {
+    "appid": "607080",
+    "name": "Psychonauts 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "617290|optiscaler|linux|x86_64": {
+    "appid": "617290",
+    "name": "Remnant: From the Ashes",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "692850|optiscaler|linux|x86_64": {
+    "appid": "692850",
+    "name": "Bloodstained: Ritual of the Night",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "692890|optiscaler|linux|x86_64": {
+    "appid": "692890",
+    "name": "Roboquest",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "738520|optiscaler|linux|x86_64": {
+    "appid": "738520",
+    "name": "Breathedge",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "860510|optiscaler|linux|x86_64": {
+    "appid": "860510",
+    "name": "Little Nightmares II",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "881020|optiscaler|linux|x86_64": {
+    "appid": "881020",
+    "name": "Granblue Fantasy: Relink",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "granblue_fantasy_relink.exe",
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-gbfr",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-gbfr"
+    ]
+   },
    "883710|optiscaler|linux|x86_64": {
     "appid": "883710",
     "name": "Resident Evil 2",
@@ -1740,6 +4401,60 @@
      "puredark-upscaler-base"
     ]
    },
+   "921570|optiscaler|linux|x86_64": {
+    "appid": "921570",
+    "name": "OCTOPATH TRAVELER",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
    "952060|optiscaler|linux|x86_64": {
     "appid": "952060",
     "name": "Resident Evil 3",
@@ -1784,6 +4499,114 @@
     "ordered_dependencies": [
      "refw-pdup-re3",
      "puredark-upscaler-base"
+    ]
+   },
+   "954740|optiscaler|linux|x86_64": {
+    "appid": "954740",
+    "name": "Terminator: Resistance",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
+    ]
+   },
+   "996580|optiscaler|linux|x86_64": {
+    "appid": "996580",
+    "name": "Spyro Reignited Trilogy",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": null,
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ue",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-840",
+     "https://github.com/optiscaler/OptiScaler/wiki/Luma-Unreal-Engine-Luma-UE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ue"
     ]
    }
   }

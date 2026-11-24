@@ -1,0 +1,26 @@
+[
+  {
+    "state": {"route": "/library/home", "routeState": {}, "browserExists": false},
+    "want": {"route": "home", "expected": null, "requested": null, "loaded": null, "browser": "missing", "loading": null, "history": {"index": null, "entries": null, "initial": null, "final": null}, "error": null}
+  },
+  {
+    "state": {"route": "/steamweb", "routeState": {"url": "https://store.steampowered.com/"}, "browserExists": true, "requested": null, "url": "", "loading": false},
+    "want": {"route": "steamweb", "expected": "store", "requested": null, "loaded": "blank", "browser": "unknown", "loading": false, "history": {"index": null, "entries": null, "initial": null, "final": null}, "error": null}
+  },
+  {
+    "state": {"route": "/steamweb", "routeState": {"url": "https://store.steampowered.com/", "initialIndex": 1, "finalIndex": 0}, "browserExists": true, "requested": "https://store.steampowered.com/", "url": "data:text/html,%3Cbody%3E%3C%2Fbody%3E", "loading": false, "history": {"index": 0, "entries": [{"url": "data:text/html,%3Cbody%3E%3C%2Fbody%3E"}]}},
+    "want": {"route": "steamweb", "expected": "store", "requested": "store", "loaded": "blank", "browser": "unknown", "loading": false, "history": {"index": 0, "entries": 1, "initial": 1, "final": 0}, "error": null}
+  },
+  {
+    "state": {"route": "/steamweb", "routeState": {"url": "https://store.steampowered.com/", "initialIndex": 1, "finalIndex": 0}, "browserExists": true, "requested": "https://store.steampowered.com/", "url": "data:text/html,%3Cbody%3E%3C%2Fbody%3E", "loading": true, "history": {"index": 0, "entries": [{"url": "data:text/html,%3Cbody%3E%3C%2Fbody%3E"}]}},
+    "want": {"route": "steamweb", "expected": "store", "requested": "store", "loaded": "blank", "browser": "unknown", "loading": true, "history": {"index": 0, "entries": 1, "initial": 1, "final": 0}, "error": null}
+  },
+  {
+    "state": {"route": "/steamweb", "routeState": {"url": "https://store.steampowered.com/", "initialIndex": 1, "finalIndex": 1}, "browserExists": true, "requested": "https://store.steampowered.com/", "url": "data:text/html,%3Cbody%3E%3C%2Fbody%3E", "loading": true, "history": {"index": 1, "entries": [{"url": "data:text/html,%3Cbody%3E%3C%2Fbody%3E"}, {"url": "https://store.steampowered.com/"}]}},
+    "want": {"route": "steamweb", "expected": "store", "requested": "store", "loaded": "blank", "browser": "unknown", "loading": true, "history": {"index": 1, "entries": 2, "initial": 1, "final": 1}, "error": null}
+  },
+  {
+    "state": {"route": "/steamweb", "routeState": {"url": "https://store.steampowered.com/", "initialIndex": 1, "finalIndex": 1}, "browserExists": true, "requested": "https://store.steampowered.com/", "url": "https://store.steampowered.com/", "loading": false, "history": {"index": 1, "entries": [{"url": "data:text/html,%3Cbody%3E%3C%2Fbody%3E"}, {"url": "https://store.steampowered.com/"}]}},
+    "want": {"route": "steamweb", "expected": "store", "requested": "store", "loaded": "store", "browser": "unknown", "loading": false, "history": {"index": 1, "entries": 2, "initial": 1, "final": 1}, "error": null}
+  }
+]

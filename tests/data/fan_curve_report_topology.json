@@ -1,0 +1,262 @@
+{
+  "chips": [
+    {
+      "name": "msi_wmi_platform",
+      "nodes": {
+        "fan1_input": {
+          "value": "3692",
+          "writable": false
+        },
+        "fan2_input": {
+          "value": "3779",
+          "writable": false
+        },
+        "pwm1_auto_point1_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_auto_point1_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_auto_point2_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_auto_point2_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_auto_point3_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_auto_point3_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_auto_point4_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_auto_point4_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_auto_point5_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_auto_point5_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_auto_point6_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_auto_point6_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm1_enable": {
+          "value": "1",
+          "writable": true
+        },
+        "pwm2_auto_point1_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_auto_point1_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_auto_point2_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_auto_point2_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_auto_point3_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_auto_point3_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_auto_point4_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_auto_point4_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_auto_point5_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_auto_point5_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_auto_point6_pwm": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_auto_point6_temp": {
+          "value": null,
+          "writable": null
+        },
+        "pwm2_enable": {
+          "value": "1",
+          "writable": true
+        }
+      }
+    },
+    {
+      "name": "asus_custom_fan_curve",
+      "nodes": {
+        "pwm1_auto_point1_pwm": {
+          "value": "10",
+          "writable": true
+        },
+        "pwm1_auto_point1_temp": {
+          "value": "40",
+          "writable": true
+        },
+        "pwm1_auto_point2_pwm": {
+          "value": "20",
+          "writable": true
+        },
+        "pwm1_auto_point2_temp": {
+          "value": "45",
+          "writable": true
+        },
+        "pwm1_auto_point3_pwm": {
+          "value": "66",
+          "writable": true
+        },
+        "pwm1_auto_point3_temp": {
+          "value": "55",
+          "writable": true
+        },
+        "pwm1_auto_point4_pwm": {
+          "value": "66",
+          "writable": true
+        },
+        "pwm1_auto_point4_temp": {
+          "value": "55",
+          "writable": true
+        },
+        "pwm1_auto_point5_pwm": {
+          "value": "66",
+          "writable": true
+        },
+        "pwm1_auto_point5_temp": {
+          "value": "55",
+          "writable": true
+        },
+        "pwm1_auto_point6_pwm": {
+          "value": "66",
+          "writable": true
+        },
+        "pwm1_auto_point6_temp": {
+          "value": "55",
+          "writable": true
+        },
+        "pwm1_auto_point7_pwm": {
+          "value": "66",
+          "writable": true
+        },
+        "pwm1_auto_point7_temp": {
+          "value": "55",
+          "writable": true
+        },
+        "pwm1_auto_point8_pwm": {
+          "value": "66",
+          "writable": true
+        },
+        "pwm1_auto_point8_temp": {
+          "value": "55",
+          "writable": true
+        },
+        "pwm1_enable": {
+          "value": "2",
+          "writable": true
+        },
+        "pwm2_auto_point1_pwm": {
+          "value": "2",
+          "writable": true
+        },
+        "pwm2_auto_point1_temp": {
+          "value": "40",
+          "writable": true
+        },
+        "pwm2_auto_point2_pwm": {
+          "value": "2",
+          "writable": true
+        },
+        "pwm2_auto_point2_temp": {
+          "value": "40",
+          "writable": true
+        },
+        "pwm2_auto_point3_pwm": {
+          "value": "2",
+          "writable": true
+        },
+        "pwm2_auto_point3_temp": {
+          "value": "40",
+          "writable": true
+        },
+        "pwm2_auto_point4_pwm": {
+          "value": "2",
+          "writable": true
+        },
+        "pwm2_auto_point4_temp": {
+          "value": "40",
+          "writable": true
+        },
+        "pwm2_auto_point5_pwm": {
+          "value": "2",
+          "writable": true
+        },
+        "pwm2_auto_point5_temp": {
+          "value": "40",
+          "writable": true
+        },
+        "pwm2_auto_point6_pwm": {
+          "value": "2",
+          "writable": true
+        },
+        "pwm2_auto_point6_temp": {
+          "value": "40",
+          "writable": true
+        },
+        "pwm2_auto_point7_pwm": {
+          "value": "2",
+          "writable": true
+        },
+        "pwm2_auto_point7_temp": {
+          "value": "40",
+          "writable": true
+        },
+        "pwm2_auto_point8_pwm": {
+          "value": "2",
+          "writable": true
+        },
+        "pwm2_auto_point8_temp": {
+          "value": "40",
+          "writable": true
+        },
+        "pwm2_enable": {
+          "value": "2",
+          "writable": true
+        }
+      }
+    }
+  ]
+}

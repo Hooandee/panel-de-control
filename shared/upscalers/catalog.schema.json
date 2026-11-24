@@ -107,6 +107,31 @@
       "type": "string",
       "minLength": 1
     },
+    "anr": {
+      "description": "Apex Neural Rendering frame generation: the add-on asset, the provider folder OptiScaler 10 loads, and the build it goes in with per GPU family.",
+      "type": "object",
+      "properties": {
+        "asset": {
+          "$ref": "#/$defs/id"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "builds": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      },
+      "required": [
+        "asset",
+        "provider",
+        "builds"
+      ],
+      "additionalProperties": false
+    },
     "notes": {
       "description": "Maintainer notes; not read by the apps.",
       "type": "object",
@@ -138,6 +163,7 @@
     "proxies",
     "base_ini",
     "ffx_loader",
+    "anr",
     "assets",
     "builds"
   ],

@@ -1,5 +1,5 @@
 import { Focusable } from "@decky/ui";
-import { useEffect, type FC, type ReactNode } from "react";
+import { useEffect, type FC } from "react";
 import { LuChevronLeft, LuChevronRight, LuLibrary } from "react-icons/lu";
 
 import { useI18n } from "../../i18n";
@@ -7,14 +7,11 @@ import { theme } from "../../theme";
 import type { AmbientSettings } from "../core/types";
 import type { CollectionEntry } from "../steam/rpc";
 import { gameName, type AmbientRuntime, type AmbientSnapshot } from "../steam/runtime";
-import { Button, Caption, ChoiceRow, ToggleRow, MoreSettings, Tile, TileStrip, ValueRow, cardStyle } from "./primitives";
+import { Button, Caption, ChoiceRow, Hint, ToggleRow, SliderRow, MoreSettings, Tile, TileStrip, ValueRow, cardStyle } from "./primitives";
 import { RoundButton } from "./NowPlaying";
 import { openBackgroundLibrary } from "./BackgroundLibrary";
 import { visualSources } from "./libraryModel";
 
-const Hint: FC<{ children: ReactNode }> = ({ children }) => (
-  <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, padding: "0 2px", marginTop: -4 }}>{children}</span>
-);
 const INTERVALS = [30, 60, 300, 900, 3600] as const;
 
 const SWATCHES: Record<string, string> = {
@@ -156,6 +153,22 @@ export const BackgroundView: FC<{ snapshot: AmbientSnapshot; runtime: AmbientRun
           />
           <Hint>{t(`ambient.bg.gameArt.desc.${bg.gameArt}`)}</Hint>
           <ToggleRow label={t("ambient.game.trailers")} description={t("ambient.game.trailers.desc")} checked={bg.gameTrailers} onChange={(gameTrailers) => update((b) => ({ ...b, gameTrailers }))} />
+          {snapshot.decision.background === "theme" && snapshot.coveredBy.length > 0 && <Hint>{t("ambient.game.trailers.covered")}</Hint>}
+
+          <Caption>{t("ambient.filters.title")}</Caption>
+          <Hint>{t("ambient.filters.desc")}</Hint>
+          {(["blur", "dim", "vignette"] as const).map((key) => (
+            <SliderRow
+              key={key}
+              label={t(`ambient.filters.${key}`)}
+              value={bg.filters?.[key] ?? 0}
+              min={0}
+              max={100}
+              step={5}
+              format={(value) => (value === 0 ? t("ambient.filters.off") : `${value}%`)}
+              onChange={(level) => update((b) => ({ ...b, filters: { ...b.filters, [key]: level } }))}
+            />
+          ))}
 
           <MoreSettings id="ambient-bg-more" label={t("ambient.more")}>
             {!fixed && <>

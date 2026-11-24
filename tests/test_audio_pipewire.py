@@ -1,8 +1,11 @@
+import asyncio
 import json
 import os
 import stat
 import types
 from pathlib import Path
+
+import pytest
 
 import audio.pipewire as pipewire
 
@@ -2956,6 +2959,8 @@ def test_eq_default_route_handoff_journals_target_before_pin(tmp_path):
         muted,
         physical_volumes,
         physical_muted,
+        *,
+        release_config=None,
     ):
         if downstream == "bluez_output.headset" and phase == "active":
             raise RuntimeError("process terminated")
@@ -2966,6 +2971,7 @@ def test_eq_default_route_handoff_journals_target_before_pin(tmp_path):
             muted,
             physical_volumes,
             physical_muted,
+            release_config=release_config,
         )
 
     eq._persist_route_state = crash_after_target_pin
@@ -3294,3 +3300,221 @@ def test_emulated_timeouts_after_answered_slow_calls_still_get_another_attempt(t
 
     assert eq._set_default_confirmed("X EQ", "alsa_speaker") is True
     assert now["value"] < 20.0
+
+
+@pytest.mark.parametrize("conf_exists", [True, False])
+def test_teardown_retry_preserves_volume_after_handoff_with_unplugged_route(tmp_path, conf_exists):
+    report = json.loads((Path(__file__).parent / "data/audio_teardown_volume.json").read_text())
+    sink = report["sink"]
+    writes = [event for event in report["events"] if event["m"] == "volume"]
+    fake = _FakeRunner(downstream_vol={sink: "100%", "X EQ": writes[0]["after"][0]})
+    fake._default = "X EQ" if conf_exists else sink
+    fake._link_target = sink
+    fake._mutes["X EQ"] = True
+    fake._sinks = f"1\t{sink}\tPipeWire\t...\tRUNNING\n"
+    if conf_exists:
+        fake._sinks += "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    eq = _make_eq(tmp_path, fake, conf_exists=conf_exists)
+    Path(eq._pending_path()).write_text(json.dumps({
+        "sink": sink,
+        "volume": writes[0]["after"][0],
+        "phase": "active",
+        "muted": True,
+        "physical_volumes": ["100%", "100%"],
+        "physical_muted": False,
+        "pending_restores": [{"sink": "bluez_output.headset", "volumes": ["68%", "68%"], "muted": False}],
+    }))
+    now = {"value": writes[0]["t"]}
+    eq._monotonic = lambda: now["value"]
+
+    assert eq.teardown() is False
+    assert fake._default == sink
+    assert fake._volumes[sink] == writes[0]["after"][0]
+
+    for event in writes[1:]:
+        now["value"] = event["t"]
+        fake._volume_channels[sink] = tuple(event["before"])
+        fake._volumes[sink] = event["before"][0]
+        fake._mutes[sink] = False
+        calls = len(fake.calls)
+        assert eq.teardown() is False
+        assert fake._volumes[sink] == event["before"][0]
+        assert fake._mutes[sink] is False
+        assert not any(
+            call[:2] in (["pactl", "set-sink-volume"], ["pactl", "set-sink-mute"])
+            and call[2] == sink
+            for call in fake.calls[calls:]
+        )
+
+    recovered = _make_eq(tmp_path, fake, conf_exists=False)
+    recovered._monotonic = lambda: now["value"] + 120
+    assert recovered.teardown() is False
+    assert fake._volumes[sink] == writes[-1]["before"][0]
+    assert fake._mutes[sink] is False
+
+    connected_sinks = fake._sinks
+    fake._sinks = ""
+    assert recovered.teardown() is False
+    fake._sinks = connected_sinks + "2\tbluez_output.headset\tPipeWire\t...\tIDLE\n"
+    assert recovered.teardown() is True
+    assert fake._volumes["bluez_output.headset"] == "68%"
+    assert fake._volumes[sink] == writes[-1]["before"][0]
+    assert fake._mutes[sink] is False
+    assert not Path(eq._pending_path()).exists()
+
+
+def test_balance_pin_never_temporarily_restores_the_attenuated_channel(tmp_path):
+    report = json.loads((Path(__file__).parent / "data/audio_balance_pin.json").read_text())
+    sink = report["sink"]
+    for case in report["cases"]:
+        before = tuple(case["events"][0]["before"])
+        target = case["events"][-1]["requested"]
+        fake = _FakeRunner(downstream_vol={sink: before[0]})
+        fake._volume_channels[sink] = before
+        fake._mutes[sink] = True
+        eq = _make_eq(tmp_path, fake, conf_exists=False)
+
+        for _ in range(2):
+            checkpoint = len(fake.calls)
+            assert eq._pin_downstream(sink, case["balance"]) is True
+            requests = [call[3:] for call in fake.calls[checkpoint:]
+                        if call[:3] == ["pactl", "set-sink-volume", sink]]
+            assert requests == [target]
+            assert eq._sink_volume_pcts(sink) == tuple(target)
+            assert eq._downstream_volumes[sink] == before
+            assert eq._downstream_mutes[sink] is True
+            assert fake._mutes[sink] is False
+
+
+def test_cancelled_balance_pin_keeps_mute_and_the_owned_restore_snapshot(tmp_path):
+    report = json.loads((Path(__file__).parent / "data/audio_balance_pin.json").read_text())
+    case = report["cases"][0]
+    sink = report["sink"]
+    before = tuple(case["events"][0]["before"])
+    fake = _FakeRunner(downstream_vol={sink: before[0]})
+    fake._volume_channels[sink] = before
+    fake._mutes[sink] = True
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    run = eq._runner
+
+    def cancel_before_unmute(argv, timeout=8):
+        if argv[:3] == ["pactl", "set-sink-mute", sink]:
+            raise asyncio.CancelledError
+        return run(argv, timeout)
+
+    eq._runner = cancel_before_unmute
+    with pytest.raises(asyncio.CancelledError):
+        eq._pin_downstream(sink, case["balance"])
+    assert eq._sink_volume_pcts(sink) == tuple(case["events"][-1]["requested"])
+    assert fake._mutes[sink] is True
+    assert eq._downstream_volumes[sink] == before
+    assert eq._downstream_mutes[sink] is True
+
+
+@pytest.mark.parametrize("default", ["X EQ", "alsa_speaker"])
+@pytest.mark.parametrize("failed_phase", ["releasing", "released"])
+@pytest.mark.parametrize("restart", [False, True])
+def test_teardown_marker_write_failure_recovers_without_reviving_old_volume(tmp_path, default, failed_phase, restart):
+    fake = _FakeRunner(downstream_vol={"alsa_speaker": "100%", "X EQ": "65%"})
+    fake._default = default
+    fake._mutes["X EQ"] = True
+    fake._sinks += "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    marker = Path(eq._pending_path())
+    marker.write_text(json.dumps({
+        "sink": "alsa_speaker", "volume": "40%", "phase": "active", "muted": False,
+        "physical_volumes": ["100%", "100%"], "physical_muted": False, "pending_restores": [],
+    }))
+    write = eq._write_entry
+
+    def reject_phase(path, text):
+        if path == str(marker) and json.loads(text)["phase"] == failed_phase:
+            return False
+        return write(path, text)
+
+    eq._write_entry = reject_phase
+    assert eq.teardown() is False
+    if failed_phase == "releasing":
+        assert fake.volume_sets("alsa_speaker") == []
+        assert fake._mutes.get("alsa_speaker", False) is False
+        assert Path(eq._conf_path()).exists()
+    else:
+        assert fake._volumes["alsa_speaker"] == "65%"
+        assert fake._mutes["alsa_speaker"] is True
+        fake._volumes["alsa_speaker"] = "77%"
+        fake._volume_channels["alsa_speaker"] = ("77%",)
+        fake._mutes["alsa_speaker"] = False
+
+    eq._write_entry = write
+    recovered = _make_eq(tmp_path, fake, conf_exists=False) if restart else eq
+    recovered._monotonic = lambda: eq._retry_at + 120
+    checkpoint = len(fake.calls)
+    assert recovered.teardown() is True
+    assert fake._volumes["alsa_speaker"] == ("65%" if failed_phase == "releasing" else "77%")
+    assert fake._mutes["alsa_speaker"] is (failed_phase == "releasing")
+    assert not marker.exists()
+    if failed_phase == "released":
+        assert not any(call[:2] in (["pactl", "set-sink-volume"], ["pactl", "set-sink-mute"])
+                       and call[2] == "alsa_speaker" for call in fake.calls[checkpoint:])
+
+
+@pytest.mark.parametrize("default,cut", [
+    ("X EQ", "volume"), ("X EQ", "mute"), ("X EQ", "default"),
+    ("alsa_speaker", "volume"), ("alsa_speaker", "mute"),
+])
+def test_teardown_interrupted_handoff_recovers_current_eq_state(tmp_path, default, cut):
+    class Interrupted(BaseException):
+        pass
+
+    fake = _FakeRunner(downstream_vol={"alsa_speaker": "100%", "X EQ": "65%"})
+    fake._default = default
+    fake._mutes["X EQ"] = True
+    fake._sinks += "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    marker = Path(eq._pending_path())
+    marker.write_text(json.dumps({
+        "sink": "alsa_speaker", "volume": "40%", "phase": "active", "muted": False,
+        "physical_volumes": ["100%", "100%"], "physical_muted": False, "pending_restores": [],
+    }))
+    command = {"volume": "set-sink-volume", "mute": "set-sink-mute", "default": "set-default-sink"}[cut]
+
+    def interrupt(argv, timeout=8):
+        value = fake(argv, timeout)
+        if argv[:3] == ["pactl", command, "alsa_speaker"]:
+            raise Interrupted
+        return value
+
+    eq._runner = interrupt
+    with pytest.raises(Interrupted):
+        eq.teardown()
+    recovered = _make_eq(tmp_path, fake, conf_exists=False)
+    assert recovered.teardown() is True
+    assert fake._default == "alsa_speaker"
+    assert fake._volumes["alsa_speaker"] == "65%"
+    assert fake._mutes["alsa_speaker"] is True
+    assert not marker.exists()
+
+
+def test_journal_only_ambiguous_release_preserves_external_values_and_reports_failure(tmp_path):
+    fake = _FakeRunner(downstream_vol={"alsa_speaker": "100%"})
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    marker = Path(eq._pending_path())
+    marker.write_text(json.dumps({
+        "sink": "alsa_speaker", "volume": "40%", "phase": "active", "muted": True,
+        "physical_volumes": ["100%", "100%"], "physical_muted": False, "pending_restores": [],
+    }))
+    write = eq._write_entry
+    eq._write_entry = lambda path, text: False if json.loads(text)["phase"] == "released" else write(path, text)
+    assert eq.teardown() is False
+    fake._volumes["alsa_speaker"] = "77%"
+    fake._volume_channels["alsa_speaker"] = ("77%",)
+    fake._mutes["alsa_speaker"] = False
+    recovered = _make_eq(tmp_path, fake, conf_exists=False)
+    checkpoint = len(fake.calls)
+    assert recovered.teardown() is False
+    assert recovered.apply_diagnostics()["reason"] == "teardown_release_unconfirmed"
+    assert fake._volumes["alsa_speaker"] == "77%"
+    assert fake._mutes["alsa_speaker"] is False
+    assert marker.exists()
+    assert not any(call[:2] in (["pactl", "set-sink-volume"], ["pactl", "set-sink-mute"])
+                   and call[2] == "alsa_speaker" for call in fake.calls[checkpoint:])

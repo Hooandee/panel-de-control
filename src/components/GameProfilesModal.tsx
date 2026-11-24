@@ -7,6 +7,7 @@ import { LuTrash2, LuGamepad2 } from "react-icons/lu";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
+import { syncSteamOverlayForGame } from "../mangohud/hudGameSync";
 import { GameProfileRow, listGameProfiles, resetGameProfiles } from "../api";
 import { configuredSections } from "../system/gameProfiles";
 import { sectionLine, SectionLine } from "../system/gameProfileSummary";
@@ -100,7 +101,12 @@ const GameProfilesBody: FC = () => {
   }, []);
 
   const onReset = (appid: string) => {
-    resetGameProfiles(appid).then(setRows).catch(() => {});
+    resetGameProfiles(appid)
+      .then((next) => {
+        setRows(next);
+        void syncSteamOverlayForGame().catch(() => {});
+      })
+      .catch(() => {});
   };
 
   return (

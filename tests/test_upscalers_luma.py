@@ -112,3 +112,16 @@ def test_recognizes_persona_5_royal_next_to_the_executable(tmp_path, monkeypatch
     assert luma.detected(root, root, '1462040') is False
     (root / 'Luma-Persona 5 Royal.addon').write_bytes(image(b'Final Fantasy VII Remake Luma mod'))
     assert luma.detected(root, root, '1687950') is False
+
+
+def test_recognizes_the_generic_unreal_package_for_any_game_its_recipe_names(tmp_path, monkeypatch):
+    root = tmp_path / 'game'
+    target = root / 'Hk_project/Binaries/Win64'
+    _write(target / 'Luma-Unreal Engine.addon', image(b'Luma for "Unreal Engine" is developed by '))
+    _write(target / 'ReShade64.dll', image(b'ReShadeRegisterAddon'))
+    _write(target / 'OptiScaler.ini', '[Plugins]\nLoadReshade=true\n')
+    _write(target / 'Luma/Unreal Engine/Luma_MotionVec_UE4_Decode.hlsl', 'shader')
+    _write(target / 'Luma/d3dcompiler_47.dll', image())
+    monkeypatch.setattr(luma.pe, 'version_strings', lambda path: {'ProductName': 'ReShade', 'OriginalFilename': 'ReShade64.dll'})
+    assert luma.detected(root, target, '1332010') is True
+    assert luma.detected(root, target, '1687950') is False

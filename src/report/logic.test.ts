@@ -110,6 +110,7 @@ describe("buildReportContext", () => {
     )).toEqual({
       runningGame: { appid: "123" },
       qam: { rendered_count: 1, rendered_unique_count: 1 },
+      steam_client_layout: { status: "unavailable", settings: {} },
       report_kind: "feature",
     });
   });
@@ -135,6 +136,7 @@ describe("buildReportContext", () => {
     )).toEqual({
       runningGame: { appid: "123" },
       qam: { rendered_count: 9, rendered_unique_count: 8 },
+      steam_client_layout: { status: "unavailable", settings: {} },
       report_kind: "bug",
     });
   });
@@ -174,6 +176,7 @@ describe("buildReportContext", () => {
     )).toEqual({
       hud: { steam_overlay: steamOverlay },
       qam: { rendered_count: 1 },
+      steam_client_layout: { status: "unavailable", settings: {} },
       report_kind: "bug",
     });
   });

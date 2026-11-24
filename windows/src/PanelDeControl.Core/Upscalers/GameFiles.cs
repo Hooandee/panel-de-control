@@ -183,7 +183,7 @@ public static class GameFiles
             {
                 throw new UpscalerException("recipe_unsupported", "manifest holds a seeded recipe config");
             }
-            if (pair.Value is null || Sha256(path) == pair.Value)
+            if (pair.Value is null || manifest.Owned.Contains(pair.Key) || Sha256(path) == pair.Value)
             {
                 File.Delete(path);
             }

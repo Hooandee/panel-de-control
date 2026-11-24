@@ -19,6 +19,9 @@ export interface ArtworkStore {
 }
 
 const HYDRATION_DELAYS_MS = [1000, 3000, 10000];
+// While a theme shows the covers, never give up: a slow backend at boot or after Desktop Mode left Duo without its
+// covers until the editor was opened (PDC-88K3, #1302).
+const ATTACHED_DELAYS_MS = [1000, 3000, 10000, 30000, 60000];
 
 /** One theme's covers: its own cache, listeners, editor and backend store. */
 export function createArtworkStore(name: ThemeArtworkStore, options: { hydrateOnAttach?: boolean } = {}): ArtworkStore {
@@ -39,8 +42,11 @@ export function createArtworkStore(name: ThemeArtworkStore, options: { hydrateOn
   };
 
   const configureHost = (next: ArtworkRpcHost): () => void => {
-    if (host !== next) { cache = {}; ready = false; request = null; writes = Promise.resolve(); }
+    const replaced = host !== next;
+    if (replaced) { cache = {}; ready = false; request = null; writes = Promise.resolve(); }
     host = next;
+    // A new host empties the cache: read it again for the themes already showing covers.
+    if (replaced && stopAttachedHydration) { stopAttachedHydration(); stopAttachedHydration = startHydration(true); }
     return () => { if (host === next) { host = null; cache = {}; ready = false; request = null; } };
   };
 
@@ -79,14 +85,18 @@ export function createArtworkStore(name: ThemeArtworkStore, options: { hydrateOn
     return write;
   };
 
-  const startHydration = (): () => void => {
+  const startHydration = (persistent = false): () => void => {
     let stopped = false;
     let retry = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const attempt = () => {
       if (stopped) return;
-      void load().catch(() => {
-        if (!stopped && retry < HYDRATION_DELAYS_MS.length) timer = setTimeout(attempt, HYDRATION_DELAYS_MS[retry++]);
+      void load().then(() => {
+        if (retry > 0) recordUiEvent("themes", "artwork_load_recovered", { store: name, attempts: retry + 1 }, true);
+      }).catch(() => {
+        if (stopped) return;
+        if (persistent) timer = setTimeout(attempt, ATTACHED_DELAYS_MS[Math.min(retry++, ATTACHED_DELAYS_MS.length - 1)]);
+        else if (retry < HYDRATION_DELAYS_MS.length) timer = setTimeout(attempt, HYDRATION_DELAYS_MS[retry++]);
       });
     };
     attempt();
@@ -102,7 +112,7 @@ export function createArtworkStore(name: ThemeArtworkStore, options: { hydrateOn
     edit: (id: number) => editor?.(id) ?? false,
     attach: () => {
       attachedThemes++;
-      if (options.hydrateOnAttach && !stopAttachedHydration) stopAttachedHydration = startHydration();
+      if (options.hydrateOnAttach && !stopAttachedHydration) stopAttachedHydration = startHydration(true);
       let released = false;
       return () => {
         if (released) return;
@@ -124,13 +134,14 @@ export function createArtworkStore(name: ThemeArtworkStore, options: { hydrateOn
       return () => { if (editor === open) editor = null; };
     },
     themeActive: () => attachedThemes > 0,
-    startHydration,
+    startHydration: () => startHydration(),
     access,
   };
 }
 
-// Duo hydrates at startup (its covers also feed the game menus); Vida's store is read only while Vida is mounted.
-const duo = createArtworkStore("duo");
+// Duo hydrates at startup (its covers also feed the game menus) and again, without giving up, while it is mounted;
+// Vida's store is read only while Vida is mounted.
+const duo = createArtworkStore("duo", { hydrateOnAttach: true });
 export const vidaArtwork = createArtworkStore("vida", { hydrateOnAttach: true });
 
 export const configureArtworkHost = duo.configureHost;

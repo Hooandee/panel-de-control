@@ -40,6 +40,20 @@ def test_section_states_are_collected_for_every_section(plugin):  # noqa: F811
     assert set(states["system"]) == {"cpu_state", "gpu_clock", "eco_state", "battery_state"}
 
 
+def test_the_fans_section_reports_the_per_fan_split_state():
+    import main
+
+    (_, fields), = main._SUPPORT_SECTIONS["fans"]
+    state = {
+        "split": True, "split_preset": "custom",
+        "channels": [{"key": "cpu", "preset": "custom", "points": [[40, 0]]}],
+        "points_by_channel": {"cpu": [[40, 0]]},
+    }
+    picked = pick_fields(state, fields)
+    assert {"split_preset", "channels", "points_by_channel"} <= set(picked)
+    assert "truncated" not in bounded(picked)
+
+
 def test_pick_fields_reaches_nested_values_and_skips_missing():
     value = {"a": 1, "model": {"layout": "vertical", "items": [1, 2]}, "live": 33}
     assert pick_fields(value, ("a", "model.layout", "nope")) == {"a": 1, "model.layout": "vertical"}

@@ -81,6 +81,9 @@ export interface Pill {
   placeholderKey?: string;
   // wrapper pills
   wrapper?: string;
+  /** Env var that turns the same tool on without the wrapper (`MANGOHUD=1`): it reads
+   *  as on, is kept instead of adding the wrapper, and is removed when switched off. */
+  wrapperEnv?: { name: string; value: string };
   // arg pills (single flag)
   arg?: string;
   // value pills (env → sets envName; arg → adds one of the flags)
@@ -105,7 +108,7 @@ export type Usage = Record<string, number>;
 // wrapper lands in the right place while any pre-existing (unknown) wrapper stays outermost.
 export const CATALOG: Pill[] = [
   // ── Común ────────────────────────────────────────────────────────────────
-  { id: "mangohud", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "mangohud", raw: "mangohud", requires: "mangohud", labelKey: "params.pill.mangohud", descKey: "params.pill.mangohud.desc" },
+  { id: "mangohud", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "mangohud", wrapperEnv: { name: "MANGOHUD", value: "1" }, raw: "mangohud", requires: "mangohud", labelKey: "params.pill.mangohud", descKey: "params.pill.mangohud.desc" },
   { id: "gamemode", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "gamemoderun", raw: "gamemoderun", requires: "gamemode", labelKey: "params.pill.gamemode", descKey: "params.pill.gamemode.desc" },
   { id: "lsfg", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "~/lsfg", raw: "~/lsfg", requires: "lsfg", labelKey: "params.pill.lsfg", descKey: "params.pill.lsfg.desc" },
   { id: "makoRun", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "~/.local/bin/mako-run", raw: "~/.local/bin/mako-run", requires: "makoRun", labelKey: "params.pill.makoRun", descKey: "params.pill.makoRun.desc" },
@@ -286,6 +289,10 @@ export function isPillAvailable(pill: Pill, tools: LaunchTools | null): boolean 
   return !!tools && !!tools[pill.requires];
 }
 
+function hasWrapperEnv(p: Parsed, pill: Pill): boolean {
+  return !!pill.wrapperEnv && getEnv(p, pill.wrapperEnv.name) === pill.wrapperEnv.value;
+}
+
 /** Remove the env/arg tokens a pill owns. A fixed-value env (LANG, PROTON_LOG=1)
  *  is only stripped when its current value is OURS — so a user's own `LANG=fr_FR`
  *  is never clobbered. A value/free-text pill owns the whole variable. Wrappers
@@ -329,7 +336,7 @@ export function detectSelections(baseline: Parsed, catalog: Pill[] = CATALOG): S
         out[pill.id] = true;
       }
     } else if (pill.kind === "wrapper" && pill.wrapper) {
-      if (hasWrapper(baseline, pill.wrapper)) out[pill.id] = true;
+      if (hasWrapper(baseline, pill.wrapper) || hasWrapperEnv(baseline, pill)) out[pill.id] = true;
     } else if (pill.kind === "arg") {
       if (pill.options) {
         // Only claim the pill when exactly one of its flags is present. Two present
@@ -357,6 +364,7 @@ export function ownedTokens(selections: Selections, catalog: Pill[] = CATALOG): 
       out.add(envToken(pill.envName, ownsVar(pill) ? String(sel) : fixedEnvValue(pill)));
     } else if (pill.kind === "wrapper" && pill.wrapper) {
       out.add(pill.wrapper);
+      if (pill.wrapperEnv) out.add(envToken(pill.wrapperEnv.name, pill.wrapperEnv.value));
     } else if (pill.kind === "arg") {
       const flag = pill.options ? String(sel) : pill.arg;
       if (flag) out.add(flag);
@@ -384,7 +392,10 @@ export function buildLaunchOptions(
   for (const pill of catalog) {
     const active = isActive(selections[pill.id]);
     if (pill.kind === "wrapper" && pill.wrapper) {
-      if (!active) p = removeWrapper(p, pill.wrapper);
+      if (!active) {
+        p = removeWrapper(p, pill.wrapper);
+        if (hasWrapperEnv(p, pill)) p = setEnv(p, pill.wrapperEnv!.name, null);
+      }
     } else if (pill.options) {
       // Strip a single-choice pill's flags when switching (a value) OR turning it off
       // (undefined) — but NOT when ambiguous (two+ present), where we preserve them
@@ -399,7 +410,7 @@ export function buildLaunchOptions(
   const activeWrappers = catalog
     .filter((pill) => pill.kind === "wrapper" && pill.wrapper && isActive(selections[pill.id]))
     .sort((a, b) => (WRAPPER_PRECEDENCE[a.wrapper!] ?? 99) - (WRAPPER_PRECEDENCE[b.wrapper!] ?? 99));
-  for (const pill of activeWrappers) p = addWrapper(p, pill.wrapper!);
+  for (const pill of activeWrappers) if (!hasWrapperEnv(p, pill)) p = addWrapper(p, pill.wrapper!);
   // Then env/arg tokens.
   for (const pill of catalog) {
     const sel = selections[pill.id];

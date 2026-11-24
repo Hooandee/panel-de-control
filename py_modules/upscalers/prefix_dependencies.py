@@ -7,8 +7,10 @@ import pwd
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from . import games, pe
@@ -17,6 +19,7 @@ _ALLOWED = {'vcrun2022', 'msvcrt40'}
 _DLLS = {'vcrun2022': ('system32/msvcp140.dll', 'system32/vcruntime140.dll'), 'msvcrt40': ('syswow64/msvcrt40.dll',)}
 _FLATPAK = 'com.github.Matoking.protontricks'
 _FLATHUB = 'https://dl.flathub.org/repo/flathub.flatpakrepo'
+_PROCESS_SETTLE_S = 5.0
 
 
 class DependencyError(RuntimeError):
@@ -206,7 +209,12 @@ def _guard_transaction(transaction, proc='/proc'):
             environment = (process / 'environ').read_bytes()
             command = (process / 'cmdline').read_bytes()
             if needle in environment or needle in command:
-                raise DependencyError('prefix_process_running')
+                name = Path(os.fsdecode(command.split(b'\0', 1)[0])).name
+                kind = ('wineserver' if name == 'wineserver' else 'wine' if name in ('wine', 'wine64', 'wine-preloader', 'wine64-preloader')
+                        else 'protontricks' if name == 'protontricks' else 'runtime' if name in ('bwrap', 'pressure-vessel-wrap', 'steam-runtime-launcher-service')
+                        else 'other')
+                source = 'environment' if needle in environment else 'command'
+                raise DependencyError('prefix_process_running', f'process={kind}; match={source}')
         except PermissionError:
             raise DependencyError('prefix_process_state_unavailable') from None
         except (FileNotFoundError, ProcessLookupError):
@@ -259,7 +267,56 @@ def _note(trace, logger, via, code, detail=''):
                                                            via, code, f' ({detail[:300]})' if detail else '')
 
 
-def prepare(home: str, installed: games.Installed, dependencies, logger=None, proc='/proc', trace=None):
+def _settle_transaction(receipt, proc, cancelled, logger, trace):
+    compat, transaction = _paths(receipt)
+    paths = (transaction, compat / 'pfx', transaction / 'compat/pfx')
+
+    def identity():
+        values = [path.stat(follow_symlinks=False) for path in paths]
+        if any(not stat.S_ISDIR(value.st_mode) for value in values):
+            raise DependencyError('prefix_transaction_failed')
+        return [(value.st_dev, value.st_ino) for value in values]
+
+    started = time.monotonic()
+    detail = 'process=unknown; match=unknown'
+    waited = False
+    try:
+        original = identity()
+        while True:
+            if cancelled():
+                raise DependencyError('cancelled')
+            if identity() != original:
+                raise DependencyError('prefix_transaction_failed')
+            try:
+                _guard_transaction(transaction, proc)
+            except DependencyError as error:
+                if error.code != 'prefix_process_running':
+                    raise
+                detail = error.detail
+                remaining = _PROCESS_SETTLE_S - (time.monotonic() - started)
+                if remaining <= 0:
+                    raise
+                waited = True
+                time.sleep(min(0.1, remaining))
+                continue
+            if not _verify(transaction / 'compat/pfx', receipt['dependencies']):
+                raise DependencyError('prefix_readback_failed')
+            break
+    except (DependencyError, OSError) as error:
+        _note(trace, logger, 'prefix-settle', getattr(error, 'code', 'prefix_transaction_failed'),
+              f'phase=prepared; elapsed_ms={round((time.monotonic() - started) * 1000)}; {detail}')
+        if isinstance(error, OSError):
+            raise DependencyError('prefix_transaction_failed') from None
+        raise
+    if waited:
+        _note(trace, logger, 'prefix-settle', 'ok',
+              f'phase=prepared; elapsed_ms={round((time.monotonic() - started) * 1000)}; {detail}')
+
+
+def prepare(home: str, installed: games.Installed, dependencies, logger=None, proc='/proc', trace=None, *, cancelled=None):
+    cancelled = cancelled or (lambda: False)
+    if cancelled():
+        raise DependencyError('cancelled')
     dependencies = tuple(dependencies)
     if not dependencies or any(verb not in _ALLOWED for verb in dependencies):
         raise DependencyError('prefix_unsupported')
@@ -364,8 +421,9 @@ def prepare(home: str, installed: games.Installed, dependencies, logger=None, pr
             raise failure
         if not _verify(staged / 'pfx', dependencies):
             raise DependencyError('prefix_readback_failed')
+        # Protontricks can return before its background Wine keepalive exits.
+        _settle_transaction(receipt, proc, cancelled, logger, trace)
         _guard(installed.root, proc)
-        _guard_transaction(transaction, proc)
         receipt.update(state='prepared', verified=True)
         _save(receipt)
         if logger:

@@ -1,6 +1,7 @@
 import { listInstalledGames } from "../launch/steamApi";
 import { readRunningGame } from "../tdp/runningGame";
 import { readCoverBadges, readInGameMode, reportedAppids } from "../upscalers/overlays";
+import { readSelectorContext } from "../upscalers/selectorContext";
 
 const MAX_GAMES = 12;
 const DETAILS_MS = 1500;
@@ -68,16 +69,17 @@ export async function upscalersReportContext() {
       };
     }
   } catch {
-    return { collected_at, status: "unavailable", badges, running: null, games: {} };
+    return { collected_at, status: "unavailable", badges, ...readSelectorContext(), running: null, games: {} };
   }
   const games: Record<string, SteamGameFacts> = {};
+  let appids: string[] = [];
   try {
     const userId = (globalThis as any).App?.m_CurrentUser?.strSteamID ?? null;
-    const appids = [...new Set([...(running ? [running.live_appid] : []), ...reportedAppids()])].slice(0, MAX_GAMES);
+    appids = [...new Set([...(running ? [running.live_appid] : []), ...reportedAppids()])].slice(0, MAX_GAMES);
     const details = await Promise.all(appids.map((appid) => readDetails(Number(appid))));
     appids.forEach((appid, index) => {
       if (details[index]) games[appid] = steamFacts(details[index]!, typeof userId === "string" ? userId : null);
     });
   } catch { /* the report still goes out with what the backend reads itself */ }
-  return { collected_at, status: "available", badges, running, games };
+  return { collected_at, status: "available", badges, ...readSelectorContext(appids), running, games };
 }

@@ -133,6 +133,13 @@ export interface HudState {
   conflict: HudConflict | null;
   model: HudModel;
   values: Partial<Record<MetricId, string>>;
+  /** Metrics this machine cannot read (MangoHud would draw a constant 0). */
+  unavailableMetrics?: MetricId[];
+  /** Running game this model belongs to; null on the desktop. */
+  appid: string | null;
+  /** True while that game applies the global HUD (also true without a game). */
+  followsGlobal: boolean;
+  hasGameProfile: boolean;
 }
 
 interface MetricMeta {
@@ -398,6 +405,7 @@ function previewValue(id: MetricId, model: HudModel): string {
 export function previewRows(
   model: HudModel,
   values: Partial<Record<MetricId, string>> = {},
+  unavailable: readonly MetricId[] = [],
 ): PreviewRow[] {
   const rows: PreviewRow[] = [];
   const c = (key: ColorKey) => `#${model.colors[key]}`;
@@ -414,6 +422,7 @@ export function previewRows(
       rows.push({ kind: "line", key: `t:${it.id}:${i}`, label: "", value: it.text, labelColor: c("text"), valueColor: c("text"), fontRole: "auxiliary" });
       return;
     }
+    if (unavailable.includes(it.id)) return;
     if (it.id === "frame_timing") {
       rows.push({ kind: "graph", key: `m:${it.id}`, color: c("frametime") });
       return;

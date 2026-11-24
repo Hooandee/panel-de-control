@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sdtdpActive, tdpConflict, monitorOnly } from "./conflict";
+import { sdtdpActive, tdpConflict, monitorOnly, conflictCardVisible } from "./conflict";
 
 describe("sdtdpActive", () => {
   it("true if installed and not disabled", () => {
@@ -74,5 +74,27 @@ describe("monitorOnly", () => {
   });
   it("false when supported and controlling", () => {
     expect(monitorOnly(true, true)).toBe(false);
+  });
+});
+
+describe("conflictCardVisible", () => {
+  const steam = tdpConflict({
+    sdtdp: false, hhdManaging: false, powerstationActive: false,
+    steamOsManagerActive: true, weControl: true, tdpSupported: true,
+  });
+  it("closing the SteamOS Manager card hides it", () => {
+    expect(conflictCardVisible(steam, false)).toBe(true);
+    expect(conflictCardVisible(steam, true)).toBe(false);
+  });
+  it("does not change who controls: the conflict itself stays", () => {
+    expect(steam.conflict).toBe(true);
+    expect(monitorOnly(true, true)).toBe(false);
+  });
+  it("a closed card still shows for another rival", () => {
+    const both = tdpConflict({
+      sdtdp: true, hhdManaging: false, powerstationActive: false,
+      steamOsManagerActive: true, weControl: true, tdpSupported: true,
+    });
+    expect(conflictCardVisible(both, true)).toBe(true);
   });
 });

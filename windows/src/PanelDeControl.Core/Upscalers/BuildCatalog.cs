@@ -128,6 +128,14 @@ public sealed class BuildCatalog
 
     public string FfxLoader { get; private set; } = "";
 
+    /// <summary>Apex Neural Rendering FG add-on asset; OptiScaler 10 loads it from <c>custom/&lt;provider&gt;/dlssg/</c>.</summary>
+    public string AnrFrameGen { get; private set; } = "";
+
+    public string AnrProvider { get; private set; } = "";
+
+    /// <summary>The OptiScaler 10 build ANR FG goes in with, per GPU family.</summary>
+    public IReadOnlyDictionary<string, string> AnrBuilds { get; private set; } = new Dictionary<string, string>();
+
     public static BuildCatalog Parse(byte[] utf8) => Parse(DataValue.Parse(utf8));
 
     public static BuildCatalog Parse(string json) => Parse(DataValue.Parse(json));
@@ -135,7 +143,7 @@ public sealed class BuildCatalog
     private static BuildCatalog Parse(DataValue document)
     {
         var raw = Fields(document, new[] { "schema_version", "archives", "gpu_groups", "preferred", "quality_ratios", "easy_modes",
-            "sharpness", "proxies", "base_ini", "ffx_loader", "assets", "builds" }, new[] { "notes" });
+            "sharpness", "proxies", "base_ini", "ffx_loader", "anr", "assets", "builds" }, new[] { "notes" });
         if (!(raw.Get("schema_version") is DataNumber { Integer: { } version } && version == 1))
         {
             throw new DataFormatException("unsupported_schema");
@@ -161,6 +169,10 @@ public sealed class BuildCatalog
         var preferred = Mapping(raw.Get("preferred")!);
         Check(preferred.Values.All(buildIds.Contains), "missing_build");
         Check(raw.Get("ffx_loader") is DataString { Value.Length: > 0 }, "invalid_ffx_loader");
+        var anr = Fields(raw.Get("anr")!, new[] { "asset", "provider", "builds" });
+        var anrBuilds = Mapping(anr.Get("builds")!);
+        Check(anr.Get("asset") is DataString { Value.Length: > 0 } anrAsset && assetIds.Contains(anrAsset.Value)
+            && anr.Get("provider") is DataString { Value.Length: > 0 } && anrBuilds.Values.All(buildIds.Contains), "missing_anr");
         return new BuildCatalog
         {
             Amd = Strings(groups.Get("amd")!),
@@ -175,6 +187,9 @@ public sealed class BuildCatalog
             Proxies = Strings(raw.Get("proxies")!),
             BaseIni = Mapping(raw.Get("base_ini")!),
             FfxLoader = ((DataString)raw.Get("ffx_loader")!).Value,
+            AnrFrameGen = ((DataString)anr.Get("asset")!).Value,
+            AnrProvider = ((DataString)anr.Get("provider")!).Value,
+            AnrBuilds = anrBuilds,
         };
     }
 

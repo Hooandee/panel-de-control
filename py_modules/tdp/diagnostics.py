@@ -12,6 +12,10 @@ _RESULT_FIELDS = (
     "ok", "requested_w", "applied_w", "failure_kind", "stage", "observed_profile",
 )
 _TARGET_FIELDS = ("pl1", "pl2", "pl3", "watts", "profile", "mode", "enabled")
+_RECOVERY_PROFILES = {"custom", "balanced", "performance", "low-power"}
+_RECOVERY_STATES = {
+    "transaction_pending", "rollback_failed", "custom_return_pending", "handoff_pending",
+}
 
 
 def _scalar(value):
@@ -48,6 +52,36 @@ def _observation(value):
     return snapshot
 
 
+def _recovery_snapshot(backend):
+    capture = getattr(backend, "recovery_diagnostics", None)
+    if not callable(capture):
+        return {"available": False}
+    try:
+        value = capture()
+        marker = value.get("transaction")
+        def rails(values):
+            return {
+                key: reading if isinstance(reading, int) and not isinstance(reading, bool) else None
+                for key, reading in _fields(values, ("pl1", "pl2", "pl3")).items()
+            }
+
+        def profile(reading):
+            return reading if isinstance(reading, str) and reading in _RECOVERY_PROFILES else None
+
+        return {
+            "profile": profile(value.get("profile")),
+            "rails": rails(value.get("rails")),
+            "transaction": None if marker is None else {
+                "state": marker.get("state") if marker.get("state") in _RECOVERY_STATES else "unknown",
+                "profile": profile(marker.get("profile")),
+                "snapshot": rails(marker.get("snapshot")),
+            },
+            "ownership_pending": value.get("ownership_pending") is True,
+        }
+    except Exception as exc:
+        return {"error": _error(exc)}
+
+
 def _emit(sink, backend, operation, before, outcome, target, on_ac, auto_tdp, started, raised):
     result = _fields(outcome.get("result", outcome), _RESULT_FIELDS)
     if raised is not None:
@@ -63,6 +97,8 @@ def _emit(sink, backend, operation, before, outcome, target, on_ac, auto_tdp, st
         payload["on_ac"] = on_ac
     if isinstance(auto_tdp, bool):
         payload["auto_tdp"] = auto_tdp
+    if "recovery" in outcome:
+        payload["recovery"] = outcome["recovery"]
     failed = raised is not None or result.get("ok") is False
     now = time.monotonic()
     if failed:
@@ -112,13 +148,24 @@ def trace_operation(
 
 def run_operation(
     backend, operation, callback, *, target=None, on_ac=None, auto_tdp=None,
-    observation_before=None,
+    observation_before=None, recovery_owner=None,
 ):
     with trace_operation(
         backend, operation, target=target, on_ac=on_ac,
         auto_tdp=auto_tdp, observation_before=observation_before,
     ) as trace:
-        result = callback()
+        recovery = None
+        if operation == "recover" and recovery_owner is not None and journal.active is not None:
+            recovery = {
+                "owner": _fields(recovery_owner, ("status", "source", "runtime_external_owner")),
+                "before": _recovery_snapshot(backend),
+            }
+        try:
+            result = callback()
+        finally:
+            if recovery is not None:
+                recovery["after"] = _recovery_snapshot(backend)
+                trace["recovery"] = recovery
         try:
             if isinstance(result, dict):
                 trace["result"] = result

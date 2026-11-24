@@ -73,3 +73,28 @@ it("downloads from the file page and shows it is waiting for Downloads", async (
   await act(async () => fireEvent.click(screen.getByText(/up.userFile.waiting/)));
   expect(screen.queryByText(/up.userFile.waiting/)).toBeNull();
 });
+
+it("still says the download never arrived when the card comes back after Steam's browser", async () => {
+  // PDC-JXY8 (#1443)
+  vi.useFakeTimers();
+  try {
+    api.getUpscalerUserFileCandidates.mockResolvedValue({ folder: "/home/deck/Downloads", candidates: [] });
+    const first = render(<UserFiles appid="1196590" files={[missing]} onDetail={() => {}} />);
+    await act(async () => fireEvent.click(screen.getByText(/up.userFile.download/)));
+    first.unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(16 * 60 * 1000); });
+    await act(async () => { render(<UserFiles appid="1196590" files={[missing]} onDetail={() => {}} />); });
+    expect(screen.getByText("up.error.watch_expired")).toBeTruthy();
+    // A file added by hand clears it for good.
+    api.getUpscalerUserFileCandidates.mockResolvedValue({ folder: "/home/deck/Downloads", candidates: [
+      { path: "/home/deck/Downloads/a.zip", filename: "a.zip", version: "1.1.2" }] });
+    cleanup();
+    await act(async () => { render(<UserFiles appid="1196590" files={[missing]} onDetail={() => {}} />); });
+    await act(async () => fireEvent.click(screen.getByText(/up.userFile.use a.zip/)));
+    cleanup();
+    await act(async () => { render(<UserFiles appid="1196590" files={[missing]} onDetail={() => {}} />); });
+    expect(screen.queryByText("up.error.watch_expired")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});

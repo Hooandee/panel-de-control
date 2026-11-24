@@ -125,6 +125,14 @@
         "gameThemes": {
           "type": "boolean"
         },
+        "gameAudio": {
+          "enum": [
+            "auto",
+            "trailerFirst",
+            "musicOnly",
+            "trailerOnly"
+          ]
+        },
         "pinned": {
           "type": "string",
           "pattern": "^$|^(local|url|opt|steam|remote):"
@@ -145,6 +153,15 @@
           "additionalProperties": {
             "type": "string",
             "pattern": "^(local|url|opt|steam|remote):"
+          }
+        },
+        "filters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "blur": {"type": "integer", "minimum": 0, "maximum": 100},
+            "dim": {"type": "integer", "minimum": 0, "maximum": 100},
+            "vignette": {"type": "integer", "minimum": 0, "maximum": 100}
           }
         },
         "lowBatteryPercent": {

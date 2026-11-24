@@ -53,7 +53,8 @@
     "version.dll",
     "dbghelp.dll",
     "wininet.dll",
-    "winhttp.dll"
+    "winhttp.dll",
+    "d3d12.dll"
   ],
   "base_ini": {
     "Log.LogToFile": "true",
@@ -61,9 +62,19 @@
     "Menu.UseHQFont": "false"
   },
   "ffx_loader": "amd_fidelityfx_loader_dx12.dll",
+  "anr": {
+    "asset": "anr-fg-addon",
+    "provider": "Apex Neural Rendering FG",
+    "builds": {
+      "rdna2": "fsr-4.1.2-beta",
+      "rdna3": "fsr-4.1.2-beta",
+      "rdna35": "fsr-4.1.2-beta"
+    }
+  },
   "notes": {
     "preferred": "OptiScaler 10 runs FSR 4.1.2 Lite on Van Gogh (rdna2), as AMD's driver picks for APUs.",
-    "base_ini": "Always set: the log is how the upscaler is proven to run, and the HQ font auto mode asserts under Proton when its TTF is missing."
+    "base_ini": "Always set: the log is how the upscaler is proven to run, and the HQ font auto mode asserts under Proton when its TTF is missing.",
+    "anr": "ANR FG needs OptiScaler 10, which loads an nvngx_dlssg replacement from custom/<provider>/dlssg/; on these GPUs it pairs with FSR 4.1.2 on OptiScaler 10."
   },
   "assets": [
     {
@@ -119,6 +130,18 @@
       "archive": true,
       "generation": 10,
       "note": "OptiScaler 10 nightly: bundled files move to an OptiScaler/ subfolder; FFX upscaler 4.1.2.4555."
+    },
+    {
+      "id": "anr-fg-addon",
+      "filename": "anr-fg-V.B19-addon.zip",
+      "sha256": "70107373e0f9744875fcbb7f46133432202ce7f132fdfff14259b8a85fba3f13",
+      "size": 3418118,
+      "urls": [
+        "https://github.com/apex-compute/ANR/releases/download/FG-V.B19/anr-fg-V.B19-addon.zip"
+      ],
+      "archive": true,
+      "generation": 10,
+      "note": "Apex Compute's official add-on, unmodified (no licence published, so never redistributed: fetched from their release). Only its 'Apex Neural Rendering FG/' folder goes in; its shell installer never runs."
     },
     {
       "id": "reframework-nightly",

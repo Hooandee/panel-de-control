@@ -7,6 +7,7 @@ _HWMON = "sys/class/hwmon"
 # Generic ACPI fan chip that usually mirrors a vendor chip with nicer labels.
 _GENERIC_FAN_CHIP = "acpi_fan"
 _PWM_FAN_CHIP = "pwmfan"
+_PS5_FAN_CHIP = "ps5_fan"
 
 # Friendly name + priority for well-known temperature sources (AMD handhelds +
 # Intel). Lower priority shows first. Unknown chips fall back to priority 2 with
@@ -177,6 +178,10 @@ class FanReader:
         self._root = root
         self._desktop = bool(desktop)
         self._device_key = device_key
+        self._ps5_duty = None
+        if device_key == "playstation_5":
+            from fans.ps5_duty import Ps5FanDuty
+            self._ps5_duty = Ps5FanDuty()
         self._layout_cache: list[tuple] | None = None
         self._layout_until = 0.0
         self._layout_names: tuple[tuple[str, str], ...] = ()
@@ -209,6 +214,10 @@ class FanReader:
             if name == _PWM_FAN_CHIP and not fans:
                 for pwm in sorted(glob.glob(os.path.join(d, "pwm[0-9]"))):
                     fans.append((None, f"Fan {os.path.basename(pwm)[len('pwm'):]}", pwm, None))
+            if name == _PS5_FAN_CHIP and self._ps5_duty is not None and not fans:
+                pwm = os.path.join(d, "pwm1")
+                if os.path.isfile(pwm):
+                    fans.append((None, "Fan 1", pwm, None))
             temps = []
             for inp in sorted(glob.glob(os.path.join(d, "temp*_input"))):
                 n = os.path.basename(inp)[len("temp"):-len("_input")]
@@ -279,13 +288,16 @@ class FanReader:
         for name, fans, temps in self._layout():
             for inp, label, pwm_path, max_rpm in fans:
                 if inp is None:
-                    pwm = _read_int(pwm_path)
+                    ps5_duty = name == _PS5_FAN_CHIP and self._ps5_duty is not None
+                    pwm = self._ps5_duty.read(pwm_path) if ps5_duty else _read_int(pwm_path)
                     if pwm is None:
-                        vanished = vanished or not os.path.exists(pwm_path)
-                        continue
+                        missing = not os.path.exists(pwm_path)
+                        vanished = vanished or missing
+                        if not ps5_duty or missing:
+                            continue
                     raw_fans.append({"chip": name, "label": label, "rpm": None,
-                                     "percent": round(pwm / 255 * 100), "max_rpm": None,
-                                     "duty_only": True})
+                                     "percent": round(pwm / 255 * 100) if pwm is not None else None,
+                                     "max_rpm": None, "duty_only": True})
                     continue
                 rpm = _read_int(inp)
                 if rpm is None:
@@ -330,4 +342,6 @@ class FanReader:
         if self._desktop:
             state["desktop"] = True
             state["device_key"] = self._device_key
+        if self._ps5_duty is not None:
+            state["duty_diagnostics"] = self._ps5_duty.diagnostics()
         return state

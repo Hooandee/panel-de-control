@@ -526,6 +526,42 @@ def test_remote_prepare_sanitizes_service_failures(theme_rpc):
     }
 
 
+def test_remote_prepare_names_the_package_check_that_failed(theme_rpc):
+    """PDC-TM74: the log said only unsafe_archive; the validator's own sentence named the cause."""
+    main, plugin, _ = theme_rpc
+
+    def fail(*_args):
+        raise main.theme_packages.ThemePackageError(
+            "unsafe_archive", "Remote theme manifest profile is invalid"
+        )
+
+    plugin._theme_remote_service = types.SimpleNamespace(prepare_install=fail)
+
+    result = asyncio.run(plugin.prepare_remote_theme_install("example-theme", "1.2.3"))
+
+    assert result == {
+        "ok": False,
+        "code": "unsafe_archive",
+        "theme_id": "example-theme",
+        "reason": "Remote theme manifest profile is invalid",
+    }
+
+
+def test_remote_prepare_reason_never_carries_a_file_name(theme_rpc):
+    main, plugin, _ = theme_rpc
+
+    def fail(*_args):
+        raise main.theme_packages.ThemePackageError(
+            "unsafe_archive", "Unsupported theme file: secret-name.exe"
+        )
+
+    plugin._theme_remote_service = types.SimpleNamespace(prepare_install=fail)
+
+    result = asyncio.run(plugin.prepare_remote_theme_install("example-theme", "1.2.3"))
+
+    assert result["reason"] == "Unsupported theme file"
+
+
 def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rpc, monkeypatch):
     main, plugin, _ = theme_rpc
     monkeypatch.setattr(main.theme_health, "internal_panel_mode", lambda: {"width": 1280, "height": 800})
@@ -559,6 +595,7 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
         "installed": [],
         "other_active_themes": 0,
         "other_active_targets": {},
+        "catalog": {"checked": False},
         "health": {
             "folders": {},
             "cleanup": {"available": False, "moved": 0, "disabled": 0},
@@ -645,6 +682,37 @@ def test_report_counts_unreadable_theme_folders_without_naming_them(theme_rpc):
 
     assert diagnostics["unreadable_theme_folders"] == 2
     assert "Private Broken Name" not in str(diagnostics)
+
+
+def test_theme_interaction_survives_a_restart_and_a_late_report(theme_rpc, tmp_path, monkeypatch):
+    import time
+    from pdc_report.collector import build_bundle
+
+    main, plugin, _ = theme_rpc
+    directory = str(tmp_path / "journal")
+    yesterday = time.time() - 2 * 86400
+    diary = main.journal.Journal(directory, clock=lambda: yesterday)
+    monkeypatch.setattr(main.journal, "active", diary)
+    detail = json.dumps({"attempt": 1, "operation": "installing", "phase": "input_frame",
+                         "surface": "main", "elapsedMs": 750, "focusChanged": True})
+    diary.start()
+    try:
+        asyncio.run(plugin.prepare_early_theme_install("/private-picker-folder/theme.zip"))
+        asyncio.run(plugin.begin_theme_activation({"private-profile-name": "private-value"}))
+        asyncio.run(plugin.settle_theme_activation("private-transaction"))
+        assert asyncio.run(plugin.record_ui_event("themes", "theme_interaction", detail, True))
+    finally:
+        diary.stop()
+    monkeypatch.setattr(main.journal, "active", main.journal.Journal(directory))
+    bundle = build_bundle(app="Panel de Control", categories=["themes"], text="", environment={},
+                          capabilities={}, state={}, stores={}, logs=[], journal=plugin._journal_report())
+    records = bundle["journal"]["older"]
+    for rpc in ("prepare_early_theme_install", "begin_theme_activation", "settle_theme_activation"):
+        assert any(r["m"] == rpc and r.get("a") is None for r in records)
+    assert "private-" not in json.dumps(bundle)
+    entry, = (r for r in records if r["m"] == "theme_interaction")
+    assert (entry["s"], entry["m"], entry["area"]) == ("ui", "theme_interaction", "themes")
+    assert json.loads(entry["detail"]) == json.loads(detail)
 
 
 def test_ui_diagnostics_reach_the_log_and_report_without_free_text_in_the_report(theme_rpc):
@@ -799,8 +867,8 @@ def test_early_rpcs_delegate_to_the_theme_service_and_sanitize_failures(theme_rp
     main, plugin, _ = theme_rpc
     calls = []
 
-    def prepare(path, root, receipts):
-        calls.append((path, pathlib.Path(root).name, pathlib.Path(receipts).name))
+    def prepare(path, root, receipts, *, catalog_id=None):
+        calls.append((path, pathlib.Path(root).name, pathlib.Path(receipts).name, catalog_id))
         if path == "/bad.zip":
             raise main.theme_remote.ThemeRemoteError("unknown_archive", "x")
         if path == "/boom.zip":
@@ -815,10 +883,14 @@ def test_early_rpcs_delegate_to_the_theme_service_and_sanitize_failures(theme_rp
     assert asyncio.run(plugin.check_theme_early(True)) == {"status": "published", "themes": [], "force": True}
     assert asyncio.run(plugin.check_theme_early("yes"))["code"] == "invalid_descriptor"
     assert asyncio.run(plugin.prepare_early_theme_install("/picked.zip"))["code"] == "prepared"
+    assert asyncio.run(plugin.prepare_early_theme_install("/selected.zip", "example-theme"))["code"] == "prepared"
     assert asyncio.run(plugin.prepare_early_theme_install("/bad.zip")) == {"ok": False, "code": "unknown_archive"}
     assert asyncio.run(plugin.prepare_early_theme_install("/boom.zip")) == {"ok": False, "code": "install_failed"}
     assert asyncio.run(plugin.prepare_early_theme_install(7)) == {"ok": False, "code": "invalid_archive"}
-    assert [call[0] for call in calls] == ["/picked.zip", "/bad.zip", "/boom.zip"]
+    assert asyncio.run(plugin.prepare_early_theme_install("/picked.zip", "../theme")) == {"ok": False, "code": "unsupported_theme"}
+    assert [(call[0], call[3]) for call in calls] == [
+        ("/picked.zip", None), ("/selected.zip", "example-theme"), ("/bad.zip", None), ("/boom.zip", None),
+    ]
 
 
 def test_early_archive_picker_opens_in_downloads_when_it_exists(theme_rpc):
@@ -847,7 +919,7 @@ def test_report_tells_early_installs_apart_until_another_build_replaces_them(the
                "failed": {"ok": False, "code": "commit_failed"}}
     monkeypatch.setattr(main.theme_packages, "commit_theme_install", lambda token, *a, **k: commits[token])
     plugin._theme_remote_service = types.SimpleNamespace(
-        prepare_early_install=lambda path, root, receipts: {**prepared("early", "0.3.0"), "catalogId": "hooandee-duo"},
+        prepare_early_install=lambda path, root, receipts, **_: {**prepared("early", "0.3.0"), "catalogId": "hooandee-duo"},
         prepare_install=lambda theme_id, version, root, receipts: prepared("stable", version),
     )
 
@@ -881,3 +953,34 @@ def test_report_tells_early_installs_apart_until_another_build_replaces_them(the
     asyncio.run(plugin.prepare_remote_theme_install("hooandee-duo", "0.3.0"))
     asyncio.run(plugin.commit_theme_install("stable"))
     assert early_flags() == [False]
+
+
+@pytest.mark.parametrize("capture", json.loads((ROOT / "src/themes/fixtures/steam-web-states.json").read_text()))
+def test_report_keeps_allowlisted_navigation_from_native_store_trace(theme_rpc, capture):
+    main, _, _ = theme_rpc
+    surface = {"navigation": capture["want"], **{f"geometry_{n}": n for n in range(30)}}
+    result = main.Plugin._with_theme_display({}, {"theme_surface": surface})
+    assert result["surface"]["navigation"] == capture["want"]
+    assert len([key for key in result["surface"] if key != "navigation"]) == 24
+
+
+def test_report_rejects_private_or_malformed_navigation_values(theme_rpc):
+    main, _, _ = theme_rpc
+    result = main.Plugin._with_theme_display({}, {"theme_surface": {"navigation": {
+        "route": "/chat/private-account", "expected": "https://example.test/private-secret",
+        "requested": ["store"], "loaded": "store", "browser": "ready", "loading": "false",
+        "history": {"index": True, "entries": -1, "initial": 1.5, "final": 2, "url": "private-secret"},
+        "error": "private-secret", "url": "private-secret", "title": "private-secret",
+    }}})
+    assert result["surface"]["navigation"] == {
+        "route": None, "expected": None, "requested": None, "loaded": "store", "browser": "ready", "loading": None,
+        "history": {"index": None, "entries": None, "initial": None, "final": 2}, "error": None,
+    }
+    assert "private" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("navigation", [True, None, "private-url", [], 4])
+def test_report_only_accepts_navigation_as_a_typed_object(theme_rpc, navigation):
+    main, _, _ = theme_rpc
+    result = main.Plugin._with_theme_display({}, {"theme_surface": {"navigation": navigation}})
+    assert "navigation" not in result["surface"]

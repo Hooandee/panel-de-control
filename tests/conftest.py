@@ -24,3 +24,13 @@ def _no_release_lookups(monkeypatch):
         raise OSError("offline in tests")
 
     monkeypatch.setattr(latest, "_fetch", offline)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_steam_libraries(monkeypatch):
+    # Library discovery looks at the host's mounted drives; tests only see the folders they build.
+    from upscalers import games
+
+    monkeypatch.setattr(games, "MOUNT_ROOTS", ())
+    monkeypatch.setattr(games, "_steam_reported", {})
+    monkeypatch.setattr(games, "_discovered", None)

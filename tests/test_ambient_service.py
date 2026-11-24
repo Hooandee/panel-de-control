@@ -106,6 +106,27 @@ def test_events_are_bounded_and_in_diagnostics(service):
     assert "home" not in json.dumps(diag)
 
 
+def test_background_diagnostics_explain_selection_without_private_references(service):
+    settings = service.get_state()["settings"]
+    settings["background"].update({
+        "pinned": "local:private-photo",
+        "collections": ["suggested.nasa", "folder.private", "suggested.library", "suggested.private"],
+    })
+    service.save_settings(settings)
+    diagnostics = service.diagnostics()
+    assert diagnostics["setup"]["pinned"] is True
+    assert diagnostics["setup"]["suggestedCollections"] == ["suggested.nasa", "suggested.library"]
+    assert "private" not in json.dumps(diagnostics)
+    settings["background"]["pinned"] = ""
+    service.save_settings(settings)
+    assert service.diagnostics()["setup"]["pinned"] is False
+
+
+def test_game_art_source_is_recorded(service):
+    assert service.record_event("game_art", '{"appid":548430,"source":"hashed","store":true}') is True
+    assert service.diagnostics()["events"][-1]["kind"] == "game_art"
+
+
 @pytest.mark.parametrize("detail", ["enter", "exit"])
 def test_fullscreen_events_are_recorded(service, detail):
     assert service.record_event("video_fullscreen", detail) is True

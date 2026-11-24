@@ -24,7 +24,7 @@ function opacity() {
 beforeEach(() => {
   running.id = 1462040;
   writeInGameMode("always");
-  vi.mocked(useOverlayLive).mockReturnValue({ live: null, lossless: null, makoSpatial: null, makoMultiplier: null, makoResolutionWarning: false });
+  vi.mocked(useOverlayLive).mockReturnValue({ live: null, lossless: null, makoName: "Mako 5", makoSpatial: null, makoMultiplier: null, makoResolutionWarning: false });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); });
 it("shows an intact DLL installation without inventing live readings", () => {

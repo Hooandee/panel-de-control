@@ -404,7 +404,6 @@
         "status",
         "revision",
         "conditions",
-        "exe",
         "args",
         "ini",
         "dependencies",

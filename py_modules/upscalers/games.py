@@ -1,9 +1,13 @@
 """Where an installed game lives, which executable creates its device and what it ships."""
 
 import json
-import mmap
 import os
 import re
+import stat
+import threading
+import time
+from collections import Counter
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,7 +24,9 @@ MANIFEST_DIR = ".pdc-upscaler"
 
 _SKIP_EXE = re.compile(
     r"crash|unins|redist|setup|prereq|dotnet|helper|easyanticheat|battleye|eac_|"
-    r"d3dconfig|compiler|7za|reporter|webhelper|cefprocess|vc_?redist|dxsetup|launcherpatcher",
+    r"ace-(?:service|setup|base)|d3dconfig|compiler|7za|reporter|webhelper|cefprocess|vc_?redist|dxsetup|launcherpatcher|"
+    # Nixxes crash reporter (crs-handler, crs-uploader, crs-video): small, imports d3d11, beats packed game exes.
+    r"^crs-",
     re.I,
 )
 _SKIP_DIRS = {"__installer", "_commonredist", "redist", "redistributables", "directx", "support", "extras", "optiscaler"}
@@ -69,28 +75,178 @@ def steam_roots(home: str) -> list[Path]:
         path = Path(home) / candidate
         try:
             resolved = path.resolve(strict=True)
-        except OSError:
+        except (OSError, RuntimeError):
             continue
         if resolved not in roots:
             roots.append(resolved)
     return roots
 
 
-def library_paths(home: str) -> list[Path]:
-    libraries: list[Path] = []
+# Where removable drives and extra disks get mounted; a Steam library sits at most a few folders below.
+MOUNT_ROOTS = ("/run/media", "/media", "/mnt")
+DISCOVERY_DEPTH = 3
+# Steam appids are 31-bit; a shortcut's id is a 32-bit hash, so no library can hold a manifest for it.
+STEAM_APPID_LIMIT = 2**31
+DISCOVERY_TTL_S = 60.0
+# A share that stops answering hangs whoever lists it; discovery never walks into one.
+NETWORK_FS = ("nfs", "nfs4", "cifs", "smb3", "smbfs", "9p", "davfs", "fuse.sshfs", "fuse.rclone", "afs", "ceph", "glusterfs", "autofs")
+_steam_reported: dict[Path, None] = {}
+_discovered: tuple[float, str, list[Path]] | None = None
+_libraries_lock = threading.Lock()
+_discovery_lock = threading.Lock()
+
+
+def _library_path(raw: object) -> Path | None:
+    if not isinstance(raw, str) or not os.path.isabs(raw) or "\0" in raw:
+        return None
+    return Path(os.path.normpath(raw))
+
+
+def _real(path: Path) -> Path:
+    try:
+        return Path(os.path.realpath(path))
+    except (OSError, ValueError):
+        return path
+
+
+def _has_steamapps(path: Path) -> bool:
+    try:
+        return (path / "steamapps").is_dir()
+    except OSError:
+        return False
+
+
+def set_steam_libraries(paths) -> None:
+    """The mounted library folders Steam itself lists (InstallFolder store), replacing the last list."""
+    folders = [path for path in (_library_path(raw) for raw in list(paths or ())[:32]) if path is not None]
+    with _libraries_lock:
+        _steam_reported.clear()
+        _steam_reported.update(dict.fromkeys(folders))
+
+
+def _lenient_index(raw: bytes) -> list[str]:
+    """Paths from an index the strict reader refused (repeated keys, stray bytes): Steam itself still loads it."""
+    text = raw[:vdf.MAX_BYTES].decode("utf-8", errors="replace")
+    found = re.findall(r'"path"\s+"((?:\\.|[^"\\])*)"', text, re.I)
+    found += re.findall(r'"\d+"\s+"(/(?:\\.|[^"\\])*)"', text)
+    return [re.sub(r'\\([\\"])', r"\1", value) for value in found]
+
+
+def _network_mounts(mountinfo: str = "/proc/self/mountinfo") -> set[str]:
+    mounts = set()
+    try:
+        with open(mountinfo, encoding="utf-8", errors="replace") as source:
+            for line in source:
+                fields, _sep, rest = line.partition(" - ")
+                parts, kind = fields.split(), rest.split()[:1]
+                if len(parts) > 4 and kind and kind[0] in NETWORK_FS:
+                    mounts.add(re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), parts[4]))
+    except OSError:
+        pass
+    return mounts
+
+
+def _discover(home: str) -> list[Path]:
+    """Steam libraries on local mounted drives and in the home folder, found by looking: the last resort."""
+    global _discovered
+    with _discovery_lock:
+        now = time.monotonic()
+        if _discovered and _discovered[1] == home and now - _discovered[0] < DISCOVERY_TTL_S:
+            return list(_discovered[2])
+        network = _network_mounts()
+        found: list[Path] = []
+        for base in (*MOUNT_ROOTS, home):
+            pending = [(_real(Path(base)), 0)]
+            while pending:
+                folder, depth = pending.pop()
+                if str(folder) in network:
+                    continue
+                try:
+                    with os.scandir(folder) as entries:
+                        children = [Path(e.path) for e in entries if e.is_dir(follow_symlinks=False) and not e.name.startswith(".")]
+                except OSError:
+                    continue
+                for child in children:
+                    if child.name == "steamapps":
+                        real = _real(folder)
+                        if real not in found:
+                            found.append(real)
+                    elif depth + 1 < DISCOVERY_DEPTH and child.name not in ("compatdata", "shadercache", "common"):
+                        pending.append((child, depth + 1))
+        _discovered = (now, home, found)
+        return list(found)
+
+
+def _library_candidates(home: str, counts: Counter, live_folders: tuple[str, ...] | None) -> Iterator[tuple[Path, str]]:
     for root in steam_roots(home):
-        candidates = [root]
+        yield root, "root"
+        index = root / "steamapps/libraryfolders.vdf"
         try:
-            folders = vdf.read_text(root / "steamapps/libraryfolders.vdf").get("libraryfolders") or {}
-        except (OSError, ValueError):
+            raw = _regular_bytes(index, vdf.MAX_BYTES)
+            if len(raw) > vdf.MAX_BYTES:
+                raise ValueError("oversized_vdf")
+            folders = vdf.parse_text(raw).get("libraryfolders")
+            if not isinstance(folders, dict):
+                raise ValueError("malformed_vdf")
+        except FileNotFoundError:
+            counts["missing_index"] += 1
             folders = {}
-        for entry in folders.values() if isinstance(folders, dict) else ():
-            if isinstance(entry, dict) and isinstance(entry.get("path"), str):
-                candidates.append(Path(entry["path"]))
-        for path in candidates:
-            if (path / "steamapps").is_dir() and path not in libraries:
-                libraries.append(path)
-    return libraries
+        except OSError:
+            counts["unreadable_index"] += 1
+            folders = {}
+        except ValueError:
+            counts["invalid_index"] += 1
+            folders = {}
+            lenient = _lenient_index(raw)
+            counts["lenient_path"] += len(lenient)
+            for candidate in lenient:
+                path = _library_path(candidate)
+                if path is not None:
+                    yield path, "lenient_index"
+        else:
+            counts["read_index"] += 1
+        for key, entry in folders.items():
+            if not key.isdecimal():
+                continue
+            path = _library_path(entry.get("path") if isinstance(entry, dict) else entry)
+            if path is None:
+                counts["invalid_entry"] += 1
+                continue
+            counts["path_object" if isinstance(entry, dict) else "direct_path"] += 1
+            yield path, "index"
+    if live_folders is None:
+        with _libraries_lock:
+            reported = list(_steam_reported)
+    else:
+        reported = [path for raw in live_folders if (path := _library_path(raw)) is not None]
+    for path in reported:
+        yield path, "steam"
+
+
+def _available_libraries(home: str, counts: Counter, live_folders: tuple[str, ...] | None = None) -> Iterator[tuple[Path, str]]:
+    seen = set()
+    for path, source in _library_candidates(home, counts, live_folders):
+        real = _real(path)
+        if real in seen:
+            continue
+        if source == "steam":
+            counts["steam_unindexed"] += 1
+        if _has_steamapps(real):
+            seen.add(real)
+            yield real, source
+        else:
+            counts["unavailable_library"] += 1
+    counts["available"] = len(seen)
+
+
+def library_paths(home: str, counts: Counter | None = None) -> list[Path]:
+    return [path for path, _ in _available_libraries(home, Counter() if counts is None else counts)]
+
+
+def library_summary(home: str) -> dict:
+    counts = Counter()
+    sources = dict(_available_libraries(home, counts))
+    return {**counts, "sources": dict(Counter(sources.values()))}
 
 
 def update_state(flags: int) -> str | None:
@@ -236,27 +392,163 @@ def linux_build(root: Path, build_id: str | None = None) -> bool:
     return result
 
 
-def find_installed(home: str, appid: str) -> Installed | None:
+def _lenient_manifest(manifest: Path) -> dict:
+    """The few top-level fields Panel needs from a manifest the strict reader refused; Steam still loads it."""
+    with open(manifest, "rb") as source:
+        text = source.read(vdf.MAX_BYTES).decode("utf-8", errors="replace")
+    opening = text.find("{")
+    nested = text.find("{", opening + 1)
+    top = text[opening + 1:nested if nested > opening else len(text)]
+    state = {}
+    for key in ("appid", "name", "installdir", "stateflags", "buildid"):
+        match = re.search(rf'"{key}"\s+"((?:\\.|[^"\\])*)"', top, re.I)
+        if match:
+            state[key] = re.sub(r'\\([\\"])', r"\1", match.group(1))
+    return state
+
+
+def _install_root(apps: Path, state: dict) -> Path | None:
+    installdir = state.get("installdir")
+    if not isinstance(installdir, str) or installdir in ("", ".", "..") or "/" in installdir or "\0" in installdir:
+        return None
+    return apps / "common" / installdir
+
+
+def _regular_bytes(path: str | Path, limit: int, *, nofollow: bool = False) -> bytes:
+    flags = os.O_NONBLOCK | (os.O_NOFOLLOW if nofollow else 0)
+    with open(path, "rb", opener=lambda name, mode: os.open(name, mode | flags)) as source:
+        if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+            raise OSError("not_regular")
+        return source.read(limit + 1)
+
+
+def _selector_manifest(path: str, appid: str) -> str | None:
+    """None when the manifest proves an installed game, else why it does not."""
+    limit = 128 * 1024
+    raw = _regular_bytes(path, limit, nofollow=True)
+    if len(raw) > limit:
+        raise ValueError("oversized_manifest")
+    state = vdf.parse_text(raw).get("appstate")
+    if not isinstance(state, dict) or state.get("appid") != appid:
+        raise ValueError("invalid_appid")
+    try:
+        flags = int(state.get("stateflags", ""))
+    except ValueError:
+        return "invalid"
+    # An installed game keeps this bit while Steam updates, validates or queues it.
+    if not flags & STATE_FULLY_INSTALLED:
+        return "not_installed"
+    root = _install_root(Path(path).parent, state)
+    return None if root is not None and root.is_dir() else "no_folder"
+
+
+def selector_installs(home: str, live_folders: tuple[str, ...] = (), on_confirmed: Callable[[int], None] | None = None) -> dict:
+    """Positive evidence only. A partial inventory can still recover games from reachable libraries."""
+    appids: set[int] = set()
+    counts = Counter()
+    rejected = Counter()
+    deadline = time.monotonic() + 3.0
+    complete = True
+    remaining = 1024
+
+    def result(done: bool) -> dict:
+        return {"appids": sorted(appids), "complete": done, "rejected": dict(rejected)}
+
+    for library, _ in _available_libraries(home, counts, live_folders):
+        try:
+            with os.scandir(library / "steamapps") as entries:
+                for entry in entries:
+                    if remaining == 0 or time.monotonic() >= deadline:
+                        return result(False)
+                    match = re.fullmatch(r"appmanifest_([1-9][0-9]{0,9})\.acf", entry.name)
+                    if not match or int(match[1]) >= STEAM_APPID_LIMIT:
+                        continue
+                    remaining -= 1
+                    try:
+                        reason = _selector_manifest(entry.path, match[1])
+                    except (OSError, ValueError):
+                        rejected["unreadable"] += 1
+                        complete = False
+                        continue
+                    if reason is not None:
+                        rejected[reason] += 1
+                        continue
+                    appid = int(match[1])
+                    if appid not in appids:
+                        appids.add(appid)
+                        if on_confirmed is not None:
+                            on_confirmed(appid)
+        except OSError:
+            complete = False
+    errors = ("unavailable_library", "unreadable_index", "invalid_index", "invalid_entry", "missing_index")
+    return result(complete and bool(counts["available"]) and not any(counts[key] for key in errors))
+
+
+def _manifest_game(library: Path, appid: str, contained: bool = False) -> tuple[str, Installed | None]:
+    apps = library / "steamapps"
+    manifest = apps / f"appmanifest_{appid}.acf"
+    try:
+        state = vdf.read_text(manifest).get("appstate")
+    except FileNotFoundError:
+        return "manifest_missing", None
+    except OSError:
+        return "manifest_unreadable", None
+    except ValueError:
+        try:
+            state = _lenient_manifest(manifest)
+        except OSError:
+            return "manifest_unreadable", None
+    if not isinstance(state, dict) or state.get("appid", appid) != appid:
+        return "manifest_invalid", None
+    root = _install_root(apps, state)
+    if root is None:
+        return "manifest_invalid", None
+    if contained and (root.is_symlink() or not _real(root).is_relative_to(_real(apps / "common"))):
+        return "folder_outside", None
+    try:
+        if not stat.S_ISDIR(root.stat().st_mode):
+            return "folder_missing", None
+    except (FileNotFoundError, NotADirectoryError):
+        return "folder_missing", None
+    except OSError:
+        return "folder_unreadable", None
+    try:
+        flags = int(state.get("stateflags", 0))
+    except (TypeError, ValueError):
+        flags = 0
+    build_id = str(state["buildid"]) if str(state.get("buildid", "")).isdecimal() else None
+    return "found", Installed(appid, str(state.get("name") or appid), root, flags,
+                              native=linux_build(root, build_id), build_id=build_id)
+
+
+def find_installed(home: str, appid: str, lookup: Counter | None = None) -> Installed | None:
+    """The game in a library Steam vouches for; only when none of them even has its manifest, a library found
+    on a mounted drive, so a stale copy never wins over the install Steam knows."""
     if not appid.isdecimal():
         return None
-    for library in library_paths(home):
-        manifest = library / "steamapps" / f"appmanifest_{appid}.acf"
-        try:
-            state = vdf.read_text(manifest).get("appstate") or {}
-        except (OSError, ValueError):
-            continue
-        installdir = state.get("installdir")
-        if not isinstance(installdir, str) or not installdir or "/" in installdir:
-            continue
-        root = library / "steamapps" / "common" / installdir
-        if root.is_dir():
-            try:
-                flags = int(state.get("stateflags", 0))
-            except (TypeError, ValueError):
-                flags = 0
-            build_id = str(state["buildid"]) if str(state.get("buildid", "")).isdecimal() else None
-            return Installed(appid, str(state.get("name") or appid), root, flags,
-                             native=linux_build(root, build_id), build_id=build_id)
+    if len(appid) > 10 or int(appid) >= STEAM_APPID_LIMIT:
+        return find_shortcut(home, appid)
+    counts = Counter() if lookup is None else lookup
+    trusted = dict(_available_libraries(home, counts))
+    known = False
+    for library, source in trusted.items():
+        outcome, installed = _manifest_game(library, appid)
+        counts[outcome] += 1
+        known = known or outcome != "manifest_missing"
+        if installed is not None:
+            counts[f"found_{source}"] += 1
+            return installed
+    if not known:
+        for library in _discover(home):
+            if library in trusted:
+                continue
+            counts["discovered"] += 1
+            outcome, installed = _manifest_game(library, appid, contained=True)
+            if outcome != "manifest_missing":
+                counts[f"discovery_{outcome}"] += 1
+            if installed is not None:
+                counts["found_discovery"] += 1
+                return installed
     return find_shortcut(home, appid)
 
 
@@ -303,6 +595,8 @@ def _score(path: Path, root: Path, size: int) -> int:
         score -= 40
     if "launcher" in name:
         score -= 25
+    if (path.parent / f"{path.stem}_Data").is_dir():
+        score += 40
     score += min(size // (8 * 1024 * 1024), 20)
     return score
 
@@ -340,6 +634,10 @@ def _graphics_apis(exe: Path) -> list[str]:
     if (exe.parent / "D3D12" / "D3D12Core.dll").is_file() and any(exe.parent.glob("re_chunk_000.pak*")):
         apis = (apis - {"d3d11"}) | {"d3d12"}
     return sorted(apis)
+
+
+def _creates_device(apis: list[str]) -> bool:
+    return any(api in apis for api in ("d3d12", "d3d11", "vulkan"))
 
 
 def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = None) -> dict:
@@ -380,7 +678,7 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
     candidates = []
     for index, (score, path, size) in enumerate(exes[:MAX_PE_SCANS]):
         apis = _graphics_apis(path)
-        if any(api in apis for api in ("d3d12", "d3d11", "vulkan")):
+        if _creates_device(apis):
             score += 30
         candidates.append({
             "exe": path.relative_to(root).as_posix(),
@@ -388,7 +686,9 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
             "size": size,
             "score": score,
         })
-    candidates.sort(key=lambda item: (-item["score"], item["exe"]))
+    # On a tie the exe that imports a graphics API wins: Unity extras (a guide, an artbook) score
+    # as much as the game through their _Data folder.
+    candidates.sort(key=lambda item: (-item["score"], not _creates_device(item["apis"]), item["exe"]))
 
     manual = False
     selected = candidates[0] if candidates else None
@@ -454,12 +754,52 @@ def running_under(root: Path, proc: str = "/proc") -> bool:
 EMBEDDED = {"fsr2": (b"ffxFsr2ContextCreate",), "fsr31": (b"ffxFsr3UpscalerContextCreate",), "xess": (b"xessD3D12CreateContext",)}
 
 
+# A cached exe scans at full speed and each `in` holds the GIL: every sysfs read the event loop makes
+# then waits behind it. Small chunks and a short pause every few keep the loop answering.
+_EMBEDDED_CHUNK = 256 * 1024
+_EMBEDDED_PAUSE_EVERY = 4
+_EMBEDDED_PAUSE_S = 0.001
+_EMBEDDED_OVERLAP = max(len(n) for needles in EMBEDDED.values() for n in needles) - 1
+_embedded_cache: dict[str, tuple[tuple[int, int], frozenset[str]]] = {}
+_embedded_lock = threading.Lock()
+
+
 def embedded_upscalers(exe: Path) -> set[str]:
+    # Plain reads, not mmap: mmap.find holds the GIL while it pages the exe in from a slow SD card.
     try:
-        with open(exe, "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
-            return {kind for kind, needles in EMBEDDED.items() if any(data.find(n) != -1 for n in needles)}
-    except (OSError, ValueError):
+        info = os.stat(exe)
+    except OSError:
         return set()
+    key, stamp = str(exe), (info.st_size, info.st_mtime_ns)
+    with _embedded_lock:
+        cached = _embedded_cache.get(key)
+    if cached and cached[0] == stamp:
+        return set(cached[1])
+    pending = dict(EMBEDDED)
+    found: set[str] = set()
+    try:
+        with open(exe, "rb") as handle:
+            tail = b""
+            chunks = 0
+            while pending:
+                chunk = handle.read(_EMBEDDED_CHUNK)
+                if not chunk:
+                    break
+                window = tail + chunk
+                for kind in [k for k, needles in pending.items() if any(n in window for n in needles)]:
+                    found.add(kind)
+                    del pending[kind]
+                tail = window[-_EMBEDDED_OVERLAP:]
+                chunks += 1
+                if chunks % _EMBEDDED_PAUSE_EVERY == 0:
+                    time.sleep(_EMBEDDED_PAUSE_S)
+    except OSError:
+        return set()
+    with _embedded_lock:
+        if len(_embedded_cache) >= 512:
+            _embedded_cache.clear()
+        _embedded_cache[key] = (stamp, frozenset(found))
+    return found
 
 
 def is_optiscaler(path: Path) -> bool:

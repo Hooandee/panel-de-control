@@ -5,6 +5,7 @@ import { readFlag, writeFlag } from "../../platform/preferences";
 import type { PowerPort, PowerSnapshot } from "../../platform/power";
 import { arbitrate, conflictKey, type ArbiterDecision, type ThemeClaim, type ThirdPartySignal } from "../core/arbiter";
 import { chooseBackground } from "../core/gameArtBlend";
+import { pickGameAudio } from "../core/gameAudio";
 import { motionFor, type MotionState } from "../core/powerPolicy";
 import { needsCopy, videoTarget } from "../core/videoQuality";
 import { gameVolumeTarget, planForGameState } from "../core/playbackPolicy";
@@ -13,7 +14,7 @@ import type { AmbientSettings, ClaimOwner, MediaKind, Channel, PlaylistContents,
 import { AudioLoaderBridge } from "./audioLoader";
 import { BackgroundLayer } from "./backgroundLayer";
 import { GameMediaDirector, ThemeAudio, type GameMedia } from "./gameMedia";
-import { installedGameAppIds, isStoreApp, libraryHeroUrl, neighborAppIdsIn, selectedAppIdIn } from "./librarySources";
+import { gameHero, installedGameAppIds, isStoreApp, neighborAppIdsIn, selectedAppIdIn } from "./librarySources";
 import { linkKind, linkName } from "../core/linkName";
 import { isLiveEmbed, parseEmbedStream } from "../core/streams";
 import { parseYouTube } from "../core/youtube";
@@ -160,12 +161,22 @@ export class AmbientRuntime {
       const doc = spDocument();
       return doc && container ? neighborAppIdsIn(doc.querySelector(`.${container}`)) : [];
     },
+    (appid) => {
+      const themed = this.channel.themeSelection();
+      const background = this.settings()?.background;
+      void rpc.recordAmbientEvent("selection", JSON.stringify({
+        appid: Number(appid),
+        source: themed ? `theme:${themed.themeId}` : "carousel",
+        trailerRequested: !!(background?.enabled && background.gameTrailers),
+      })).catch(() => undefined);
+    },
   );
   private readonly themeAudio = new ThemeAudio(() => (typeof Audio === "function" ? new Audio() : null));
   private themePausedMusic = false;
   /** The game whose soundtrack and trailer sound stay quiet because the user chose their own music over it. */
   private themeSilencedFor: string | null = null;
   private lastSelectedAppId: string | null = null;
+  private heroReported = new Set<string>();
   private libraryViews = 0;
   private floatingMounts = 0;
   private videoPage: string | null = null;
@@ -230,6 +241,7 @@ export class AmbientRuntime {
       (detail) => void rpc.recordAmbientEvent(detail.startsWith("radio") ? "radio_error" : "playback_error", detail).catch(() => undefined),
       undefined,
       () => new VideoFrameEngine(() => rpc.getAmbientVideoPage(), () => spDocument()),
+      (url) => rpc.getAmbientStreamUrl(url),
     );
     this.snapshot = {
       ready: false,
@@ -728,7 +740,7 @@ export class AmbientRuntime {
   private async previewFor(id: string, url?: string): Promise<string | null> {
     if (id === "suggested.library") {
       const appid = installedGameAppIds()[0];
-      return appid ? libraryHeroUrl(appid) : null;
+      return appid ? gameHero(appid).url : null;
     }
     if (id in DAILY_FEEDS) return (await this.feed(id).catch(() => []))[0]?.url ?? null;
     if (url) return VIDEO_URL.test(url) ? null : url;
@@ -738,6 +750,8 @@ export class AmbientRuntime {
 
   private async resolve(ref: string): Promise<string | null> {
     const effective = this.optimized.get(`${ref}|${this.settings()?.background.videoQuality ?? "fluid"}`) ?? ref;
+    // Not cached: custom art or a newly downloaded hash can change the hero at any time.
+    if (effective.startsWith("steam:")) return gameHero(effective.slice(6)).url;
     const cached = this.urls.get(effective);
     if (cached) return cached;
     if (this.noSpace.has(effective)) return null;
@@ -746,8 +760,7 @@ export class AmbientRuntime {
     const generation = this.cacheGeneration;
     const request = (async () => {
       let url: string | null = null;
-      if (effective.startsWith("steam:")) url = libraryHeroUrl(effective.slice(6));
-      else if (effective.startsWith("remote:")) {
+      if (effective.startsWith("remote:")) {
         const collection = this.snapshot.items.find((item) => item.ref === ref)?.collection ?? "";
         const served = await rpc.cacheAmbientRemote(effective.slice(7), collection).catch(() => ({ error: "unreachable" }) as rpc.Served);
         if (this.stopped || generation !== this.cacheGeneration) return null;
@@ -869,7 +882,7 @@ export class AmbientRuntime {
     if (trailer && owns) {
       const page = await this.trailerPage(trailer.url, trailerSound ? Math.round(settings.music.volume * 100) : 0);
       if (this.stopped || generation !== this.renderGeneration) return;
-      if (page && this.layer.apply({ url: page, kind: "page" }, { transition: "fade", nativeArt: "hide", motion, visible: true })) {
+      if (page && this.layer.apply({ url: page, kind: "page" }, { transition: "fade", nativeArt: "hide", motion, visible: true, filters: settings.background.filters })) {
         doc?.documentElement.setAttribute("data-pdc-ambient-background", "panel");
         return;
       }
@@ -877,27 +890,43 @@ export class AmbientRuntime {
     // Until the trailer is ready the selected game shows its own background, or Steam's art for it.
     const artMode = wantsTrailers && this.gameMedia.pending() ? "game" : settings.background.gameArt;
     const choice = chooseBackground(artMode, this.snapshot.current?.ref ?? null, selectedAppId, settings.background.perGame);
-    if (!owns || choice.mediaRef === null) {
+    const hostClaim = this.channel.activeClaim();
+    const hosted = hostClaim?.mode === "host" && surface !== "other" && hostClaim.surfaces.includes(surface);
+    // A host replaces Steam's Home, so its native game art must travel through the media channel.
+    const hostHero = hosted && choice.mediaRef === null && choice.nativeArt === "show" && selectedAppId ? gameHero(selectedAppId) : null;
+    const hostGameArtUrl = hostHero?.url ?? null;
+    if (hostHero && selectedAppId && (hostHero.source !== "plain" || !isStoreApp(selectedAppId)) && !this.heroReported.has(selectedAppId)) {
+      this.heroReported.add(selectedAppId);
+      void rpc.recordAmbientEvent("game_art", JSON.stringify({ appid: Number(selectedAppId), source: hostHero.source, store: isStoreApp(selectedAppId) })).catch(() => undefined);
+    }
+    const mediaRef = choice.mediaRef ?? (hostGameArtUrl ? `steam:${selectedAppId}` : null);
+    if (!owns || mediaRef === null) {
       this.layer.apply(null, { transition: settings.background.transition, nativeArt: "show", motion, visible: false });
       doc?.documentElement.removeAttribute("data-pdc-ambient-background");
       this.channel.publish({ owner: "theme", media: null, motion });
       if (doc) applyNeutralizer(doc, []);
-      this.patch({ coveredBy: [] });
+      const themeOwner = this.themeClaim?.id;
+      this.patch({ coveredBy: decision.background === "theme" && themeOwner && settings.claims[themeOwner] === "theme" ? [themeOwner] : [] });
       this.previousOwner = decision.background === "panel" && !owns ? null : decision.background;
       this.patch({ currentUrl: null });
       return;
     }
-    const url = await this.resolve(choice.mediaRef);
+    if (hostGameArtUrl && this.channel.getState().media?.url !== hostGameArtUrl) {
+      // A missing hero must not leave the previous game's art in the host's load-error fallback.
+      this.channel.publish({ owner: "panel", media: null, motion });
+      this.patch({ currentUrl: null });
+    }
+    const url = await this.resolve(mediaRef);
     if (this.stopped || generation !== this.renderGeneration || !url) return;
-    const kind = this.snapshot.items.find((i) => i.ref === choice.mediaRef)?.kind ?? (VIDEO_URL.test(url) ? "video" : "image");
-    this.channel.publish({ owner: "panel", media: { url, kind }, motion });
-    const hostClaim = this.channel.activeClaim();
-    if (hostClaim?.mode === "host" && surface !== "other" && hostClaim.surfaces.includes(surface)) {
+    const kind = this.snapshot.items.find((i) => i.ref === mediaRef)?.kind ?? (VIDEO_URL.test(url) ? "video" : "image");
+    const { blur = 0, dim = 0, vignette = 0 } = settings.background.filters ?? {};
+    this.channel.publish({ owner: "panel", media: { url, kind }, motion, filters: { blur, dim, vignette } });
+    if (hosted) {
       this.layer.apply(null, { transition: settings.background.transition, nativeArt: "show", motion, visible: false });
       if (doc) applyNeutralizer(doc, []);
       doc?.documentElement.setAttribute("data-pdc-ambient-background", "panel");
       this.previousOwner = "panel";
-      this.patch({ currentUrl: url });
+      this.patch({ currentUrl: url, coveredBy: [] });
       return;
     }
     const chosen = Object.entries(settings.claims).filter(([id, owner]) => id.startsWith("css:") && owner === "panel").map(([id]) => id);
@@ -907,8 +936,9 @@ export class AmbientRuntime {
     const shown = this.layer.apply({ url, kind }, {
       transition: settings.background.transition,
       nativeArt: choice.nativeArt,
-      motion: motion === "play" && this.optimizingRef === choice.mediaRef ? "pause" : motion,
+      motion: motion === "play" && this.optimizingRef === mediaRef ? "pause" : motion,
       visible: surfaceAllowed,
+      filters: settings.background.filters,
     });
     if (shown) {
       doc?.documentElement.setAttribute("data-pdc-ambient-background", "panel");
@@ -927,8 +957,9 @@ export class AmbientRuntime {
   }
 
   /**
-   * The game's soundtrack replaces Ambiente's media while its game is selected; without one, the
-   * trailer's own audio does. Returns whether the trailer should sound.
+   * The game's soundtrack or its trailer's own audio replaces Ambiente's media while its game is selected,
+   * as `background.gameAudio` chooses (by default the soundtrack, and the trailer when there is none).
+   * Returns whether the trailer should sound.
    */
   private syncGameTheme(media: GameMedia | null, settings: AmbientSettings): boolean {
     if (this.librarySession) {
@@ -936,8 +967,12 @@ export class AmbientRuntime {
       return false;
     }
     const wanted = settings.background.gameThemes ? media : null;
-    const theme = wanted?.theme ?? null;
-    const trailerSound = !theme && !!wanted?.trailer && settings.background.enabled && settings.background.gameTrailers;
+    const pick = pickGameAudio(settings.background.gameAudio, {
+      theme: !!wanted?.theme,
+      trailer: !!wanted?.trailer && settings.background.enabled && settings.background.gameTrailers,
+    });
+    const theme = pick === "theme" ? wanted?.theme ?? null : null;
+    const trailerSound = pick === "trailer";
     if (theme) this.themeAudio.play(theme.url, settings.music.volume);
     else this.themeAudio.stop();
     const sounding = !!theme || trailerSound;
@@ -1618,9 +1653,10 @@ export class AmbientRuntime {
 
   private playlists = new Map<string, Promise<PlaylistContents>>();
 
-  /** Channels of a saved list; one request per list while Panel runs, failures are retried. */
+  /** Channels of a saved list; one request per list while Panel runs, failures are retried. A list file on disk is read each time: it changes, and its local entries are served from a port that can change. */
   playlist(id: string): Promise<PlaylistContents> {
-    const cached = this.playlists.get(id);
+    const local = id.startsWith("local:");
+    const cached = local ? undefined : this.playlists.get(id);
     if (cached) return cached;
     const pending = rpc.getAmbientPlaylist(id)
       .then((contents) => contents ?? { id, channels: [], error: "unreachable" })
@@ -1629,7 +1665,7 @@ export class AmbientRuntime {
         if (contents.error) this.playlists.delete(id);
         return contents;
       });
-    this.playlists.set(id, pending);
+    if (!local) this.playlists.set(id, pending);
     return pending;
   }
 

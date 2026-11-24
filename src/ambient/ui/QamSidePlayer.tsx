@@ -3,6 +3,7 @@ import { useEffect, useState, type FC } from "react";
 import { createPortal } from "react-dom";
 
 import { qamPanelWidth, subscribeQamSurface, type QamSurface } from "../../platform/qamSurface";
+import { subscribeVirtualKeyboard } from "../../platform/virtualKeyboard";
 import { useI18n } from "../../i18n";
 import { NowPlaying } from "./NowPlaying";
 import { useAmbient } from "./useAmbient";
@@ -23,7 +24,8 @@ function mainDocument(): Document | null {
 /**
  * Mini player beside the QAM. The QAM window starts at the panel's edge, so the player lives in
  * Steam's main window, which Steam also shows over a running game while the QAM is open; it sits
- * just left of the panel, measured from the QAM's layout, and only while the QAM is open.
+ * just left of the panel, measured from the QAM's layout, and only while the QAM is open and Steam's
+ * on-screen keyboard is not (the player would cover the keys of a chat).
  */
 export const QamSidePlayer: FC = () => {
   const { runtime, snapshot } = useAmbient();
@@ -31,8 +33,10 @@ export const QamSidePlayer: FC = () => {
   const [surface, setSurface] = useState<QamSurface | null>(null);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [right, setRight] = useState<number | null>(null);
+  const [keyboardShown, setKeyboardShown] = useState(false);
 
   useEffect(() => subscribeQamSurface(setSurface), []);
+  useEffect(() => subscribeVirtualKeyboard(setKeyboardShown), []);
 
   useEffect(() => {
     const doc = mainDocument();
@@ -66,7 +70,7 @@ export const QamSidePlayer: FC = () => {
 
   const settings = snapshot?.state?.settings;
   const player = snapshot?.player;
-  const show = !!runtime && !!host && right !== null && settings?.music.qamPlayer !== false && !!player?.track && !(player.video && !snapshot?.videoCollapsed) && !snapshot?.pageOpen;
+  const show = !!runtime && !!host && right !== null && !keyboardShown && settings?.music.qamPlayer !== false && !!player?.track && !(player.video && !snapshot?.videoCollapsed) && !snapshot?.pageOpen;
   if (!show || !runtime || !player || !host || right === null) return null;
   const busy = player.status === "playing" || player.status === "loading" || player.status === "retrying";
 

@@ -43,6 +43,22 @@ _HOME_PATH = re.compile(r"[\\/]home[\\/][^\\/\s:\"']+")
 _FIRMWARE_VERSION_KEYS = frozenset(
     {"bios_version", "bios_date", "bios_release", "ec_firmware_release"}
 )
+# Public controller enums resemble serials; preserve them only in typed fields.
+_CONTROLLER_ENUMS = frozenset(
+    prefix + name
+    for prefix in ("", "Gamepad:Button:")
+    for name in (
+        "LeftPaddle1", "LeftPaddle2", "LeftPaddle3",
+        "RightPaddle1", "RightPaddle2", "RightPaddle3", "QuickAccess2",
+    )
+)
+_CONTROLLER_ENUM_PATHS = frozenset({
+    ("controller", "gamepad_targets"),
+    ("controller", "buttons", "source"),
+    ("controller", "buttons", "target", "gamepad"),
+    ("controller_diagnostics", "dbus", "capabilities"),
+    ("controller_diagnostics", "mapped_buttons", "source"),
+})
 # Identifiers that can appear inside free text (log lines, dmesg/journal output).
 _MAC = re.compile(r"\b(?:[0-9a-fA-F]{2}[:_-]){5}[0-9a-fA-F]{2}\b")
 _UUID = re.compile(
@@ -86,7 +102,7 @@ def redact_text(
     return s
 
 
-def redact_obj(obj, *, home: str | None = None, hostname: str | None = None):
+def redact_obj(obj, *, home: str | None = None, hostname: str | None = None, _path=()):
     """Recursively redact a JSON-ish structure: scrub serial-like key values and
     run redact_text on every string. Idempotent."""
     if isinstance(obj, dict):
@@ -97,11 +113,13 @@ def redact_obj(obj, *, home: str | None = None, hostname: str | None = None):
             elif k in _FIRMWARE_VERSION_KEYS and isinstance(v, str):
                 out[k] = redact_text(v, home=home, hostname=hostname, keep_serial_runs=True)
             else:
-                out[k] = redact_obj(v, home=home, hostname=hostname)
+                out[k] = redact_obj(v, home=home, hostname=hostname, _path=(*_path, k))
         return out
     if isinstance(obj, (list, tuple)):
-        return [redact_obj(x, home=home, hostname=hostname) for x in obj]
-    return redact_text(obj, home=home, hostname=hostname)
+        return [redact_obj(x, home=home, hostname=hostname, _path=_path) for x in obj]
+    path = _path[1:] if _path[:1] == ("state",) else _path
+    keep_enum = isinstance(obj, str) and obj in _CONTROLLER_ENUMS and path in _CONTROLLER_ENUM_PATHS
+    return redact_text(obj, home=home, hostname=hostname, keep_serial_runs=keep_enum)
 
 
 def _tail_file(path: str, n: int) -> str:
@@ -158,7 +176,7 @@ def tail_logs(
 
 _PLUGIN_LOAD_ERROR = re.compile(r"Error loading plugin\b", re.I)
 _PLUGIN_LOAD_EXCEPTION = re.compile(
-    r"Error loading plugin\s+.+?\s+\([^)\r\n]{1,80}\)\s+"
+    r"Error loading plugin\s+(?P<name>.+?)\s+\([^)\r\n]{1,80}\)\s+"
     r"(?P<error>TypeError|ReferenceError|SyntaxError|Error)\b",
     re.I,
 )
@@ -204,6 +222,14 @@ _MAX_PLUGIN_FIELD = 80
 _MAX_FRONTEND_SIGNALS = 24
 _MAX_FRONTEND_LOG_BYTES = 64 * 1024
 _CEF_LOG_NAMES = frozenset({"cef_log.txt", "cef_log.previous.txt"})
+# Hooandee themes write their own diagnostics as `[Duo] home-hidden reason path=/x` (PDC-VB97). Only the event name
+# and short, plain tokens leave the device; anything else on the line is dropped.
+_THEME_LINE = re.compile(r'\[(?P<theme>Duo|Vida)\] (?P<event>[a-z][a-z0-9-]{1,40})(?P<rest>[^"\n]*)')
+_THEME_TOKEN = re.compile(r"^[A-Za-z0-9_.:/#=>+-]{1,60}$")
+_MAX_THEME_LINES = 50
+# Steam writes Big Picture's console (where themes log) to webhelper_js, not cef_log.
+_THEME_LOG_NAMES = ("webhelper_js.previous.txt", "webhelper_js.txt")
+_MAX_THEME_LOG_BYTES = 1024 * 1024
 
 
 def _tail_regular_file(path: str, n: int) -> tuple[str, int]:
@@ -395,15 +421,17 @@ def _steam_ui_exception_detail(line: str) -> dict:
     return detail
 
 
+def _frontend_origin(plugin_name: str) -> str:
+    return _KNOWN_FRONTEND_ORIGINS.get(re.sub(r"[^a-z0-9]", "", plugin_name.lower()), "other_plugin")
+
+
 def _frontend_exception_detail(line: str) -> dict:
     error = _FRONTEND_EXCEPTION_TYPE.search(line)
     origin = "decky"
     match = _DECKY_ORIGIN.search(line)
     path = (match.group("path") if match else None) or ""
     if path.startswith("/plugins/"):
-        folder = urllib.parse.unquote(path[len("/plugins/"):].split("/", 1)[0])
-        slug = re.sub(r"[^a-z0-9]", "", folder.lower())
-        origin = _KNOWN_FRONTEND_ORIGINS.get(slug, "other_plugin")
+        origin = _frontend_origin(urllib.parse.unquote(path[len("/plugins/"):].split("/", 1)[0]))
     detail = {
         "error_type": error.group("error") if error else "unknown",
         "origin": origin,
@@ -418,6 +446,63 @@ def _frontend_exception_detail(line: str) -> dict:
             name = reading.group("name")
             detail["reading"] = name if name in _STEAM_UI_READING_NAMES else "other"
     return detail
+
+
+def _capture_log_tail(path, name: str, quota: int) -> tuple[dict, str | None]:
+    """Read a log's tail without following links; the record says why nothing was read."""
+    record = {"name": name, "status": "unreadable"}
+    if not isinstance(path, str) or not path or quota <= 0:
+        record["status"] = "rejected"
+        return record, None
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        record["status"] = "missing"
+        return record, None
+    except OSError:
+        return record, None
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        record["status"] = "rejected"
+        return record, None
+    try:
+        text, bytes_read = _tail_regular_file(path, quota)
+    except FileNotFoundError:
+        record["status"] = "missing"
+        return record, None
+    except ValueError:
+        record["status"] = "rejected"
+        return record, None
+    except OSError:
+        return record, None
+    record.update({"status": "captured", "bytes_read": bytes_read})
+    return record, text
+
+
+def theme_diagnostic_lines(log_dir, *, max_bytes: int = _MAX_THEME_LOG_BYTES) -> dict:
+    """The last `[Duo]`/`[Vida]` lines from Steam's webhelper_js logs, oldest first.
+
+    Only the theme, the event name and short plain tokens leave the device (PDC-VB97).
+    """
+    files, lines = [], []
+    quota = max_bytes // len(_THEME_LOG_NAMES)
+    for name in _THEME_LOG_NAMES:
+        path = os.path.join(log_dir, name) if isinstance(log_dir, str) and log_dir else ""
+        record, text = _capture_log_tail(path, name, quota)
+        files.append(record)
+        if text is None:
+            continue
+        for raw_line in text.splitlines():
+            match = _THEME_LINE.search(raw_line)
+            if not match:
+                continue
+            tokens = [t for t in match.group("rest").split() if _THEME_TOKEN.match(t)][:8]
+            lines.append({
+                "source": name,
+                "theme": match.group("theme"),
+                "event": match.group("event"),
+                "detail": redact_text(" ".join(tokens), keep_serial_runs=True),
+            })
+    return {"schema": 1, "files": files, "lines": lines[-_MAX_THEME_LINES:]}
 
 
 def frontend_crash_diagnostics(
@@ -444,32 +529,10 @@ def frontend_crash_diagnostics(
     for path in paths:
         basename = os.path.basename(path) if isinstance(path, str) else ""
         source = basename if basename in _CEF_LOG_NAMES else "invalid"
-        record = {"name": source, "status": "unreadable"}
+        record, text = _capture_log_tail(path if source != "invalid" else None, source, quota)
         files.append(record)
-        if not isinstance(path, str) or source == "invalid" or quota <= 0:
-            record["status"] = "rejected"
+        if text is None:
             continue
-        try:
-            info = os.lstat(path)
-        except FileNotFoundError:
-            record["status"] = "missing"
-            continue
-        except OSError:
-            continue
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-            record["status"] = "rejected"
-            continue
-        try:
-            text, bytes_read = _tail_regular_file(path, quota)
-        except FileNotFoundError:
-            record["status"] = "missing"
-            continue
-        except ValueError:
-            record["status"] = "rejected"
-            continue
-        except OSError:
-            continue
-        record.update({"status": "captured", "bytes_read": bytes_read})
 
         for raw_line in text.splitlines():
             kind, is_crash = _frontend_signal(raw_line)
@@ -483,8 +546,9 @@ def frontend_crash_diagnostics(
                 plugin = {
                     "error_type": _PLUGIN_ERROR_TYPES[match.group("error").lower()],
                     "source": source,
+                    "origin": _frontend_origin(match.group("name")),
                 }
-                key = (plugin["error_type"], source)
+                key = (plugin["error_type"], source, plugin["origin"])
                 if (
                     key not in seen_plugins
                     and len(plugin_load_errors) < _MAX_FRONTEND_SIGNALS
@@ -537,6 +601,48 @@ _LOADER_LIFECYCLE_GREP = (
     "(?i)still alive|SIGKILL|has been stopped in|already loaded|Shutting down|"
     "Loaded Panel|Failed to (start|unload)|Loop exited|socket_guard"
 )
+
+_SLEEP_USERSPACE_MESSAGES = {
+    "[main][INFO]: CEF has disconnected...": {"event": "cef_disconnected"},
+    "[CSS_Loader] Connected to Steam Browser": {"event": "steam_browser_connected"},
+    "[main][INFO]: Loading Decky frontend!": {"event": "decky_frontend_loading"},
+}
+for _rc in (0, 1):
+    for _state, _active in (("0", False), ("1", True), ("unknown", None)):
+        _SLEEP_USERSPACE_MESSAGES[f"pdc-sleep-cores rc={_rc} smt_active={_state}"] = {
+            "event": "sleep_core_guard", "ok": _rc == 0, "smt_active": _active,
+        }
+
+_SLEEP_USERSPACE_LIMIT = 24
+_SLEEP_USERSPACE_ARGS = [
+    "-u", "plugin_loader", "-u", "panel-de-control-sleep-cores.service",
+    "-o", "json", "--output-fields=MESSAGE",
+    "--grep", "^(?:" + "|".join(map(re.escape, _SLEEP_USERSPACE_MESSAGES)) + ")$",
+    "-n", str(_SLEEP_USERSPACE_LIMIT), "--reverse", "--no-pager",
+]
+
+
+def _sleep_userspace_events(text: str | None) -> list[dict] | None:
+    # journalctl --grep with JSON output exits 1 with no stderr for an empty match.
+    if text is not None and text.strip() in ("", "-- No entries --", "[exit 1]"):
+        return []
+    if text is None or text.startswith("[exit "):
+        return None
+    events = []
+    for line in text.splitlines()[:_SLEEP_USERSPACE_LIMIT]:
+        try:
+            row = json.loads(line)
+            event = _SLEEP_USERSPACE_MESSAGES[row["MESSAGE"]]
+            stamp = row["__REALTIME_TIMESTAMP"]
+            if not isinstance(stamp, str) or not re.fullmatch(r"[0-9]{1,18}", stamp):
+                continue
+        except (ValueError, TypeError, KeyError):
+            continue
+        events.append({"t": int(stamp) / 1_000_000, **event})
+    # --reverse selects the newest entries first even if the wall clock moved.
+    events.reverse()
+    return events or None
+
 
 # Split-lock traps from Steam's HTTP threads fill a whole tail on some kernels. journalctl
 # built without PCRE2 rejects --grep: those commands run again unfiltered.
@@ -607,10 +713,18 @@ _KERNEL_CMDS = {
         "--grep", _LOADER_LIFECYCLE_GREP,
         "-n", "80", "--no-pager",
     ],
+    # A Steam/gamescope crash shows in the plugin log only as "CEF has disconnected".
+    "session_crashes": [
+        "/usr/bin/journalctl", "-b", "-t", "systemd-coredump", "-t", "kernel",
+        "--grep", r"(?i)\((steam\w*|gamescope\S*)\) of user \d+ dumped core|(steam\w*|gamescope\S*)\[\d+\]:? (segfault|general protection fault)",
+        "-n", "40", "--no-pager",
+    ],
     "earlyoom": ["/usr/bin/journalctl", "-b", "-t", "earlyoom", "-n", "30", "--no-pager"],
     "previous_boot_earlyoom": [
         "/usr/bin/journalctl", "-b", "-1", "-t", "earlyoom", "-n", "30", "--no-pager",
     ],
+    "sleep_userspace": ["/usr/bin/journalctl", "-b", *_SLEEP_USERSPACE_ARGS],
+    "previous_boot_sleep_userspace": ["/usr/bin/journalctl", "-b", "-1", *_SLEEP_USERSPACE_ARGS],
     "sleep_inhibitors": ["/usr/bin/systemd-inhibit", "--list", "--no-pager"],
     "pm_wakeup_irq": ["/usr/bin/cat", "/sys/power/pm_wakeup_irq"],
 }
@@ -625,6 +739,14 @@ _CONTROLLER_UNITS = {
     "inputplumber": ("inputplumber.service",),
 }
 
+_IP_LIFECYCLE_LINES = 120
+_IP_LIFECYCLE_BYTES = 16_000
+_IP_LIFECYCLE_GREP = (
+    "(?i)loading device profile|setting target devices|setting intercept mode to:"
+    "|device (added|removed):|starting inputplumber|stopp(ing|ed) inputplumber"
+    "|failed running device|found missing input device|disconnected|possible deadlock|channel (is )?closed"
+)
+
 
 def controller_daemon_cmds(manager: str | None) -> dict:
     """Extra kernel_logs command for the active controller daemon's journal, or an
@@ -636,7 +758,13 @@ def controller_daemon_cmds(manager: str | None) -> dict:
     for unit in units:
         cmd.extend(("-u", unit))
     cmd.extend(("-n", "300", "--no-pager"))
-    return {"controller": cmd}
+    commands = {"controller": cmd}
+    if manager == "inputplumber":
+        commands["controller_lifecycle"] = [
+            "/usr/bin/journalctl", "-b", "-u", "inputplumber.service",
+            "--grep", _IP_LIFECYCLE_GREP, "-n", str(_IP_LIFECYCLE_LINES), "--no-pager",
+        ]
+    return commands
 
 
 def capture_command(cmd, *, run=None, env=None) -> str | None:
@@ -676,7 +804,25 @@ def kernel_logs(
                 text = run(cmd[:at - 1] + cmd[at + 1:])
         except Exception:  # noqa: BLE001
             text = None
-        out[key] = redact_text(text[-cap:], home=home, hostname=hostname) if text else None
+        if key in ("sleep_userspace", "previous_boot_sleep_userspace"):
+            out[key] = _sleep_userspace_events(text)
+        elif key == "controller_lifecycle":
+            redacted = redact_text(text, home=home, hostname=hostname) if text else ""
+            encoded = redacted.encode("utf-8")
+            byte_limit = min(cap, _IP_LIFECYCLE_BYTES)
+            out[key] = encoded[-byte_limit:].decode("utf-8", errors="ignore") if encoded else None
+            out["controller_lifecycle_capture"] = {
+                "status": ("unavailable" if text is None else "command_exit"
+                           if text.startswith("[exit ") else "empty"
+                           if not text.strip() or text.strip() == "-- No entries --" else "captured"),
+                "window": "current_boot_tail",
+                "line_limit": _IP_LIFECYCLE_LINES,
+                "line_limit_reached": len((text or "").splitlines()) >= _IP_LIFECYCLE_LINES,
+                "byte_limit": byte_limit,
+                "byte_truncated": len(encoded) > byte_limit,
+            }
+        else:
+            out[key] = redact_text(text[-cap:], home=home, hostname=hostname) if text else None
     return out
 
 
@@ -688,6 +834,8 @@ _SNAP_MAX_CHIPS = 32
 _RAPL_SAMPLE_S = 0.5
 _sleep = time.sleep
 _SNAP_MAX_NAMES = 128
+_SNAP_MAX_FAN_CURVE_CHANNELS = 2
+_SNAP_MAX_FAN_CURVE_POINTS = 8
 _SNAP_MAX_MODULES = 512
 _SNAP_CAP = 60_000
 _HWMON_PATTERNS = (
@@ -743,12 +891,28 @@ def _hwmon_ppt_nodes(chip_dir: str) -> dict:
 
 def _hwmon_fan_nodes(chip_dir: str) -> dict:
     values = {}
-    for pat in ("pwm[0-9]", "pwm[0-9]_enable", "fan[0-9]_input"):
-        for path in sorted(_glob(chip_dir, pat)):
-            values[os.path.basename(path)] = {
-                "value": read_str(path),
-                "writable": _mode_writable(path),
-            }
+    # Existing single-digit control nodes stay bounded; curve readback is at most
+    # two channels of eight points, independent of requested or active fan mode.
+    paths = [path for pat in ("pwm[0-9]", "pwm[0-9]_enable", "fan[0-9]_input")
+             for path in sorted(_glob(chip_dir, pat))]
+    paths += [
+        path
+        for channel in range(1, _SNAP_MAX_FAN_CURVE_CHANNELS + 1)
+        for point in range(1, _SNAP_MAX_FAN_CURVE_POINTS + 1)
+        for field in ("temp", "pwm")
+        if os.path.exists(path := os.path.join(chip_dir, f"pwm{channel}_auto_point{point}_{field}"))
+    ]
+    for path in paths:
+        raw = read_str(path)
+        value = None
+        if raw is not None and re.fullmatch(r"[+-]?[0-9]{1,10}", raw):
+            numeric = int(raw)
+            if -(2 ** 31) <= numeric < 2 ** 31:
+                value = str(numeric)
+        values[os.path.basename(path)] = {
+            "value": value,
+            "writable": _mode_writable(path),
+        }
     return values
 
 
@@ -1180,7 +1344,7 @@ def _snap_desktop(root: str) -> dict:
     return out
 
 
-_DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name",
+_DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name", "board_version",
                "product_name", "product_version", "product_family", "chassis_type",
                "bios_version", "bios_date", "bios_release", "ec_firmware_release")
 _LED_NODES = ("max_brightness", "multi_index", "multi_intensity", "brightness")

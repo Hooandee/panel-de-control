@@ -7,6 +7,9 @@ import type { GameEntry } from "../launch/steamApi";
 const state = vi.hoisted(() => ({ live: { fps: null, render: null, output: null, generating: null, canPause: false, active: false } as any, imageDirty: null as null | ((dirty: boolean) => void), imageSaves: 0, detail: null as unknown, job: null as unknown, nextId: 0, running: null as any, advancedRows: false, frameProps: null as any, t: (key: string, _params?: Record<string, unknown>) => key }));
 vi.mock("../system/uiEvents", () => ({ recordUiEvent: vi.fn() }));
 vi.mock("../api", () => ({
+  getUpscalerModCandidates: vi.fn(async () => ({ folder: "/home/deck/Downloads", candidates: [] })),
+  addUpscalerMod: vi.fn(),
+  removeUpscalerMod: vi.fn(),
   getMakoStatus: vi.fn(async () => ({ profiles: {} })),
   getUpscalersGame: vi.fn(async () => state.detail),
   getUpscalersJob: vi.fn(async () => state.job),
@@ -21,6 +24,7 @@ vi.mock("../api", () => ({
   }),
   refreshUpscalerWiki: vi.fn(async () => ({ updated: false })),
   recordUpscalerArgs: vi.fn(async () => ({})),
+  getUpscalerUserFileCandidates: vi.fn(async () => ({ folder: null, candidates: [] })),
 }));
 vi.mock("@decky/api", () => ({ openFilePicker: vi.fn() }));
 vi.mock("@decky/ui", () => ({ Focusable: ({ children }: any) => <div>{children}</div>, Navigation: {}, ConfirmModal: () => null }));
@@ -91,6 +95,44 @@ it("saves quality and sharpness with one button", async () => {
   expect(configureUpscaler).toHaveBeenCalledWith("777", expect.objectContaining({ quality: "balanced" }));
 });
 
+it("hands the render size back to the game's own preset", async () => {
+  // PDC-XKSZ (#1452)
+  state.detail = installed();
+  state.advancedRows = true;
+  try {
+    await act(async () => { render(<GameView {...props} />); });
+    await act(async () => { fireEvent.click(screen.getByText("up.quality.balanced")); });
+    await act(async () => { fireEvent.click(screen.getByText("up.quality.useGame")); });
+    await act(async () => { fireEvent.click(screen.getByText("up.save")); });
+    expect(configureUpscaler).toHaveBeenLastCalledWith("777", expect.objectContaining({ quality: null }));
+    await act(async () => { fireEvent.click(screen.getByText("up.quality.useGame")); });
+    await act(async () => { fireEvent.click(screen.getByText("up.save")); });
+    expect(configureUpscaler).toHaveBeenLastCalledWith("777", expect.objectContaining({ quality: "balanced" }));
+  } finally {
+    state.advancedRows = false;
+  }
+});
+
+it("does not offer the game's quality where REFramework sets it on exit", async () => {
+  state.detail = { ...installed(), recipe_info: { ...installed().recipe_info, quality_on_exit: true } } as unknown as GameDetail;
+  state.advancedRows = true;
+  try {
+    await act(async () => { render(<GameView {...props} />); });
+    expect(screen.queryByText("up.quality.useGame")).toBeNull();
+  } finally {
+    state.advancedRows = false;
+  }
+});
+
+it.each([["set", false], ["missing", true], [null, false]] as const)("asks to switch RDR2 to DirectX 12 only while Panel could not (%s)", async (configState, shown) => {
+  // PDC-Z63N (#1470): Panel writes RDR2's API itself; before its first launch the game has no settings file yet.
+  const detail = installed() as any;
+  state.detail = { ...detail, recipe_info: { ...detail.recipe_info, game_config: true },
+    install: configState ? { ...detail.install, game_config: [{ tag: "API", state: configState }] } : null };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1174180 } as unknown as GameEntry} />); });
+  expect(!!screen.queryByText("up.notice.rdr2Dx12")).toBe(shown);
+});
+
 it("says a change waits for a restart right under the scaler, also after leaving the page", async () => {
   state.running = { liveAppid: 777 };
   state.detail = installed();
@@ -116,6 +158,14 @@ it("drops the in-game input hint once the scaler is seen working", async () => {
   expect(screen.getByText("up.input.recommended")).toBeTruthy();
   cleanup();
   state.live = { ...state.live, active: true };
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.queryByText("up.input.recommended")).toBeNull();
+});
+
+it("does not ask for DLSS in the game when Luma supplies it", async () => {
+  state.running = { liveAppid: 777 };
+  const detail = installed();
+  state.detail = { ...detail, recipe_info: { ...detail.recipe_info!, automatic: ["Luma"] } } as unknown as GameDetail;
   await act(async () => { render(<GameView {...props} />); });
   expect(screen.queryByText("up.input.recommended")).toBeNull();
 });
@@ -194,4 +244,46 @@ it("asks REFramework games to run full screen at the display's resolution", asyn
   await act(async () => { render(<GameView {...props} overview={{ ...overview, display: [800, 1280] } as unknown as UpscalersOverview} />); });
   expect(screen.getByText("up.recipe.fullResolution 1280x800")).toBeTruthy();
   state.t = plain;
+});
+
+it("queues a first install chosen while the game is running instead of refusing it", async () => {
+  state.running = { liveAppid: 777 };
+  state.detail = { analysis: { target: "/game", inputs: { fsr31: ["LiesofP/Binaries/Win64/amd_fidelityfx_dx12.dll"] }, candidates: [] }, history: [],
+    recipe_info: null, install: null } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  await act(async () => { fireEvent.click(screen.getByText("up.activate")); });
+  const { installUpscaler } = await import("../api");
+  expect(installUpscaler).not.toHaveBeenCalled();
+  expect(screen.getByText("up.live.appliedOnExit")).toBeTruthy();
+  await act(async () => { fireEvent.click(screen.getAllByText("up.discard")[0]); });
+  state.running = null;
+});
+
+it("tells a game that needs a separate mod why OptiScaler loaded without upscaling", async () => {
+  const detail = installed("loaded");
+  state.detail = { ...detail, analysis: { ...detail.analysis, inputs: {} },
+    recipe_info: { recommended_input: null, needs: ["mod"], page: "Elden-Ring-(ERSS‐FG)", status: "works" } } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.getByText("up.status.loadedNeedsMod")).toBeTruthy();
+  expect(screen.queryByText("up.status.loaded")).toBeNull();
+});
+
+it("blames the user file version known not to load when OptiScaler loads without upscaling", async () => {
+  const detail = installed("loaded");
+  state.detail = { ...detail, recipe_info: { recommended_input: null, needs: ["reframework"], user_files: [{ id: "puredark-upscaler-base",
+    name: "UpscalerBasePlugin", page_url: "", version: "1.1.2", installed_version: "1.2.0", filename: "UpscalerBasePlugin-502-1-2-0-1734538315.zip", state: "avoid" }] } } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.getAllByText("up.userFile.avoid").length).toBeGreaterThan(0);
+  expect(screen.queryByText("up.status.loaded")).toBeNull();
+});
+
+it("reinstalls a game with anti-cheat for a new mod without asking about the anti-cheat again", async () => {
+  const { markPendingReinstall } = await import("./userFileWatch");
+  const { installUpscaler } = await import("../api");
+  const detail = installed();
+  state.detail = { ...detail, analysis: { ...detail.analysis, anti_cheat: true } } as unknown as GameDetail;
+  markPendingReinstall("777");
+  await act(async () => { render(<GameView {...props} />); });
+  await act(async () => { await Promise.resolve(); });
+  expect(installUpscaler).toHaveBeenCalledWith("777", expect.objectContaining({ confirm_anti_cheat: true }));
 });

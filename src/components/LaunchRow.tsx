@@ -75,7 +75,7 @@ export const LaunchRow: FC<{ pill: Pill; ed: LaunchEditor; tools: LaunchTools; g
           </div>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, marginLeft: 20 }}>{pillDesc(pill, t)}</div>
         </Focusable>
-        {isToggle && <RowSwitch label={pillLabel(pill, t)} active={!!sel} disabled={!available} onToggle={() => ed.set(pill.id, !sel)} />}
+        {isToggle && <RowSwitch label={pillLabel(pill, t)} active={!!sel} disabled={!available && !sel} onToggle={() => ed.set(pill.id, !sel)} />}
       </Focusable>
 
       {expanded && (

@@ -1,8 +1,15 @@
 export type ClaimOwner = "panel" | "theme" | "other";
 export type InGameAction = "pause" | "continue" | "duck";
 export type GameArtMode = "mine" | "blend" | "game";
+export type GameAudioSource = "auto" | "trailerFirst" | "musicOnly" | "trailerOnly";
 export type MediaKind = "image" | "video" | "audio";
 export type RepeatMode = "all" | "one" | "off";
+
+export interface WallpaperFilters {
+  blur: number;
+  dim: number;
+  vignette: number;
+}
 
 export interface QueuedTrack {
   id: string;
@@ -32,9 +39,13 @@ export interface AmbientSettings {
     /** On Home, the selected game's official trailer plays as the background and its soundtrack plays. */
     gameTrailers: boolean;
     gameThemes: boolean;
+    /** What sounds when a game is selected: its soundtrack (Apple Music), its trailer, and which comes first. */
+    gameAudio: GameAudioSource;
     lowBatteryPercent: number;
     optimizeVideos: boolean;
     videoQuality: VideoQuality;
+    /** Wallpaper filters, 0 (off) to 100. */
+    filters: WallpaperFilters;
   };
   music: {
     enabled: boolean;

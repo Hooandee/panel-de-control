@@ -72,25 +72,111 @@ export function overviewToEntry(ov: Overview): GameEntry {
   };
 }
 
+function isListedInstall(overview: Overview): boolean {
+  return overview.app_type !== APP_TYPE_TOOL &&
+    (isNonSteam(overview) || overview.local_per_client_data?.installed === true);
+}
+
 /** Installed Steam games + non-Steam shortcuts (order applied by the caller). Never throws. */
 export function listInstalledGames(): GameEntry[] {
   try {
     const all: Overview[] = w.collectionStore?.allAppsCollection?.allApps ?? [];
     const out: GameEntry[] = [];
     for (const ov of all) {
-      if (!ov || typeof ov.appid !== "number") continue;
-      // Tools (Proton builds, runtimes, redistributables) aren't games you set
-      // launch options on — never list them.
-      if (ov.app_type === APP_TYPE_TOOL) continue;
-      // Non-Steam shortcuts are inherently local (they don't reliably populate the
-      // installed flag); Steam games are listed only when actually installed.
-      if (!isNonSteam(ov) && ov.local_per_client_data?.installed !== true) continue;
-      out.push(overviewToEntry(ov));
+      if (ov && typeof ov.appid === "number" && isListedInstall(ov)) out.push(overviewToEntry(ov));
     }
     return out;
   } catch {
     return [];
   }
+}
+
+function isPublicSteamGame(ov: Overview): boolean {
+  return Number.isSafeInteger(ov.appid) && ov.appid > 0 && !isNonSteam(ov) &&
+    (ov.app_type === 1 || ov.app_type === 8);
+}
+
+function lookupOverview(appid: number): Overview | undefined {
+  const ov = w.appStore?.GetAppOverviewByAppID?.(appid);
+  return ov?.appid === appid ? ov : undefined;
+}
+
+export interface SelectorSteamMetadata {
+  appid: number;
+  collection: boolean;
+  manifest: boolean;
+  local: "true" | "false" | "missing" | "unreadable";
+}
+
+/** Complement Steam's installed flags with positive installer evidence for known games. */
+export function readUpscalersSelection(confirmedAppids: readonly number[]) {
+  const collection = new Map<number, Overview>();
+  const unreadableIds = new Set<number>();
+  let unreadableCollection = 0;
+  try {
+    const all: Overview[] = w.collectionStore?.allAppsCollection?.allApps ?? [];
+    for (const ov of all) {
+      try {
+        const appid = ov?.appid;
+        if (typeof appid === "number") collection.set(appid, ov);
+      } catch {
+        unreadableCollection++;
+      }
+    }
+  } catch {
+    unreadableCollection++;
+  }
+  const manifests = new Set(confirmedAppids);
+  const rows = new Map<number, { game: GameEntry; steam?: SelectorSteamMetadata }>();
+  const addRow = (appid: number, ov: Overview, inCollection?: Overview) => {
+    const game = overviewToEntry(ov);
+    let steam: SelectorSteamMetadata | undefined;
+    if (isPublicSteamGame(ov)) {
+      let local: SelectorSteamMetadata["local"] = "missing";
+      try {
+        const installed = (inCollection ?? ov).local_per_client_data?.installed;
+        if (typeof installed === "boolean") local = installed ? "true" : "false";
+      } catch {
+        unreadableIds.add(appid);
+        local = "unreadable";
+      }
+      steam = { appid, collection: inCollection !== undefined, manifest: manifests.has(appid), local };
+    }
+    rows.set(appid, { game, steam });
+  };
+  for (const [appid, ov] of collection) {
+    try {
+      if (isListedInstall(ov)) addRow(appid, ov, ov);
+    } catch {
+      unreadableIds.add(appid);
+    }
+  }
+  const omitted = new Map<number, "no_metadata" | "unreadable">();
+  let no_metadata = 0;
+  let not_game = 0;
+  for (const appid of manifests) {
+    if (!Number.isSafeInteger(appid) || appid <= 0 || appid >= 2 ** 31 || rows.get(appid)?.steam) continue;
+    try {
+      const inCollection = collection.get(appid);
+      const ov = inCollection?.app_type === undefined ? lookupOverview(appid) ?? inCollection : inCollection;
+      if (!ov || ov.app_type === undefined) {
+        no_metadata++;
+        if (!rows.has(appid)) omitted.set(appid, "no_metadata");
+      } else if (!isPublicSteamGame(ov)) {
+        if (ov.app_type === APP_TYPE_TOOL) rows.delete(appid);
+        not_game++;
+      } else {
+        addRow(appid, ov, inCollection);
+      }
+    } catch {
+      unreadableIds.add(appid);
+      if (!rows.has(appid)) omitted.set(appid, "unreadable");
+    }
+  }
+  const entries = [...rows.values()];
+  const steam = entries.flatMap((row) => row.steam ? [row.steam] : []);
+  const unreadable = unreadableCollection + unreadableIds.size;
+  return { games: entries.map((row) => row.game), steam, no_metadata, not_game, unreadable, omitted };
 }
 
 /** Every game in the library, installed or not, plus non-Steam shortcuts; tools excluded. Ids and names only. Never throws. */

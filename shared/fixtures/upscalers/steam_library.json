@@ -46,7 +46,8 @@
         ]
       },
       "expected": [
-        "home/.local/share/Steam"
+        "home/.local/share/Steam",
+        "SD/SteamLibrary"
       ]
     },
     {
@@ -63,7 +64,8 @@
         ]
       },
       "expected": [
-        "home/.local/share/Steam"
+        "home/.local/share/Steam",
+        "SD/SteamLibrary"
       ]
     },
     {

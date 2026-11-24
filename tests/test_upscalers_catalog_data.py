@@ -10,7 +10,7 @@ SNAPSHOT = Path(__file__).parent / "fixtures" / "upscaler_catalog_snapshot.json"
 DATA_NAMES = (
     "OPTISCALER_ARCHIVE", "OPTISCALER_BETA", "LSFG_ARCHIVE", "HELIXSR_ARCHIVE", "OPTIPATCHER",
     "ASSETS", "AMD", "EVERY_GPU", "BUILDS", "PREFERRED", "QUALITY_RATIOS", "EASY_MODES",
-    "SHARPNESS", "PROXIES", "BASE_INI", "FFX_LOADER",
+    "SHARPNESS", "PROXIES", "BASE_INI", "FFX_LOADER", "ANR_FG", "ANR_PROVIDER", "ANR_BUILDS",
 )
 DEVICES = ("", "steam_deck_lcd", "rog_ally")
 

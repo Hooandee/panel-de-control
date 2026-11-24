@@ -372,6 +372,8 @@ def _is_key_record(record: dict) -> bool:
     if record.get("l") in ("W", "E", "C") or record.get("s") in _KEY_SOURCES:
         return True
     message = record.get("m")
+    if record.get("s") == "ui" and record.get("area") == "themes" and message == "theme_interaction":
+        return True
     return isinstance(message, str) and any(key in message for key in _KEY_MESSAGES)
 
 
@@ -504,6 +506,10 @@ def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
     return sessions
 
 
+# Where an idle thread parks: waiting on a lock, a queue or a selector.
+_IDLE_MODULES = frozenset({"threading.py", "queue.py", "selectors.py", "thread.py"})
+
+
 class LoopWatchdog:
     """Warns, with the loop thread's stack, when the asyncio loop misses its
     heartbeat. Built on the loop's thread so a freeze during startup, before the
@@ -549,7 +555,8 @@ class LoopWatchdog:
         late = now - self._last_beat
         if late >= self._limit_s and self._stuck_since is None:
             self._stuck_since = self._last_beat
-            self._journal.write("WARNING", "loop", "blocked", after_s=round(late, 1), stack=self._loop_stack())
+            self._journal.write("WARNING", "loop", "blocked", after_s=round(late, 1), stack=self._loop_stack(),
+                                busy=self._busy_threads())
         elif late < self._limit_s and self._stuck_since is not None:
             self._journal.write("WARNING", "loop", "recovered", stuck_s=round(self._last_beat - self._stuck_since, 1))
             self._stuck_since = None
@@ -560,9 +567,27 @@ class LoopWatchdog:
             return ""
         return "".join(traceback.format_stack(frame)[-12:])[-3000:]
 
+    def _busy_threads(self) -> list[str]:
+        """Threads not parked on a lock, queue or selector, and where they are: a loop stuck on a
+        plain sysfs read is usually waiting for the GIL one of them holds."""
+        names = {thread.ident: thread.name for thread in threading.enumerate()}
+        busy = []
+        for ident, frame in sys._current_frames().items():
+            if ident in (self._loop_thread, threading.get_ident()):
+                continue
+            if os.path.basename(frame.f_code.co_filename) in _IDLE_MODULES:
+                continue
+            stack = traceback.StackSummary.extract(traceback.walk_stack(frame), limit=4, lookup_lines=False)
+            where = " < ".join(f"{os.path.basename(f.filename)}:{f.lineno} {f.name}" for f in stack)
+            busy.append(f"{names.get(ident, ident)}: {where}"[:400])
+        return busy[:12]
+
     def _watch(self) -> None:
         while not self._stop.wait(self._beat_s):
-            self.check()
+            try:
+                self.check()
+            except Exception:  # noqa: BLE001 - the watchdog must outlive a frame it cannot format
+                pass
 
 
 _TRANSITION = re.compile(r"^(?P<name>[A-Z][A-Za-z -]{1,40} transition) (?P<event>\{.*\})$", re.S)

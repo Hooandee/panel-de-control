@@ -2,6 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import defaults from "../../../shared/contracts/ambient/fixtures/defaults.json";
+import selectionReport from "../../../shared/contracts/ambient/fixtures/selection-report.json";
+import savedThemeBackground from "../../../shared/contracts/ambient/fixtures/saved-theme-background.json";
+import hostGameArt from "../../../shared/contracts/ambient/fixtures/host-game-art.json";
 import type { AmbientSettings } from "../core/types";
 import type { GameMedia } from "./gameMedia";
 
@@ -13,7 +16,7 @@ const rpcMock = vi.hoisted(() => ({
   cacheAmbientRemote: vi.fn(),
   reconcileAmbientCache: vi.fn(async () => false),
   getAmbientRemoteFeed: vi.fn(async () => []),
-  recordAmbientEvent: vi.fn(async () => true),
+  recordAmbientEvent: vi.fn(async (_kind: string, _detail: string) => true),
   checkAmbientAudio: vi.fn(async (_detail: string) => true),
   cancelAmbientJobs: vi.fn(async () => true),
   resolveAmbientRadio: vi.fn(async () => null),
@@ -25,6 +28,7 @@ const rpcMock = vi.hoisted(() => ({
   addAmbientFolder: vi.fn(),
   addAmbientFavorite: vi.fn(),
   addAmbientPlaylist: vi.fn(),
+  getAmbientPlaylist: vi.fn(),
   inspectAmbientLink: vi.fn(async (_url: string) => ({ kind: "stream" })),
   removeAmbientItem: vi.fn(),
   restoreAmbientSuggested: vi.fn(),
@@ -738,6 +742,7 @@ describe("AmbientRuntime", () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(p.notify).toHaveBeenCalledTimes(1);
     expect(p.notify).toHaveBeenCalledWith("ambient.toast.theme:Gallery", "ambient.toast.body");
+    expect(runtime.getSnapshot().coveredBy).toEqual([]);
     expect(document.getElementById("pdc-ambient-layer")).toBeNull();
     runtime.stop();
   });
@@ -752,6 +757,32 @@ describe("AmbientRuntime", () => {
     await vi.waitFor(() => expect(document.getElementById("pdc-ambient-layer")).not.toBeNull());
     expect(rpcMock.saveAmbientSettings).toHaveBeenLastCalledWith(expect.objectContaining({ claims: { "hooandee-gallery": "panel" } }));
     runtime.stop();
+  });
+
+  it.each(["css", "host"] as const)("lets the saved %s theme background choice be changed back to Panel", async (mode) => {
+    const configured = settings({ claims: savedThemeBackground.claims as AmbientSettings["claims"] });
+    configured.background.enabled = savedThemeBackground.backgroundEnabled;
+    configured.background.gameArt = savedThemeBackground.setup.gameArt as AmbientSettings["background"]["gameArt"];
+    const channel = new AmbientThemeChannel();
+    if (mode === "host") channel.claim("hooandee-loop", { name: "Loop", surfaces: ["home"], mode: "host" });
+    else {
+      document.documentElement.style.setProperty("--pdc-ambient-claim", "hooandee-loop");
+      document.documentElement.style.setProperty("--pdc-ambient-claim-name", "Loop");
+    }
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts, channel);
+    try {
+      await runtime.start();
+      expect(runtime.getSnapshot().decision).toMatchObject({ background: "theme", conflict: null });
+      expect(runtime.getSnapshot().coveredBy).toEqual(["hooandee-loop"]);
+      await runtime.showMineOver(runtime.getSnapshot().coveredBy);
+      await vi.waitFor(() => expect(runtime.getSnapshot().decision.background).toBe("panel"));
+      await vi.waitFor(() => expect(channel.getState().owner).toBe("panel"));
+      expect(runtime.getSnapshot().currentUrl).toBeTruthy();
+      expect(document.documentElement.getAttribute("data-pdc-ambient-background")).toBe("panel");
+      if (mode === "css") expect(document.getElementById("pdc-ambient-layer")).not.toBeNull();
+      expect(runtime.getSnapshot().coveredBy).toEqual([]);
+    } finally { runtime.stop(); }
   });
 
   it("entering a game pauses the video layer and leaves the game's volume alone", async () => {
@@ -786,6 +817,141 @@ describe("AmbientRuntime", () => {
     expect(runtime.getSnapshot().decision.conflict).toBeNull();
     runtime.stop();
     expect(channel.getState().owner).toBe("theme");
+  });
+
+  it("hands the wallpaper filters to a theme that paints the background itself", async () => {
+    const base = settings({ claims: { "hooandee-gallery": "panel" } });
+    base.background.filters = { blur: 60, dim: 30, vignette: 0 };
+    rpcMock.getAmbientState.mockResolvedValue({ settings: base, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    const channel = new AmbientThemeChannel();
+    channel.claim("hooandee-gallery", { name: "Gallery", surfaces: ["home"], mode: "host" });
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts, channel);
+    await runtime.start();
+    await vi.waitFor(() => expect(channel.getState()).toMatchObject({ owner: "panel", filters: { blur: 60, dim: 30, vignette: 0 } }));
+    runtime.stop();
+  });
+
+  function hostGameArtFixture(mode: "host" | "yield" | null = "host", surfaces: readonly ("home" | "library")[] = ["home"]) {
+    const configured = settings({ claims: structuredClone(hostGameArt.claims) as AmbientSettings["claims"] });
+    configured.background.enabled = hostGameArt.backgroundEnabled;
+    configured.background.gameArt = hostGameArt.gameArt as AmbientSettings["background"]["gameArt"];
+    const channel = new AmbientThemeChannel();
+    if (mode) channel.claim(hostGameArt.themeId, { name: "Duo", surfaces, mode });
+    channel.select(hostGameArt.themeId, "730");
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    return { channel, runtime: new AmbientRuntime(ports() as unknown as AmbientPorts, channel) };
+  }
+
+  it("keeps the saved theme owner, then gives a host the selected game's art when Panel is recovered", async () => {
+    const { channel, runtime } = hostGameArtFixture();
+    try {
+      await runtime.start();
+      expect(channel.getState()).toMatchObject({ owner: "theme", media: null });
+      expect(runtime.getSnapshot().decision.background).toBe("theme");
+      await runtime.showMineOver([hostGameArt.themeId]);
+      await vi.waitFor(() => expect(channel.getState()).toMatchObject({
+        owner: hostGameArt.recovered.owner.background,
+        media: { url: "https://steamloopback.host/assets/730/library_hero.jpg", kind: "image" },
+      }));
+      expect(runtime.getSnapshot().coveredBy).toEqual(hostGameArt.recovered.coveredBy);
+      expect(runtime.getSnapshot().state?.settings.claims).toEqual({ ...hostGameArt.claims, [hostGameArt.themeId]: "panel" });
+      expect(document.getElementById("pdc-ambient-layer")).toBeNull();
+    } finally { runtime.stop(); }
+  });
+
+  it("hands a host the hashed hero Steam serves for the game and reports where it came from", async () => {
+    const hash = "35c4a38067592e934fbb389098eccb0d8a8de000";
+    Object.assign(globalThis, {
+      appStore: { GetAppOverviewByAppID: (id: number) => ({ appid: id }), GetCustomHeroImageURLs: () => [] },
+      appDetailsStore: { GetHeroImagesForAppId: () => ({ rgHeroImages: [`https://shared.steamstatic.com/store_item_assets/steam/apps/730/${hash}/library_hero.jpg?t=0`] }) },
+    });
+    const { channel, runtime } = hostGameArtFixture();
+    try {
+      await runtime.start();
+      await runtime.showMineOver([hostGameArt.themeId]);
+      await vi.waitFor(() => expect(channel.getState().media?.url).toBe(`https://steamloopback.host/assets/730/${hash}/library_hero.jpg`));
+      const reports = rpcMock.recordAmbientEvent.mock.calls.filter(([kind]) => kind === "game_art").map(([, detail]) => JSON.parse(detail));
+      expect(reports).toEqual([{ appid: 730, source: "hashed", store: true }]);
+    } finally {
+      delete (globalThis as { appStore?: unknown }).appStore;
+      delete (globalThis as { appDetailsStore?: unknown }).appDetailsStore;
+      runtime.stop();
+    }
+  });
+
+  it.each([null, "yield", "unclaimed"] as const)("keeps native game art for a %s surface", async (mode) => {
+    const { channel, runtime } = hostGameArtFixture(mode === "unclaimed" ? "host" : mode, mode === "unclaimed" ? ["library"] : ["home"]);
+    try {
+      await runtime.start();
+      await runtime.showMineOver([hostGameArt.themeId]);
+      expect(runtime.getSnapshot().decision.background).toBe("panel");
+      expect(channel.getState().media).toBeNull();
+      expect(document.getElementById("pdc-ambient-layer")).toBeNull();
+    } finally { runtime.stop(); }
+  });
+
+  it("does not publish an older host selection after it changes, disappears or the runtime stops", async () => {
+    const { channel, runtime } = hostGameArtFixture();
+    try {
+      await runtime.start();
+      await runtime.showMineOver([hostGameArt.themeId]);
+      const seen: string[] = [];
+      channel.subscribe(state => { if (state.media) seen.push(state.media.url); });
+      channel.select(hostGameArt.themeId, "570");
+      channel.select(hostGameArt.themeId, "440");
+      await vi.waitFor(() => expect(channel.getState().media?.url).toBe("https://steamloopback.host/assets/440/library_hero.jpg"));
+      expect(seen).not.toContain("https://steamloopback.host/assets/570/library_hero.jpg");
+      channel.select(hostGameArt.themeId, null);
+      expect(channel.getState().media).toBeNull();
+      expect(runtime.getSnapshot().currentUrl).toBeNull();
+      channel.select(hostGameArt.themeId, "570");
+      runtime.stop();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(channel.getState()).toMatchObject({ owner: "theme", media: null });
+    } finally { runtime.stop(); }
+  });
+
+  it.each([true, false])("clears the previous host game before resolving the next one (source available: %s)", async (available) => {
+    const { channel, runtime } = hostGameArtFixture();
+    try {
+      await runtime.start();
+      await runtime.showMineOver([hostGameArt.themeId]);
+      await vi.waitFor(() => expect(channel.getState().media?.url).toBe("https://steamloopback.host/assets/730/library_hero.jpg"));
+      const resolver = runtime as unknown as { resolve(ref: string): Promise<string | null> };
+      const original = resolver.resolve.bind(runtime);
+      let finish!: (url: string | null) => void;
+      vi.spyOn(resolver, "resolve").mockImplementation(ref => ref === "steam:570" ? new Promise(resolve => { finish = resolve; }) : original(ref));
+      const seen: (string | null)[] = [];
+      channel.subscribe(state => seen.push(state.media?.url ?? null));
+      channel.select(hostGameArt.themeId, "570");
+      expect(channel.getState()).toMatchObject({ owner: "panel", media: null });
+      expect(runtime.getSnapshot().currentUrl).toBeNull();
+      const next = available ? "https://steamloopback.host/assets/570/library_hero.jpg" : null;
+      finish(next);
+      await vi.waitFor(() => expect(channel.getState().media?.url ?? null).toBe(next));
+      expect(seen).toEqual(available ? [null, next] : [null]);
+      if (available) {
+        await runtime.updateSettings(s => s);
+        expect(seen).toEqual([null, next]);
+        expect(channel.getState().media?.url).toBe(next);
+      }
+    } finally { runtime.stop(); }
+  });
+
+  it("keeps the host's existing crossfade policy for an explicit per-game picture", async () => {
+    const { channel, runtime } = hostGameArtFixture();
+    try {
+      await runtime.start();
+      await runtime.showMineOver([hostGameArt.themeId]);
+      await vi.waitFor(() => expect(channel.getState().media?.url).toBe("https://steamloopback.host/assets/730/library_hero.jpg"));
+      await runtime.updateSettings(s => ({ ...s, background: { ...s.background, perGame: { "570": "local:b" } } }));
+      const seen: (string | null)[] = [];
+      channel.subscribe(state => seen.push(state.media?.url ?? null));
+      channel.select(hostGameArt.themeId, "570");
+      await vi.waitFor(() => expect(channel.getState().media?.url).toBe("http://127.0.0.1:1/m/t/local:b"));
+      expect(seen).toEqual(["http://127.0.0.1:1/m/t/local:b"]);
+    } finally { runtime.stop(); }
   });
 
   it("tells theme runtimes when Ambiente's music really plays, and when the in-game pause silences it", async () => {
@@ -863,6 +1029,38 @@ describe("AmbientRuntime", () => {
     runtime.stop();
   });
 
+  it.each(["carousel", "theme"])("records the real %s source only for the settled media request", async (source) => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `<div class="h-BasicHome"><section></section><div class="h-RecentGamesContainer">
+      <div role="listitem"><div class="gpfocus"><img src="/assets/${selectionReport.nativeAppId}/library_hero.jpg"></div></div>
+      <div role="listitem"><img src="/assets/${selectionReport.neighborAppId}/library_hero.jpg"></div>
+    </div></div>`;
+    const configured = settings();
+    Object.assign(configured.background, selectionReport.background);
+    configured.claims[selectionReport.themeId] = "theme";
+    document.documentElement.style.setProperty("--pdc-ambient-claim", `"${selectionReport.themeId}"`);
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    rpcMock.getAmbientGameMedia.mockResolvedValue({ trailer: null, theme: null });
+    const channel = new AmbientThemeChannel();
+    if (source === "theme") channel.select(selectionReport.themeId, selectionReport.themeAppId);
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts, channel);
+    const requests = () => rpcMock.recordAmbientEvent.mock.calls
+      .filter(([kind, detail]) => kind === "selection" && detail.startsWith("{"))
+      .map(([, detail]) => JSON.parse(detail));
+    try {
+      await runtime.start();
+      await vi.advanceTimersByTimeAsync(1499);
+      expect(requests()).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(requests()).toEqual([{
+        appid: Number(source === "theme" ? selectionReport.themeAppId : selectionReport.nativeAppId),
+        source: source === "theme" ? `theme:${selectionReport.themeId}` : "carousel",
+        trailerRequested: true,
+      }]);
+      expect(rpcMock.getAmbientGameMedia).toHaveBeenCalledWith(selectionReport.neighborAppId, expect.any(String), false);
+    } finally { runtime.stop(); }
+  });
+
   it("a game resting selected on Home plays its trailer as the background, capped to a light rendition", async () => {
     // Keep the player URL observable without issuing real loopback requests in happy-dom.
     const frameUrls = new WeakMap<HTMLIFrameElement, string>();
@@ -932,6 +1130,47 @@ describe("AmbientRuntime", () => {
       await vi.waitFor(() => expect(themePlays()).toHaveLength(1), { timeout: 10000 });
     } finally { runtime.stop(); }
   }, 30000);
+
+  it.each([
+    ["auto", "theme"],
+    ["trailerFirst", "trailer"],
+    ["musicOnly", "theme"],
+    ["trailerOnly", "trailer"],
+  ] as const)("with the soundtrack and the trailer both found, game audio %s sounds the %s", async (gameAudio, sounds) => {
+    const frameUrls = new WeakMap<HTMLIFrameElement, string>();
+    vi.spyOn(HTMLIFrameElement.prototype, "src", "set").mockImplementation(function (this: HTMLIFrameElement, value: string) { frameUrls.set(this, value); });
+    vi.spyOn(HTMLIFrameElement.prototype, "src", "get").mockImplementation(function (this: HTMLIFrameElement) { return frameUrls.get(this) ?? ""; });
+    document.body.innerHTML = '<div class="h-BasicHome"><section></section><div class="h-RecentGamesContainer"><img src="https://steamloopback.host/assets/1145360/library_hero_blur.jpg?c=0"></div></div>';
+    const THEME = "https://audio.test/theme.m4a";
+    rpcMock.getAmbientGameMedia.mockResolvedValue({ trailer: { url: "https://video.akamai.steamstatic.com/a.m3u8", poster: "", title: "" }, theme: { url: THEME, title: "Theme", artist: "" } });
+    const configured = settings();
+    configured.background.gameTrailers = true;
+    configured.background.gameThemes = true;
+    configured.background.gameAudio = gameAudio;
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    const elements: HTMLAudioElement[] = [];
+    vi.stubGlobal("Audio", function () {
+      const audio = document.createElement("audio");
+      vi.spyOn(audio, "play").mockImplementation(async () => { audio.dispatchEvent(new Event("playing")); });
+      vi.spyOn(audio, "pause").mockImplementation(() => undefined);
+      vi.spyOn(audio, "load").mockImplementation(() => undefined);
+      elements.push(audio);
+      return audio;
+    });
+    const themePlays = () => elements.filter((audio) => vi.mocked(audio.play).mock.instances.length > 0 && audio.getAttribute("src") === THEME);
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      const frame = await vi.waitFor(() => {
+        const found = document.querySelector<HTMLIFrameElement>("#pdc-ambient-layer iframe");
+        if (!found) throw new Error("no trailer yet");
+        return found;
+      }, { timeout: 4000 });
+      expect(Number(new URL(frame.src).searchParams.get("vol")) > 0).toBe(sounds === "trailer");
+      if (sounds === "theme") await vi.waitFor(() => expect(themePlays()).toHaveLength(1), { timeout: 5000 });
+      else expect(themePlays()).toHaveLength(0);
+    } finally { runtime.stop(); }
+  });
 
   it("says when Decky never draws the floating player, and not when it does", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -1068,6 +1307,23 @@ describe("AmbientRuntime", () => {
       await runtime.reload();
       expect(runtime.getSnapshot().current?.ref).toBe("local:chosen");
       expect(state.settings.background.collections).toContain(folder);
+    } finally { runtime.stop(); }
+  });
+
+  it("caches a saved list's channels but reads a local list file again each time", async () => {
+    rpcMock.getAmbientState.mockResolvedValue({ settings: settings(), knownFolders: {}, collections: [], mediaServer: "stopped" });
+    rpcMock.getAmbientPlaylist.mockImplementation(async (id: string) => ({ id, channels: [] }));
+    rpcMock.getAmbientPlaylist.mockClear();
+    audioStub();
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      await runtime.playlist("list.tdt");
+      await runtime.playlist("list.tdt");
+      expect(rpcMock.getAmbientPlaylist).toHaveBeenCalledTimes(1);
+      await runtime.playlist("local:abc");
+      await runtime.playlist("local:abc");
+      expect(rpcMock.getAmbientPlaylist).toHaveBeenCalledTimes(3);
     } finally { runtime.stop(); }
   });
 

@@ -8,11 +8,18 @@
  * controller to its own UI (focused appid 769); Hidden gives it back to the game. */
 const COMPOSITION_HIDDEN = 0;
 const COMPOSITION_OVERLAY = 2;
+/** Hybrid themes' STEAM press (hooandee-private-themes `runtime/hybridSteamButton.ts`). */
+const HYBRID_HOME_PRESS = "pdc-hyb-home-press";
+const HYBRID_LAUNCH_SCREEN = "[data-pdc-hyb-launch]";
 /** The overlay takes the navigation context when it activates; Big Picture's is taken back after it. */
 const REACTIVATE_DELAYS_MS = [0, 120, 400];
 /** A game asking for its overlay (store page, purchase) is followed within this window by the activation. */
 const GAME_REQUEST_WINDOW_MS = 1_500;
+/** Where Steam also gets the Xbox button, its overlay opens with Game Bar: Steam answers, the companion stands down. */
+const STEAM_HAD_BUTTON_MS = 1_500;
 const OVERLAY_POLL_MS = 1_000;
+/** The companion's DevTools binding that raises the game's window as well. */
+export const RAISE_GAME_BINDING = "pdcHostRaiseGame";
 /** Steam's own UI in its focus events and composition queue. */
 const STEAM_UI_APPID = 769;
 
@@ -36,7 +43,7 @@ interface SteamWindowInstance {
   MainRunningAppID?: number;
   Navigator?: { Home?(): void };
   BrowserWindow?: (Pick<Window, "addEventListener" | "removeEventListener"> & {
-    document?: Pick<Document, "hasFocus"> & { hidden?: boolean };
+    document?: Pick<Document, "hasFocus"> & Partial<Pick<Document, "dispatchEvent" | "querySelector">> & { hidden?: boolean };
     SteamClient?: { Window?: { BringToFront?(): void } };
   }) | null;
   m_history?: SteamHistory;
@@ -65,9 +72,16 @@ interface SteamButtonScope {
 /** How long Steam's own answer to its button gets before the companion's press acts in its place. */
 export const PRESS_HOME_WAIT_MS = 350;
 
-/** Stops the Steam button handling; `pressHome` is the Xbox button seen by Game Bar instead of Steam (the companion
- * calls it): the theme's own Steam button, or Big Picture's Home over a game. */
-export type SteamButtonHome = (() => void) & { pressHome(): string };
+/** Stops the Steam button handling. The companion calls the rest for the Xbox button, which Windows keeps for Game
+ * Bar on some handhelds: `pressHome` is Steam's button (the theme's own, or Big Picture's Home over a game),
+ * `gameBarShown` is Game Bar opening, and `gameHome` is Big Picture's Home over the running game (Game Bar opened
+ * and closed at once, or the widget's button). */
+export type SteamButtonHome = (() => void) & {
+  pressHome(): string;
+  gameBarShown(foregroundWasSteam: boolean): string;
+  gameHome(): string;
+  gameRunning(): boolean;
+};
 
 /** Records a failure code; it reaches the companion as one of the host's errors. */
 export type SteamButtonLog = (code: string) => void;
@@ -93,6 +107,7 @@ export function installSteamButtonHome(
   const steam = scope as unknown as SteamButtonScope;
   const main = () => steam.SteamUIStore?.WindowStore?.GamepadUIMainWindowInstance;
   let lastGameRequest = -Infinity;
+  let lastPlayerOverlay = -Infinity;
 
   const activateBigPicture = () => {
     const window = main();
@@ -116,6 +131,9 @@ export function installSteamButtonHome(
       if (gameId) steam.SteamClient?.Overlay?.SetOverlayState?.(gameId, COMPOSITION_OVERLAY);
       const window = main();
       window?.Navigator?.Home?.();
+      // Hybrid themes (Duo, Vida) keep their black launch screen over Big Picture until their own STEAM press goes
+      // Home: this Home is that press for them.
+      window?.BrowserWindow?.document?.dispatchEvent?.(new Event(HYBRID_HOME_PRESS));
       window?.BrowserWindow?.SteamClient?.Window?.BringToFront?.();
     } catch {
       log("steam_button_home_failed");
@@ -149,6 +167,7 @@ export function installSteamButtonHome(
       lastGameRequest = Date.now();
     }));
     registrations.push(steam.SteamClient?.Overlay?.RegisterForOverlayActivated?.((_pid, appId, active, user) => {
+      if (user) lastPlayerOverlay = Date.now();
       if (!active || !user || !isActive() || Date.now() - lastGameRequest < GAME_REQUEST_WINDOW_MS) return;
       showBigPictureHome(appId);
     }));
@@ -166,6 +185,8 @@ export function installSteamButtonHome(
       try {
         steam.SteamClient?.Overlay?.SetOverlayState?.(gameId, COMPOSITION_HIDDEN);
         void Promise.resolve(steam.SteamClient?.Apps?.RaiseWindowForGame?.(gameId)).catch(() => log("raise_game_failed"));
+        // Windows can refuse Steam the game's window after Game Bar; the companion raises it too (GameWindowRaiser).
+        (scope as unknown as Record<string, ((payload: string) => void) | undefined>)[RAISE_GAME_BINDING]?.(gameId);
       } catch {
         log("raise_game_failed");
       }
@@ -256,6 +277,32 @@ export function installSteamButtonHome(
     return "scheduled";
   };
 
+  // Game Bar opening is only Game Bar: over a game, pressing twice goes Home (the companion's gameHome); anywhere else
+  // it does nothing. Treating it as Steam's button opened the running game's page on Windows (themes such as Duo hand
+  // the button to Steam while a game runs), with the game hidden behind it. A hybrid theme's launch screen in front
+  // stands for the game it is loading: the game may already be up behind it.
+  const launchScreenUp = () => {
+    try {
+      const screen = main()?.BrowserWindow?.document?.querySelector?.(HYBRID_LAUNCH_SCREEN);
+      return Boolean(screen && !(screen as HTMLElement).hidden);
+    } catch {
+      return false;
+    }
+  };
+  const gameBarShown = (foregroundWasSteam: boolean): string => {
+    if (!isActive()) return "inactive";
+    return (!foregroundWasSteam || launchScreenUp()) && runningAppId() ? "game" : "none";
+  };
+
+  const gameHome = (): string => {
+    if (!isActive()) return "inactive";
+    if (Date.now() - lastPlayerOverlay < STEAM_HAD_BUTTON_MS) return "steam_had_button";
+    const running = runningAppId();
+    if (!running) return pressHome();
+    showBigPictureHome(running);
+    return "game_home";
+  };
+
   const stop = () => {
     timers.clearInterval(overlayPoll);
     timers.clearInterval(windowPoll);
@@ -274,5 +321,5 @@ export function installSteamButtonHome(
     }
     patched.clear();
   };
-  return Object.assign(stop, { pressHome });
+  return Object.assign(stop, { pressHome, gameBarShown, gameHome, gameRunning: () => Boolean(runningAppId()) });
 }

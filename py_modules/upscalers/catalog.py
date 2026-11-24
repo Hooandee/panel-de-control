@@ -32,7 +32,7 @@ def _read(path: Path = CATALOG_PATH) -> dict:
     """The neutral build catalog the Windows app reads too, straight from the same JSON file."""
     raw = _fields(json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_keys),
                   ("schema_version", "archives", "gpu_groups", "preferred", "quality_ratios", "easy_modes", "sharpness",
-                   "proxies", "base_ini", "ffx_loader", "assets", "builds"), ("notes",))
+                   "proxies", "base_ini", "ffx_loader", "anr", "assets", "builds"), ("notes",))
     if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
         raise CatalogError("unsupported_schema")
     return raw
@@ -147,12 +147,16 @@ def _parse(raw: dict) -> dict:
     preferred = _mapping(raw["preferred"])
     _check(set(preferred.values()) <= builds.keys(), "missing_build")
     _check(isinstance(raw["ffx_loader"], str) and raw["ffx_loader"], "invalid_ffx_loader")
+    anr = _fields(raw["anr"], ("asset", "provider", "builds"))
+    anr_builds = _mapping(anr["builds"])
+    _check(_text(anr["asset"]) in assets and set(anr_builds.values()) <= builds.keys(), "missing_anr")
     return {
         "amd": _strings(groups["amd"]), "every_gpu": _strings(groups["every"]),
         "assets": assets, "builds": builds, "preferred": preferred,
         "quality_ratios": _mapping(raw["quality_ratios"], (int, float)), "easy_modes": _mapping(raw["easy_modes"]),
         "sharpness": _mapping(raw["sharpness"], (int, float, type(None))), "proxies": _strings(raw["proxies"]),
         "base_ini": _mapping(raw["base_ini"]), "ffx_loader": raw["ffx_loader"],
+        "anr_fg": anr["asset"], "anr_provider": _text(anr["provider"]), "anr_builds": anr_builds,
     }
 
 
@@ -168,6 +172,22 @@ SHARPNESS = _DATA["sharpness"]
 PROXIES = _DATA["proxies"]
 BASE_INI = _DATA["base_ini"]
 FFX_LOADER = _DATA["ffx_loader"]
+ANR_FG = _DATA["anr_fg"]
+# OptiScaler 10 loads an nvngx_dlssg replacement from `custom/<name>/dlssg/`; ANR FG takes the game's DLSS-FG calls.
+ANR_PROVIDER = _DATA["anr_provider"]
+# ANR FG needs OptiScaler 10; on these GPUs Panel pairs it with FSR 4.1.2 on OptiScaler 10.
+ANR_BUILDS = _DATA["anr_builds"]
+
+
+def anr_capable(build: Build | None, gpu: str) -> bool:
+    return bool(build and build.engine == "optiscaler" and build.available and gpu in ANR_BUILDS
+                and gpu in build.gpus and ASSETS[build.archive].generation >= 10)
+
+
+def anr_build(gpu: str) -> str | None:
+    """The build ANR FG goes in with when the game isn't already on OptiScaler 10."""
+    name = ANR_BUILDS.get(gpu)
+    return name if anr_capable(BUILDS.get(str(name)), gpu) else None
 
 
 def for_game(build: Build, inputs: dict, gpu: str, recipe=None) -> Build:
@@ -250,6 +270,7 @@ def describe(gpu: str, device: str = "") -> list[dict]:
             "engine": build.engine,
             "way": build.way or None,
             "may_fallback": may_fallback(build, gpu),
+            "anr": anr_capable(build, gpu),
         }
         for build in BUILDS.values()
     ]
@@ -289,6 +310,10 @@ def fg_routes(gpu: str, inputs: dict, apis: list | tuple = (), streamline: int |
     if dx12:
         routes["optiscaler"] = {"input": "upscaler", "output": output, "follows_game": False,
                                 "source": "optiscaler", "experimental": True}
+    # Offered whatever the build: choosing it moves the game to OptiScaler 10 (`anr_build`).
+    if "dlssg" in inputs and dx12 and anr_build(gpu):
+        routes["anr"] = {"input": "nvngxfg", "output": "auto", "follows_game": True, "source": "anr",
+                         "experimental": True, "provider": ANR_PROVIDER}
     return routes
 
 
@@ -311,11 +336,17 @@ def fg_route_plan(plan: dict | None, route: str | None) -> dict | None:
     return {**plan["routes"][route], "route": route, "routes": plan["routes"]}
 
 
-def fg_overrides(plan: dict | None, enabled: bool) -> dict[str, str]:
+def fg_overrides(plan: dict | None, enabled: bool, anr_files: bool = False) -> dict[str, str]:
+    provider = plan.get("provider") if enabled and plan else None
+    # Only where ANR is or was: leaving it hands DLSSG back to OptiScaler's default. ANR draws the HUD over the
+    # HUD-less colour itself, so OptiScaler must not strip it.
+    replacement = ({"FrameGen.FGNvngxReplacement": provider or "auto",
+                    "FrameGen.DisableHudless": "false" if provider else "auto"} if provider or anr_files else {})
     if not enabled or not plan:
-        return {"FrameGen.Enabled": "false", "FrameGen.FGInput": "nofg", "FrameGen.FGOutput": "nofg"}
+        return {"FrameGen.Enabled": "false", "FrameGen.FGInput": "nofg", "FrameGen.FGOutput": "nofg", **replacement}
     enabled = "auto" if plan.get("follows_game") else "true"
-    overrides = {"FrameGen.Enabled": enabled, "FrameGen.FGInput": plan["input"], "FrameGen.FGOutput": plan["output"]}
+    overrides = {"FrameGen.Enabled": enabled, "FrameGen.FGInput": plan["input"], "FrameGen.FGOutput": plan["output"],
+                 **replacement}
     if plan["input"] == "upscaler":
         overrides["OptiFG.HUDFix"] = "true"
     return overrides

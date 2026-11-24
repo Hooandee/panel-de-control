@@ -9,7 +9,7 @@ export interface ThemeInstallResult {
 
 export interface ThemeInstallHost {
   prepareRemote(themeId: string, expectedVersion: string): Promise<unknown>;
-  prepareEarly(archivePath: string): Promise<unknown>;
+  prepareEarly(archivePath: string, catalogId: string): Promise<unknown>;
   commit(transaction: string): Promise<unknown>;
   discard(catalogId: string): Promise<unknown>;
   rollback(transaction: string): Promise<unknown>;
@@ -51,7 +51,7 @@ export class PanelThemeInstaller {
       if (typeof source.archivePath !== "string" || !source.archivePath.startsWith("/")) {
         throw new ThemeInstallError("unsupported_source", "Theme install source is not permitted");
       }
-      response = await this.host.prepareEarly(source.archivePath);
+      response = await this.host.prepareEarly(source.archivePath, catalogId);
     } else {
       if (
         source.kind !== "official-remote"
@@ -66,7 +66,11 @@ export class PanelThemeInstaller {
       throw new ThemeInstallError("malformed_response", "Panel returned an invalid theme install result");
     }
     if (!response.ok) {
-      throw new ThemeInstallError(response.code, "Theme package installation failed");
+      // The backend names the package check that failed; only a short plain sentence is kept.
+      const reason = typeof response.reason === "string" && /^[A-Za-z][A-Za-z ,'-]{2,79}$/.test(response.reason)
+        ? `: ${response.reason}`
+        : "";
+      throw new ThemeInstallError(response.code, `Theme package installation failed${reason}`);
     }
     if (
       response.code !== "prepared"

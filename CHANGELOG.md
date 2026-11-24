@@ -1,5 +1,727 @@
 # Changelog
 
+## [0.95.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.95.0...panel-de-control-v0.95.1) (2026-11-24)
+
+
+### Español
+
+* **Monster Hunter Rise ya funciona con Escaladores:** OptiScaler se cargaba pero el juego nunca ofrecía DLSS, así que no escalaba nada. Ahora se instala como pide la guía de OptiScaler para este juego, con REFramework incluido, y en sus opciones gráficas aparece DLSS para elegirlo.
+* **Más juegos reciben el archivo que necesitan:** Cuando la guía de OptiScaler pide instalarlo con otro nombre de archivo, Panel de Control ahora le hace caso en todos los juegos. Antes lo ignoraba en casi todos y juegos como INDIKA, Persona 3 Reload o la trilogía de GTA podían cargar el escalador sin que hiciera nada.
+* **God of War Ragnarök ya no se rompe con el modo DLL:** Cambiar su librería de FSR hacía que el juego mostrara un error al arrancar. Ahora ese modo no se ofrece en este juego y se usa OptiScaler, que sí funciona.
+* **Activar un tema ya no lo desactiva al momento:** Al pulsar Activar tema, el botón pasaba a Desactivar tema y una segunda pulsación lo apagaba antes de verlo. Ahora muestra Tema activado unos segundos y no hace caso a esa segunda pulsación.
+* **Tus propios temas ya no salen como un problema:** La comprobación de temas marcaba los temas de CSS Loader que tú usas aunque no tuvieras activo ninguno de los nuestros, y Solucionar los apagaba. Ahora solo los señala si chocan con un tema nuestro activo.
+* **Los fondos de los juegos se ven en más juegos:** En los temas que pintan su propio fondo, algunos juegos y los accesos directos que no son de Steam se quedaban sin imagen. Ahora se usa la imagen real del juego, también la que hayas puesto tú.
+* **Eliges qué suena al seleccionar un juego:** En Ambiente puedes decidir si suena la banda sonora de Apple Music, el audio del tráiler, uno primero y el otro si no hay, o dejarlo como estaba.
+* **El TDP de la MSI Claw A8 con SteamOS vuelve a subir:** Se quedaba en unos 20 W aunque eligieras más. Ahora el límite que pones se aplica de verdad.
+
+### English
+
+* **Monster Hunter Rise now works with Upscalers:** OptiScaler loaded but the game never offered DLSS, so nothing was upscaled. It now installs the way the OptiScaler guide asks for this game, REFramework included, and DLSS shows up in its graphics options to pick.
+* **More games get the file they need:** When the OptiScaler guide asks for it to be installed under a different file name, Panel de Control now follows it in every game. Before, it ignored it in almost all of them, and games like INDIKA, Persona 3 Reload or the GTA trilogy could load the upscaler without it doing anything.
+* **God of War Ragnarök no longer breaks with DLL mode:** Swapping its FSR library made the game show an error at start. That mode is no longer offered for this game and OptiScaler is used instead, which works.
+* **Activating a theme no longer turns it off right away:** After pressing Activate theme, the button became Deactivate theme and a second press switched the theme off before you could see it. It now shows Theme activated for a few seconds and ignores that second press.
+* **Your own themes no longer show up as a problem:** The theme check flagged the CSS Loader themes you use even with none of ours on, and Fix switched them off. It now only points them out when they clash with one of our themes that is on.
+* **Game backgrounds show in more games:** In themes that draw their own background, some games and non-Steam shortcuts were left without an image. The game's real image is used now, including one you set yourself.
+* **You choose what plays when you select a game:** In Ambient you can pick the Apple Music soundtrack, the trailer audio, one first and the other when there is none, or keep it as it was.
+* **The MSI Claw A8 TDP on SteamOS goes up again:** It stayed around 20 W even when you picked more. The limit you set now really applies.
+
+### Italiano
+
+* **Monster Hunter Rise ora funziona con Upscaler:** OptiScaler si caricava ma il gioco non offriva mai DLSS, quindi non scalava nulla. Ora si installa come chiede la guida di OptiScaler per questo gioco, REFramework incluso, e nelle opzioni grafiche compare DLSS da scegliere.
+* **Più giochi ricevono il file di cui hanno bisogno:** Quando la guida di OptiScaler chiede di installarlo con un altro nome di file, Panel de Control ora la segue in tutti i giochi. Prima la ignorava in quasi tutti, e giochi come INDIKA, Persona 3 Reload o la trilogia di GTA potevano caricare l'upscaler senza che facesse nulla.
+* **God of War Ragnarök non si rompe più con la modalità DLL:** Cambiare la sua libreria FSR faceva comparire un errore all'avvio. Ora questa modalità non viene offerta per questo gioco e si usa OptiScaler, che funziona.
+* **Attivare un tema non lo disattiva più subito:** Dopo aver premuto Attiva tema, il pulsante diventava Disattiva tema e una seconda pressione spegneva il tema prima di vederlo. Ora mostra Tema attivato per qualche secondo e ignora quella seconda pressione.
+* **I tuoi temi non risultano più un problema:** Il controllo dei temi segnalava i temi di CSS Loader che usi anche senza nessuno dei nostri attivo, e Risolvi li spegneva. Ora li indica solo se si scontrano con un nostro tema attivo.
+* **Gli sfondi dei giochi si vedono in più giochi:** Nei temi che disegnano il proprio sfondo, alcuni giochi e i collegamenti non Steam restavano senza immagine. Ora si usa l'immagine vera del gioco, anche quella che hai messo tu.
+* **Scegli cosa suona quando selezioni un gioco:** In Atmosfera puoi scegliere la colonna sonora di Apple Music, l'audio del trailer, uno prima e l'altro se manca, oppure lasciarlo com'era.
+* **Il TDP della MSI Claw A8 con SteamOS torna a salire:** Restava intorno ai 20 W anche se ne sceglievi di più. Ora il limite che imposti si applica davvero.
+
+### Deutsch
+
+* **Monster Hunter Rise funktioniert jetzt mit Upscaler:** OptiScaler wurde geladen, aber das Spiel bot nie DLSS an, also wurde nichts hochskaliert. Jetzt wird es so installiert, wie die OptiScaler-Anleitung es für dieses Spiel verlangt, mit REFramework, und in den Grafikoptionen erscheint DLSS zur Auswahl.
+* **Mehr Spiele bekommen die Datei, die sie brauchen:** Wenn die OptiScaler-Anleitung einen anderen Dateinamen für die Installation verlangt, hält sich Panel de Control jetzt in jedem Spiel daran. Vorher wurde das fast überall ignoriert, und Spiele wie INDIKA, Persona 3 Reload oder die GTA-Trilogie konnten den Upscaler laden, ohne dass er etwas tat.
+* **God of War Ragnarök geht mit dem DLL-Modus nicht mehr kaputt:** Das Austauschen seiner FSR-Bibliothek ließ das Spiel beim Start einen Fehler zeigen. Dieser Modus wird für das Spiel nicht mehr angeboten, stattdessen läuft OptiScaler, das funktioniert.
+* **Ein Theme zu aktivieren schaltet es nicht mehr sofort aus:** Nach Theme aktivieren wurde der Knopf zu Theme deaktivieren, und ein zweiter Druck schaltete das Theme aus, bevor man es sah. Jetzt zeigt er ein paar Sekunden Theme aktiviert und ignoriert diesen zweiten Druck.
+* **Deine eigenen Themes gelten nicht mehr als Problem:** Die Theme-Prüfung markierte deine CSS-Loader-Themes, auch wenn keins von unseren aktiv war, und Beheben schaltete sie aus. Jetzt weist sie nur darauf hin, wenn sie mit einem aktiven Theme von uns kollidieren.
+* **Spielhintergründe erscheinen in mehr Spielen:** In Themes mit eigenem Hintergrund blieben manche Spiele und Nicht-Steam-Verknüpfungen ohne Bild. Jetzt wird das echte Bild des Spiels verwendet, auch eines, das du selbst gesetzt hast.
+* **Du wählst, was beim Auswählen eines Spiels läuft:** In Ambiente kannst du den Soundtrack von Apple Music, den Trailer-Ton, eins zuerst und das andere, wenn es fehlt, wählen oder alles lassen, wie es war.
+* **Die TDP der MSI Claw A8 unter SteamOS steigt wieder:** Sie blieb bei etwa 20 W, auch wenn du mehr eingestellt hast. Jetzt gilt das Limit, das du setzt, wirklich.
+
+### Português (Brasil)
+
+* **Monster Hunter Rise agora funciona com o Upscalers:** O OptiScaler carregava, mas o jogo nunca oferecia DLSS, então nada era escalado. Agora ele é instalado como o guia do OptiScaler pede para esse jogo, com o REFramework incluído, e o DLSS aparece nas opções gráficas para escolher.
+* **Mais jogos recebem o arquivo de que precisam:** Quando o guia do OptiScaler pede para instalar com outro nome de arquivo, o Panel de Control agora segue isso em todos os jogos. Antes ele ignorava em quase todos, e jogos como INDIKA, Persona 3 Reload ou a trilogia GTA podiam carregar o upscaler sem que ele fizesse nada.
+* **God of War Ragnarök não quebra mais com o modo DLL:** Trocar a biblioteca de FSR fazia o jogo mostrar um erro ao abrir. Agora esse modo não é oferecido nesse jogo e o OptiScaler é usado no lugar, que funciona.
+* **Ativar um tema não o desativa mais na hora:** Depois de apertar Ativar tema, o botão virava Desativar tema e um segundo toque desligava o tema antes de você ver. Agora ele mostra Tema ativado por alguns segundos e ignora esse segundo toque.
+* **Seus próprios temas não aparecem mais como problema:** A verificação de temas marcava os temas do CSS Loader que você usa mesmo sem nenhum dos nossos ativo, e Resolver os desligava. Agora só aponta quando eles batem com um tema nosso ativo.
+* **Os fundos dos jogos aparecem em mais jogos:** Nos temas que desenham o próprio fundo, alguns jogos e atalhos que não são da Steam ficavam sem imagem. Agora é usada a imagem real do jogo, inclusive a que você mesmo colocou.
+* **Você escolhe o que toca ao selecionar um jogo:** Em Ambiente você pode escolher a trilha do Apple Music, o áudio do trailer, um primeiro e o outro se não houver, ou deixar como estava.
+* **O TDP do MSI Claw A8 no SteamOS volta a subir:** Ficava em uns 20 W mesmo escolhendo mais. Agora o limite que você define é aplicado de verdade.
+
+### Français
+
+* **Monster Hunter Rise fonctionne maintenant avec Upscalers :** OptiScaler se chargeait mais le jeu ne proposait jamais DLSS, donc rien n'était mis à l'échelle. Il s'installe maintenant comme le demande le guide d'OptiScaler pour ce jeu, REFramework compris, et DLSS apparaît dans ses options graphiques.
+* **Plus de jeux reçoivent le fichier dont ils ont besoin :** Quand le guide d'OptiScaler demande de l'installer sous un autre nom de fichier, Panel de Control le suit maintenant dans tous les jeux. Avant, il l'ignorait presque partout, et des jeux comme INDIKA, Persona 3 Reload ou la trilogie GTA pouvaient charger l'upscaler sans qu'il fasse quoi que ce soit.
+* **God of War Ragnarök ne casse plus avec le mode DLL :** Remplacer sa bibliothèque FSR faisait afficher une erreur au lancement. Ce mode n'est plus proposé pour ce jeu et OptiScaler est utilisé à la place, ce qui fonctionne.
+* **Activer un thème ne le désactive plus aussitôt :** Après Activer le thème, le bouton devenait Désactiver le thème et un deuxième appui éteignait le thème avant qu'on le voie. Il affiche maintenant Thème activé quelques secondes et ignore ce deuxième appui.
+* **Vos propres thèmes ne sont plus signalés comme un problème :** La vérification des thèmes signalait les thèmes CSS Loader que vous utilisez même sans aucun des nôtres actif, et Corriger les éteignait. Elle ne les signale maintenant que s'ils entrent en conflit avec l'un de nos thèmes actifs.
+* **Les fonds des jeux s'affichent dans plus de jeux :** Dans les thèmes qui dessinent leur propre fond, certains jeux et les raccourcis hors Steam restaient sans image. La vraie image du jeu est maintenant utilisée, y compris celle que vous avez mise vous-même.
+* **Vous choisissez ce qui joue quand vous sélectionnez un jeu :** Dans Ambiance, vous pouvez choisir la bande-son Apple Music, le son de la bande-annonce, l'un d'abord et l'autre s'il n'y en a pas, ou garder le réglage d'avant.
+* **Le TDP du MSI Claw A8 sous SteamOS remonte :** Il restait vers 20 W même en choisissant plus. La limite que vous réglez s'applique maintenant vraiment.
+
+## [0.95.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.3...panel-de-control-v0.95.0) (2026-11-23)
+
+
+### Español
+
+* **Warframe ya funciona con Escaladores:** Al abrir el juego, su lanzador borraba los archivos del escalador y la instalación salía rota cada vez. Ahora Panel de Control los protege y los carga de una forma que Warframe sí acepta. En la ficha del juego verás cómo pasarlo a DirectX 12 y elegir DLSS, que es como funciona.
+* **Red Dead Redemption 2 pasa solo a DirectX 12:** En Vulkan, que es como arranca por defecto, el juego se cerraba al activar FSR 2 con el escalador. Ahora Panel de Control lo cambia a DirectX 12 al instalar el escalador y lo deja como estaba al quitarlo.
+* **Puedes dejar que el juego decida la calidad:** Con el nuevo interruptor Usar la calidad del juego, el preset de calidad del juego y el menú de OptiScaler vuelven a cambiar la resolución. Antes la calidad de Panel de Control los anulaba.
+* **Resident Evil Village tiene su propio escalado:** Ahora se instala igual que en los otros Resident Evil, con su versión de REFramework, y solo hace falta descargar el plugin que se indica en la ficha.
+* **La descarga de un mod ya no se queda esperando para siempre:** Si el archivo no llega a Descargas en 15 minutos, la ficha te lo dice para que lo vuelvas a descargar o lo elijas a mano.
+* **Los temas pueden dar estilo a más controles:** Algunos botones y desplegables de Panel de Control ya se pueden personalizar desde los temas.
+
+### English
+
+* **Warframe now works with Upscalers:** When the game started, its launcher deleted the upscaler files and the install came out broken every time. Panel de Control now protects them and loads them in a way Warframe accepts. The game's page shows how to switch it to DirectX 12 and pick DLSS, which is how it works.
+* **Red Dead Redemption 2 switches to DirectX 12 on its own:** In Vulkan, its default, the game quit when FSR 2 was turned on with the upscaler. Panel de Control now switches it to DirectX 12 when installing the upscaler and puts it back when removing it.
+* **You can let the game decide the quality:** With the new Use the game's quality switch, the game's quality preset and OptiScaler's menu change the resolution again. Before, Panel de Control's quality overrode them.
+* **Resident Evil Village gets its own upscaling:** It now installs like the other Resident Evil games, with its own REFramework build, and you only need to download the plugin shown on its page.
+* **A mod download no longer waits forever:** If the file doesn't reach Downloads within 15 minutes, the page tells you so you can download it again or pick it by hand.
+* **Themes can style more controls:** Some Panel de Control buttons and folds can now be customised by themes.
+
+### Italiano
+
+* **Warframe ora funziona con Upscaler:** All'avvio del gioco, il suo launcher cancellava i file dell'upscaler e l'installazione risultava rotta ogni volta. Ora Panel de Control li protegge e li carica in un modo che Warframe accetta. Nella scheda del gioco trovi come passarlo a DirectX 12 e scegliere DLSS, che è come funziona.
+* **Red Dead Redemption 2 passa da solo a DirectX 12:** In Vulkan, che è l'impostazione predefinita, il gioco si chiudeva attivando FSR 2 con l'upscaler. Ora Panel de Control lo passa a DirectX 12 quando installi l'upscaler e lo rimette com'era quando lo togli.
+* **Puoi lasciare che sia il gioco a decidere la qualità:** Con il nuovo interruttore Usa la qualità del gioco, il preset di qualità del gioco e il menu di OptiScaler tornano a cambiare la risoluzione. Prima la qualità di Panel de Control li annullava.
+* **Resident Evil Village ha il suo upscaling:** Ora si installa come negli altri Resident Evil, con la sua versione di REFramework, e basta scaricare il plugin indicato nella scheda.
+* **Il download di una mod non resta più in attesa all'infinito:** Se il file non arriva in Download entro 15 minuti, la scheda te lo dice così puoi riscaricarlo o sceglierlo a mano.
+* **I temi possono personalizzare più controlli:** Alcuni pulsanti e menu a comparsa di Panel de Control ora si possono personalizzare dai temi.
+
+### Deutsch
+
+* **Warframe funktioniert jetzt mit Upscaler:** Beim Start löschte der Launcher des Spiels die Upscaler-Dateien, und die Installation war jedes Mal kaputt. Jetzt schützt Panel de Control sie und lädt sie so, dass Warframe sie annimmt. Auf der Seite des Spiels steht, wie du auf DirectX 12 umstellst und DLSS wählst, denn so funktioniert es.
+* **Red Dead Redemption 2 wechselt von selbst zu DirectX 12:** Unter Vulkan, der Standardeinstellung, beendete sich das Spiel, sobald FSR 2 mit dem Upscaler aktiviert wurde. Jetzt stellt Panel de Control beim Installieren des Upscalers auf DirectX 12 um und setzt es beim Entfernen zurück.
+* **Du kannst die Qualität dem Spiel überlassen:** Mit dem neuen Schalter Qualität des Spiels verwenden ändern die Qualitätsvoreinstellung des Spiels und das OptiScaler-Menü wieder die Auflösung. Vorher hat die Qualität von Panel de Control sie überschrieben.
+* **Resident Evil Village bekommt sein eigenes Upscaling:** Es wird jetzt wie die anderen Resident-Evil-Spiele installiert, mit seiner eigenen REFramework-Version, und du musst nur das auf seiner Seite genannte Plugin herunterladen.
+* **Ein Mod-Download wartet nicht mehr ewig:** Kommt die Datei nicht innerhalb von 15 Minuten in Downloads an, sagt dir die Seite Bescheid, damit du sie erneut herunterlädst oder von Hand auswählst.
+* **Themes können mehr Bedienelemente gestalten:** Einige Schaltflächen und Klappbereiche von Panel de Control lassen sich jetzt über Themes anpassen.
+
+### Português (Brasil)
+
+* **Warframe agora funciona com o Upscalers:** Ao abrir o jogo, o launcher dele apagava os arquivos do upscaler e a instalação ficava quebrada toda vez. Agora o Panel de Control protege esses arquivos e os carrega de um jeito que o Warframe aceita. Na página do jogo você vê como passar para DirectX 12 e escolher DLSS, que é como funciona.
+* **Red Dead Redemption 2 muda sozinho para DirectX 12:** Em Vulkan, que é o padrão, o jogo fechava ao ativar o FSR 2 com o upscaler. Agora o Panel de Control muda para DirectX 12 ao instalar o upscaler e volta como estava ao removê-lo.
+* **Você pode deixar o jogo decidir a qualidade:** Com o novo botão Usar a qualidade do jogo, a predefinição de qualidade do jogo e o menu do OptiScaler voltam a mudar a resolução. Antes, a qualidade do Panel de Control se sobrepunha a eles.
+* **Resident Evil Village tem seu próprio upscaling:** Agora ele é instalado como os outros Resident Evil, com sua própria versão do REFramework, e só é preciso baixar o plugin indicado na página.
+* **O download de um mod não fica mais esperando para sempre:** Se o arquivo não chegar em Downloads em 15 minutos, a página avisa para você baixar de novo ou escolher na mão.
+* **Os temas podem personalizar mais controles:** Alguns botões e seções recolhíveis do Panel de Control agora podem ser personalizados pelos temas.
+
+### Français
+
+* **Warframe fonctionne maintenant avec Upscalers :** Au lancement du jeu, son launcher supprimait les fichiers de l'upscaler et l'installation était cassée à chaque fois. Panel de Control les protège maintenant et les charge d'une façon que Warframe accepte. La page du jeu indique comment passer en DirectX 12 et choisir DLSS, car c'est ainsi qu'il fonctionne.
+* **Red Dead Redemption 2 passe tout seul en DirectX 12 :** En Vulkan, son réglage par défaut, le jeu se fermait quand FSR 2 était activé avec l'upscaler. Panel de Control le passe maintenant en DirectX 12 à l'installation de l'upscaler et le remet comme avant quand vous le retirez.
+* **Vous pouvez laisser le jeu décider de la qualité :** Avec le nouvel interrupteur Utiliser la qualité du jeu, le préréglage de qualité du jeu et le menu d'OptiScaler changent de nouveau la résolution. Avant, la qualité de Panel de Control les remplaçait.
+* **Resident Evil Village a son propre upscaling :** Il s'installe maintenant comme les autres Resident Evil, avec sa propre version de REFramework, et il suffit de télécharger le plugin indiqué sur sa page.
+* **Le téléchargement d'un mod n'attend plus indéfiniment :** Si le fichier n'arrive pas dans Téléchargements en 15 minutes, la page vous le signale pour que vous le téléchargiez de nouveau ou le choisissiez à la main.
+* **Les thèmes peuvent personnaliser plus de contrôles :** Certains boutons et volets de Panel de Control peuvent maintenant être personnalisés par les thèmes.
+
+## [0.94.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.2...panel-de-control-v0.94.3) (2026-11-23)
+
+
+### Español
+
+* **Escaladores enseña enseguida los juegos que no son de Steam:** Los accesos directos que añades a Steam tardaban mucho en salir en Escaladores, o no salían, porque esperaban a que se revisara toda tu biblioteca. Ahora aparecen en cuanto están listos.
+* **Panel ya no se queda colgado mientras Escaladores revisa tus juegos:** Al abrir Escaladores, Potencia y otras secciones podían quedarse cargando varios segundos. Ahora Panel sigue respondiendo mientras revisa los juegos.
+* **Mako se instala aunque quedara una instalación a medias:** Si una instalación anterior de Mako se había cortado, activarlo daba fallo una y otra vez. Ahora Panel limpia lo que quedó y lo instala.
+* **El TDP de la Legion Go S ya no desaparece a mitad de partida:** En algunos modelos el TDP dejaba de estar disponible jugando y no volvía hasta reiniciar. Además, cuando se levanta el límite por batería baja, tu TDP se vuelve a aplicar sin tener que apagar la pantalla.
+* **El HUD ya no enseña el consumo de CPU y GPU a 0 W en equipos Intel:** Esas lecturas siempre marcaban 0 porque el sistema no las da. Ahora se ocultan.
+* **Ambiente avisa cuando no puede poner tráileres:** Si el fondo lo pone tu tema, los tráileres de los juegos no se ven. Ahora Ambiente te lo dice y te deja usar su fondo.
+* **Los ajustes de color de Pantalla van de uno en uno:** Antes saltaban de cinco en cinco y costaba afinar.
+* **Quitar MangoHud en Parámetros lo quita de verdad:** Al desmarcarlo, a veces la superposición seguía apareciendo. Ahora la opción controla también la variable que lo activaba.
+* **Loop muestra las horas de los juegos que no son de Steam:** En el Inicio de Loop salían como nunca jugados. Actualiza Loop desde Temas para verlo.
+
+### English
+
+* **Upscalers shows non-Steam games right away:** Shortcuts you add to Steam took a long time to show up in Upscalers, or never did, because they waited for your whole library to be checked. They now appear as soon as they're ready.
+* **Panel no longer hangs while Upscalers checks your games:** Opening Upscalers could leave Power and other sections loading for several seconds. Panel now keeps responding while it checks the games.
+* **Mako installs even after an interrupted install:** If an earlier Mako install was cut short, turning it on failed every time. Panel now cleans up what was left and installs it.
+* **The Legion Go S TDP no longer disappears mid-game:** On some models the TDP became unavailable while playing and didn't come back until a restart. Also, once the low-battery limit is lifted, your TDP is applied again without turning the screen off.
+* **The HUD no longer shows CPU and GPU power at 0 W on Intel devices:** Those readings always showed 0 because the system doesn't provide them. They're now hidden.
+* **Ambient tells you when it can't play trailers:** If your theme draws the background, game trailers don't show. Ambient now tells you and lets you use its own background.
+* **Display colour settings move one step at a time:** They used to jump in steps of five, which made fine-tuning hard.
+* **Turning MangoHud off in Parameters really turns it off:** After unticking it, the overlay sometimes kept showing up. The option now also controls the variable that turned it on.
+* **Loop shows the playtime of non-Steam games:** On Loop's Home they showed up as never played. Update Loop from Themes to see it.
+
+### Italiano
+
+* **Upscaler mostra subito i giochi non Steam:** Le scorciatoie che aggiungi a Steam ci mettevano tanto a comparire in Upscaler, o non comparivano, perché aspettavano il controllo di tutta la libreria. Ora compaiono appena sono pronte.
+* **Panel non si blocca più mentre Upscaler controlla i tuoi giochi:** Aprendo Upscaler, Potenza e altre sezioni potevano restare a caricare per diversi secondi. Ora Panel continua a rispondere mentre controlla i giochi.
+* **Mako si installa anche dopo un'installazione interrotta:** Se un'installazione precedente di Mako si era interrotta, attivarlo falliva ogni volta. Ora Panel ripulisce ciò che era rimasto e lo installa.
+* **Il TDP della Legion Go S non sparisce più a metà partita:** Su alcuni modelli il TDP smetteva di essere disponibile mentre giocavi e tornava solo riavviando. Inoltre, quando viene tolto il limite per batteria scarica, il tuo TDP viene riapplicato senza dover spegnere lo schermo.
+* **L'HUD non mostra più il consumo di CPU e GPU a 0 W sui dispositivi Intel:** Quelle letture segnavano sempre 0 perché il sistema non le fornisce. Ora sono nascoste.
+* **Atmosfera avvisa quando non può mostrare i trailer:** Se lo sfondo lo disegna il tuo tema, i trailer dei giochi non si vedono. Ora Atmosfera te lo dice e ti lascia usare il suo sfondo.
+* **Le regolazioni del colore in Schermo vanno di uno in uno:** Prima saltavano di cinque in cinque ed era difficile regolarle con precisione.
+* **Togliere MangoHud in Parametri lo toglie davvero:** Dopo averlo deselezionato, a volte l'overlay continuava a comparire. Ora l'opzione controlla anche la variabile che lo attivava.
+* **Loop mostra le ore dei giochi non Steam:** Nella Home di Loop risultavano mai giocati. Aggiorna Loop da Temi per vederle.
+
+### Deutsch
+
+* **Upscaler zeigt Nicht-Steam-Spiele sofort:** Verknüpfungen, die du zu Steam hinzufügst, brauchten lange, bis sie in Upscaler erschienen, oder tauchten gar nicht auf, weil sie auf die Prüfung deiner ganzen Bibliothek warteten. Jetzt erscheinen sie, sobald sie bereit sind.
+* **Panel hängt nicht mehr, während Upscaler deine Spiele prüft:** Beim Öffnen von Upscaler konnten Leistung und andere Bereiche mehrere Sekunden lang laden. Jetzt reagiert Panel weiter, während es die Spiele prüft.
+* **Mako lässt sich auch nach einer abgebrochenen Installation installieren:** Wenn eine frühere Mako-Installation abgebrochen war, schlug das Einschalten jedes Mal fehl. Jetzt räumt Panel die Reste auf und installiert es.
+* **Der TDP der Legion Go S verschwindet nicht mehr mitten im Spiel:** Bei manchen Modellen war der TDP beim Spielen plötzlich nicht mehr verfügbar und kam erst nach einem Neustart zurück. Außerdem wird dein TDP wieder angewendet, sobald die Begrenzung bei niedrigem Akku aufgehoben ist, ohne dass du den Bildschirm ausschalten musst.
+* **Das HUD zeigt auf Intel-Geräten keinen CPU- und GPU-Verbrauch von 0 W mehr:** Diese Werte standen immer auf 0, weil das System sie nicht liefert. Jetzt werden sie ausgeblendet.
+* **Ambiente sagt Bescheid, wenn es keine Trailer abspielen kann:** Wenn dein Theme den Hintergrund zeichnet, sind Spieltrailer nicht zu sehen. Jetzt sagt Ambiente dir das und lässt dich seinen eigenen Hintergrund nutzen.
+* **Die Farbregler unter Bildschirm gehen in Einerschritten:** Vorher sprangen sie in Fünferschritten, und Feineinstellung war schwer.
+* **MangoHud unter Startoptionen auszuschalten, schaltet es wirklich aus:** Nach dem Abwählen tauchte das Overlay manchmal trotzdem auf. Jetzt steuert die Option auch die Variable, die es eingeschaltet hat.
+* **Loop zeigt die Spielzeit von Nicht-Steam-Spielen:** Auf dem Home von Loop galten sie als nie gespielt. Aktualisiere Loop unter Themes, um sie zu sehen.
+
+### Português (Brasil)
+
+* **Upscalers mostra na hora os jogos que não são da Steam:** Os atalhos que você adiciona ao Steam demoravam muito para aparecer no Upscalers, ou nem apareciam, porque esperavam a verificação da biblioteca inteira. Agora aparecem assim que ficam prontos.
+* **O Panel não trava mais enquanto o Upscalers verifica seus jogos:** Ao abrir o Upscalers, Potência e outras seções podiam ficar carregando por vários segundos. Agora o Panel continua respondendo enquanto verifica os jogos.
+* **O Mako instala mesmo depois de uma instalação interrompida:** Se uma instalação anterior do Mako tinha sido cortada, ativar dava erro toda vez. Agora o Panel limpa o que sobrou e instala.
+* **O TDP do Legion Go S não some mais no meio da partida:** Em alguns modelos o TDP deixava de estar disponível durante o jogo e só voltava reiniciando. Além disso, quando o limite de bateria baixa é liberado, seu TDP volta a ser aplicado sem precisar desligar a tela.
+* **O HUD não mostra mais o consumo de CPU e GPU em 0 W em aparelhos Intel:** Essas leituras sempre marcavam 0 porque o sistema não as fornece. Agora ficam ocultas.
+* **O Ambiente avisa quando não consegue mostrar trailers:** Se o fundo é desenhado pelo seu tema, os trailers dos jogos não aparecem. Agora o Ambiente avisa e deixa você usar o fundo dele.
+* **Os ajustes de cor em Tela vão de um em um:** Antes pulavam de cinco em cinco e era difícil ajustar com precisão.
+* **Desligar o MangoHud em Opções de inicialização desliga de verdade:** Depois de desmarcar, às vezes a sobreposição continuava aparecendo. Agora a opção controla também a variável que o ativava.
+* **O Loop mostra as horas dos jogos que não são da Steam:** Na tela inicial do Loop eles apareciam como nunca jogados. Atualize o Loop em Temas para ver.
+
+### Français
+
+* **Upscalers affiche tout de suite les jeux non Steam :** Les raccourcis que vous ajoutez à Steam mettaient longtemps à apparaître dans Upscalers, voire jamais, parce qu'ils attendaient la vérification de toute votre bibliothèque. Ils apparaissent maintenant dès qu'ils sont prêts.
+* **Panel ne se fige plus pendant qu'Upscalers vérifie vos jeux :** En ouvrant Upscalers, Puissance et d'autres sections pouvaient rester en chargement plusieurs secondes. Panel continue maintenant de répondre pendant la vérification des jeux.
+* **Mako s'installe même après une installation interrompue :** Si une installation précédente de Mako avait été coupée, l'activer échouait à chaque fois. Panel nettoie maintenant ce qui restait et l'installe.
+* **Le TDP de la Legion Go S ne disparaît plus en pleine partie :** Sur certains modèles, le TDP n'était plus disponible en jeu et ne revenait qu'après un redémarrage. En plus, quand la limite de batterie faible est levée, votre TDP est de nouveau appliqué sans avoir à éteindre l'écran.
+* **Le HUD n'affiche plus la consommation CPU et GPU à 0 W sur les appareils Intel :** Ces valeurs affichaient toujours 0 parce que le système ne les fournit pas. Elles sont maintenant masquées.
+* **Ambiance prévient quand les bandes-annonces ne peuvent pas s'afficher :** Si le fond est dessiné par votre thème, les bandes-annonces des jeux ne s'affichent pas. Ambiance vous le dit maintenant et vous laisse utiliser son propre fond.
+* **Les réglages de couleur d'Écran avancent d'un cran à la fois :** Avant, ils sautaient de cinq en cinq et c'était difficile d'affiner.
+* **Désactiver MangoHud dans Lancement le désactive vraiment :** Après l'avoir décoché, la surimpression continuait parfois de s'afficher. L'option contrôle maintenant aussi la variable qui l'activait.
+* **Loop affiche le temps de jeu des jeux non Steam :** Sur l'accueil de Loop, ils apparaissaient comme jamais joués. Mettez Loop à jour depuis Thèmes pour le voir.
+
+## [0.94.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.1...panel-de-control-v0.94.2) (2026-11-22)
+
+### Español
+
+* **Al despertar, el perfil de CPU ya no se aplica antes de tiempo:** Si usabas menos núcleos o el SMT desactivado, al volver de la suspensión el equipo podía congelarse o reiniciarse porque el perfil se aplicaba demasiado pronto. Ahora espera a que el equipo termine de despertar. Lo mismo pasa con el TDP y el límite de carga cuando enchufas o desenchufas el cargador justo al despertar.
+* **Actualizar un tema que estás usando ya no bloquea Steam:** Al instalar la versión nueva de un tema activo, Steam podía quedarse sin responder. Ahora el tema se para antes de cambiar sus archivos y vuelve a arrancar con la versión nueva.
+* **Escaladores muestra todos tus juegos instalados:** Algunos juegos de Steam no salían en la lista de Escaladores aunque estaban instalados, sobre todo mientras Steam los actualizaba o si un disco tardaba en responder. Ahora aparecen igualmente.
+
+### English
+
+* **Waking up no longer applies your CPU profile too early:** If you used fewer cores or turned SMT off, coming back from sleep could freeze or restart the device because the profile was applied too soon. It now waits until the device has finished waking up. The same goes for TDP and the charge limit when you plug or unplug the charger right after waking.
+* **Updating a theme you're using no longer freezes Steam:** Installing a new version of an active theme could leave Steam unresponsive. The theme now stops before its files change and starts again with the new version.
+* **Upscalers shows all your installed games:** Some Steam games didn't show up in the Upscalers list even though they were installed, mostly while Steam was updating them or when a drive was slow to respond. They now show up anyway.
+
+### Italiano
+
+* **Al risveglio il profilo CPU non si applica più troppo presto:** Se usavi meno core o lo SMT disattivato, al ritorno dalla sospensione il dispositivo poteva bloccarsi o riavviarsi perché il profilo veniva applicato troppo presto. Ora aspetta che il dispositivo abbia finito di svegliarsi. Lo stesso vale per il TDP e il limite di carica quando colleghi o scolleghi il caricatore subito dopo il risveglio.
+* **Aggiornare un tema che stai usando non blocca più Steam:** Installare la nuova versione di un tema attivo poteva lasciare Steam senza risposta. Ora il tema si ferma prima di cambiare i suoi file e riparte con la nuova versione.
+* **Upscaler mostra tutti i tuoi giochi installati:** Alcuni giochi di Steam non comparivano nella lista di Upscaler anche se erano installati, soprattutto mentre Steam li aggiornava o se un disco rispondeva lentamente. Ora compaiono comunque.
+
+### Deutsch
+
+* **Beim Aufwachen greift dein CPU-Profil nicht mehr zu früh:** Wenn du weniger Kerne genutzt oder SMT ausgeschaltet hattest, konnte das Gerät nach dem Ruhezustand einfrieren oder neu starten, weil das Profil zu früh angewendet wurde. Jetzt wartet es, bis das Gerät ganz aufgewacht ist. Das gilt auch für TDP und Ladelimit, wenn du direkt nach dem Aufwachen das Ladegerät ansteckst oder abziehst.
+* **Ein Theme zu aktualisieren, das du gerade nutzt, friert Steam nicht mehr ein:** Die neue Version eines aktiven Themes zu installieren, konnte Steam hängen lassen. Jetzt stoppt das Theme, bevor sich seine Dateien ändern, und startet danach mit der neuen Version.
+* **Upscaler zeigt alle deine installierten Spiele:** Manche Steam-Spiele fehlten in der Liste von Upscaler, obwohl sie installiert waren, vor allem während Steam sie aktualisierte oder wenn ein Laufwerk langsam antwortete. Jetzt erscheinen sie trotzdem.
+
+### Português (Brasil)
+
+* **Ao acordar, o perfil de CPU não é mais aplicado cedo demais:** Se você usava menos núcleos ou o SMT desligado, ao voltar da suspensão o aparelho podia travar ou reiniciar porque o perfil era aplicado cedo demais. Agora ele espera o aparelho terminar de acordar. O mesmo vale para o TDP e o limite de carga quando você conecta ou desconecta o carregador logo depois de acordar.
+* **Atualizar um tema que você está usando não trava mais o Steam:** Instalar a versão nova de um tema ativo podia deixar o Steam sem responder. Agora o tema para antes de trocar os arquivos e volta a funcionar com a versão nova.
+* **Upscalers mostra todos os seus jogos instalados:** Alguns jogos da Steam não apareciam na lista do Upscalers mesmo instalados, principalmente enquanto o Steam os atualizava ou quando um disco demorava para responder. Agora eles aparecem mesmo assim.
+
+### Français
+
+* **Au réveil, votre profil CPU ne s'applique plus trop tôt :** Si vous utilisiez moins de cœurs ou le SMT désactivé, l'appareil pouvait se figer ou redémarrer en sortant de veille parce que le profil s'appliquait trop tôt. Il attend maintenant que l'appareil ait fini de se réveiller. C'est pareil pour le TDP et la limite de charge quand vous branchez ou débranchez le chargeur juste après le réveil.
+* **Mettre à jour un thème que vous utilisez ne bloque plus Steam :** Installer la nouvelle version d'un thème actif pouvait laisser Steam sans réponse. Le thème s'arrête maintenant avant que ses fichiers changent et redémarre avec la nouvelle version.
+* **Upscalers affiche tous vos jeux installés :** Certains jeux Steam n'apparaissaient pas dans la liste d'Upscalers alors qu'ils étaient installés, surtout pendant que Steam les mettait à jour ou quand un disque tardait à répondre. Ils apparaissent maintenant quand même.
+
+## [0.94.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.0...panel-de-control-v0.94.1) (2026-11-19)
+
+
+### Español
+
+* **Escaladores encuentra tus juegos aunque estén en otra biblioteca:** En algunos equipos, Escaladores decía que un juego no estaba instalado aunque Steam lo abría sin problema, sobre todo con juegos en la tarjeta SD o en otro disco. Ahora busca los juegos en las mismas bibliotecas que usa Steam y, si hace falta, también en los discos conectados.
+
+### English
+
+* **Upscalers finds your games even in another library:** On some devices, Upscalers said a game wasn't installed even though Steam launched it fine, mostly with games on the SD card or another drive. It now looks for games in the same libraries Steam uses and, when needed, on the connected drives too.
+
+### Italiano
+
+* **Upscaler trova i tuoi giochi anche in un'altra libreria:** Su alcuni dispositivi, Upscaler diceva che un gioco non era installato anche se Steam lo avviava senza problemi, soprattutto con giochi sulla scheda SD o su un altro disco. Ora cerca i giochi nelle stesse librerie che usa Steam e, se serve, anche nei dischi collegati.
+
+### Deutsch
+
+* **Upscaler findet deine Spiele auch in einer anderen Bibliothek:** Auf manchen Geräten meldete Upscaler, ein Spiel sei nicht installiert, obwohl Steam es problemlos startete, vor allem bei Spielen auf der SD-Karte oder einem anderen Laufwerk. Jetzt sucht es die Spiele in denselben Bibliotheken wie Steam und bei Bedarf auch auf den angeschlossenen Laufwerken.
+
+### Português (Brasil)
+
+* **Upscalers encontra seus jogos mesmo em outra biblioteca:** Em alguns aparelhos, Upscalers dizia que um jogo não estava instalado mesmo com o Steam abrindo o jogo normalmente, principalmente com jogos no cartão SD ou em outro disco. Agora ele procura os jogos nas mesmas bibliotecas que o Steam usa e, se precisar, também nos discos conectados.
+
+### Français
+
+* **Upscalers trouve vos jeux même dans une autre bibliothèque :** Sur certains appareils, Upscalers indiquait qu'un jeu n'était pas installé alors que Steam le lançait sans souci, surtout pour les jeux sur la carte SD ou sur un autre disque. Il cherche maintenant les jeux dans les mêmes bibliothèques que Steam et, si besoin, aussi sur les disques branchés.
+
+## [0.94.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.93.0...panel-de-control-v0.94.0) (2026-11-19)
+
+
+### Español
+
+* **Los filtros del fondo también funcionan con temas que pintan su propio fondo:** Si usas un tema que dibuja el fondo de Ambiente a su manera, Difuminado, Oscurecer y Viñeta antes no hacían nada. Ahora se aplican igual que con el fondo normal, siempre que el tema esté actualizado.
+
+### English
+
+* **Background filters also work with themes that paint their own background:** If you use a theme that draws Ambient's background its own way, Blur, Darken and Vignette used to do nothing. They now apply just like on the regular background, as long as the theme is up to date.
+
+### Italiano
+
+* **I filtri dello sfondo funzionano anche con i temi che disegnano il proprio sfondo:** Se usi un tema che disegna lo sfondo di Atmosfera a modo suo, Sfocatura, Scurisci e Vignettatura prima non facevano niente. Ora si applicano come con lo sfondo normale, purché il tema sia aggiornato.
+
+### Deutsch
+
+* **Die Hintergrundfilter gehen jetzt auch mit Themes, die ihren eigenen Hintergrund zeichnen:** Wenn du ein Theme nutzt, das den Hintergrund von Ambiente selbst zeichnet, haben Weichzeichnen, Abdunkeln und Vignette bisher nichts bewirkt. Jetzt wirken sie wie beim normalen Hintergrund, solange das Theme aktuell ist.
+
+### Português (Brasil)
+
+* **Os filtros do fundo também funcionam com temas que desenham o próprio fundo:** Se você usa um tema que desenha o fundo do Ambiente do jeito dele, Desfoque, Escurecer e Vinheta antes não faziam nada. Agora eles funcionam igual ao fundo normal, desde que o tema esteja atualizado.
+
+### Français
+
+* **Les filtres du fond marchent aussi avec les thèmes qui dessinent leur propre fond :** Si vous utilisez un thème qui dessine le fond d'Ambiance à sa façon, Flou, Assombrir et Vignette n'avaient aucun effet. Ils s'appliquent maintenant comme sur le fond normal, tant que le thème est à jour.
+
+## [0.93.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.92.0...panel-de-control-v0.93.0) (2026-11-19)
+
+
+### Español
+
+* **Luma se instala solo en 30 juegos más:** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 y 24 juegos de Unreal Engine como Stray, Psychonauts 2 o STAR WARS Jedi: Fallen Order. Al activar el escalador, Panel de Control instala Luma y lo que necesita, igual que ya hacía en Final Fantasy VII Remake y Persona 5 Royal. En estos juegos ya no te pide elegir DLSS en el menú, porque de eso se encarga Luma.
+* **Mods para los juegos que los necesitan:** Si un juego necesita un mod para escalar, su ficha muestra una tarjeta con Descargar y Elegir archivo. Descargar abre la página del mod en el navegador de Steam y lo recoge en cuanto termina de bajar, sin salir del modo de juego. Sirven archivos .zip, .7z y .rar, también con contraseña. En cualquier otro juego tienes Añadir un mod.
+* **Elden Ring con ERSS-FG, sin tocar nada:** Con el mod ERSS-FG, Panel de Control deja Elden Ring listo para jugar: FSR 4.1.2 y la generación de frames del mod activadas, lo que el mod necesita instalado y el juego arrancando sin el anticheat, así que se juega sin conexión. La píldora del juego muestra ERSS-FG debajo del escalador. Además, el escalador se instala junto al juego y no junto a la guía o el libro de arte.
+* **Panel de Control ya no se queda parado al abrir Escaladores:** Con muchos juegos instalados, sobre todo en la tarjeta SD, Panel de Control podía dejar de responder varios segundos mientras revisaba los juegos. Ahora sigue respondiendo.
+* **Activar con el juego abierto:** Si activas un escalador por primera vez con el juego abierto, Panel de Control espera a que lo cierres en vez de pedirte una y otra vez que lo cierres antes.
+* **Avisos que dicen qué falta:** Si el juego carga OptiScaler pero no escala porque le falta un mod, la ficha te dice qué mod es. Y si tienes una versión de un complemento que no funciona, como pasa en Resident Evil 4, te dice qué versión poner.
+* **Filtros del fondo en Ambiente:** En Fondo tienes Difuminado, Oscurecer y Viñeta, para que se lea mejor lo que hay encima. Funcionan con imágenes, vídeos y tráileres. Con el fondo difuminado, la imagen deja de moverse.
+
+### English
+
+* **Luma installs on its own in 30 more games:** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 and 24 Unreal Engine games such as Stray, Psychonauts 2 and STAR WARS Jedi: Fallen Order. When you turn on the upscaler, Panel de Control installs Luma and what it needs, as it already did for Final Fantasy VII Remake and Persona 5 Royal. These games no longer ask you to pick DLSS in their menu, because Luma takes care of it.
+* **Mods for the games that need them:** If a game needs a mod to upscale, its page shows a card with Download and Choose file. Download opens the mod's page in Steam's browser and picks the file up as soon as it finishes, without leaving Game Mode. .zip, .7z and .rar files work, including password-protected ones. Any other game has Add a mod.
+* **Elden Ring with ERSS-FG, nothing to set up:** With the ERSS-FG mod, Panel de Control gets Elden Ring ready to play: FSR 4.1.2 and the mod's frame generation turned on, what the mod needs installed, and the game starting without the anti-cheat, so it plays offline. The in-game pill shows ERSS-FG under the upscaler. The upscaler also goes next to the game instead of next to the guide or the artbook.
+* **Panel de Control no longer freezes when you open Upscalers:** With many games installed, especially on the SD card, Panel de Control could stop responding for several seconds while it checked them. It now keeps responding.
+* **Turning it on with the game open:** If you turn on an upscaler for the first time with the game open, Panel de Control waits for you to close it instead of asking you over and over to close it first.
+* **Messages that say what is missing:** If the game loads OptiScaler but doesn't upscale because a mod is missing, the page tells you which mod. And if you have a version of an add-on that doesn't work, as happens in Resident Evil 4, it tells you which version to use.
+* **Background filters in Ambient:** In Background you now have Blur, Darken and Vignette, so what sits on top is easier to read. They work with images, videos and trailers. While the background is blurred, the picture stops moving.
+
+### Italiano
+
+* **Luma si installa da solo in altri 30 giochi:** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 e 24 giochi Unreal Engine come Stray, Psychonauts 2 o STAR WARS Jedi: Fallen Order. Quando attivi l'upscaler, Panel de Control installa Luma e quello che gli serve, come già faceva con Final Fantasy VII Remake e Persona 5 Royal. In questi giochi non ti chiede più di scegliere DLSS nel menu, perché ci pensa Luma.
+* **Mod per i giochi che ne hanno bisogno:** Se un gioco ha bisogno di una mod per l'upscaling, la sua scheda mostra una scheda con Scarica e Scegli file. Scarica apre la pagina della mod nel browser di Steam e prende il file appena finisce di scaricarsi, senza uscire dalla Modalità gioco. Vanno bene file .zip, .7z e .rar, anche protetti da password. In qualsiasi altro gioco hai Aggiungi una mod.
+* **Elden Ring con ERSS-FG, senza toccare niente:** Con la mod ERSS-FG, Panel de Control prepara Elden Ring per giocare: FSR 4.1.2 e la generazione di frame della mod attive, quello che serve alla mod installato e il gioco che parte senza anticheat, quindi si gioca offline. La pillola del gioco mostra ERSS-FG sotto l'upscaler. Inoltre l'upscaler si installa accanto al gioco e non accanto alla guida o all'artbook.
+* **Panel de Control non si blocca più aprendo Upscaler:** Con molti giochi installati, soprattutto sulla scheda SD, Panel de Control poteva smettere di rispondere per qualche secondo mentre li controllava. Ora continua a rispondere.
+* **Attivarlo con il gioco aperto:** Se attivi un upscaler per la prima volta con il gioco aperto, Panel de Control aspetta che tu lo chiuda invece di chiederti ogni volta di chiuderlo prima.
+* **Avvisi che dicono cosa manca:** Se il gioco carica OptiScaler ma non fa l'upscaling perché manca una mod, la scheda ti dice quale. E se hai una versione di un componente aggiuntivo che non funziona, come succede in Resident Evil 4, ti dice quale versione usare.
+* **Filtri dello sfondo in Atmosfera:** In Sfondo ora hai Sfocatura, Scurisci e Vignettatura, così quello che c'è sopra si legge meglio. Funzionano con immagini, video e trailer. Con lo sfondo sfocato, l'immagine smette di muoversi.
+
+### Deutsch
+
+* **Luma wird in 30 weiteren Spielen von selbst installiert:** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 und 24 Unreal-Engine-Spiele wie Stray, Psychonauts 2 oder STAR WARS Jedi: Fallen Order. Wenn du den Upscaler einschaltest, installiert Panel de Control Luma und alles, was es braucht, wie schon bei Final Fantasy VII Remake und Persona 5 Royal. Diese Spiele verlangen nicht mehr, dass du im Menü DLSS wählst, denn darum kümmert sich Luma.
+* **Mods für Spiele, die eine brauchen:** Braucht ein Spiel eine Mod zum Hochskalieren, zeigt seine Seite eine Karte mit Herunterladen und Datei wählen. Herunterladen öffnet die Seite der Mod im Steam-Browser und übernimmt die Datei, sobald der Download fertig ist, ohne den Spielmodus zu verlassen. .zip-, .7z- und .rar-Dateien gehen, auch mit Passwort. Bei jedem anderen Spiel gibt es Mod hinzufügen.
+* **Elden Ring mit ERSS-FG, ohne etwas einzustellen:** Mit der Mod ERSS-FG macht Panel de Control Elden Ring spielbereit: FSR 4.1.2 und die Frame-Generierung der Mod sind an, was die Mod braucht, ist installiert, und das Spiel startet ohne Anti-Cheat, also offline. Die Pille im Spiel zeigt ERSS-FG unter dem Upscaler. Außerdem landet der Upscaler neben dem Spiel und nicht neben dem Guide oder dem Artbook.
+* **Panel de Control hängt beim Öffnen von Upscaler nicht mehr:** Mit vielen installierten Spielen, vor allem auf der SD-Karte, konnte Panel de Control einige Sekunden nicht reagieren, während es sie prüfte. Jetzt reagiert es weiter.
+* **Einschalten bei offenem Spiel:** Schaltest du einen Upscaler zum ersten Mal bei offenem Spiel ein, wartet Panel de Control, bis du es schließt, statt dich immer wieder aufzufordern, es vorher zu schließen.
+* **Hinweise, die sagen, was fehlt:** Lädt das Spiel OptiScaler, skaliert aber nicht hoch, weil eine Mod fehlt, sagt dir die Seite, welche. Und wenn du eine Version einer Erweiterung hast, die nicht funktioniert, wie bei Resident Evil 4, sagt sie dir, welche Version du brauchst.
+* **Hintergrundfilter in Ambiente:** Unter Hintergrund gibt es jetzt Weichzeichnen, Abdunkeln und Vignette, damit sich lesen lässt, was darüber liegt. Sie funktionieren mit Bildern, Videos und Trailern. Ist der Hintergrund weichgezeichnet, bewegt sich das Bild nicht mehr.
+
+### Português (Brasil)
+
+* **O Luma se instala sozinho em mais 30 jogos:** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 e 24 jogos de Unreal Engine como Stray, Psychonauts 2 e STAR WARS Jedi: Fallen Order. Quando você ativa o upscaler, o Panel de Control instala o Luma e o que ele precisa, como já fazia em Final Fantasy VII Remake e Persona 5 Royal. Esses jogos não pedem mais que você escolha DLSS no menu, porque o Luma cuida disso.
+* **Mods para os jogos que precisam:** Se um jogo precisa de um mod para fazer upscaling, a página dele mostra um cartão com Baixar e Escolher arquivo. Baixar abre a página do mod no navegador do Steam e pega o arquivo assim que o download termina, sem sair do Modo Jogo. Funcionam arquivos .zip, .7z e .rar, inclusive com senha. Em qualquer outro jogo você tem Adicionar um mod.
+* **Elden Ring com ERSS-FG, sem mexer em nada:** Com o mod ERSS-FG, o Panel de Control deixa Elden Ring pronto para jogar: FSR 4.1.2 e a geração de quadros do mod ativadas, o que o mod precisa instalado e o jogo abrindo sem o anticheat, então ele roda offline. A pílula do jogo mostra ERSS-FG embaixo do upscaler. Além disso, o upscaler é instalado junto do jogo e não junto do guia ou do artbook.
+* **O Panel de Control não trava mais ao abrir Upscalers:** Com muitos jogos instalados, principalmente no cartão SD, o Panel de Control podia parar de responder por alguns segundos enquanto verificava os jogos. Agora ele continua respondendo.
+* **Ativar com o jogo aberto:** Se você ativar um upscaler pela primeira vez com o jogo aberto, o Panel de Control espera você fechar o jogo, em vez de pedir toda hora para fechar antes.
+* **Avisos que dizem o que falta:** Se o jogo carrega o OptiScaler mas não faz upscaling porque falta um mod, a página diz qual mod é. E se você tiver uma versão de um complemento que não funciona, como acontece em Resident Evil 4, ela diz qual versão usar.
+* **Filtros do fundo no Ambiente:** Em Fundo agora você tem Desfoque, Escurecer e Vinheta, para ficar mais fácil ler o que está por cima. Funcionam com imagens, vídeos e trailers. Com o fundo desfocado, a imagem para de se mexer.
+
+### Français
+
+* **Luma s'installe tout seul dans 30 jeux de plus :** Metaphor: ReFantazio, Granblue Fantasy: Relink, Quantum Break, Prey, Dishonored 2, Watch Dogs 2 et 24 jeux Unreal Engine comme Stray, Psychonauts 2 ou STAR WARS Jedi: Fallen Order. Quand vous activez l'upscaler, Panel de Control installe Luma et ce dont il a besoin, comme il le faisait déjà pour Final Fantasy VII Remake et Persona 5 Royal. Ces jeux ne vous demandent plus de choisir DLSS dans leur menu, car Luma s'en charge.
+* **Des mods pour les jeux qui en ont besoin :** Si un jeu a besoin d'un mod pour l'upscaling, sa page affiche une carte avec Télécharger et Choisir un fichier. Télécharger ouvre la page du mod dans le navigateur de Steam et récupère le fichier dès la fin du téléchargement, sans quitter le mode Jeu. Les fichiers .zip, .7z et .rar fonctionnent, y compris avec mot de passe. Dans tous les autres jeux, vous avez Ajouter un mod.
+* **Elden Ring avec ERSS-FG, sans rien régler :** Avec le mod ERSS-FG, Panel de Control prépare Elden Ring : FSR 4.1.2 et la génération d'images du mod activés, ce dont le mod a besoin installé, et le jeu qui démarre sans l'anti-triche, donc il se joue hors ligne. La pastille du jeu affiche ERSS-FG sous l'upscaler. En plus, l'upscaler s'installe à côté du jeu et non à côté du guide ou de l'artbook.
+* **Panel de Control ne se fige plus à l'ouverture d'Upscalers :** Avec beaucoup de jeux installés, surtout sur la carte SD, Panel de Control pouvait ne plus répondre pendant quelques secondes le temps de les vérifier. Il continue maintenant de répondre.
+* **Activer avec le jeu ouvert :** Si vous activez un upscaler pour la première fois avec le jeu ouvert, Panel de Control attend que vous le fermiez au lieu de vous demander sans arrêt de le fermer d'abord.
+* **Des messages qui disent ce qui manque :** Si le jeu charge OptiScaler mais ne fait pas d'upscaling parce qu'il manque un mod, la page vous dit lequel. Et si vous avez une version d'un module qui ne fonctionne pas, comme dans Resident Evil 4, elle vous dit quelle version utiliser.
+* **Filtres du fond dans Ambiance :** Dans Fond, vous avez maintenant Flou, Assombrir et Vignette, pour mieux lire ce qui est au premier plan. Ils fonctionnent avec les images, les vidéos et les bandes-annonces. Quand le fond est flou, l'image ne bouge plus.
+
+## [0.92.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.91.1...panel-de-control-v0.92.0) (2026-11-18)
+
+
+### Español
+
+* **Generación de frames con Apex Neural Rendering (Beta):** En juegos DX12 que tienen Generación de frames de DLSS, con gráfica AMD, ya puedes elegir Apex ANR en el selector de generación de frames. Panel pasa el juego a OptiScaler 10 con FSR 4.1.2 y lo deja todo listo; tú solo activas la Generación de frames de DLSS en el juego. Varios juegos traen una nota con las opciones exactas de su menú, y la píldora del juego te dice si está generando frames.
+* **Mako 5:** Ahora puedes elegir Mako 5 junto a Mako 4 Lossless. Trae su propio modelo de generación de frames, así que no necesitas tener Lossless Scaling. La píldora, las portadas y la lista de juegos dicen qué versión estás usando.
+* **Mako responde mientras se descarga:** El estado de Mako ya no se queda colgado mientras baja. Y si las opciones de lanzamiento del juego pierden lo que había puesto Panel, al guardar se vuelven a poner.
+* **Arreglos en algunos juegos:** Cyberpunk 2077 se salta su lanzador, que se quedaba colgado, y Deep Rock Galactic arranca en DX12. En The Last of Us Part II y Spider-Man 2, Panel ya no confunde el programa de informes de errores con el juego.
+
+### English
+
+* **Frame generation with Apex Neural Rendering (Beta):** In DX12 games that have DLSS Frame Generation, on AMD graphics, you can now pick Apex ANR in the frame generation selector. Panel moves the game to OptiScaler 10 with FSR 4.1.2 and sets everything up; you just turn on DLSS Frame Generation in the game. Several games come with a note listing the exact options to set in their menu, and the in-game pill tells you whether it is generating frames.
+* **Mako 5:** You can now pick Mako 5 next to Mako 4 Lossless. It comes with its own frame generation model, so you don't need Lossless Scaling. The pill, covers and game list show which version you are using.
+* **Mako keeps responding while it downloads:** Mako's status no longer hangs while it downloads. And if the game's launch options lose what Panel had added, saving puts it back.
+* **Fixes for some games:** Cyberpunk 2077 skips its launcher, which used to hang, and Deep Rock Galactic starts in DX12. In The Last of Us Part II and Spider-Man 2, Panel no longer mistakes the crash reporter for the game.
+
+### Italiano
+
+* **Generazione di frame con Apex Neural Rendering (Beta):** Nei giochi DX12 che hanno la Generazione di frame DLSS, con grafica AMD, ora puoi scegliere Apex ANR nel selettore della generazione di frame. Panel passa il gioco a OptiScaler 10 con FSR 4.1.2 e prepara tutto; tu devi solo attivare la Generazione di frame DLSS nel gioco. Diversi giochi hanno una nota con le opzioni esatte da impostare nel loro menu, e la pillola del gioco ti dice se sta generando frame.
+* **Mako 5:** Ora puoi scegliere Mako 5 accanto a Mako 4 Lossless. Ha un suo modello di generazione di frame, quindi non ti serve Lossless Scaling. La pillola, le copertine e l'elenco dei giochi mostrano quale versione stai usando.
+* **Mako risponde mentre si scarica:** Lo stato di Mako non si blocca più durante il download. E se le opzioni di avvio del gioco perdono quello che aveva messo Panel, salvando vengono rimesse.
+* **Correzioni per alcuni giochi:** Cyberpunk 2077 salta il suo launcher, che si bloccava, e Deep Rock Galactic si avvia in DX12. In The Last of Us Part II e Spider-Man 2, Panel non scambia più il programma di segnalazione errori per il gioco.
+
+### Deutsch
+
+* **Frame-Generierung mit Apex Neural Rendering (Beta):** In DX12-Spielen mit DLSS Frame Generation kannst du mit AMD-Grafik jetzt Apex ANR in der Auswahl der Frame-Generierung wählen. Panel stellt das Spiel auf OptiScaler 10 mit FSR 4.1.2 um und richtet alles ein; du schaltest nur DLSS Frame Generation im Spiel ein. Mehrere Spiele haben einen Hinweis mit den genauen Optionen für ihr Menü, und die Pille im Spiel zeigt dir, ob Frames generiert werden.
+* **Mako 5:** Du kannst jetzt Mako 5 neben Mako 4 Lossless wählen. Es bringt ein eigenes Modell für die Frame-Generierung mit, du brauchst also kein Lossless Scaling. Pille, Cover und Spieleliste zeigen, welche Version du nutzt.
+* **Mako reagiert auch während des Downloads:** Der Status von Mako hängt beim Herunterladen nicht mehr. Und wenn die Startoptionen des Spiels verlieren, was Panel eingetragen hatte, werden sie beim Speichern wieder gesetzt.
+* **Korrekturen für einige Spiele:** Cyberpunk 2077 überspringt seinen Launcher, der hängen blieb, und Deep Rock Galactic startet in DX12. Bei The Last of Us Part II und Spider-Man 2 hält Panel das Programm für Fehlerberichte nicht mehr für das Spiel.
+
+### Português (Brasil)
+
+* **Geração de quadros com Apex Neural Rendering (Beta):** Em jogos DX12 que têm Geração de quadros DLSS, com placa AMD, agora você pode escolher Apex ANR no seletor de geração de quadros. O Panel passa o jogo para o OptiScaler 10 com FSR 4.1.2 e deixa tudo pronto; você só ativa a Geração de quadros DLSS no jogo. Vários jogos vêm com uma nota com as opções exatas do menu, e a pílula do jogo mostra se ele está gerando quadros.
+* **Mako 5:** Agora você pode escolher o Mako 5 ao lado do Mako 4 Lossless. Ele traz seu próprio modelo de geração de quadros, então você não precisa ter o Lossless Scaling. A pílula, as capas e a lista de jogos mostram qual versão você está usando.
+* **O Mako responde enquanto baixa:** O status do Mako não trava mais durante o download. E se as opções de inicialização do jogo perderem o que o Panel tinha colocado, ao salvar elas voltam.
+* **Correções em alguns jogos:** Cyberpunk 2077 pula o próprio launcher, que travava, e Deep Rock Galactic abre em DX12. Em The Last of Us Part II e Spider-Man 2, o Panel não confunde mais o programa de relatório de erros com o jogo.
+
+### Français
+
+* **Génération d'images avec Apex Neural Rendering (Bêta) :** Dans les jeux DX12 qui ont la Génération d'images DLSS, avec une carte graphique AMD, tu peux maintenant choisir Apex ANR dans le sélecteur de génération d'images. Panel passe le jeu sur OptiScaler 10 avec FSR 4.1.2 et prépare tout ; tu n'as qu'à activer la Génération d'images DLSS dans le jeu. Plusieurs jeux ont une note avec les options exactes à régler dans leur menu, et la pastille du jeu t'indique s'il génère des images.
+* **Mako 5 :** Tu peux maintenant choisir Mako 5 à côté de Mako 4 Lossless. Il a son propre modèle de génération d'images, donc tu n'as pas besoin de Lossless Scaling. La pastille, les jaquettes et la liste des jeux indiquent quelle version tu utilises.
+* **Mako répond pendant son téléchargement :** L'état de Mako ne reste plus bloqué pendant le téléchargement. Et si les options de lancement du jeu perdent ce que Panel avait ajouté, elles sont remises quand tu enregistres.
+* **Corrections pour certains jeux :** Cyberpunk 2077 passe son lanceur, qui restait bloqué, et Deep Rock Galactic démarre en DX12. Dans The Last of Us Part II et Spider-Man 2, Panel ne prend plus le programme de rapport d'erreurs pour le jeu.
+
+## [0.91.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.91.0...panel-de-control-v0.91.1) (2026-11-18)
+
+
+### Español
+
+* **La app de escritorio vuelve a abrirse bien:** En Windows, al abrir Panel de Control fuera de la Game Bar solo se veía el nombre del equipo, sin ninguna sección. Ya se abre completa.
+* **Fuera de una partida, el botón Xbox solo abre la Game Bar:** Con Big Picture delante o sin ningún juego abierto, pulsar el botón Xbox también hacía saltar el Inicio del tema, y con un juego abierto podía acabar en una pantalla negra de carga con el juego escondido detrás. Ahora una pulsación abre solo la Game Bar y dos no hacen nada.
+* **Dos pulsaciones con un juego recién abierto te llevan al Inicio:** Si abrías un juego desde el tema y pulsabas dos veces el botón Xbox, se quedaba la pantalla negra de carga con el logo del juego durante casi un minuto sin responder al mando. Ahora vas directo al Inicio con el juego abierto, también si pulsas mientras se está cargando.
+
+### English
+
+* **The desktop app opens properly again:** On Windows, opening Panel de Control outside Game Bar showed only the device name and no sections. It now opens in full.
+* **Outside a game, the Xbox button only opens Game Bar:** With Big Picture in front or no game open, pressing the Xbox button also jumped to the theme's Home, and with a game open it could end on a black loading screen with the game hidden behind it. Now one press opens just Game Bar and two do nothing.
+* **Two presses right after opening a game take you Home:** If you opened a game from the theme and pressed the Xbox button twice, the black loading screen with the game's logo stayed for almost a minute and ignored the controller. Now you go straight Home with the game still open, also if you press while it is loading.
+
+### Italiano
+
+* **L'app desktop si apre di nuovo bene:** Su Windows, aprendo Panel de Control fuori dalla Game Bar si vedeva solo il nome del dispositivo, senza nessuna sezione. Ora si apre completa.
+* **Fuori da una partita, il tasto Xbox apre solo la Game Bar:** Con Big Picture davanti o senza nessun gioco aperto, premere il tasto Xbox faceva saltare anche la Home del tema, e con un gioco aperto si poteva finire su una schermata nera di caricamento con il gioco nascosto dietro. Ora una pressione apre solo la Game Bar e due non fanno nulla.
+* **Due pressioni con un gioco appena aperto ti portano alla Home:** Se aprivi un gioco dal tema e premevi due volte il tasto Xbox, la schermata nera di caricamento con il logo del gioco restava quasi un minuto senza rispondere al controller. Ora vai dritto alla Home con il gioco aperto, anche se premi mentre si sta caricando.
+
+### Deutsch
+
+* **Die Desktop-App öffnet sich wieder richtig:** Unter Windows zeigte Panel de Control außerhalb der Game Bar nur den Gerätenamen und keinen Bereich. Jetzt öffnet sie sich vollständig.
+* **Außerhalb eines Spiels öffnet die Xbox-Taste nur die Game Bar:** Mit Big Picture im Vordergrund oder ohne offenes Spiel sprang die Xbox-Taste auch zum Home des Themes, und mit offenem Spiel konnte man auf einem schwarzen Ladebildschirm landen, hinter dem das Spiel versteckt war. Jetzt öffnet ein Druck nur die Game Bar und zwei tun nichts.
+* **Zwei Drücke direkt nach dem Start eines Spiels bringen dich zum Home:** Wenn du ein Spiel aus dem Theme gestartet und zweimal die Xbox-Taste gedrückt hast, blieb der schwarze Ladebildschirm mit dem Spiellogo fast eine Minute stehen und reagierte nicht auf den Controller. Jetzt landest du direkt im Home und das Spiel bleibt offen, auch wenn du während des Ladens drückst.
+
+### Português (Brasil)
+
+* **O app de desktop volta a abrir direito:** No Windows, ao abrir o Panel de Control fora da Game Bar aparecia só o nome do aparelho, sem nenhuma seção. Agora ele abre completo.
+* **Fora de uma partida, o botão Xbox só abre a Game Bar:** Com o Big Picture na frente ou sem nenhum jogo aberto, apertar o botão Xbox também pulava para o Início do tema, e com um jogo aberto dava para cair numa tela preta de carregamento com o jogo escondido atrás. Agora um toque abre só a Game Bar e dois não fazem nada.
+* **Dois toques logo depois de abrir um jogo te levam ao Início:** Se você abria um jogo pelo tema e apertava o botão Xbox duas vezes, a tela preta de carregamento com o logo do jogo ficava quase um minuto sem responder ao controle. Agora você vai direto ao Início com o jogo aberto, também se apertar enquanto ele carrega.
+
+### Français
+
+* **L'application de bureau s'ouvre de nouveau correctement :** Sous Windows, en ouvrant Panel de Control hors de la Game Bar, on ne voyait que le nom de l'appareil, sans aucune section. Elle s'ouvre maintenant en entier.
+* **Hors d'une partie, le bouton Xbox ouvre seulement la Game Bar :** Avec Big Picture au premier plan ou sans jeu ouvert, appuyer sur le bouton Xbox faisait aussi apparaître l'Accueil du thème, et avec un jeu ouvert on pouvait tomber sur un écran noir de chargement avec le jeu caché derrière. Maintenant un appui ouvre seulement la Game Bar et deux ne font rien.
+* **Deux appuis juste après avoir lancé un jeu t'amènent à l'Accueil :** Si tu lançais un jeu depuis le thème et appuyais deux fois sur le bouton Xbox, l'écran noir de chargement avec le logo du jeu restait presque une minute sans réagir à la manette. Maintenant tu vas directement à l'Accueil avec le jeu ouvert, même si tu appuies pendant le chargement.
+
+## [0.91.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.90.0...panel-de-control-v0.91.0) (2026-11-17)
+
+
+### Español
+
+* **La Game Bar ya se puede usar en mitad de una partida:** En Windows, con un juego abierto, el botón Xbox abría la Game Bar pero Big Picture se ponía encima con el Inicio del tema, y no había forma de tocar el TDP ni el widget de Panel de Control. Ahora una pulsación abre solo la Game Bar y el juego sigue a la vista.
+* **Dos pulsaciones te llevan al Inicio sin cerrar el juego:** Pulsa el botón Xbox dos veces seguidas durante la partida y vas al Inicio del tema con el juego abierto. El widget de Panel de Control tiene también un botón nuevo, Ir al Inicio de Steam, que hace lo mismo.
+* **Al reanudar vuelves al juego:** Desde el Inicio del tema, Reanudar pone el juego otra vez delante, también si lo abriste desde otro lanzador como Ubisoft, EA o Rockstar.
+* **El sonido del juego se corta en el Inicio:** Los temas que silencian el juego mientras estás en el Inicio no conseguían hacerlo en Windows. Ahora el juego se calla al ir al Inicio y vuelve a sonar al reanudar.
+
+### English
+
+* **Game Bar now works in the middle of a game:** On Windows, with a game open, the Xbox button opened Game Bar but Big Picture jumped on top with the theme's Home, so there was no way to reach TDP or the Panel de Control widget. Now one press opens just Game Bar and the game stays in view.
+* **Two presses take you Home without closing the game:** Press the Xbox button twice in a row while playing and you land on the theme's Home with the game still open. The Panel de Control widget also has a new Go to Steam Home button that does the same.
+* **Resume takes you back to the game:** From the theme's Home, Resume brings the game to the front again, also when you started it from another launcher like Ubisoft, EA or Rockstar.
+* **Game sound stops on Home:** Themes that silence the game while you're on Home couldn't do it on Windows. Now the game goes quiet when you go Home and plays again when you resume.
+
+### Italiano
+
+* **La Game Bar ora funziona a metà partita:** Su Windows, con un gioco aperto, il tasto Xbox apriva la Game Bar ma Big Picture si metteva sopra con la Home del tema, e non c'era modo di toccare il TDP né il widget di Panel de Control. Ora una pressione apre solo la Game Bar e il gioco resta in vista.
+* **Due pressioni ti portano alla Home senza chiudere il gioco:** Premi il tasto Xbox due volte di seguito durante la partita e arrivi alla Home del tema con il gioco ancora aperto. Il widget di Panel de Control ha anche un nuovo pulsante, Vai alla Home di Steam, che fa lo stesso.
+* **Riprendendo torni al gioco:** Dalla Home del tema, Riprendi rimette il gioco in primo piano, anche se l'hai avviato da un altro launcher come Ubisoft, EA o Rockstar.
+* **L'audio del gioco si ferma sulla Home:** I temi che silenziano il gioco mentre sei sulla Home non ci riuscivano su Windows. Ora il gioco tace quando vai alla Home e torna a suonare quando riprendi.
+
+### Deutsch
+
+* **Die Game Bar funktioniert jetzt mitten im Spiel:** Unter Windows öffnete die Xbox-Taste bei laufendem Spiel zwar die Game Bar, aber Big Picture legte sich mit der Startseite des Themes darüber, sodass TDP und das Widget von Panel de Control nicht erreichbar waren. Jetzt öffnet ein Druck nur die Game Bar und das Spiel bleibt sichtbar.
+* **Zweimal drücken bringt dich zur Startseite, ohne das Spiel zu schließen:** Drück im Spiel zweimal hintereinander die Xbox-Taste und du landest auf der Startseite des Themes, während das Spiel offen bleibt. Das Widget von Panel de Control hat dafür auch eine neue Schaltfläche, Zur Steam-Startseite.
+* **Fortsetzen bringt dich zurück ins Spiel:** Auf der Startseite des Themes holt Fortsetzen das Spiel wieder nach vorne, auch wenn du es über einen anderen Launcher wie Ubisoft, EA oder Rockstar gestartet hast.
+* **Der Spielton verstummt auf der Startseite:** Themes, die das Spiel auf der Startseite stummschalten, schafften das unter Windows nicht. Jetzt wird das Spiel auf der Startseite still und ist beim Fortsetzen wieder zu hören.
+
+### Português (Brasil)
+
+* **A Game Bar agora funciona no meio da partida:** No Windows, com um jogo aberto, o botão Xbox abria a Game Bar, mas o Big Picture ficava por cima com o Início do tema e não dava para mexer no TDP nem no widget do Panel de Control. Agora um toque abre só a Game Bar e o jogo continua à vista.
+* **Dois toques te levam ao Início sem fechar o jogo:** Aperte o botão Xbox duas vezes seguidas durante a partida e você vai para o Início do tema com o jogo ainda aberto. O widget do Panel de Control também tem um botão novo, Ir para o Início do Steam, que faz o mesmo.
+* **Ao retomar você volta ao jogo:** No Início do tema, Retomar traz o jogo de volta para a frente, também quando você o abriu por outro launcher, como Ubisoft, EA ou Rockstar.
+* **O som do jogo para no Início:** Os temas que silenciam o jogo enquanto você está no Início não conseguiam fazer isso no Windows. Agora o jogo fica em silêncio ao ir para o Início e volta a tocar ao retomar.
+
+### Français
+
+* **La Game Bar fonctionne maintenant en pleine partie :** Sous Windows, avec un jeu ouvert, le bouton Xbox ouvrait la Game Bar mais Big Picture passait par-dessus avec l'accueil du thème, et impossible d'atteindre le TDP ou le widget de Panel de Control. Maintenant, un appui ouvre seulement la Game Bar et le jeu reste visible.
+* **Deux appuis vous mènent à l'accueil sans fermer le jeu :** Appuyez deux fois de suite sur le bouton Xbox en jeu et vous arrivez sur l'accueil du thème avec le jeu toujours ouvert. Le widget de Panel de Control a aussi un nouveau bouton, Aller à l'accueil de Steam, qui fait la même chose.
+* **Reprendre vous ramène au jeu :** Depuis l'accueil du thème, Reprendre remet le jeu au premier plan, même si vous l'avez lancé depuis un autre lanceur comme Ubisoft, EA ou Rockstar.
+* **Le son du jeu se coupe sur l'accueil :** Les thèmes qui coupent le son du jeu pendant que vous êtes sur l'accueil n'y arrivaient pas sous Windows. Maintenant, le jeu se tait quand vous allez à l'accueil et se fait entendre de nouveau quand vous reprenez.
+
+## [0.90.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.3...panel-de-control-v0.90.0) (2026-11-16)
+
+
+### Español
+
+* **Los dos ventiladores de la ROG Ally, por separado:** En la familia ROG Ally, el editor de curva tiene ahora «Juntos» y «Por separado». Por separado, cada ventilador sigue su propia curva, con los preajustes aplicados a los dos. Si vuelves a «Juntos», recuperas tu curva de siempre. En las consolas con un solo ventilador no cambia nada.
+* **HUD distinto para cada juego:** El HUD tiene las mismas pestañas Global y Juego que la potencia o los ventiladores. Puedes dejarlo apagado para todos y encendido solo en un juego, o al revés, y se aplica solo al abrirlo. En Parámetros verás qué juegos tienen su propio HUD.
+* **El aviso de control del TDP se puede ocultar:** La tarjeta que avisa de que Steam también puede gestionar la potencia tiene «No volver a mostrar», y devolver el control a Steam sigue a mano dentro de la sección. Si Steam es quien controla el TDP, la sección lo dice claramente y te deja recuperarlo con un toque.
+* **El TDP, también en tus menús personalizados:** Hay un bloque nuevo que solo trae el control de vatios, para ponerlo en cualquier menú personalizado.
+* **Generación de frames de Lossless Scaling más fácil de ajustar:** La calidad de generación mantiene sus opciones de siempre y añade Manual, con un deslizador que va de más rendimiento a más calidad.
+* **FSR 4 funciona en Arknights: Endfield:** Antes OptiScaler se instalaba en la carpeta equivocada y el juego no lo cargaba. Ahora Panel de Control lo coloca junto al juego y lo abre en DirectX 11, que es como FSR 4 funciona en Linux. Solo tienes que elegir DLSS en los ajustes gráficos del juego; la tarjeta te lo recuerda.
+* **Panel de Control avisa si FSR 4 no llega a usarse:** Cuando un juego no puede usar FSR 4 y cambia a FSR 2, la tarjeta y la etiqueta del juego lo dicen, en lugar de seguir mostrando FSR 4.
+* **Escaladores más fiables:** Panel de Control ya no confunde el programa antitrampas con el juego al elegir dónde instalar, sigue las indicaciones de DirectX 12 de cada juego y la etiqueta del juego se actualiza en cuanto termina una instalación.
+* **El Modo Descarga se apaga solo al terminar:** Cuando acaba la descarga de Steam que empezó con el modo activo, la consola vuelve a tu potencia normal sin que tengas que tocarla.
+* **El TDP de las Legion no desaparece con poca batería:** En la Legion Go 2 con la batería baja, el firmware bloquea la potencia y Panel de Control mostraba el TDP como no disponible. Ahora sigue disponible y lo aplica en cuanto el firmware lo permite.
+* **La Legion Go S ya no se queda congelada:** Leer el límite de carga podía tardar unos segundos en la Go S y dejaba Panel de Control sin responder. Ahora esa lectura va aparte y no afecta a nada más.
+* **El límite de carga ya no se deshace solo:** Un cambio confirmado del límite de carga ya no vuelve al valor anterior por una lectura atrasada.
+* **La MSI Claw A8 recupera el TDP tras reiniciar Decky:** Panel de Control vuelve a controlar la potencia sin perder los valores originales de la consola.
+* **La CPU vuelve a su velocidad máxima al salir del Modo Eco:** Si al salir la CPU se quedaba limitada, Panel de Control lo detecta y lo corrige sin reiniciar. Al volver de la suspensión, los núcleos y el SMT se respetan como los dejaste.
+* **Más radios funcionan en Ambiente:** Las emisoras que solo emiten por http ya suenan, también al cambiar de una emisora a otra mientras suena música.
+* **Tus listas de música, también:** Ambiente lee las listas .m3u y .m3u8 de las carpetas que elijas.
+* **El reproductor lateral ya no tapa el teclado:** Se oculta mientras escribes con el teclado de Steam y vuelve después.
+* **Puedes volver a tu fondo:** Si eliges el fondo de un tema, ahora puedes recuperar el tuyo cuando quieras. Los temas compatibles reciben también la imagen del juego seleccionado.
+* **Tus variables de lanzamiento, a la vista:** Las variables personalizadas aparecen en el editor de cada juego sin tener que desplegar Avanzado.
+* **El limpiador deja elegir tus Proton personalizados:** Aunque falle la lectura de algún juego que no tiene nada que ver, los Proton que no usa ningún juego se pueden seleccionar.
+* **Los temas avisan si falta reiniciar Decky:** Si tras actualizar Panel de Control los temas no aparecen porque Decky sigue con la versión anterior cargada, verás un aviso para reiniciarlo con un toque.
+* **El HUD horizontal ya no se mueve:** Los valores de Panel de Control ocupan siempre el mismo espacio, así que la fila no baila cuando un número gana una cifra.
+* **Editar la curva del ventilador gasta menos:** El editor ya no hace trabajar a la gráfica sin parar mientras está abierto, y las curvas manuales se conservan al cambiar de modo.
+* **El ecualizador ya no te cambia el volumen:** Al desactivarlo, el volumen del sistema deja de volver al valor anterior, y el balance ya no pega un salto.
+* **Tu reporte no se pierde al pulsar Intro:** Al escribir un reporte con el teclado virtual, Intro ya no lo cancela.
+* **El ventilador de la PS5 muestra su porcentaje:** Se ve el porcentaje real en lugar de unas revoluciones inventadas.
+
+### English
+
+* **The ROG Ally's two fans, separately:** On the ROG Ally family, the curve editor now offers Joined and Split. Split gives each fan its own curve, with presets applied to both. Going back to Joined restores your usual curve. Nothing changes on single-fan devices.
+* **A different HUD for each game:** The HUD has the same Global and Game tabs as power or fans. You can keep it off everywhere and on in one game, or the other way round, and it applies on its own when the game opens. Launch options show which games have their own HUD.
+* **The TDP control notice can be hidden:** The card warning that Steam can also manage power has «Don't show again», and giving control back to Steam is still at hand inside the section. When Steam is the one controlling TDP, the section says so clearly and lets you take it back with one tap.
+* **TDP in your custom menus too:** A new block holds just the watts control, so you can place it in any custom menu.
+* **Lossless Scaling frame generation is easier to tune:** Generation quality keeps its usual options and adds Manual, with a slider that goes from more performance to more quality.
+* **FSR 4 works in Arknights: Endfield:** OptiScaler used to be installed in the wrong folder and the game never loaded it. Panel de Control now places it next to the game and launches it in DirectX 11, which is how FSR 4 works on Linux. Just pick DLSS in the game's graphics settings; the card reminds you.
+* **Panel de Control tells you when FSR 4 is not used:** When a game cannot use FSR 4 and switches to FSR 2, the card and the game label say so instead of still showing FSR 4.
+* **More reliable upscalers:** Panel de Control no longer mistakes the anti-cheat program for the game when choosing where to install, follows each game's DirectX 12 notes, and the game label updates as soon as an install finishes.
+* **Download mode turns itself off when done:** When the Steam download that started with the mode on finishes, the console goes back to your normal power without you touching it.
+* **Legion TDP no longer disappears on low battery:** On the Legion Go 2 with a low battery, the firmware locks power and Panel de Control showed TDP as unavailable. It now stays available and applies as soon as the firmware allows it.
+* **The Legion Go S no longer freezes:** Reading the charge limit could take a few seconds on the Go S and left Panel de Control unresponsive. That read now runs on its own and does not hold anything else up.
+* **The charge limit no longer undoes itself:** A confirmed charge limit change no longer goes back to the previous value because of a late reading.
+* **MSI Claw A8 gets TDP back after restarting Decky:** Panel de Control takes power control again without losing the console's original values.
+* **The CPU gets back to full speed after Eco mode:** If the CPU stayed capped after leaving, Panel de Control spots it and fixes it without a reboot. After waking from sleep, cores and SMT stay as you left them.
+* **More radios work in Ambient:** Stations that only stream over http now play, also when switching from one station to another while music is playing.
+* **Your playlists too:** Ambient reads .m3u and .m3u8 lists from the folders you choose.
+* **The side player no longer covers the keyboard:** It hides while you type with Steam's keyboard and comes back afterwards.
+* **You can go back to your background:** If you pick a theme's background, you can now get yours back whenever you want. Compatible themes also receive the selected game's artwork.
+* **Your launch variables, in sight:** Custom variables show up in each game's editor without unfolding Advanced.
+* **The cleaner lets you select your custom Protons:** Even if reading some unrelated game fails, Protons that no game uses can be selected.
+* **Themes tell you when Decky needs a restart:** If themes do not show up after updating Panel de Control because Decky still has the old version loaded, you get a notice to restart it with one tap.
+* **The horizontal HUD stops shifting:** Panel de Control values always take the same space, so the row no longer jumps when a number gains a digit.
+* **Editing the fan curve uses less power:** The editor no longer keeps the GPU busy while it is open, and manual curves are kept when switching modes.
+* **The equalizer no longer changes your volume:** Turning it off stops the system volume from jumping back, and balance no longer spikes.
+* **Your report is not lost when you press Enter:** When writing a report with the virtual keyboard, Enter no longer cancels it.
+* **The PS5 fan shows its percentage:** You see the real percentage instead of made-up RPM.
+
+### Italiano
+
+* **Le due ventole della ROG Ally, separate:** Sulla famiglia ROG Ally, l'editor della curva offre ora «Insieme» e «Separate». Separate dà a ogni ventola la sua curva, con i preset applicati a entrambe. Tornando a Insieme ritrovi la curva di sempre. Nulla cambia sulle console con una sola ventola.
+* **Un HUD diverso per ogni gioco:** L'HUD ha le stesse schede Globale e Gioco della potenza o delle ventole. Puoi tenerlo spento ovunque e acceso in un solo gioco, o il contrario, e si applica da solo quando il gioco si apre. Nei parametri vedi quali giochi hanno un HUD proprio.
+* **L'avviso sul controllo del TDP si può nascondere:** La scheda che avvisa che anche Steam può gestire la potenza ha «Non mostrare più», e restituire il controllo a Steam resta a portata di mano nella sezione. Quando è Steam a controllare il TDP, la sezione lo dice chiaramente e ti permette di riprenderlo con un tocco.
+* **Il TDP anche nei menu personalizzati:** Un nuovo blocco contiene solo il controllo dei watt, da mettere in qualsiasi menu personalizzato.
+* **La generazione di frame di Lossless Scaling si regola più facilmente:** La qualità di generazione mantiene le opzioni di sempre e aggiunge Manuale, con un cursore che va da più prestazioni a più qualità.
+* **FSR 4 funziona in Arknights: Endfield:** Prima OptiScaler veniva installato nella cartella sbagliata e il gioco non lo caricava. Ora Panel de Control lo mette accanto al gioco e lo avvia in DirectX 11, che è il modo in cui FSR 4 funziona su Linux. Basta scegliere DLSS nelle impostazioni grafiche del gioco; la scheda te lo ricorda.
+* **Panel de Control avvisa se FSR 4 non viene usato:** Quando un gioco non può usare FSR 4 e passa a FSR 2, la scheda e l'etichetta del gioco lo indicano invece di mostrare ancora FSR 4.
+* **Upscaler più affidabili:** Panel de Control non scambia più il programma anti-cheat per il gioco quando sceglie dove installare, segue le indicazioni DirectX 12 di ogni gioco e l'etichetta del gioco si aggiorna appena finisce un'installazione.
+* **La modalità Download si spegne da sola alla fine:** Quando termina il download di Steam iniziato con la modalità attiva, la console torna alla potenza normale senza che tu debba toccarla.
+* **Il TDP delle Legion non sparisce con la batteria scarica:** Sulla Legion Go 2 con batteria bassa il firmware blocca la potenza e Panel de Control mostrava il TDP come non disponibile. Ora resta disponibile e si applica appena il firmware lo permette.
+* **La Legion Go S non si blocca più:** Leggere il limite di carica poteva richiedere qualche secondo sulla Go S e lasciava Panel de Control senza risposta. Ora quella lettura va per conto suo e non blocca nient'altro.
+* **Il limite di carica non si annulla più da solo:** Una modifica confermata del limite di carica non torna più al valore precedente per una lettura in ritardo.
+* **La MSI Claw A8 recupera il TDP dopo il riavvio di Decky:** Panel de Control riprende il controllo della potenza senza perdere i valori originali della console.
+* **La CPU torna alla velocità massima dopo la modalità Eco:** Se all'uscita la CPU restava limitata, Panel de Control se ne accorge e la sistema senza riavviare. Dopo la sospensione, core e SMT restano come li avevi lasciati.
+* **Più radio funzionano in Ambiente:** Le emittenti che trasmettono solo via http ora suonano, anche passando da un'emittente all'altra mentre c'è musica.
+* **Anche le tue playlist:** Ambiente legge le liste .m3u e .m3u8 dalle cartelle che scegli.
+* **Il lettore laterale non copre più la tastiera:** Si nasconde mentre scrivi con la tastiera di Steam e poi ricompare.
+* **Puoi tornare al tuo sfondo:** Se scegli lo sfondo di un tema, ora puoi riavere il tuo quando vuoi. I temi compatibili ricevono anche l'immagine del gioco selezionato.
+* **Le tue variabili di avvio, in vista:** Le variabili personalizzate compaiono nell'editor di ogni gioco senza dover aprire Avanzate.
+* **Il pulitore lascia selezionare i tuoi Proton personalizzati:** Anche se la lettura di un gioco che non c'entra non riesce, i Proton che nessun gioco usa si possono selezionare.
+* **I temi avvisano se serve riavviare Decky:** Se dopo l'aggiornamento di Panel de Control i temi non compaiono perché Decky ha ancora caricata la versione precedente, vedrai un avviso per riavviarlo con un tocco.
+* **L'HUD orizzontale non si sposta più:** I valori di Panel de Control occupano sempre lo stesso spazio, così la riga non balla quando un numero guadagna una cifra.
+* **Modificare la curva della ventola consuma meno:** L'editor non tiene più occupata la GPU mentre è aperto, e le curve manuali restano quando cambi modalità.
+* **L'equalizzatore non ti cambia più il volume:** Disattivandolo, il volume di sistema non torna più al valore precedente e il bilanciamento non ha più sbalzi.
+* **Il tuo report non si perde premendo Invio:** Scrivendo un report con la tastiera virtuale, Invio non lo annulla più.
+* **La ventola della PS5 mostra la sua percentuale:** Vedi la percentuale reale invece di giri inventati.
+
+### Deutsch
+
+* **Die zwei Lüfter der ROG Ally, getrennt:** In der ROG-Ally-Familie bietet der Kurveneditor jetzt «Gemeinsam» und «Getrennt». Getrennt bekommt jeder Lüfter seine eigene Kurve, Voreinstellungen gelten für beide. Zurück auf Gemeinsam bekommst du deine gewohnte Kurve wieder. Auf Geräten mit nur einem Lüfter ändert sich nichts.
+* **Ein eigenes HUD für jedes Spiel:** Das HUD hat dieselben Tabs Global und Spiel wie Leistung oder Lüfter. Du kannst es überall aus und nur in einem Spiel an lassen oder umgekehrt, und es greift von selbst, sobald das Spiel startet. In den Startoptionen siehst du, welche Spiele ein eigenes HUD haben.
+* **Der Hinweis zur TDP-Steuerung lässt sich ausblenden:** Die Karte, die darauf hinweist, dass auch Steam die Leistung verwalten kann, hat «Nicht mehr anzeigen», und die Steuerung an Steam zurückzugeben bleibt im Abschnitt griffbereit. Wenn Steam die TDP steuert, sagt der Abschnitt das klar und du holst sie dir mit einem Tippen zurück.
+* **TDP auch in deinen eigenen Menüs:** Ein neuer Baustein enthält nur die Watt-Steuerung, damit du ihn in jedes eigene Menü setzen kannst.
+* **Die Bildgenerierung von Lossless Scaling lässt sich leichter einstellen:** Die Generierungsqualität behält ihre gewohnten Optionen und bekommt Manuell dazu, mit einem Regler von mehr Leistung bis mehr Qualität.
+* **FSR 4 funktioniert in Arknights: Endfield:** Bisher wurde OptiScaler in den falschen Ordner installiert und das Spiel hat es nie geladen. Panel de Control legt es jetzt neben das Spiel und startet es in DirectX 11, so funktioniert FSR 4 unter Linux. Wähle einfach DLSS in den Grafikeinstellungen des Spiels; die Karte erinnert dich daran.
+* **Panel de Control sagt dir, wenn FSR 4 nicht genutzt wird:** Wenn ein Spiel FSR 4 nicht nutzen kann und zu FSR 2 wechselt, zeigen Karte und Spielbeschriftung das an, statt weiter FSR 4 anzuzeigen.
+* **Zuverlässigere Upscaler:** Panel de Control verwechselt das Anti-Cheat-Programm nicht mehr mit dem Spiel, wenn es den Installationsort wählt, folgt den DirectX-12-Hinweisen jedes Spiels, und die Spielbeschriftung aktualisiert sich, sobald eine Installation fertig ist.
+* **Der Download-Modus schaltet sich nach dem Download selbst ab:** Wenn der Steam-Download, der mit aktivem Modus begonnen hat, fertig ist, kehrt die Konsole zu deiner normalen Leistung zurück, ohne dass du etwas tun musst.
+* **Die TDP der Legion verschwindet bei wenig Akku nicht mehr:** Auf der Legion Go 2 sperrt die Firmware bei niedrigem Akkustand die Leistung, und Panel de Control zeigte die TDP als nicht verfügbar. Jetzt bleibt sie verfügbar und wird angewendet, sobald die Firmware es zulässt.
+* **Die Legion Go S friert nicht mehr ein:** Das Auslesen des Ladelimits konnte auf der Go S einige Sekunden dauern und ließ Panel de Control hängen. Jetzt läuft das getrennt und hält nichts anderes auf.
+* **Das Ladelimit macht sich nicht mehr selbst rückgängig:** Eine bestätigte Änderung des Ladelimits springt nicht mehr wegen einer verspäteten Messung auf den alten Wert zurück.
+* **Die MSI Claw A8 bekommt die TDP nach einem Decky-Neustart zurück:** Panel de Control übernimmt die Leistungssteuerung wieder, ohne die ursprünglichen Werte der Konsole zu verlieren.
+* **Die CPU kommt nach dem Eco-Modus wieder auf volle Geschwindigkeit:** Blieb die CPU nach dem Verlassen begrenzt, erkennt Panel de Control das und behebt es ohne Neustart. Nach dem Aufwachen aus dem Ruhezustand bleiben Kerne und SMT so, wie du sie eingestellt hast.
+* **Mehr Radiosender funktionieren in Ambient:** Sender, die nur über http streamen, spielen jetzt, auch wenn du bei laufender Musik von einem Sender zum anderen wechselst.
+* **Auch deine Playlists:** Ambient liest .m3u- und .m3u8-Listen aus den Ordnern, die du auswählst.
+* **Der seitliche Player verdeckt die Tastatur nicht mehr:** Er blendet sich aus, während du mit der Steam-Tastatur schreibst, und kommt danach zurück.
+* **Du kannst zu deinem Hintergrund zurück:** Wenn du den Hintergrund eines Themes wählst, bekommst du deinen jetzt jederzeit zurück. Kompatible Themes erhalten außerdem das Bild des ausgewählten Spiels.
+* **Deine Startvariablen im Blick:** Eigene Variablen erscheinen im Editor jedes Spiels, ohne Erweitert aufklappen zu müssen.
+* **Der Aufräumer lässt deine eigenen Protons auswählen:** Auch wenn das Auslesen eines unbeteiligten Spiels fehlschlägt, lassen sich Protons, die kein Spiel nutzt, auswählen.
+* **Themes melden, wenn Decky neu gestartet werden muss:** Erscheinen nach einem Update von Panel de Control keine Themes, weil Decky noch die alte Version geladen hat, siehst du einen Hinweis, um es mit einem Tippen neu zu starten.
+* **Das horizontale HUD verrutscht nicht mehr:** Werte von Panel de Control nehmen immer gleich viel Platz ein, damit die Zeile nicht springt, wenn eine Zahl eine Stelle dazubekommt.
+* **Die Lüfterkurve zu bearbeiten kostet weniger:** Der Editor beschäftigt die GPU nicht mehr dauernd, solange er offen ist, und manuelle Kurven bleiben beim Moduswechsel erhalten.
+* **Der Equalizer verändert deine Lautstärke nicht mehr:** Beim Ausschalten springt die Systemlautstärke nicht mehr zurück, und die Balance macht keinen Sprung mehr.
+* **Dein Bericht geht beim Drücken von Enter nicht verloren:** Wenn du einen Bericht mit der Bildschirmtastatur schreibst, bricht Enter ihn nicht mehr ab.
+* **Der PS5-Lüfter zeigt seinen Prozentwert:** Du siehst den echten Prozentwert statt erfundener Drehzahlen.
+
+### Português (Brasil)
+
+* **As duas ventoinhas do ROG Ally, separadas:** Na família ROG Ally, o editor de curva agora oferece «Juntas» e «Separadas». Separadas, cada ventoinha segue a sua própria curva, com as predefinições aplicadas às duas. Voltando para Juntas, você recupera a curva de sempre. Nada muda nos aparelhos com uma só ventoinha.
+* **Um HUD diferente para cada jogo:** O HUD tem as mesmas abas Global e Jogo da potência ou das ventoinhas. Você pode deixá-lo desligado em tudo e ligado em um jogo só, ou o contrário, e ele é aplicado sozinho quando o jogo abre. Nos parâmetros você vê quais jogos têm HUD próprio.
+* **O aviso de controle do TDP pode ser ocultado:** O cartão que avisa que o Steam também pode gerenciar a potência tem «Não mostrar de novo», e devolver o controle ao Steam continua à mão dentro da seção. Quando é o Steam que controla o TDP, a seção diz isso claramente e deixa você recuperá-lo com um toque.
+* **O TDP também nos seus menus personalizados:** Um bloco novo traz só o controle de watts, para colocar em qualquer menu personalizado.
+* **A geração de quadros do Lossless Scaling ficou mais fácil de ajustar:** A qualidade de geração mantém as opções de sempre e ganha Manual, com um controle deslizante que vai de mais desempenho a mais qualidade.
+* **O FSR 4 funciona em Arknights: Endfield:** Antes o OptiScaler era instalado na pasta errada e o jogo nunca o carregava. Agora o Panel de Control coloca ele junto do jogo e o abre em DirectX 11, que é como o FSR 4 funciona no Linux. É só escolher DLSS nas configurações gráficas do jogo; o cartão lembra você disso.
+* **O Panel de Control avisa quando o FSR 4 não é usado:** Quando um jogo não consegue usar o FSR 4 e muda para o FSR 2, o cartão e a etiqueta do jogo mostram isso em vez de continuar exibindo FSR 4.
+* **Escaladores mais confiáveis:** O Panel de Control não confunde mais o programa antitrapaça com o jogo ao escolher onde instalar, segue as indicações de DirectX 12 de cada jogo, e a etiqueta do jogo é atualizada assim que uma instalação termina.
+* **O Modo Download desliga sozinho no final:** Quando o download do Steam que começou com o modo ativo termina, o console volta para a sua potência normal sem você precisar mexer.
+* **O TDP dos Legion não some com pouca bateria:** No Legion Go 2 com a bateria baixa, o firmware trava a potência e o Panel de Control mostrava o TDP como indisponível. Agora ele continua disponível e é aplicado assim que o firmware deixa.
+* **O Legion Go S não trava mais:** Ler o limite de carga podia levar alguns segundos no Go S e deixava o Panel de Control sem responder. Agora essa leitura roda à parte e não segura mais nada.
+* **O limite de carga não se desfaz sozinho:** Uma mudança confirmada no limite de carga não volta mais ao valor anterior por causa de uma leitura atrasada.
+* **O MSI Claw A8 recupera o TDP depois de reiniciar o Decky:** O Panel de Control volta a controlar a potência sem perder os valores originais do console.
+* **A CPU volta à velocidade máxima ao sair do Modo Eco:** Se a CPU ficava limitada ao sair, o Panel de Control percebe e corrige sem reiniciar. Ao voltar da suspensão, os núcleos e o SMT ficam como você deixou.
+* **Mais rádios funcionam no Ambiente:** As emissoras que só transmitem por http agora tocam, também ao trocar de uma emissora para outra com música tocando.
+* **Suas playlists também:** O Ambiente lê as listas .m3u e .m3u8 das pastas que você escolher.
+* **O player lateral não cobre mais o teclado:** Ele se esconde enquanto você digita com o teclado do Steam e volta depois.
+* **Você pode voltar para o seu fundo:** Se escolher o fundo de um tema, agora pode recuperar o seu quando quiser. Os temas compatíveis também recebem a imagem do jogo selecionado.
+* **Suas variáveis de inicialização, à vista:** As variáveis personalizadas aparecem no editor de cada jogo sem precisar abrir Avançado.
+* **O limpador deixa escolher seus Proton personalizados:** Mesmo que a leitura de algum jogo que não tem nada a ver falhe, os Proton que nenhum jogo usa podem ser selecionados.
+* **Os temas avisam quando falta reiniciar o Decky:** Se depois de atualizar o Panel de Control os temas não aparecem porque o Decky ainda está com a versão antiga carregada, você vê um aviso para reiniciá-lo com um toque.
+* **O HUD horizontal não se mexe mais:** Os valores do Panel de Control ocupam sempre o mesmo espaço, então a linha não pula quando um número ganha um dígito.
+* **Editar a curva da ventoinha gasta menos:** O editor não deixa mais a GPU trabalhando sem parar enquanto está aberto, e as curvas manuais são mantidas ao trocar de modo.
+* **O equalizador não muda mais o seu volume:** Ao desligá-lo, o volume do sistema não volta mais ao valor anterior, e o balanço não dá mais salto.
+* **Seu relatório não se perde ao apertar Enter:** Ao escrever um relatório com o teclado virtual, o Enter não o cancela mais.
+* **A ventoinha do PS5 mostra a sua porcentagem:** Você vê a porcentagem real em vez de rotações inventadas.
+
+### Français
+
+* **Les deux ventilateurs de la ROG Ally, séparément :** Sur la famille ROG Ally, l'éditeur de courbe propose maintenant « Ensemble » et « Séparément ». Séparément, chaque ventilateur suit sa propre courbe, avec les préréglages appliqués aux deux. En revenant à Ensemble, vous retrouvez votre courbe habituelle. Rien ne change sur les appareils à un seul ventilateur.
+* **Un HUD différent pour chaque jeu :** Le HUD a les mêmes onglets Global et Jeu que la puissance ou les ventilateurs. Vous pouvez le laisser éteint partout et allumé dans un seul jeu, ou l'inverse, et il s'applique tout seul à l'ouverture du jeu. Dans les paramètres, vous voyez quels jeux ont leur propre HUD.
+* **L'avis sur le contrôle du TDP peut être masqué :** La carte qui prévient que Steam peut aussi gérer la puissance a « Ne plus afficher », et rendre le contrôle à Steam reste sous la main dans la section. Quand c'est Steam qui contrôle le TDP, la section le dit clairement et vous permet de le reprendre d'un geste.
+* **Le TDP aussi dans vos menus personnalisés :** Un nouveau bloc ne contient que le réglage des watts, à placer dans n'importe quel menu personnalisé.
+* **La génération d'images de Lossless Scaling se règle plus facilement :** La qualité de génération garde ses options habituelles et ajoute Manuel, avec un curseur qui va de plus de performances à plus de qualité.
+* **FSR 4 fonctionne dans Arknights: Endfield :** Avant, OptiScaler était installé dans le mauvais dossier et le jeu ne le chargeait jamais. Panel de Control le place maintenant à côté du jeu et le lance en DirectX 11, c'est ainsi que FSR 4 fonctionne sous Linux. Il suffit de choisir DLSS dans les réglages graphiques du jeu ; la carte vous le rappelle.
+* **Panel de Control vous prévient si FSR 4 n'est pas utilisé :** Quand un jeu ne peut pas utiliser FSR 4 et passe à FSR 2, la carte et l'étiquette du jeu l'indiquent au lieu d'afficher encore FSR 4.
+* **Des upscalers plus fiables :** Panel de Control ne confond plus le programme anti-triche avec le jeu au moment de choisir où installer, suit les indications DirectX 12 de chaque jeu, et l'étiquette du jeu se met à jour dès qu'une installation se termine.
+* **Le mode Téléchargement s'arrête tout seul à la fin :** Quand le téléchargement Steam lancé avec le mode actif se termine, la console revient à votre puissance normale sans que vous ayez à la toucher.
+* **Le TDP des Legion ne disparaît plus avec peu de batterie :** Sur la Legion Go 2 avec une batterie faible, le firmware bloque la puissance et Panel de Control affichait le TDP comme indisponible. Il reste maintenant disponible et s'applique dès que le firmware le permet.
+* **La Legion Go S ne se fige plus :** Lire la limite de charge pouvait prendre quelques secondes sur la Go S et laissait Panel de Control sans réponse. Cette lecture se fait maintenant à part et ne bloque plus rien d'autre.
+* **La limite de charge ne s'annule plus toute seule :** Un changement confirmé de la limite de charge ne revient plus à la valeur précédente à cause d'une lecture en retard.
+* **La MSI Claw A8 retrouve le TDP après un redémarrage de Decky :** Panel de Control reprend le contrôle de la puissance sans perdre les valeurs d'origine de la console.
+* **Le processeur retrouve sa vitesse maximale après le mode Éco :** Si le processeur restait bridé à la sortie, Panel de Control le détecte et le corrige sans redémarrer. Au réveil de la mise en veille, les cœurs et le SMT restent comme vous les avez laissés.
+* **Plus de radios fonctionnent dans Ambiance :** Les stations qui ne diffusent qu'en http jouent maintenant, aussi quand vous passez d'une station à l'autre pendant que la musique joue.
+* **Vos listes de lecture aussi :** Ambiance lit les listes .m3u et .m3u8 des dossiers que vous choisissez.
+* **Le lecteur latéral ne cache plus le clavier :** Il se masque pendant que vous tapez avec le clavier de Steam et revient ensuite.
+* **Vous pouvez retrouver votre fond :** Si vous choisissez le fond d'un thème, vous pouvez maintenant récupérer le vôtre quand vous voulez. Les thèmes compatibles reçoivent aussi l'image du jeu sélectionné.
+* **Vos variables de lancement, bien visibles :** Les variables personnalisées apparaissent dans l'éditeur de chaque jeu sans devoir ouvrir Avancé.
+* **Le nettoyeur permet de choisir vos Proton personnalisés :** Même si la lecture d'un jeu sans rapport échoue, les Proton qu'aucun jeu n'utilise peuvent être sélectionnés.
+* **Les thèmes préviennent quand Decky doit redémarrer :** Si après une mise à jour de Panel de Control les thèmes n'apparaissent pas parce que Decky a encore l'ancienne version chargée, un avis vous propose de le redémarrer d'un geste.
+* **Le HUD horizontal ne bouge plus :** Les valeurs de Panel de Control prennent toujours la même place, la ligne ne saute plus quand un nombre gagne un chiffre.
+* **Modifier la courbe du ventilateur consomme moins :** L'éditeur n'occupe plus le GPU en continu tant qu'il est ouvert, et les courbes manuelles sont conservées quand vous changez de mode.
+* **L'égaliseur ne change plus votre volume :** En le désactivant, le volume du système ne revient plus à sa valeur précédente et la balance ne fait plus de saut.
+* **Votre rapport n'est plus perdu quand vous appuyez sur Entrée :** En écrivant un rapport avec le clavier virtuel, Entrée ne l'annule plus.
+* **Le ventilateur de la PS5 affiche son pourcentage :** Vous voyez le pourcentage réel au lieu de tours inventés.
+
+## [0.89.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.2...panel-de-control-v0.89.3) (2026-11-14)
+
+
+### Español
+
+* **Las portadas personalizadas de Duo ya no desaparecen:** Al encender la consola o al volver del modo escritorio, Duo a veces mostraba las portadas normales en lugar de las tuyas hasta que abrías el editor de portadas. Panel de Control ahora las sigue pidiendo hasta que llegan y las vuelve a cargar si hace falta, así que siempre ves las que elegiste.
+* **Los reportes ayudan a arreglar antes los fallos de los temas:** Cuando un tema se quedaba en negro o tardaba en mostrar sus portadas, el reporte no lo reflejaba. Ahora incluye los avisos que deja el propio tema, sin datos personales.
+
+### English
+
+* **Duo's custom covers no longer disappear:** After turning the console on or coming back from Desktop Mode, Duo sometimes showed the standard covers instead of yours until you opened the cover editor. Panel de Control now keeps asking for them until they arrive and loads them again when needed, so you always see the ones you picked.
+* **Reports help fix theme problems sooner:** When a theme went black or was slow to show its covers, the report did not show it. It now includes the notes the theme itself leaves, with no personal data.
+
+### Italiano
+
+* **Le copertine personalizzate di Duo non scompaiono più:** All'accensione della console o al ritorno dalla modalità desktop, Duo a volte mostrava le copertine normali invece delle tue finché non aprivi l'editor delle copertine. Panel de Control ora continua a richiederle finché non arrivano e le ricarica quando serve, così vedi sempre quelle che hai scelto.
+* **I report aiutano a risolvere prima i problemi dei temi:** Quando un tema restava nero o tardava a mostrare le copertine, il report non lo indicava. Ora include le note lasciate dal tema stesso, senza dati personali.
+
+### Deutsch
+
+* **Duos eigene Cover verschwinden nicht mehr:** Nach dem Einschalten der Konsole oder der Rückkehr aus dem Desktopmodus zeigte Duo manchmal die normalen Cover statt deiner eigenen, bis du den Cover-Editor geöffnet hast. Panel de Control fragt sie jetzt so lange an, bis sie da sind, und lädt sie bei Bedarf neu, sodass du immer die siehst, die du ausgewählt hast.
+* **Berichte helfen, Probleme mit Themes schneller zu beheben:** Wenn ein Theme schwarz blieb oder seine Cover nur langsam zeigte, stand davon nichts im Bericht. Jetzt enthält er die Hinweise, die das Theme selbst hinterlässt, ohne persönliche Daten.
+
+### Português (Brasil)
+
+* **As capas personalizadas do Duo não somem mais:** Ao ligar o console ou voltar do modo desktop, o Duo às vezes mostrava as capas normais em vez das suas até você abrir o editor de capas. O Panel de Control agora continua pedindo as capas até elas chegarem e as carrega de novo quando precisa, então você sempre vê as que escolheu.
+* **Os relatórios ajudam a corrigir antes os problemas dos temas:** Quando um tema ficava preto ou demorava para mostrar as capas, o relatório não mostrava isso. Agora ele inclui os avisos que o próprio tema deixa, sem dados pessoais.
+
+### Français
+
+* **Les jaquettes personnalisées de Duo ne disparaissent plus :** Au démarrage de la console ou au retour du mode bureau, Duo affichait parfois les jaquettes normales au lieu des vôtres jusqu'à ce que vous ouvriez l'éditeur de jaquettes. Panel de Control continue maintenant à les demander jusqu'à ce qu'elles arrivent et les recharge si besoin, pour que vous voyiez toujours celles que vous avez choisies.
+* **Les rapports aident à corriger plus vite les problèmes de thèmes :** Quand un thème restait noir ou tardait à afficher ses jaquettes, le rapport ne le montrait pas. Il inclut maintenant les indications laissées par le thème lui-même, sans données personnelles.
+
+## [0.89.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.1...panel-de-control-v0.89.2) (2026-11-14)
+
+
+### Español
+
+* **Los reportes de temas dicen por qué falla la instalación:** Cuando un tema no se podía instalar, el reporte solo decía unsafe_archive. Ahora incluye el motivo exacto y si tienes activado Fondo ampliado en la página de inicio de Steam, para poder arreglar antes los problemas de los temas.
+
+### English
+
+* **Theme reports now say why an install failed:** When a theme could not be installed, the report only said unsafe_archive. It now includes the exact reason and whether Steam's Expanded background is turned on for the Home page, so theme problems can be fixed sooner.
+
+### Italiano
+
+* **I report dei temi dicono perché l'installazione non riesce:** Quando un tema non si poteva installare, il report diceva solo unsafe_archive. Ora include il motivo esatto e se hai attivato lo Sfondo ampliato nella pagina iniziale di Steam, così i problemi dei temi si risolvono prima.
+
+### Deutsch
+
+* **Theme-Berichte nennen den Grund für eine fehlgeschlagene Installation:** Wenn sich ein Theme nicht installieren ließ, stand im Bericht nur unsafe_archive. Jetzt enthält er den genauen Grund und ob in Steam auf der Startseite der erweiterte Hintergrund aktiv ist, damit Probleme mit Themes schneller behoben werden.
+
+### Português (Brasil)
+
+* **Os relatórios de temas dizem por que a instalação falhou:** Quando um tema não podia ser instalado, o relatório só dizia unsafe_archive. Agora ele inclui o motivo exato e se o Fundo ampliado está ativado na página inicial do Steam, para que os problemas dos temas sejam resolvidos mais rápido.
+
+### Français
+
+* **Les rapports de thèmes indiquent pourquoi l'installation a échoué :** Quand un thème ne pouvait pas être installé, le rapport indiquait seulement unsafe_archive. Il inclut maintenant la raison exacte et si l'arrière-plan étendu est activé sur la page d'accueil de Steam, pour que les problèmes de thèmes soient corrigés plus vite.
+
 ## [0.89.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.0...panel-de-control-v0.89.1) (2026-11-13)
 
 

@@ -61,4 +61,26 @@ public sealed class GameBarFocusTrackerTests
 
         Assert.Equal(IntPtr.Zero, tracker.Observe(new ForegroundWindow(Steam, ForegroundKind.Steam)));
     }
+
+    [Fact]
+    public void ReturnsFocusToSteamWhenGameBarClosesOntoNoWindowAtAll()
+    {
+        var tracker = new GameBarFocusTracker();
+        tracker.Observe(new ForegroundWindow(Steam, ForegroundKind.Steam));
+        tracker.Observe(new ForegroundWindow(Bar, ForegroundKind.GameBar));
+
+        // Windows left the foreground to nobody for longer than a switch: the returner reads it as the shell.
+        Assert.Equal(Steam, tracker.Observe(new ForegroundWindow(IntPtr.Zero, ForegroundKind.Shell)));
+    }
+
+    [Fact]
+    public void LeavesTheFocusToAGameThatTookItAfterGameBar()
+    {
+        var tracker = new GameBarFocusTracker();
+        var game = new IntPtr(50);
+        tracker.Observe(new ForegroundWindow(Steam, ForegroundKind.Steam));
+        tracker.Observe(new ForegroundWindow(Bar, ForegroundKind.GameBar));
+
+        Assert.Equal(IntPtr.Zero, tracker.Observe(new ForegroundWindow(game, ForegroundKind.Other)));
+    }
 }

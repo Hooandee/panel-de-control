@@ -55,10 +55,13 @@ public static class SolutionPlan
         ["-dx12"] = "d3d12",
         ["-d3d12"] = "d3d12",
         ["-vulkan"] = "vulkan",
+        ["-force-d3d11"] = "d3d11",
+        ["-force-d3d12"] = "d3d12",
+        ["-force-vulkan"] = "vulkan",
     };
     private static readonly HashSet<string> KnownApis = new(StringComparer.Ordinal) { "d3d11", "d3d12", "vulkan" };
 
-    public static SolutionPlanResult Resolve(string gpu, PlanAnalysis analysis, PlanRecipe? recipe = null, int generation = 9,
+    public static SolutionPlanResult Resolve(BuildCatalog catalog, string gpu, PlanAnalysis analysis, PlanRecipe? recipe = null, int generation = 9,
         string engine = "optiscaler", string? route = null, bool dependenciesReady = false)
     {
         var forced = new HashSet<string>(StringComparer.Ordinal);
@@ -80,12 +83,21 @@ public static class SolutionPlan
         var owner = optiscaler ? recipe?.QualityOwner ?? "panel" : "game";
         var recommended = recipe?.RecommendedInput;
         var offered = optiscaler
-            ? UpscalerPlanner.FrameGenPlanFor(gpu, analysis.Inputs, recipe?.FrameGen, generation, new[] { "d3d12" }, analysis.Streamline, route)
+            ? UpscalerPlanner.FrameGenPlanFor(catalog, gpu, analysis.Inputs, recipe?.FrameGen, generation, new[] { "d3d12" }, analysis.Streamline, route)
             : null;
+        // DLSS-G only exists on D3D12 and Vulkan: an exe that imports only d3d11 often loads D3D12 at runtime, so only a
+        // recipe's API or a Vulkan-only game rules ANR out.
+        var noDx12 = forced.Count > 0 ? !forced.Contains("d3d12") : detected.Contains("vulkan") && !detected.Contains("d3d12");
+        if (offered is not null && offered.Has("anr") && noDx12)
+        {
+            var kept = offered.Routes.Where(pair => pair.Key != "anr").ToList();
+            offered = kept.Count == 0 ? null
+                : new FrameGenPlan(kept.Any(pair => pair.Key == offered.Route) ? offered.Route : kept[0].Key, kept);
+        }
         FrameGenPlan? frameGen = null;
         if (optiscaler && !conflict)
         {
-            frameGen = UpscalerPlanner.FrameGenPlanFor(gpu, analysis.Inputs, recipe?.FrameGen, generation, new[] { effective ?? "unknown" },
+            frameGen = UpscalerPlanner.FrameGenPlanFor(catalog, gpu, analysis.Inputs, recipe?.FrameGen, generation, new[] { effective ?? "unknown" },
                 analysis.Streamline, route);
             if (frameGen is not null && effective != "d3d12")
             {

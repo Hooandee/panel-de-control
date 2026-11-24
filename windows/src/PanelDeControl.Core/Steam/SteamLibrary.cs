@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.RegularExpressions;
 using PanelDeControl.Core.FileSystem;
 
 namespace PanelDeControl.Core.Steam;
@@ -56,15 +58,7 @@ public static class SteamLibrary
         foreach (var root in steamRoots)
         {
             var candidates = new List<string> { root };
-            var folders = ValveTextVdf.TryRead(fileSystem, FileSystemPath.Join(root, "steamapps/libraryfolders.vdf"))?.GetObject("libraryfolders");
-            if (folders is not null)
-            {
-                candidates.AddRange(folders.Entries
-                    .Select(entry => (entry.Value as VdfObject)?.GetString("path"))
-                    .Where(path => path is not null)
-                    .Cast<string>());
-            }
-
+            candidates.AddRange(IndexedLibraries(fileSystem, FileSystemPath.Join(root, "steamapps/libraryfolders.vdf")));
             foreach (var path in candidates)
             {
                 if (fileSystem.IsDirectory(FileSystemPath.Join(path, "steamapps")) && seen.Add(SameLibraryKey(path)))
@@ -125,4 +119,61 @@ public static class SteamLibrary
     }
 
     private static string SameLibraryKey(string path) => path.Replace('\\', '/').TrimEnd('/');
+
+    /// <summary>
+    /// Numbered entries of the index, whose path is a string or a <c>path</c> member. An index the strict reader refuses
+    /// (a repeated key, stray bytes) is still read for its paths: Steam itself loads it.
+    /// </summary>
+    private static IEnumerable<string> IndexedLibraries(IReadOnlyFileSystem fileSystem, string index)
+    {
+        var data = FileSystemPath.ReadAtMost(fileSystem, index, ValveTextVdf.MaxBytes + 1);
+        if (data is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        VdfObject? folders;
+        try
+        {
+            folders = ValveTextVdf.Parse(data).GetObject("libraryfolders");
+        }
+        catch (VdfFormatException)
+        {
+            folders = null;
+        }
+
+        if (folders is null)
+        {
+            return LenientIndex(data).Where(IsAbsolute);
+        }
+
+        return folders.Entries
+            .Where(entry => PythonText.IsDecimal(entry.Key))
+            .Select(entry => entry.Value switch
+            {
+                string path => path,
+                VdfObject item => item.GetString("path"),
+                _ => null,
+            })
+            .Where(path => path is not null && IsAbsolute(path))
+            .Cast<string>();
+    }
+
+    private static readonly Regex LenientPath = new(@"""path""\s+""((?:\\.|[^""\\])*)""", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static readonly Regex LenientNumbered = new(@"""\d+""\s+""((?:/|[A-Za-z]:[\\/]|\\\\)(?:\\.|[^""\\])*)""", RegexOptions.CultureInvariant);
+
+    private static readonly Regex Unescape = new(@"\\([\\""])", RegexOptions.CultureInvariant);
+
+    private static IEnumerable<string> LenientIndex(byte[] data)
+    {
+        var length = Math.Min(data.Length, ValveTextVdf.MaxBytes);
+        var text = new UTF8Encoding(false, false).GetString(data, 0, length);
+        return LenientPath.Matches(text).Cast<Match>().Concat(LenientNumbered.Matches(text).Cast<Match>())
+            .Select(match => Unescape.Replace(match.Groups[1].Value, "$1"));
+    }
+
+    private static bool IsAbsolute(string path) =>
+        path.IndexOf('\0') < 0 && (path.StartsWith("/", StringComparison.Ordinal) || path.StartsWith(@"\\", StringComparison.Ordinal)
+            || (path.Length >= 3 && char.IsLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/'));
 }

@@ -180,7 +180,7 @@ public sealed class OptiScalerInstaller
     private FrameGenPlan? RequestedFrameGen(GameAnalysis analysis, GameRecipe? recipe, UpscalerBuild effective, UpscalerChoice choice)
     {
         var generation = _catalog.Asset(effective.Archive)!.Generation;
-        var plan = SolutionPlan.Resolve(_gpu, new PlanAnalysis { Apis = analysis.Apis, Inputs = Inputs(analysis), Streamline = analysis.Streamline },
+        var plan = SolutionPlan.Resolve(_catalog, _gpu, new PlanAnalysis { Apis = analysis.Apis, Inputs = Inputs(analysis), Streamline = analysis.Streamline },
             recipe is null ? null : new PlanRecipe
             {
                 Args = recipe.Args,

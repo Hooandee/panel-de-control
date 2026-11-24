@@ -57,6 +57,7 @@ const RgbAction: FC<{ label: string; onTap?: () => void; children: ReactNode }> 
   return (
     <Focusable
       data-testid="system-rgb-action"
+      data-pdc-part="surface-action"
       role="button"
       aria-label={label}
       onActivate={activate}

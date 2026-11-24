@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FC } from "react";
 import { createPortal } from "react-dom";
 
 import { getUpscalersOverview } from "../api";
-import { useI18n } from "../i18n";
+import { translate, useI18n } from "../i18n";
 import { registerGlobal } from "../platform/globalComponent";
 import { OverGameComposition } from "../platform/overGameComposition";
 import { subscribeQamSurface, type QamSurface } from "../platform/qamSurface";
@@ -12,8 +12,9 @@ import { useRunningGame } from "../tdp/useRunningGame";
 import { useGameInFront } from "./gameInFront";
 import { useOverlayLive } from "./useOverlayLive";
 import { startFpsCounterSession } from "./fpsCounter";
-import { badgeLabel } from "./model";
-import type { BuildInfo, UpscalersOverview } from "./types";
+import { onJobUpdate } from "./jobRunner";
+import { badgeLabel, fallbackLine } from "./model";
+import type { BuildInfo, ScalerFallback, UpscalersOverview } from "./types";
 
 export type InGameMode = "off" | "start" | "always";
 export const IN_GAME_MODES: InGameMode[] = ["off", "start", "always"];
@@ -43,6 +44,8 @@ interface Badge {
   provider: ProviderFamily | null;
   fg: boolean;
   fgRoute: string | null;
+  modFg: string | null;
+  fallback: ScalerFallback | null;
 }
 
 let installs: Record<string, Badge> = {};
@@ -57,21 +60,30 @@ function emit(): void {
 }
 
 /** Publishes what Escaladores knows so covers and the in-game pill follow it without polling. */
+let makoEngines: Record<string, 4 | 5> = {};
+
 export function publishOverview(overview: UpscalersOverview): void {
   const next: Record<string, Badge> = {};
   for (const [appid, install] of Object.entries(overview.installs)) {
     const build = overview.builds.find((b) => b.id === install.build);
     const label = badgeLabel(build, install.options?.model, install.build);
-    next[appid] = { label: label.full, short: label.short, state: install.status, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null };
+    const fallback = install.fallback ?? null;
+    // The cover must not announce FSR 4 while the log shows another scaler runs.
+    const cover = fallback
+      ? { label: translate(fallback.observed ? "up.fallback.cover" : "up.fallback.coverNone", { from: fallback.requested, to: fallback.observed ?? "" }), short: fallback.observed ?? translate("up.fallback.coverNone", { from: fallback.requested, to: "" }), state: "fallback" }
+      : { label: label.full, short: label.short, state: install.status };
+    next[appid] = { ...cover, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null, modFg: install.mod_fg ?? null, fallback };
   }
   installs = next;
+  makoEngines = Object.fromEntries(Object.entries(overview.engines ?? {}).flatMap(([appid, engines]) => engines.mako?.engine ? [[appid, engines.mako.engine]] : []));
   const covers: Record<string, Badge> = {};
   for (const [appid, engines] of Object.entries(overview.engines ?? {})) {
     if (next[appid]) continue;
-    const label = engines.mako?.spatial ? "Mako"
-      : engines.mako?.fg ? `Mako${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
+    const mako = engines.mako ? `Mako ${engines.mako.engine === 5 ? 5 : 4}` : "Mako";
+    const label = engines.mako?.spatial ? mako
+      : engines.mako?.fg ? `${mako}${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
       : engines.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
-    if (label) covers[appid] = { label, short: label, state: "pending", build: label.toLowerCase(), engine: null, provider: null, fg: false, fgRoute: null };
+    if (label) covers[appid] = { label, short: label, state: "pending", build: label.toLowerCase(), engine: null, provider: null, fg: false, fgRoute: null, modFg: null, fallback: null };
   }
   engineCovers = covers;
   emit();
@@ -172,8 +184,9 @@ const COVER_CSS = `
 .${BADGE_CLASS} > b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 .${BADGE_CLASS}[data-state="active"] > svg { color: #6fe3a1; }
 .${BADGE_CLASS}[data-state="active"] { box-shadow: inset 0 0 0 1px rgba(111, 227, 161, .55), 0 3px 10px rgba(0, 0, 0, .38); }
-.${BADGE_CLASS}[data-state="broken"] > svg, .${BADGE_CLASS}[data-state="broken"] > b { color: #ffbe63; }
-.${BADGE_CLASS}[data-state="broken"] { box-shadow: inset 0 0 0 1px rgba(255, 190, 99, .6), 0 3px 10px rgba(0, 0, 0, .38); }
+.${BADGE_CLASS}[data-state="broken"] > svg, .${BADGE_CLASS}[data-state="broken"] > b,
+.${BADGE_CLASS}[data-state="fallback"] > svg, .${BADGE_CLASS}[data-state="fallback"] > b { color: #ffbe63; }
+.${BADGE_CLASS}[data-state="broken"], .${BADGE_CLASS}[data-state="fallback"] { box-shadow: inset 0 0 0 1px rgba(255, 190, 99, .6), 0 3px 10px rgba(0, 0, 0, .38); }
 .${BADGE_CLASS}[data-size="s"] { padding: 2px 7px 2px 5px; gap: 4px; font-size: 9.5px; line-height: 13px; }
 .${BADGE_CLASS}[data-size="s"] > svg { font-size: 10px; }
 .${BADGE_CLASS}[data-round] { top: auto; left: 50%; bottom: 4%; transform: translateX(-50%); animation-name: pdc-up-badge-in-round; }
@@ -390,7 +403,10 @@ export const InGameBadge: FC = () => {
   useEffect(() => subscribeQamSurface(setSurface), []);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const badge = running ? map[String(running.liveAppid)] : undefined;
-  const { live, lossless, makoResolutionWarning, makoMultiplier, makoSpatial } = useOverlayLive(running ? String(running.liveAppid) : null, !!badge);
+  const live_ = useOverlayLive(running ? String(running.liveAppid) : null, !!badge);
+  const { live, lossless, makoResolutionWarning, makoMultiplier, makoSpatial } = live_;
+  // A spatial-only or idle runtime may not say which model it loaded; the profile's version still does.
+  const makoName = running && makoEngines[String(running.liveAppid)] === 5 ? "Mako 5" : live_.makoName;
   const resolution = live?.resolution ? [live.resolution.render[1], live.resolution.output[1]] : null;
   const installedDll = badge?.engine === "dll" && badge.state === "not_run";
   const hasContent = installedDll || !!live || !!lossless || makoResolutionWarning || makoMultiplier !== null || !!makoSpatial;
@@ -399,12 +415,15 @@ export const InGameBadge: FC = () => {
   const observedName = live?.provider_name ?? (observedFamily ? PROVIDER_NAMES[observedFamily] : null);
   const observedProvider = otherProvider
     ? [observedName, live?.provider_version].filter(Boolean).join(" ")
-    : live?.provider_source === "optiscaler_log" && live.provider_name && live.provider_version
+    // The provider read from the log can differ from the build's version: it is evidence, not the build's name.
+    : live?.provider_source === "optiscaler_log" && live.provider_confidence !== "log_provider" && live.provider_name && live.provider_version
       ? `${live.provider_name} ${live.provider_version}` : null;
+  const fallback = live ? live.fallback ?? null : badge?.fallback ?? null;
   const fgLabel = lossless
-    ? `Lossless Scaling ×${lossless.multiplier} ${t(`up.lsfg.flow.${lossless.flow}`)}`
-    : badge?.fg ? t(`up.fg.pick.${badge.fgRoute ?? "optiscaler"}`) : null;
-  const fgState = lossless || live?.fg == null ? t("up.overlay.configured") : live.fg ? t("up.overlay.generating") : t("up.overlay.paused");
+    ? `Lossless Scaling ×${lossless.multiplier} · ${t("up.lsfg.flowScale")} ${Math.round(lossless.flow_scale * 100)} %`
+    : badge?.fg ? t(`up.fg.pick.${badge.fgRoute ?? "optiscaler"}`) : badge?.modFg ?? null;
+  // OptiScaler's own FG reading says nothing about the frame generation a mod runs.
+  const fgState = lossless || live?.fg == null || (!badge?.fg && !!badge?.modFg) ? t("up.overlay.configured") : live.fg ? t("up.overlay.generating") : t("up.overlay.paused");
 
   useEffect(() => {
     const update = () => {
@@ -485,17 +504,17 @@ export const InGameBadge: FC = () => {
           }}
         >
           {scalerShown && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
-            <span>{observedProvider ?? badge!.label}</span>
+            <span style={fallback ? { color: "#ffbe63" } : undefined}>{fallback ? fallbackLine(fallback, t) : observedProvider ?? badge!.label}</span>
             {resolution && <span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{resolution[0]}p → {resolution[1]}p</span>}
           </div>}
           {makoSpatial && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
-            <span>Mako</span><span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{`${makoSpatial.render.join("×")} → ${makoSpatial.output.join("×")}`}</span>
+            <span>{makoName}</span><span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{`${makoSpatial.render.join("×")} → ${makoSpatial.output.join("×")}`}</span>
           </div>}
           {makoResolutionWarning && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", color: "#ffbe63" }}>
             {t("up.overlay.makoResolution")}
           </div>}
           {makoMultiplier !== null && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
-            <span>{`Mako ×${makoMultiplier}`}</span><span style={{ color: "#9aa3ae" }}>{t("up.overlay.generating")}</span>
+            <span>{`${makoName} ×${makoMultiplier}`}</span><span style={{ color: "#9aa3ae" }}>{t("up.overlay.generating")}</span>
           </div>}
           {fgLabel && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
             <span>{fgLabel}</span><span style={{ color: "#9aa3ae" }}>{fgState}</span>
@@ -522,8 +541,11 @@ export function startUpscalerOverlays(): () => void {
     });
   };
   load(0);
+  // A job tracked after the Quick Access Menu closed finishes without Escaladores open to republish the overview.
+  const stopJobs = onJobUpdate((update) => { if (update.finished) load(0); });
   return () => {
     stopped = true;
+    stopJobs();
     stopCounterSession();
     window.clearTimeout(retry);
     inGame();

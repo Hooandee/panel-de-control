@@ -3,8 +3,9 @@ namespace PanelDeControl.Core.Upscalers;
 /// <summary>One frame generation path: what OptiScaler reads (<c>FGInput</c>) and what it produces (<c>FGOutput</c>).</summary>
 public sealed class FrameGenRoute
 {
-    public FrameGenRoute(string input, string output, bool followsGame, string source, bool experimental)
+    public FrameGenRoute(string input, string output, bool followsGame, string source, bool experimental, string? provider = null)
     {
+        Provider = provider;
         Input = input;
         Output = output;
         FollowsGame = followsGame;
@@ -23,7 +24,10 @@ public sealed class FrameGenRoute
 
     public bool Experimental { get; }
 
-    internal FrameGenRoute WithOutput(string output) => new(Input, output, FollowsGame, Source, Experimental);
+    /// <summary>The DLSS-G replacement OptiScaler loads for this route (ANR), or null.</summary>
+    public string? Provider { get; }
+
+    internal FrameGenRoute WithOutput(string output) => new(Input, output, FollowsGame, Source, Experimental, Provider);
 }
 
 /// <summary>The chosen route plus every route the game offers, in the order the Linux backend lists them.</summary>
@@ -66,6 +70,7 @@ public sealed class BuildDescription
     public string Engine { get; internal set; } = "";
     public string? Way { get; internal set; }
     public string? MayFallback { get; internal set; }
+    public bool Anr { get; internal set; }
 }
 
 /// <summary>
@@ -138,7 +143,16 @@ public static class UpscalerPlanner
             Engine = build.Engine,
             Way = build.Way.Length > 0 ? build.Way : null,
             MayFallback = MayFallback(build, gpu),
+            Anr = AnrCapable(catalog, build, gpu),
         }).ToList();
+
+    public static bool AnrCapable(BuildCatalog catalog, UpscalerBuild? build, string gpu) =>
+        build is { Engine: "optiscaler", Available: true } && catalog.AnrBuilds.ContainsKey(gpu) && build.Gpus.Contains(gpu)
+        && (catalog.Asset(build.Archive)?.Generation ?? 0) >= 10;
+
+    /// <summary>The build ANR FG goes in with when the game isn't already on OptiScaler 10.</summary>
+    public static string? AnrBuild(BuildCatalog catalog, string gpu) =>
+        catalog.AnrBuilds.TryGetValue(gpu, out var name) && AnrCapable(catalog, catalog.Build(name), gpu) ? name : null;
 
     public static IReadOnlyDictionary<string, string> ModelOverrides(UpscalerBuild? build, string? model)
     {
@@ -192,8 +206,8 @@ public static class UpscalerPlanner
     /// Every frame generation path this game, GPU and OptiScaler generation can take. DLSSG via Streamline ranks
     /// first, then the game's FSR/Xe FG, then OptiFG; OptiFG and XeFG are DX12 only.
     /// </summary>
-    public static IReadOnlyList<KeyValuePair<string, FrameGenRoute>> FrameGenRoutes(string gpu, IReadOnlyDictionary<string, IReadOnlyList<string>> inputs,
-        IReadOnlyCollection<string> apis, int? streamline, int generation)
+    public static IReadOnlyList<KeyValuePair<string, FrameGenRoute>> FrameGenRoutes(BuildCatalog catalog, string gpu,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> inputs, IReadOnlyCollection<string> apis, int? streamline, int generation)
     {
         var output = gpu == "intel" ? "xefg" : "fsrfg";
         var dx12 = apis.Count == 0 || apis.Contains("d3d12");
@@ -238,13 +252,18 @@ public static class UpscalerPlanner
         {
             routes.Add(new("optiscaler", new FrameGenRoute("upscaler", output, false, "optiscaler", true)));
         }
+        // Offered whatever the build: choosing it moves the game to OptiScaler 10 (AnrBuild).
+        if (inputs.ContainsKey("dlssg") && dx12 && AnrBuild(catalog, gpu) is not null)
+        {
+            routes.Add(new("anr", new FrameGenRoute("nvngxfg", "auto", true, "anr", true, catalog.AnrProvider)));
+        }
         return routes;
     }
 
-    public static FrameGenPlan? FrameGenPlanFor(string gpu, IReadOnlyDictionary<string, IReadOnlyList<string>> inputs, RecipeFrameGen? recipeFrameGen,
-        int generation, IReadOnlyCollection<string> apis, int? streamline, string? route)
+    public static FrameGenPlan? FrameGenPlanFor(BuildCatalog catalog, string gpu, IReadOnlyDictionary<string, IReadOnlyList<string>> inputs,
+        RecipeFrameGen? recipeFrameGen, int generation, IReadOnlyCollection<string> apis, int? streamline, string? route)
     {
-        var routes = FrameGenRoutes(gpu, inputs, apis, streamline, generation).ToList();
+        var routes = FrameGenRoutes(catalog, gpu, inputs, apis, streamline, generation).ToList();
         if (recipeFrameGen is not null && generation == 9)
         {
             var game = new FrameGenRoute(recipeFrameGen.Input, recipeFrameGen.Output ?? "fsrfg", false, "game", false);
@@ -271,28 +290,45 @@ public static class UpscalerPlanner
     public static FrameGenPlan? FrameGenRoutePlan(FrameGenPlan? plan, string? route) =>
         plan is null || !plan.Has(route) ? plan : new FrameGenPlan(route!, plan.Routes);
 
-    public static IReadOnlyDictionary<string, string> FrameGenOverrides(FrameGenPlan? plan, bool enabled)
+    public static IReadOnlyDictionary<string, string> FrameGenOverrides(FrameGenPlan? plan, bool enabled, bool anrFiles = false)
     {
+        var provider = enabled ? plan?.Selected.Provider : null;
+        Dictionary<string, string> overrides;
         if (!enabled || plan is null)
         {
-            return new Dictionary<string, string>(StringComparer.Ordinal)
+            overrides = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["FrameGen.Enabled"] = "false",
                 ["FrameGen.FGInput"] = "nofg",
                 ["FrameGen.FGOutput"] = "nofg",
             };
+            AddAnrReplacement(overrides, provider, anrFiles);
+            return overrides;
         }
-        var overrides = new Dictionary<string, string>(StringComparer.Ordinal)
+        overrides = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["FrameGen.Enabled"] = plan.Selected.FollowsGame ? "auto" : "true",
             ["FrameGen.FGInput"] = plan.Selected.Input,
             ["FrameGen.FGOutput"] = plan.Selected.Output,
         };
+        AddAnrReplacement(overrides, provider, anrFiles);
         if (plan.Selected.Input == "upscaler")
         {
             overrides["OptiFG.HUDFix"] = "true";
         }
         return overrides;
+    }
+
+    // Only where ANR is or was: leaving it hands DLSSG back to OptiScaler's default. ANR draws the HUD over the
+    // HUD-less colour itself, so OptiScaler must not strip it.
+    private static void AddAnrReplacement(Dictionary<string, string> overrides, string? provider, bool anrFiles)
+    {
+        if (provider is null && !anrFiles)
+        {
+            return;
+        }
+        overrides["FrameGen.FGNvngxReplacement"] = provider ?? "auto";
+        overrides["FrameGen.DisableHudless"] = provider is not null ? "false" : "auto";
     }
 
     private static string FileName(string path)

@@ -21,7 +21,9 @@ const gameState = vi.hoisted(() => ({
   current: null as { appid: string; liveAppid: number; name: string } | null,
 }));
 
+const syncHud = vi.hoisted(() => vi.fn());
 vi.mock("../api", () => ({ setCurrentGame }));
+vi.mock("../mangohud/hudGameSync", () => ({ syncSteamOverlayForGame: syncHud }));
 vi.mock("./runningGame", () => ({
   readRunningGame: () => gameState.current,
 }));
@@ -62,6 +64,8 @@ describe("startGameWatcher", () => {
     performance.read.mockClear();
     setCurrentGame.mockReset();
     setCurrentGame.mockResolvedValue(undefined);
+    syncHud.mockReset();
+    syncHud.mockResolvedValue(undefined);
     notifyLifetime = () => undefined;
     unregisterLifetime = vi.fn();
     vi.stubGlobal("SteamClient", {
@@ -98,6 +102,18 @@ describe("startGameWatcher", () => {
     performance.notify();
     await flushPromises();
     expect(setCurrentGame).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets the HUD follow the game once the backend knows it, and again on exit", async () => {
+    gameState.current = { appid: "shortcut", liveAppid: 101, name: "Game A" };
+    const stop = startGameWatcher();
+    await flushPromises();
+    expect(syncHud).toHaveBeenCalledTimes(1);
+    gameState.current = null;
+    notifyLifetime();
+    await flushPromises();
+    expect(syncHud).toHaveBeenCalledTimes(2);
+    stop();
   });
 
   it("polls unknown profile recovery without requiring an open panel", async () => {

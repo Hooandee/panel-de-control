@@ -25,6 +25,7 @@ import { theme } from "../theme";
 import {
   QUALITIES, badgeLabel, buildLabel, defaultChoice, lastOutputHeight, megabytes, renderHeight,
   buildBlocker, gameNotice, gameOutputHeight, protonFsr4Env, restoredChoice, steamMachineStrain,
+  fallbackLine,
 } from "./model";
 import { scalerSwitching } from "./scalerTransition";
 import { MakoScaling } from "./MakoScaling";
@@ -44,13 +45,14 @@ import { JobProgress } from "./JobProgress";
 import { FrameGenRow } from "./FrameGenRow";
 import { useThemes } from "../themes/useThemes";
 import { ModelPicker } from "./ModelPicker";
+import { ModFile, modDownload, wikiModName } from "./ModFile";
 import { UserFiles } from "./UserFiles";
 import { markPendingReinstall, takePendingReinstall } from "./userFileWatch";
 import { replaceForeignInstallation } from "./foreignReplacement";
 import {
   ActionButton, Fold, Label, ListCard, ListRow, Note, Notice, Row, SegmentRow, Skeleton, Spinner, statusColor,
 } from "./parts";
-import type { BuildInfo, GameDetail, UpscalerChoice, UpscalerJob, UpscalerStatus, UpscalersOverview, VerifyResult } from "./types";
+import type { BuildInfo, GameDetail, Quality, UpscalerChoice, UpscalerJob, UpscalerStatus, UpscalersOverview, VerifyResult } from "./types";
 import { upscalerErrorCode } from "./errorCode";
 
 const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR 3.1", fsr2: "FSR 2", xess: "XeSS" };
@@ -107,6 +109,7 @@ export const GameView: FC<{
   const [spatial, setSpatial] = useState(false);
   const [spatialInstalled, setSpatialInstalled] = useState(false);
   const spatialSelected = useRef(false);
+  const panelQuality = useRef<Quality>("native");
   useEffect(() => {
     let alive = true;
     spatialSelected.current = false;
@@ -280,6 +283,9 @@ export const GameView: FC<{
   const qualityChanged = qualityMode.mode === "panel" && install?.options.quality !== choice.quality;
   const modelChanged = (install?.options.model ?? builds.find((build) => build.id === install?.build)?.models?.[0] ?? null)
     !== (choice.model ?? builds.find((build) => build.id === choice.build)?.models?.[0] ?? null);
+  const missingMod = !!detail?.recipe_info?.page && !!detail.recipe_info.needs.includes("mod") && !detail.recipe_info.user_files?.length && !detail.mod
+    && Object.values(detail.analysis.inputs).every((files) => !files?.length);
+  const avoidedFile = detail?.recipe_info?.user_files?.find((file) => file.state === "avoid");
   const awaitingExit = !!queued && queued.build === choice.build && (queued.model ?? null) === (choice.model ?? null)
     && (!detail?.recipe_info?.quality_on_exit || (queued.quality ?? null) === (choice.quality ?? null));
   const dirty = !awaitingExit && (spatialInstalled || !install || !sameBuild || qualityChanged || install.options.sharpness !== choice.sharpness || modelChanged);
@@ -295,8 +301,13 @@ export const GameView: FC<{
   const installedOptiscaler = !!install && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton" && installedBuild?.engine !== "dll";
   const installedRoute = install?.options.fg_route ?? detail?.fg_plan?.route ?? detail?.fg_plan?.source ?? null;
   const scalerChoice = { ...choice, fg: install?.options.fg ?? "off" as const, fg_route: install?.options.fg_route ?? null };
+  // ANR FG only runs on OptiScaler 10: another version goes in without it.
+  const dropsAnr = scalerChoice.fg_route === "anr" && !selected?.anr;
+  // Accepting the anti-cheat warning sticks to the install it was given for, so reinstalling that game (a new mod or user
+  // file, another version) doesn't ask again; installs from before the flag existed only went in after the warning.
+  const antiCheatAccepted = confirmAntiCheat || !!(install && (install.anti_cheat_accepted ?? detail?.analysis.anti_cheat));
   const installSelected = () => startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
-    ...scalerChoice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
+    ...scalerChoice, ...(replacesFsr || dropsAnr ? { fg: "off" as const } : {}), confirm_anti_cheat: antiCheatAccepted,
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
   });
   const reinstall = () => start(installSelected);
@@ -331,10 +342,10 @@ export const GameView: FC<{
 
   const apply = async () => {
     trace("apply");
-    if (gameRunning && install && !spatialInstalled && (!sameBuild || modelChanged || (qualityChanged && !!detail?.recipe_info?.quality_on_exit))) {
+    if (gameRunning && !spatialInstalled && (!install || !sameBuild || modelChanged || (qualityChanged && !!detail?.recipe_info?.quality_on_exit))) {
       // The running game holds OptiScaler's files (and REFramework rewrites its quality on exit): it goes in as soon as it closes.
       queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
-        ...scalerChoice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
+        ...scalerChoice, ...(replacesFsr || dropsAnr ? { fg: "off" as const } : {}), confirm_anti_cheat: antiCheatAccepted,
         ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
       });
       setMessage(null);
@@ -363,6 +374,7 @@ export const GameView: FC<{
   const applyFrameGeneration = async (fg: "on" | "off", fg_route: UpscalerChoice["fg_route"]) => {
     trace("frame_generation", { ...choice, fg, fg_route });
     if (blocked || running) throw new Error("blocked");
+    if (fg === "on" && fg_route === "anr") return applyAnr();
     const configureInstalled = !!install && (sameBuild || fg === "off");
     const fgSolution = detail?.solutions?.[configureInstalled ? install!.build : choice.build];
     const next = { ...(configureInstalled ? restoredChoice(install!.build, install!.options, builds, preferred) : choice), fg, fg_route };
@@ -382,6 +394,32 @@ export const GameView: FC<{
       setJob(started);
       await waitForJobCompletion(started.id);
     }
+  };
+
+  /** ANR FG: Panel picks the OptiScaler 10 build it runs with (FSR 4.1.2) and installs its provider beside it. */
+  const applyAnr = async () => {
+    const target = installedBuild?.anr ? installedBuild.id : overview.anr_build;
+    if (!target) throw new Error("anr_build");
+    const keep = install?.build === target;
+    const base = keep ? restoredChoice(install!.build, install!.options, builds, preferred) : { ...choice, build: target, model: null };
+    const next = { ...base, fg: "on" as const, fg_route: "anr" as const };
+    keepDraft.current = true;
+    changeChoice(next);
+    if (keep && install?.options.fg_route === "anr") {
+      try {
+        const result = await configureUpscaler(appid, next);
+        if (gameRunning) setApplied(result.live ? "now" : "restart");
+        await load();
+        onChanged();
+        return;
+      } catch (error) {
+        // A reinstall with frame generation off took ANR's files out: they go back in with a new install.
+        if (upscalerErrorCode(error) !== "anr_reinstall") throw error;
+      }
+    }
+    const started = await startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
+    setJob(started);
+    await waitForJobCompletion(started.id);
   };
 
   const saveAll = async () => {
@@ -454,6 +492,7 @@ export const GameView: FC<{
   };
 
   const pickExe = async () => {
+    holdPage();
     const picked = await openFilePicker(0 as never, detail?.analysis.target ?? "/home", true, true, undefined, ["exe"]).catch(() => null);
     if (!picked?.realpath) return;
     try {
@@ -477,6 +516,7 @@ export const GameView: FC<{
   const [live, setGenerating] = useUpscalerLive(appid, playing, status === "pending" ? check : undefined);
 
   const facts = verify?.facts ?? detail?.history[detail.history.length - 1]?.facts;
+  const fallback = (playing ? live.fallback : status === "active" ? facts?.fallback : null) ?? null;
   const render = facts?.resolution?.render[1] ?? null;
   const output = facts?.resolution?.output[1] ?? null;
   const blocked = switchingScaler || foreignBusy || !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
@@ -487,17 +527,25 @@ export const GameView: FC<{
   const preferredBuild = builds.find((b) => b.id === preferred && b.available);
   const runs = badgeLabel(installedBuild, install?.options.model, install?.build ?? "").full;
   const uses = [...new Set(Object.keys(inputs).map((k) => INPUT_NAMES[k]).filter(Boolean))];
+  // Turning the game's quality off goes back to Panel's last quality, not to Native.
+  if (choice.quality && QUALITIES.includes(choice.quality)) panelQuality.current = choice.quality;
   const qualityName = (q: UpscalerChoice["quality"]) => (q ? t(`up.quality.${q}`) : t("up.quality.game"));
   const installedEngine = installedBuild?.engine ?? "optiscaler";
   const selectedEngine = selected?.engine ?? "optiscaler";
   const optiscalerRecipe = !spatial && !pendingModel && !externalHelix && selectedEngine === "optiscaler";
+  const modCard = !!detail && !detail.native && ((!spatial && selectedEngine === "optiscaler" && !detail.recipe_info?.user_files?.length) || !!detail.mod);
   const recommendedInputKey = solution ? solution.recommended_input : detail?.recipe_info?.recommended_input;
   const scalerSeenWorking = sameBuild && (status === "active" || (playing && live.active));
   // Locked quality already names the input to pick, right under the selector.
   const inputHintShown = !scalerSeenWorking && qualityMode.mode !== "locked";
-  const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown
+  // Luma hands OptiScaler its DLSS input itself; these games have no such option in their menus.
+  const lumaInput = !!detail?.recipe_info?.luma_detected || !!detail?.recipe_info?.automatic?.includes("Luma");
+  const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown && !lumaInput
     ? INPUT_NAMES[recommendedInputKey] : null;
-  const notice = detail && !detail.native ? gameNotice(detail.identity?.steam_appid ?? appid) : null;
+  // A setting Panel writes into the game's config on install is only asked of the user when Panel could not write it.
+  const configPending = !detail?.recipe_info?.game_config
+    || !!detail.install?.game_config?.some((c) => c.state === "missing" || c.state === "failed");
+  const notice = detail && !detail.native && configPending ? gameNotice(detail.identity?.steam_appid ?? appid) : null;
   const strain = detail && !detail.native && !spatial ? steamMachineStrain(overview.device, gameOutputHeight(detail?.history ?? [], overview.display), selected, choice.quality) : null;
   const recipeBlocked = !!solution?.blocked_reason || (optiscalerRecipe && !solution && !!detail?.recipe_info?.blocked);
   const automaticLuma = optiscalerRecipe && !detail?.recipe_info?.luma_detected && !!detail?.recipe_info?.automatic?.includes("Luma");
@@ -518,7 +566,7 @@ export const GameView: FC<{
   const subtitle = !detail ? null
     : detail.native ? null
     : playing ? t("up.sub.playing")
-    : install ? runs
+    : install ? (fallback?.observed ?? runs)
     : detail.analysis.foreign ? externalHelix ? "" : t("up.sub.foreign")
     : uses.length ? t(preferredBuild ? "up.sub.usesBetter" : "up.sub.uses", { name: uses.join(", ") })
     : null;
@@ -544,7 +592,7 @@ export const GameView: FC<{
           ) : playing ? (
             <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                <StatusLine icon={<StatusIcon status={status} />} title={runs} />
+                <StatusLine icon={<StatusIcon status={fallback ? "loaded" : status} />} title={fallback ? fallbackLine(fallback, t) : runs} sub={fallback ? t(`up.fallback.reason.${fallback.reason}`) : undefined} tone={fallback ? "warn" : undefined} />
                 {live.render !== null && live.output !== null && (
                   <span style={{ fontSize: theme.font.caption + 2, color: theme.color.textMuted, fontVariantNumeric: "tabular-nums" }}>
                     {t("up.res.arrow", { from: live.render, to: live.output })}
@@ -563,13 +611,16 @@ export const GameView: FC<{
             </div>
           ) : install ? (
             <StatusLine
-              icon={<StatusIcon status={status} />}
-              title={status === "active" ? t("up.state.working", { name: runs }) : status === "broken" ? t("up.status.broken") : t("up.state.installed", { name: runs })}
-              sub={status === "active" && render && output
+              icon={<StatusIcon status={fallback ? "loaded" : status} />}
+              title={fallback ? fallbackLine(fallback, t) : status === "active" ? t("up.state.working", { name: runs }) : status === "broken" ? t("up.status.broken") : t("up.state.installed", { name: runs })}
+              sub={fallback ? t(`up.fallback.reason.${fallback.reason}`) : status === "active" && render && output
                 ? t(render < output ? "up.state.checked" : "up.state.checkedNative", { from: render, to: output })
                 : status === "active" ? undefined : installedBuild?.engine === "dll" && status === "not_run"
-                  ? t("up.status.dll_not_run") : t(`up.status.${status}`)}
-              tone={status === "broken" ? "danger" : status === "loaded" ? "warn" : undefined}
+                  ? t("up.status.dll_not_run") : status === "loaded" && avoidedFile
+                    ? t("up.userFile.avoid", { version: avoidedFile.installed_version ?? "", recommended: avoidedFile.version })
+                    : status === "loaded" && missingMod
+                      ? t("up.status.loadedNeedsMod") : t(`up.status.${status}`)}
+              tone={status === "broken" ? "danger" : status === "loaded" || fallback ? "warn" : undefined}
             />
           ) : detail.analysis.foreign ? (
             <StatusLine icon={<LuArrowLeftRight size={17} />} title={detail.analysis.foreign_identity?.engine === "helixsr" ? `HelixSR${detail.analysis.foreign_identity.variant === "unknown" ? "" : ` ${detail.analysis.foreign_identity.variant.toUpperCase()}`}` : t("up.foreign.title")} sub={detail.analysis.foreign_identity?.engine === "helixsr" ? t("up.helix.foreign", { name: "HelixSR" }) : t("up.foreign.body")} />
@@ -584,6 +635,12 @@ export const GameView: FC<{
           {!detail.native && !spatial && selectedEngine === "optiscaler" && !!detail.recipe_info?.user_files?.length && (
             <UserFiles appid={appid} files={detail.recipe_info.user_files} disabled={running || foreignBusy}
               onDetail={(next) => { if (next.install) markPendingReinstall(appid); setDetail(next); }} />
+          )}
+          {modCard && (
+            <ModFile appid={appid} mod={detail.mod ?? null} needed={!!detail.recipe_info?.needs.includes("mod")}
+              name={wikiModName(detail.recipe_info?.page)} download={modDownload(detail)} disabled={running || foreignBusy || gameRunning}
+              onDetail={(next) => { if (next.install && !next.mod?.applied) markPendingReinstall(appid); setDetail(next); }}
+              onApply={install ? reinstall : undefined} />
           )}
           {(detail.native || externalHelix) && <ListRow label="Mako" chevron disabled={running || foreignBusy} onPress={() => selectSpatial(!spatial)} />}
           {wikiUpdating && (
@@ -624,7 +681,7 @@ export const GameView: FC<{
           {detail.updating && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Notice>}
           {detail.analysis.target && uses.length === 0 && !solution?.input_reconciled && !detail.recipe_info?.needs.includes("mod") && !detail.recipe_info?.user_files?.length && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.detect.noinputs")}</Notice>}
           {detail.recipe_info?.broken && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.broken")}</Notice>}
-          {detail.recipe_info?.needs.filter((need) => !(need === "mod" && detail.recipe_info?.user_files?.length)).filter((need) => need !== "luma" || (optiscalerRecipe && !detail.recipe_info?.luma_detected && !automaticLuma)).map((need) => <Notice key={need} icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.recipe.need.${need}`)}</Notice>)}
+          {detail.recipe_info?.needs.filter((need) => !(need === "mod" && (detail.recipe_info?.user_files?.length || modCard))).filter((need) => need !== "luma" || (optiscalerRecipe && !detail.recipe_info?.luma_detected && !automaticLuma)).map((need) => <Notice key={need} icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.recipe.need.${need}`)}</Notice>)}
           {!spatial && selectedEngine === "optiscaler" && detail.recipe_info?.game_settings?.map((entry) => (
             <Notice key={entry.setting} icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.gameSetting", entry)}</Notice>
           ))}
@@ -667,13 +724,20 @@ export const GameView: FC<{
             onChange={(quality) => changeChoice({ ...choice, quality })}
             options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: height === undefined ? undefined : `${renderHeight(height, q)}p` }))}
           />
+          {/* Ratio override off: the game's preset and OptiScaler's menu set the size. Not under REFramework's PureDark path. */}
+          {qualityMode.mode === "panel" && !detail.recipe_info?.quality_on_exit && <ListCard>
+            <ListRow first label={t("up.quality.useGame")} caption={t("up.quality.useGameCaption")} on={choice.quality === null}
+              onPress={() => changeChoice({ ...choice, quality: choice.quality === null ? panelQuality.current : null })} />
+          </ListCard>}
         </>
       )}
       {detail && !pendingModel && !spatial && !detail.native && !externalHelix && (qualityMode.mode === "game" || replacesFsr) && <Note>{t("up.quality.inGame")}</Note>}
       {detail && !pendingModel && !spatial && qualityMode.mode === "locked" && <Note>{t("up.quality.useInput", { input: qualityMode.input })}</Note>}
-      {notice && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(notice)}</Notice>}
+      {notice && (notice === "up.notice.dx11Launch"
+        ? <Notice icon={<LuInfo size={16} />}>{t(notice)}</Notice>
+        : <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(notice)}</Notice>)}
       {strain && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.steamMachine.${strain}`)}</Notice>}
-      {recommendedInput && <Notice icon={<LuInfo size={16} />}>
+      {recommendedInput && notice !== "up.notice.dx11Launch" && <Notice icon={<LuInfo size={16} />}>
         {t("up.input.recommended", { input: recommendedInput, name: badgeLabel(selected, choice.model, choice.build).full })}
       </Notice>}
       {detail && !spatial && !detail.native && (installedOptiscaler || detail.analysis.foreign_identity?.engine === "helixsr") && (
@@ -749,6 +813,7 @@ export const GameView: FC<{
           optiscaler={{ fg: choice.fg ?? "off", route }}
           installedRoute={install?.options.fg === "on" ? install.options.fg_route ?? detail.fg_plan?.route ?? detail.fg_plan?.source ?? "game" : null}
           gpu={overview.gpu}
+          anrSettings={detail.recipe_info?.anr_settings}
           onOptiscaler={(fg, fg_route) => changeChoice({ ...choice, fg, fg_route: fg_route ?? choice.fg_route ?? null })}
           renderAdvanced={(restore) => detail.native ? restore && (
             <>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  blockAvailableInMode,
   blockOrder,
   blocksForSection,
   CATEGORY_IDS,
@@ -57,9 +58,16 @@ describe("desktop-only customization blocks", () => {
   it("allows the independent Steam block in custom views", () => {
     expect(pickableBlocksForSection("power", false, null).map((block) => block.id)).toEqual([
       "tdp",
+      "tdpWatts",
       "steamPerformance",
       "autoTdp",
     ]);
+  });
+
+  it("offers the watts-only TDP block on handhelds but never in the section or on desktop", () => {
+    expect(blocksForSection("power", false).map((block) => block.id)).not.toContain("tdpWatts");
+    expect(blockAvailableInMode("tdpWatts", false)).toBe(true);
+    expect(blockAvailableInMode("tdpWatts", true)).toBe(false);
   });
 
   it("keeps the desktop core visible with a stale handheld presence cache", () => {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hmac
 import os
 import re
@@ -10,6 +11,7 @@ import urllib.parse
 from typing import Callable, Optional
 
 from ..core.media_types import mime_type
+from .stream_relay import StreamRelay
 
 Resolver = Callable[[str], Optional[str]]
 
@@ -35,8 +37,9 @@ class MediaServer:
     `http.server` on every release.
     """
 
-    def __init__(self, resolver: Resolver):
+    def __init__(self, resolver: Resolver, relay: Optional[StreamRelay] = None):
         self._resolver = resolver
+        self._relay = relay
         self.token = secrets.token_urlsafe(24)
         self._socket: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
@@ -74,6 +77,13 @@ class MediaServer:
             return None
         return f"http://127.0.0.1:{self.port}/m/{self.token}/{urllib.parse.quote(media_id, safe='')}"
 
+    def stream_url(self, url: str) -> Optional[str]:
+        """Loopback address for a plain-http radio stream; Steam's https document upgrades http media."""
+        if not self._socket or not self._relay:
+            return None
+        key = self._relay.register(url)
+        return f"http://127.0.0.1:{self.port}/r/{self.token}/{key}" if key else None
+
     def video_page_url(self) -> Optional[str]:
         """Page for Steam's native video window. YouTube refuses embeds without an http(s) referrer."""
         if not self._socket:
@@ -107,12 +117,14 @@ class MediaServer:
 
     def _serve(self, client: socket.socket, target: str, headers: dict[str, str], send_body: bool) -> None:
         parts = target.split("?", 1)[0].split("/")
-        if len(parts) != 4 or parts[1] not in ("m", "v"):
+        if len(parts) != 4 or parts[1] not in ("m", "v", "r"):
             return _send_status(client, 404)
         if not hmac.compare_digest(parts[2], self.token):
             return _send_status(client, 403)
         if parts[1] == "v":
             return _serve_page(client, parts[3], send_body)
+        if parts[1] == "r":
+            return self._serve_stream(client, parts[3], send_body)
         path = self._resolver(urllib.parse.unquote(parts[3]))
         mime = mime_type(path) if path else None
         if not path or not mime:
@@ -148,6 +160,19 @@ class MediaServer:
                     break
                 client.sendall(chunk)
                 remaining -= len(chunk)
+
+    def _serve_stream(self, client: socket.socket, key: str, send_body: bool) -> None:
+        stream = self._relay.open(urllib.parse.unquote(key)) if self._relay else None
+        if stream is None:
+            return _send_status(client, 404)
+        with contextlib.closing(stream):
+            _send_head(client, 200, {"Content-Type": stream.content_type, "Cache-Control": "no-store", "Access-Control-Allow-Origin": STEAM_UI_ORIGIN})
+            if not send_body:
+                return
+            for chunk in stream.chunks():
+                if self._stopping.is_set():
+                    return
+                client.sendall(chunk)
 
 
 def _read_request(client: socket.socket) -> Optional[tuple[str, str, dict[str, str]]]:

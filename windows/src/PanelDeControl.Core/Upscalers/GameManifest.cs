@@ -20,6 +20,9 @@ public sealed class GameManifest
     /// <summary>Recipe configuration files restored key by key; Windows installs never write one yet.</summary>
     public DataValue Configuration { get; set; } = new DataObject(Array.Empty<KeyValuePair<string, DataValue>>());
 
+    /// <summary>Files that are Panel's whatever their hash now (a user's mod the game rewrites); removed regardless.</summary>
+    public List<string> Owned { get; } = new();
+
     public bool Incomplete { get; set; }
 
     public string? Engine { get; set; }
@@ -68,6 +71,7 @@ public sealed class GameManifest
         {
             manifest.Configuration = configuration;
         }
+        manifest.Owned.AddRange(Strings(document.Get("owned")));
         manifest.Incomplete = document.Get("incomplete") is DataBool { Value: true };
         manifest.Engine = (document.Get("engine") as DataString)?.Value;
         return manifest;
@@ -81,6 +85,7 @@ public sealed class GameManifest
             Member("backups", new DataArray(Backups.Select(name => (DataValue)new DataString(name)).ToList())),
             Member("dirs", new DataArray(Dirs.Select(name => (DataValue)new DataString(name)).ToList())),
             Member("configuration", Configuration),
+            Member("owned", new DataArray(Owned.OrderBy(name => name, StringComparer.Ordinal).Select(name => (DataValue)new DataString(name)).ToList())),
         };
         if (Incomplete)
         {

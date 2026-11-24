@@ -4,7 +4,7 @@ import struct
 from pathlib import Path
 from typing import NamedTuple
 
-from . import ini, pe
+from . import ini, pe, recipe_catalog
 
 _MAX_ADDON = 32 * 1024 * 1024
 
@@ -15,14 +15,34 @@ class _Mod(NamedTuple):
     markers: tuple[bytes, ...]
 
 
+# Keyed by the catalog dependency that installs each Luma package; a game's recipe says which one it uses.
 _MODS = {
-    "1462040": _Mod('Luma-Final Fantasy VII Remake.addon',
-                    'Luma/Final Fantasy VII Remake/Luma_FF7R_Output_SDR_Tonemap.hlsl',
-                    (b'Final Fantasy VII Remake Luma mod', b'Luma for "Final Fantasy VII Remake" is developed by ')),
-    "1687950": _Mod('Luma-Persona 5 Royal.addon',
-                    'Luma/Persona 5 Royal/Luma_DecodeMotionVector.hlsl',
-                    (b'Persona 5 Royal Luma mod',)),
+    "luma-ff7": _Mod('Luma-Final Fantasy VII Remake.addon',
+                     'Luma/Final Fantasy VII Remake/Luma_FF7R_Output_SDR_Tonemap.hlsl',
+                     (b'Final Fantasy VII Remake Luma mod', b'Luma for "Final Fantasy VII Remake" is developed by ')),
+    "luma-p5r": _Mod('Luma-Persona 5 Royal.addon', 'Luma/Persona 5 Royal/Luma_DecodeMotionVector.hlsl',
+                     (b'Persona 5 Royal Luma mod',)),
+    "luma-mrf": _Mod('Luma-Metaphor ReFantazio.addon', 'Luma/Metaphor ReFantazio/Luma_PrepareMotionVector.hlsl',
+                     (b'Metaphor: ReFantazio Luma mod',)),
+    "luma-gbfr": _Mod('Luma-Granblue Fantasy Relink.addon', 'Luma/Granblue Fantasy Relink/Luma_GBFR_Tonemap.hlsl',
+                      (b'Luma for "Granblue Fantasy Relink" is developed by ',)),
+    "luma-qb": _Mod('Luma-Quantum Break.addon', 'Luma/Quantum Break/Luma_QB_PreSRDecode.hlsl',
+                    (b'Luma for "Quantum Break" is developed by ',)),
+    "luma-prey": _Mod('Luma-Prey.addon', 'Luma/Prey/ArkPostEffects_ArkFullscreenTex_0x994768B0.ps_5_0.hlsl',
+                      (b'Luma for "Prey" is developed by ',)),
+    "luma-dh2": _Mod('Luma-Dishonored 2.addon', 'Luma/Dishonored 2/AA_TAA_0x06BBC941_0x9F77B624.cs_5_0.hlsl',
+                     (b'Luma for "Dishonored 2" is developed by ',)),
+    "luma-wd2": _Mod('Luma-Watch Dogs 2.addon', 'Luma/Watch Dogs 2/AmbientOcclusionVolume_0x570E07E7.ps_5_0.hlsl',
+                     (b'Luma for "Watch Dogs 2" is developed by ',)),
+    "luma-ue": _Mod('Luma-Unreal Engine.addon', 'Luma/Unreal Engine/Luma_MotionVec_UE4_Decode.hlsl',
+                    (b'Luma for "Unreal Engine" is developed by ',)),
 }
+
+
+def _mod(appid: str) -> _Mod | None:
+    game = recipe_catalog.bundled().games.get(str(appid))
+    recipes = game.recipes.values() if game else ()
+    return next((_MODS[dep] for recipe in recipes for dep in recipe.dependencies if dep in _MODS), None)
 
 
 def _file(root: Path, target: Path, name: str, limit: int) -> Path | None:
@@ -48,7 +68,7 @@ def _x64_image(data: bytes) -> bool:
 
 
 def detected(root: Path, target: Path | None, appid: str) -> bool:
-    mod = _MODS.get(str(appid))
+    mod = _mod(appid)
     if target is None or mod is None:
         return False
     try:

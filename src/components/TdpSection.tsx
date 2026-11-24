@@ -3,7 +3,7 @@ import { FC, useCallback, useEffect, useMemo, useState } from "react";
 
 import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
 import { resetWatts } from "../tdp/logic";
-import { extraZone, manualCeiling } from "../tdp/extraZone";
+import { extraZone, wattsRange } from "../tdp/extraZone";
 import { PresetItem } from "../tdp/powerPresets";
 import { resolveLivePresets } from "../tdp/livePresets";
 import { openPowerPresetsModal } from "./PowerPresetsModal";
@@ -46,11 +46,16 @@ export interface TdpSectionProps {
   onApplyPreset: (item: PresetItem) => void;
   /** The console firmware owns the power budget (PS5): explain it instead of a bare notice. */
   consoleManaged?: boolean;
+  /** SteamOS Manager is running: with control off, Steam is the one driving the TDP. */
+  steamControlled?: boolean;
+  /** Hand the TDP back to Steam; shown at the bottom of the controls. */
+  onReleaseControl?: () => void;
 }
 
 const STEAM_DECK_NOMINAL_MAX_W = 15;
+const DISABLED_OPACITY = 0.45;
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onGpuLevel, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset, consoleManaged }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onGpuLevel, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset, consoleManaged, steamControlled, onReleaseControl }) => {
   const { t } = useI18n();
   const [target, setTarget] = useState<PowerTarget>("cpu");
   const targetContext = `${scope}:${tdp?.appid ?? ""}`;
@@ -127,11 +132,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
     scope === "global"
       ? { watts: tdp.global_watts, levels: tdp.global_requested_levels ?? tdp.global_levels, mode: tdp.global_boost_mode }
       : { watts: tdp.watts, levels: tdp.requested_levels ?? tdp.levels, mode: tdp.boost_mode };
-  const requestMin = tdp.request_min ?? tdp.limits.min;
-  // Active ceiling: on battery the device-aware cap (max), on charger max_ac.
-  // Never offer more than the current power source can deliver.
-  const activeMax = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
-  const sliderMax = manualCeiling(activeMax, tdp.on_ac, tdp.manual_max_ac);
+  const { requestMin, activeMax, sliderMax } = wattsRange(tdp);
   const isAutoOn = !monitorOnly && (power?.auto_tdp ?? false);
   const visualLimits = { ...tdp.limits, min: isAutoOn ? tdp.limits.min : requestMin };
   // Reference watts clamped to the active ceiling; the reset link shows only when
@@ -212,9 +213,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
     return (
       <>
         <PanelSectionRow>
-          <TdpMonitorNotice onReactivate={onReactivate} />
+          <TdpMonitorNotice steam={steamControlled} onReactivate={onReactivate} />
         </PanelSectionRow>
         <PanelSectionRow>
+          <div style={{ opacity: DISABLED_OPACITY }}>
           <PowerArc
             watts={arcTarget}
             limits={visualLimits}
@@ -230,6 +232,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
             overclocked={tdp.overclock?.detected ?? false}
             unit={tdp.unit}
           />
+          </div>
         </PanelSectionRow>
       </>
     );
@@ -431,6 +434,25 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
             </PanelSectionRow>
           )}
         </>
+      )}
+      {onReleaseControl && (
+        <PanelSectionRow>
+          <Focusable
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              padding: "4px 0",
+              marginTop: 4,
+              color: theme.color.textMuted,
+              fontSize: "var(--pdc-power-caption, 11px)",
+              cursor: "pointer",
+            }}
+            onActivate={onReleaseControl}
+            onClick={onReleaseControl}
+          >
+            {t("tdp.conflict.steamos.release")}
+          </Focusable>
+        </PanelSectionRow>
       )}
     </>
   );

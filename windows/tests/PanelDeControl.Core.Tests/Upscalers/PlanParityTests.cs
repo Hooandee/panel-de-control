@@ -49,12 +49,12 @@ public sealed class PlanParityTests
 
     [Fact]
     public void FrameGenRoutesMatch() => Check("fg_routes", (key, parts) =>
-        Routes(UpscalerPlanner.FrameGenRoutes(parts[0], Inputs(parts[1]), Apis(parts[2]), Streamline(parts[3]), int.Parse(parts[4], CultureInfo.InvariantCulture))));
+        Routes(UpscalerPlanner.FrameGenRoutes(Catalog, parts[0], Inputs(parts[1]), Apis(parts[2]), Streamline(parts[3]), int.Parse(parts[4], CultureInfo.InvariantCulture))));
 
     [Fact]
     public void FrameGenPlansMatch() => Check("fg_plans", (key, parts) =>
     {
-        var plan = UpscalerPlanner.FrameGenPlanFor(parts[0], Inputs(parts[1]), parts[3].Length == 0 ? null : new RecipeFrameGen(parts[3]),
+        var plan = UpscalerPlanner.FrameGenPlanFor(Catalog, parts[0], Inputs(parts[1]), parts[3].Length == 0 ? null : new RecipeFrameGen(parts[3]),
             int.Parse(parts[4], CultureInfo.InvariantCulture), Apis(parts[2]), 2, parts[5].Length == 0 ? null : parts[5]);
         return new JsonObject
         {
@@ -69,7 +69,7 @@ public sealed class PlanParityTests
     public void SolutionPlansMatch() => Check("solutions", (key, parts) =>
     {
         var route = parts[5].Length == 0 ? null : parts[5];
-        var plan = SolutionPlan.Resolve(parts[0], Analysis(parts[2]), Recipe(parts[1]), int.Parse(parts[3], CultureInfo.InvariantCulture),
+        var plan = SolutionPlan.Resolve(Catalog, parts[0], Analysis(parts[2]), Recipe(parts[1]), int.Parse(parts[3], CultureInfo.InvariantCulture),
             parts[4], route, parts[6] == "1");
         return new JsonObject
         {
@@ -143,7 +143,7 @@ public sealed class PlanParityTests
         ["id"] = build.Id, ["family"] = build.Family, ["version"] = build.Version, ["image"] = build.Image, ["cost"] = build.Cost,
         ["available"] = build.Available, ["channel"] = build.Channel, ["supported"] = build.Supported, ["download_bytes"] = build.DownloadBytes,
         ["models"] = List(build.Models), ["dll_names"] = List(build.DllNames), ["dll_legacy_names"] = List(build.DllLegacyNames),
-        ["engine"] = build.Engine, ["way"] = build.Way, ["may_fallback"] = build.MayFallback,
+        ["engine"] = build.Engine, ["way"] = build.Way, ["may_fallback"] = build.MayFallback, ["anr"] = build.Anr,
     };
 
     private static JsonNode Describe(SolutionPlanResult plan) => new JsonObject
@@ -154,11 +154,19 @@ public sealed class PlanParityTests
         ["warning_reason"] = plan.WarningReason, ["dependencies"] = List(plan.Dependencies), ["recipe_revision"] = plan.RecipeRevision,
     };
 
-    private static JsonObject Route(FrameGenRoute route) => new()
+    private static JsonObject Route(FrameGenRoute route)
     {
-        ["input"] = route.Input, ["output"] = route.Output, ["follows_game"] = route.FollowsGame,
-        ["source"] = route.Source, ["experimental"] = route.Experimental,
-    };
+        var node = new JsonObject
+        {
+            ["input"] = route.Input, ["output"] = route.Output, ["follows_game"] = route.FollowsGame,
+            ["source"] = route.Source, ["experimental"] = route.Experimental,
+        };
+        if (route.Provider is not null)
+        {
+            node["provider"] = route.Provider;
+        }
+        return node;
+    }
 
     private static JsonObject Routes(IEnumerable<KeyValuePair<string, FrameGenRoute>> routes) =>
         new(routes.Select(pair => new KeyValuePair<string, JsonNode?>(pair.Key, Route(pair.Value))));

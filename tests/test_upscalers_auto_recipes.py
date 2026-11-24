@@ -21,7 +21,7 @@ def automatic(steam, fake_catalog, proc, monkeypatch, tmp_path):
     monkeypatch.setattr(auto_recipes, 'verbs', lambda selected: ('vcrun2022',))
     calls = []
     receipt = {'state': 'prepared'}
-    monkeypatch.setattr(prefix_dependencies, 'prepare', lambda *args: receipt)
+    monkeypatch.setattr(prefix_dependencies, 'prepare', lambda *args, **kwargs: receipt)
     monkeypatch.setattr(prefix_dependencies, 'publish', lambda *args: (calls.append('publish'), receipt.update(state='published')))
     monkeypatch.setattr(prefix_dependencies, 'rollback', lambda *args: (calls.append('rollback'), receipt.update(state='rolled_back')))
     monkeypatch.setattr(prefix_dependencies, 'finish', lambda *args: calls.append('finish'))
@@ -63,7 +63,7 @@ def test_failed_launch_restores_files_prefix_and_cleans_on_confirmation(automati
 
 def test_existing_verified_prefix_needs_no_transaction(automatic, monkeypatch):
     service, calls, _ = automatic
-    monkeypatch.setattr(prefix_dependencies, 'prepare', lambda *args: None)
+    monkeypatch.setattr(prefix_dependencies, 'prepare', lambda *args, **kwargs: None)
     monkeypatch.setattr(prefix_dependencies, 'recover_pending', lambda *args: None)
     checkpoint = service.begin_scaler_transition(APPID)
     service.install(APPID, {'build': 'fsr-test'})
@@ -85,7 +85,7 @@ def test_report_distinguishes_applied_and_current_game_build(steam, fake_catalog
     service = _service(steam, fake_catalog, proc)
     original = service._find(APPID)
     current = replace(original, build_id='100')
-    monkeypatch.setattr(service, '_find', lambda appid: current)
+    monkeypatch.setattr(service, '_find', lambda appid, lookup=None: current)
     service.install(APPID, {'build': 'fsr-test'})
     current = replace(original, build_id='200')
     report = service.diagnose(APPID)
@@ -232,7 +232,7 @@ def test_recipe_without_proton_prerequisites_never_touches_the_prefix(automatic,
 def test_windows_components_that_fail_do_not_stop_the_install(automatic, steam, monkeypatch):
     service, calls, _ = automatic
 
-    def failing(*args):
+    def failing(*args, **kwargs):
         args[-1].append({'via': 'flatpak', 'result': 'prefix_install_failed', 'detail': 'protontricks (ERROR): no Proton'})
         raise prefix_dependencies.DependencyError('prefix_install_failed')
 
@@ -252,15 +252,19 @@ def test_windows_components_that_fail_do_not_stop_the_install(automatic, steam, 
     assert calls == ['abandon']
 
 
-def test_a_game_that_starts_mid_install_still_stops_it(automatic, monkeypatch):
+@pytest.mark.parametrize('reason', ['running', 'cancelled'])
+def test_a_game_or_cancellation_that_starts_mid_install_still_stops_it(automatic, monkeypatch, reason):
     service, _, _ = automatic
 
-    def running(*args):
-        raise prefix_dependencies.DependencyError('running')
+    def running(*args, **kwargs):
+        if reason == 'cancelled':
+            service.cancel()
+            assert kwargs['cancelled']()
+        raise prefix_dependencies.DependencyError(reason)
 
     monkeypatch.setattr(prefix_dependencies, 'prepare', running)
     service.begin_scaler_transition(APPID)
-    with pytest.raises(UpscalerError, match='running'):
+    with pytest.raises(UpscalerError, match=reason):
         service.install(APPID, {'build': 'fsr-test'})
 
 

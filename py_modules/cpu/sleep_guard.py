@@ -1,4 +1,4 @@
-"""Brings every CPU core back online right before the system sleeps.
+"""Enables SMT and brings every CPU core online right before the system sleeps.
 
 Sleeping with cores switched off can freeze the machine on resume. A runtime systemd
 unit ordered before sleep.target runs even when the plugin is busy or stuck, and /run
@@ -16,13 +16,23 @@ _TIMEOUT_S = 10
 
 # systemd expands $VAR in ExecStart: $$ passes a literal dollar to the shell.
 UNIT_TEXT = """[Unit]
-Description=Panel de Control: CPU cores online before sleep
+Description=Panel de Control: CPU threads online before sleep
 Before=sleep.target
 
 [Service]
 Type=oneshot
 TimeoutStartSec=10
-ExecStart=/bin/sh -c 'for f in /sys/devices/system/cpu/cpu[0-9]*/online; do [ "$$(cat "$$f" 2>/dev/null)" = 0 ] && echo 1 > "$$f"; done; exit 0'
+ExecStart=/bin/sh -c 'rc=0; s=/sys/devices/system/cpu/smt/control; \
+if [ "$$(cat "$$s" 2>/dev/null)" = off ]; then \
+  echo on > "$$s" || rc=1; \
+  [ "$$(cat "$$s" 2>/dev/null)" = on ] || rc=1; \
+fi; \
+for f in /sys/devices/system/cpu/cpu[0-9]*/online; do \
+  if [ "$$(cat "$$f" 2>/dev/null)" = 0 ]; then echo 1 > "$$f" || rc=1; fi; \
+done; \
+read -r smt 2>/dev/null < /sys/devices/system/cpu/smt/active || smt=unknown; \
+case "$$smt" in 0|1) ;; *) smt=unknown ;; esac; \
+echo "pdc-sleep-cores rc=$$rc smt_active=$$smt"; exit "$$rc"'
 """
 
 

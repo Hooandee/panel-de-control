@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   hudEnabled: false,
   steamMasterEnabled: true as boolean | null,
   uniformTextSize: false,
+  unavailable: [] as string[],
   conflict: null as null | {
     path: string;
     expectedHash: string | null;
@@ -93,7 +94,14 @@ vi.mock("../mangohud/useHud", async () => {
           ],
         },
         values: {},
+        unavailableMetrics: mocks.unavailable,
+        appid: null,
+        followsGlobal: true,
+        hasGameProfile: false,
       },
+      scope: "global",
+      game: null,
+      onScope: vi.fn(),
       setModel: mocks.setModel,
       setEnabled: mocks.setEnabled,
       reload: vi.fn(),
@@ -142,6 +150,7 @@ describe("HudSection QAM composition", () => {
     vi.useRealTimers();
     vi.clearAllMocks();
     mocks.conflict = null;
+    mocks.unavailable = [];
     mocks.hudEnabled = false;
     mocks.steamMasterEnabled = true;
     mocks.uniformTextSize = false;
@@ -360,5 +369,16 @@ describe("HudSection QAM composition", () => {
     );
 
     expect(mocks.setModel).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not offer block metrics the machine cannot read", () => {
+    mocks.unavailable = ["battery_watt"];
+    render(<HudSection />);
+
+    fireEvent.click(
+      screen.getByText("copy:hud.group.battery").closest("[data-testid='focusable']")!,
+    );
+    expect(screen.getByText("copy:hud.block.base.battery")).toBeTruthy();
+    expect(screen.queryByText("copy:hud.metric.battery_watt")).toBeNull();
   });
 });

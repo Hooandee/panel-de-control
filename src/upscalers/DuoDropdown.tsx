@@ -26,7 +26,7 @@ export function DuoDropdown<T extends string>({ controlId, label, value, options
     const element = root.current;
     if (!element) return;
     const showIcons = () => {
-      element.querySelectorAll<SVGElement>(".pdc-up-mako-icon, .pdc-up-optiscaler-icon, .pdc-up-lossless-icon, .pdc-up-dll-icon")
+      element.querySelectorAll<SVGElement>(".pdc-up-mako-icon, .pdc-up-optiscaler-icon, .pdc-up-lossless-icon, .pdc-up-dll-icon, .pdc-up-anr-icon")
         .forEach((icon) => icon.style.setProperty("display", "inline-block", "important"));
     };
     showIcons();

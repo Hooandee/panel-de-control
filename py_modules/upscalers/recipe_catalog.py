@@ -69,7 +69,8 @@ class GameRecipe:
     name: str
     revision: int
     conditions: dict[str, tuple[str, ...]]
-    exe: str
+    # None: Panel's own analysis picks the executable (Unreal games ship a small launcher next to the real one).
+    exe: str | None
     args: tuple[str, ...]
     ini: dict[str, str]
     dependencies: tuple[str, ...]
@@ -261,7 +262,7 @@ def _closure(ids, dependencies, platform: str) -> list[DependencySpec]:
 
 
 def _recipe(appid: str, name: str, platform: str, item, dependencies) -> GameRecipe:
-    item = _object(item, ('status', 'revision', 'conditions', 'exe', 'args', 'ini', 'dependencies', 'source_urls'), ('tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings'))
+    item = _object(item, ('status', 'revision', 'conditions', 'args', 'ini', 'dependencies', 'source_urls'), ('exe', 'tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings'))
     conditions = _object(item['conditions'], ('engine', 'arch'), ('game_builds',))
     allowed = {'engine': _ENGINES, 'arch': _ARCHES}
     parsed_conditions = {}
@@ -337,7 +338,7 @@ def _recipe(appid: str, name: str, platform: str, item, dependencies) -> GameRec
         except ValueError:
             raise CatalogError('invalid_test_date') from None
     return GameRecipe(appid, name, _integer(item['revision'], 2**31 - 1),
-                      parsed_conditions, _path(item['exe']), args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
+                      parsed_conditions, _path(item['exe']) if 'exe' in item else None, args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
                       flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings), platform, item['status'])
 
 

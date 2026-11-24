@@ -60,6 +60,31 @@ def test_pinned_persona_5_royal_uses_luma_dlss_through_optiscaler():
     assert not recipes.recipe_for('1687950', engine='dll', platform='linux', arch='x86_64').dependencies
 
 
+def test_pinned_metaphor_and_granblue_use_luma_dlss_through_optiscaler():
+    catalog = rc.load()
+    game = catalog.match('2679460', 'optiscaler', 'linux', 'x86_64')
+    assert game.exe == 'METAPHOR.exe'
+    assert [d.id for d in catalog.dependency_order(game.dependencies)] == ['vcrun2022', 'msvcrt40', 'luma-mrf']
+    files = catalog.dependencies['luma-mrf'].files
+    assert files['ReShade64.dll'] == 'dxgi.dll'
+    assert 'dxgi.dll' not in files
+    assert catalog.assets['luma-mrf-840'].size == 37461871
+    game = catalog.match('881020', 'optiscaler', 'linux', 'x86_64')
+    assert game.exe == 'granblue_fantasy_relink.exe'
+    assert catalog.dependencies['luma-gbfr'].files['ReShade64.dll'] == 'dxgi.dll'
+    assert 'luma' in recipes.recipe_for('881020', platform='linux', arch='x86_64').needs, "not on the wiki, still needs Luma"
+
+
+def test_unreal_games_share_the_generic_luma_package_and_let_panel_pick_the_exe():
+    catalog = rc.load()
+    stray = catalog.match('1332010', 'optiscaler', 'linux', 'x86_64')
+    assert stray.exe is None and stray.args == ('-dx11',)
+    assert [d.id for d in catalog.dependency_order(stray.dependencies)] == ['vcrun2022', 'msvcrt40', 'luma-ue']
+    assert catalog.dependencies['luma-ue'].files['ReShade64.dll'] == 'dxgi.dll'
+    assert recipes.recipe_for('1332010', platform='linux', arch='x86_64').exe is None
+    assert catalog.match('552520', 'optiscaler', 'linux', 'x86_64') is None, "Far Cry 5's package is Luma's template"
+
+
 def test_conditions_use_actual_host(monkeypatch):
     monkeypatch.setattr(rc.host_platform, 'system', lambda: 'Linux')
     monkeypatch.setattr(rc.host_platform, 'machine', lambda: 'AMD64')
@@ -76,7 +101,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 13
+    assert recipe.catalog_version == 18
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
@@ -371,8 +396,19 @@ def test_baldurs_gate_3_skips_its_launcher_into_d3d11_and_asks_for_dlss():
 
 
 def test_every_reframework_recipe_runs_optiscalers_overlay_menu():
-    for appid in ('2050650', '883710', '952060', '418370', '601150'):
+    for appid in ('2050650', '883710', '952060', '418370', '601150', '1196590'):
         assert recipes.recipe_for(appid, platform='linux', arch='x86_64').ini['Menu.OverlayMenu'] == 'true', appid
+
+
+def test_village_gets_the_puredark_route_instead_of_a_mod_to_find():
+    # PDC-S34S / PDC-JXY8 (#1372, #1443)
+    catalog = rc.load()
+    game = catalog.match('1196590', 'optiscaler', 'linux', 'x86_64')
+    assert game is not None and game.exe == 're8.exe'
+    order = catalog.dependency_order(game.dependencies)
+    assert [(d.id, d.kind) for d in order] == [('refw-pdup-re8', 'game_files'), ('puredark-upscaler-base', 'user_files')]
+    recipe = recipes.recipe_for('1196590', platform='linux', arch='x86_64')
+    assert recipe.reframework_upscaler and not recipe.optiscaler_fg
 
 
 def _windows_block(d, **changes):

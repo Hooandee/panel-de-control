@@ -6,7 +6,8 @@ def resolve(gpu, analysis, recipe=None, generation=9, engine="optiscaler", route
     declared = getattr(recipe, "effective_api", None)
     forced = {value for argument in getattr(recipe, "args", ())
               if (value := {"-dx11": "d3d11", "-d3d11": "d3d11", "-dx12": "d3d12",
-                            "-d3d12": "d3d12", "-vulkan": "vulkan"}.get(argument.lower()))}
+                            "-d3d12": "d3d12", "-vulkan": "vulkan", "-force-d3d11": "d3d11",
+                            "-force-d3d12": "d3d12", "-force-vulkan": "vulkan"}.get(argument.lower()))}
     if declared:
         forced.add(declared)
     detected = set(analysis.get("apis", ())) & {"d3d11", "d3d12", "vulkan"}
@@ -19,6 +20,12 @@ def resolve(gpu, analysis, recipe=None, generation=9, engine="optiscaler", route
     offered = (catalog.fg_plan(gpu, analysis.get("inputs", {}), getattr(recipe, "fg", None),
                                generation, ["d3d12"], analysis.get("streamline"), route)
                if engine == "optiscaler" else None)
+    # DLSS-G only exists on D3D12 and Vulkan: an exe that imports only d3d11 often loads D3D12 at runtime (Where Winds
+    # Meet ships the Agility SDK in a subfolder), so only a recipe's API or a Vulkan-only game rules ANR out.
+    no_dx12 = ("d3d12" not in forced) if forced else ("vulkan" in detected and "d3d12" not in detected)
+    if offered and "anr" in offered["routes"] and no_dx12:
+        routes = {key: value for key, value in offered["routes"].items() if key != "anr"}
+        offered = catalog.fg_route_plan({**offered, "routes": routes}, offered["route"]) if routes else None
     fg = None
     if engine == "optiscaler" and not conflict:
         fg = catalog.fg_plan(gpu, analysis.get("inputs", {}), getattr(recipe, "fg", None),

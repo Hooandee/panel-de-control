@@ -68,6 +68,7 @@ public static class ThemesResponseBuilder
             CatalogError = catalog.ErrorCode,
             Themes = entries.ToArray(),
             RuntimeErrors = engine.Host.Errors.Count == 0 ? null : engine.Host.Errors.ToArray(),
+            GameRunning = engine.Host.GameRunning,
         };
     }
 

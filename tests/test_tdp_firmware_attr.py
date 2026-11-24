@@ -1,9 +1,12 @@
 import os
 import inspect
 
+import pytest
+
 from device_registry import detect
 from device_profiles import DEVICE_TABLE
 from tdp.firmware_attr import FirmwareAttrBackend
+from tdp.runtime_lock import RuntimeSafetyLock
 from tdp.types import RailReading, TdpLimits, TdpObservation
 
 FALLBACK = TdpLimits(min_w=4, default_w=15, max_w=30, max_ac_w=30)
@@ -1417,3 +1420,200 @@ def test_gos_83l3_eio_rollback_still_restores_a_rail_that_moved(tmp_path, monkey
 
     assert restored is False
     assert attempts == ["ppt_pl1_spl"]
+
+
+def _legion_go_2_low_battery(root, rails, safety_lock_path):
+    # 83N1: at <=20 % battery the firmware pins its own rails
+    # and ignores every write, so neither the target nor the rollback ever lands.
+    driver = "lenovo-wmi-other-0"
+    _mk_attr(root, driver, "ppt_pl1_spl", rails[0], 5, 35)
+    _mk_attr(root, driver, "ppt_pl2_sppt", rails[1], 5, 37)
+    _mk_attr(root, driver, "ppt_pl3_fppt", rails[2], 5, 45)
+    _mk_profile(root, cur="custom")
+    return FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        FALLBACK,
+        root=root,
+        profile_name="lenovo-wmi-gamezone",
+        safety_lock_path=safety_lock_path,
+        probe_live_max_on_ac=True,
+    )
+
+
+def _pin_rails(backend, monkeypatch, pinned, error=None):
+    original_write = backend._write
+    rail_paths = [
+        backend._attr(attr)
+        for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt")
+    ]
+
+    def firmware_write(path, value):
+        if path not in rail_paths:
+            return original_write(path, value)
+        if error is not None:
+            backend._last_write_error = error
+            return False
+        return True
+
+    for path, value in zip(rail_paths, pinned):
+        with open(path, "w") as fh:
+            fh.write(str(value))
+    monkeypatch.setattr(backend, "_write", firmware_write)
+
+
+def test_low_battery_firmware_pin_keeps_tdp_available(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    safety_lock_path = str(tmp_path / "run" / "firmware-tdp.lock")
+    b = _legion_go_2_low_battery(root, (30, 30, 30), safety_lock_path)
+    original_capture = b._capture_transaction
+
+    def capture_then_firmware_pins(surfaces):
+        captured = original_capture(surfaces)
+        _pin_rails(b, monkeypatch, (25, 25, 30))
+        return captured
+
+    monkeypatch.setattr(b, "_capture_transaction", capture_then_firmware_pins)
+
+    result = b.set_levels(17, 17, 17, ac=False)
+
+    assert result.ok is False
+    assert result.failure_kind == "target_not_applied"
+    assert "firmware holds rails" in result.detail
+    assert b.ready() is True
+    assert b.safety_locked is False
+    assert not os.path.exists(safety_lock_path)
+
+
+def test_rail_left_at_the_target_still_locks_after_a_failed_rollback(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    safety_lock_path = str(tmp_path / "run" / "firmware-tdp.lock")
+    b = _legion_go_2_low_battery(root, (30, 30, 30), safety_lock_path)
+    original_capture = b._capture_transaction
+
+    def capture_then_pin_one_rail_at_target(surfaces):
+        captured = original_capture(surfaces)
+        _pin_rails(b, monkeypatch, (17, 25, 30))
+        return captured
+
+    monkeypatch.setattr(b, "_capture_transaction", capture_then_pin_one_rail_at_target)
+
+    result = b.set_levels(17, 17, 17, ac=False)
+
+    assert result.ok is False
+    assert "rollback failed" in result.detail
+    assert b.ready() is False
+    assert os.path.exists(safety_lock_path)
+
+
+def test_restart_recovery_releases_a_low_battery_firmware_pin(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    safety_lock_path = str(tmp_path / "run" / "firmware-tdp.lock")
+    labels = [f"firmware-attr:lenovo-wmi-other/{rail}" for rail in ("pl1", "pl2", "pl3")]
+    RuntimeSafetyLock(safety_lock_path).persist_payload({
+        "state": "rollback_failed",
+        "detail": "rollback failed",
+        "snapshot": dict(zip(labels, (35, 37, 45))),
+        "targets": dict(zip(labels, (17, 17, 17))),
+        "profile": "custom",
+    })
+    b = _legion_go_2_low_battery(root, (35, 30, 35), safety_lock_path)
+    _pin_rails(b, monkeypatch, (35, 30, 35), error="EBUSY")
+    assert b.ready() is False
+
+    assert b.recover_runtime_transaction()["ok"] is True
+    assert b.ready() is True
+    assert not os.path.exists(safety_lock_path)
+
+
+def test_restart_recovery_without_saved_targets_stays_locked(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    safety_lock_path = str(tmp_path / "run" / "firmware-tdp.lock")
+    labels = [f"firmware-attr:lenovo-wmi-other/{rail}" for rail in ("pl1", "pl2", "pl3")]
+    RuntimeSafetyLock(safety_lock_path).persist_payload({
+        "state": "rollback_failed",
+        "detail": "rollback failed",
+        "snapshot": dict(zip(labels, (35, 37, 45))),
+        "profile": "custom",
+    })
+    b = _legion_go_2_low_battery(root, (35, 30, 35), safety_lock_path)
+    _pin_rails(b, monkeypatch, (35, 30, 35), error="EBUSY")
+
+    assert b.recover_runtime_transaction()["ok"] is False
+    assert b.ready() is False
+
+
+def _gos_83l3_dropping_to_firmware_defaults(tmp_path, safety_lock_path, start=14):
+    # Mid-transaction the firmware drops back to its own 30/15/20 in "custom" and
+    # ignores the rollback.
+    from device_quirks import legion_go_s_83l3_firmware_attr_quirks
+
+    root = str(tmp_path)
+    dmi = tmp_path / "sys/class/dmi/id"
+    dmi.mkdir(parents=True)
+    (dmi / "sys_vendor").write_text("LENOVO")
+    (dmi / "product_name").write_text("83L3")
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", start, 5, 33)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", start, 5, 33)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", start, 5, 35)
+    _mk_profile(root, cur="custom")
+    device = detect(product_name="83L3")
+    backend = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        TdpLimits.from_profile(device),
+        root=root,
+        profile_name="lenovo-wmi-gamezone",
+        safety_lock_path=safety_lock_path,
+        **legion_go_s_83l3_firmware_attr_quirks(device, root),
+    )
+    return backend
+
+
+@pytest.mark.parametrize(("start", "target"), [(14, 13), (14, 15), (16, 15), (14, 20)])
+def test_gos_83l3_firmware_defaults_mid_game_keep_tdp_available(
+    tmp_path, monkeypatch, start, target,
+):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    safety_lock_path = str(tmp_path / "run" / "firmware-tdp.lock")
+    backend = _gos_83l3_dropping_to_firmware_defaults(tmp_path, safety_lock_path, start)
+    original_capture = backend._capture_transaction
+
+    def capture_then_firmware_resets(surfaces):
+        captured = original_capture(surfaces)
+        _pin_rails(backend, monkeypatch, (30, 15, 20))
+        return captured
+
+    monkeypatch.setattr(backend, "_capture_transaction", capture_then_firmware_resets)
+
+    result = backend.set_levels(target, target, target, ac=False)
+
+    assert result.ok is False
+    assert result.failure_kind == "target_not_applied"
+    assert "firmware holds rails" in result.detail
+    assert backend.ready() is True
+    assert not os.path.exists(safety_lock_path)
+
+
+@pytest.mark.parametrize("target", [13, 15])
+def test_gos_83l3_restart_recovery_releases_firmware_defaults(
+    tmp_path, monkeypatch, target,
+):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    safety_lock_path = str(tmp_path / "run" / "firmware-tdp.lock")
+    labels = [f"firmware-attr:lenovo-wmi-other/{rail}" for rail in ("pl1", "pl2", "pl3")]
+    RuntimeSafetyLock(safety_lock_path).persist_payload({
+        "state": "rollback_failed",
+        "detail": "rollback failed",
+        "snapshot": dict(zip(labels, (14, 14, 14))),
+        "targets": dict(zip(labels, (target,) * 3)),
+        "profile": "custom",
+    })
+    backend = _gos_83l3_dropping_to_firmware_defaults(tmp_path, safety_lock_path)
+    _pin_rails(backend, monkeypatch, (30, 15, 20))
+    assert backend.ready() is False
+
+    assert backend.recover_runtime_transaction()["ok"] is True
+    assert backend.ready() is True
+    assert not os.path.exists(safety_lock_path)

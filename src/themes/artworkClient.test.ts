@@ -182,4 +182,30 @@ describe("separate cover stores", () => {
       expect(store.themeActive()).toBe(false);
     } finally { release(); vi.useRealTimers(); }
   });
+  it("keeps reading while a theme is mounted until the backend answers, and again after the host is replaced (PDC-88K3)", async () => {
+    vi.useFakeTimers();
+    const store = createArtworkStore("duo", { hydrateOnAttach: true });
+    let online = false;
+    const read = vi.fn(async () => { if (!online) throw new Error("offline"); return { "7": { ...DEFAULT_ARTWORK, showTitle: false } }; });
+    const release = store.configureHost({ read, write: async () => ({ ok: true }) });
+    const detach = store.access.attach!();
+    try {
+      await vi.advanceTimersByTimeAsync(120000);
+      const failures = read.mock.calls.length;
+      expect(failures).toBeGreaterThan(4);
+      expect(store.access.get(7)).toBeNull();
+      online = true;
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(store.access.get(7)).toEqual({ ...DEFAULT_ARTWORK, showTitle: false });
+      const settled = read.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(120000);
+      expect(read).toHaveBeenCalledTimes(settled);
+      const releaseNext = store.configureHost({ read, write: async () => ({ ok: true }) });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(settled + 1);
+      expect(store.access.get(7)).toEqual({ ...DEFAULT_ARTWORK, showTitle: false });
+      detach();
+      releaseNext();
+    } finally { release(); vi.useRealTimers(); }
+  });
 });

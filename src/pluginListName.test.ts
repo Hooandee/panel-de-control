@@ -18,28 +18,22 @@ describe("nextRowText", () => {
     expect(nextRowText(IDENTITY, IDENTITY, "Control Panel")).toBe("Control Panel");
   });
 
-  it("localizes the identity row from a persisted Italian selection", () => {
+  it("keeps the identity row unchanged with a persisted Italian selection", () => {
     window.localStorage.setItem("panel-de-control-lang", "it");
 
-    expect(nextRowText(IDENTITY, IDENTITY, translate("app.title"))).toBe(
-      "Pannello di controllo",
-    );
+    expect(nextRowText(IDENTITY, IDENTITY, translate("app.title"))).toBeNull();
   });
 
-  it("localizes the identity row from a persisted Brazilian Portuguese selection", () => {
+  it("keeps the identity row unchanged with a persisted Brazilian Portuguese selection", () => {
     window.localStorage.setItem("panel-de-control-lang", "pt-BR");
 
-    expect(nextRowText(IDENTITY, IDENTITY, translate("app.title"))).toBe(
-      "Painel de Controle",
-    );
+    expect(nextRowText(IDENTITY, IDENTITY, translate("app.title"))).toBeNull();
   });
 
-  it("localizes the identity row from a persisted French selection", () => {
+  it("keeps the identity row unchanged with a persisted French selection", () => {
     window.localStorage.setItem("panel-de-control-lang", "fr");
 
-    expect(nextRowText(IDENTITY, IDENTITY, translate("app.title"))).toBe(
-      "Centre de contrôle",
-    );
+    expect(nextRowText(IDENTITY, IDENTITY, translate("app.title"))).toBeNull();
   });
 
   it("leaves the row untouched when the target equals the identity (Spanish)", () => {

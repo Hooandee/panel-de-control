@@ -81,7 +81,8 @@ public sealed class GameRecipe
 
     public IReadOnlyDictionary<string, IReadOnlyList<string>> Conditions { get; internal set; } = new Dictionary<string, IReadOnlyList<string>>();
 
-    public string Exe { get; internal set; } = "";
+    /// <summary>Null: the game analysis picks the executable (Unreal games ship a small launcher next to the real one).</summary>
+    public string? Exe { get; internal set; }
 
     public IReadOnlyList<string> Args { get; internal set; } = Array.Empty<string>();
 
@@ -459,8 +460,8 @@ public sealed class RecipeCatalog
     private static GameRecipe ReadRecipe(string appId, string name, string platform, DataValue value, IReadOnlyDictionary<string, RecipeDependency> dependencies)
     {
         var item = Object(value,
-            new[] { "status", "revision", "conditions", "exe", "args", "ini", "dependencies", "source_urls" },
-            new[] { "tested_game_builds", "tested_at", "configuration", "recommended_input", "effective_api", "quality_owner", "recommended_build",
+            new[] { "status", "revision", "conditions", "args", "ini", "dependencies", "source_urls" },
+            new[] { "exe", "tested_game_builds", "tested_at", "configuration", "recommended_input", "effective_api", "quality_owner", "recommended_build",
                 "optiscaler_root_files", "reframework_upscaler", "optiscaler_fg", "game_settings" });
         var conditions = Object(item.Get("conditions")!, new[] { "engine", "arch" }, new[] { "game_builds" });
         var parsedConditions = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
@@ -572,7 +573,7 @@ public sealed class RecipeCatalog
             Name = name,
             Revision = Integer(item.Get("revision")!, int.MaxValue),
             Conditions = parsedConditions,
-            Exe = SafePath(item.Get("exe")!),
+            Exe = item.Get("exe") is { } exe ? SafePath(exe) : null,
             Args = args,
             Ini = ini,
             Dependencies = ids,

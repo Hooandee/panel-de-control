@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.Threading.Tasks;
 using Microsoft.Gaming.XboxGameBar;
 using Windows.ApplicationModel.Activation;
 using Windows.UI.Xaml;
@@ -15,7 +17,7 @@ sealed partial class App : Application
         UnhandledException += (_, args) => CrashLog.Write("unhandled", args.Exception, args.Message);
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             CrashLog.Write("domain", args.ExceptionObject as Exception, args.ExceptionObject?.ToString());
-        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, args) =>
+        TaskScheduler.UnobservedTaskException += (_, args) =>
             CrashLog.Write("task", args.Exception);
         try
         {
@@ -80,19 +82,74 @@ sealed partial class App : Application
     }
 
     // On some handhelds (ROG Xbox Ally X with Gaming Services 39.118) Windows keeps the Xbox button for Game Bar and
-    // Steam never sees it, so a Steam theme could not leave a game. Game Bar coming to the foreground is that press:
-    // the companion asks the theme host to answer it as Steam's Home (steamButton.ts pressHome), and stands down
-    // where Steam got the button too.
+    // Steam never sees it. The companion hears every time Game Bar opens and closes: one press is only Game Bar, and
+    // over a game opening and closing it at once (the button pressed twice) goes to Steam's Home. How long it was
+    // shown is measured here, where the events arrive, and the reports go out one after another so a slow pipe cannot
+    // reorder them.
+    private static readonly Stopwatch GameBarShownFor = new();
+    private static readonly object GameBarReportGate = new();
+    private static Task gameBarReports = Task.CompletedTask;
+    private static bool closingForHome;
+
+    /// <summary>
+    /// The widget's Home button closes Game Bar first: Big Picture is asked for its Home once Game Bar is gone, since
+    /// closing Game Bar hands the game the foreground again.
+    /// </summary>
+    internal static void ExpectGameBarCloseForHome()
+    {
+        lock (GameBarReportGate)
+        {
+            closingForHome = true;
+        }
+    }
+
+    /// <summary>Whether Game Bar never closed and the Home request is still the caller's to send.</summary>
+    internal static bool TakeHomeStillPending()
+    {
+        lock (GameBarReportGate)
+        {
+            var pending = closingForHome;
+            closingForHome = false;
+            return pending;
+        }
+    }
+
     private static void OnGameBarDisplayModeChanged(XboxGameBarWidget sender, object args)
     {
-        if (sender.GameBarDisplayMode != XboxGameBarDisplayMode.Foreground)
+        var shown = sender.GameBarDisplayMode == XboxGameBarDisplayMode.Foreground;
+        Func<ThemesClient, Task> report;
+        lock (GameBarReportGate)
         {
-            return;
-        }
+            if (shown == GameBarShownFor.IsRunning)
+            {
+                return;
+            }
 
-        _ = new ThemesClient().SteamHomeAsync().ContinueWith(
-            task => CrashLog.Write("steam-home", task.Exception),
-            System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+            if (shown)
+            {
+                GameBarShownFor.Restart();
+                report = client => client.GameBarShownAsync();
+            }
+            else if (closingForHome)
+            {
+                closingForHome = false;
+                GameBarShownFor.Stop();
+                report = client => client.SteamHomeAsync();
+            }
+            else
+            {
+                GameBarShownFor.Stop();
+                var milliseconds = GameBarShownFor.ElapsedMilliseconds;
+                report = client => client.GameBarHiddenAsync(milliseconds);
+            }
+
+            gameBarReports = gameBarReports
+                .ContinueWith(_ => report(new ThemesClient()), TaskScheduler.Default)
+                .Unwrap()
+                .ContinueWith(
+                    task => CrashLog.Write("game-bar-report", task.Exception),
+                    TaskContinuationOptions.OnlyOnFaulted);
+        }
     }
 
     // Game Bar loads the widget at sign-in even while hidden. The companion keeps Steam themed, so it
@@ -101,7 +158,7 @@ sealed partial class App : Application
     {
         _ = HardwareBrokerLauncher.EnsureStartedAsync().ContinueWith(
             task => CrashLog.Write("companion-start", task.Exception),
-            System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+            TaskContinuationOptions.OnlyOnFaulted);
     }
 
     private void OnWidgetClosed(
@@ -112,6 +169,12 @@ sealed partial class App : Application
         if (widget is not null)
         {
             widget.GameBarDisplayModeChanged -= OnGameBarDisplayModeChanged;
+        }
+
+        // Closed while Game Bar was open, the widget never hears it close: the next opening must still count.
+        lock (GameBarReportGate)
+        {
+            GameBarShownFor.Reset();
         }
 
         widget = null;
