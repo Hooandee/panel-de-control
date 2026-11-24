@@ -17,6 +17,7 @@
     <EmbeddedResource Include="../../../shared/devices/catalog.json" Link="Devices/catalog.json" LogicalName="PanelDeControl.Hardware.Devices.catalog.json" />
     <EmbeddedResource Include="../../../dist/windows/steam-theme-host.js" Link="Themes/steam-theme-host.js" LogicalName="PanelDeControl.Hardware.Themes.steam-theme-host.js" />
     <EmbeddedResource Include="../../../shared/upscalers/catalog.json" Link="Upscalers/catalog.json" LogicalName="PanelDeControl.Hardware.Upscalers.catalog.json" />
+    <EmbeddedResource Include="../../../py_modules/upscalers/recipes_wiki.json" Link="Upscalers/recipes_wiki.json" LogicalName="PanelDeControl.Hardware.Upscalers.recipes_wiki.json" />
     <EmbeddedResource Include="../../../shared/upscalers/gpus.json" Link="Upscalers/gpus.json" LogicalName="PanelDeControl.Hardware.Upscalers.gpus.json" />
     <EmbeddedResource Include="../../../game-recipes/*.json" Exclude="../../../game-recipes/schema.json" Link="Upscalers/Recipes/%(Filename)%(Extension)" LogicalName="PanelDeControl.Hardware.Upscalers.recipes/%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../../game-recipes/games/*.json" Link="Upscalers/Recipes/games/%(Filename)%(Extension)" LogicalName="PanelDeControl.Hardware.Upscalers.recipes/games/%(Filename)%(Extension)" />

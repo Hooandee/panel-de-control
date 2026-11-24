@@ -154,6 +154,13 @@ public sealed class DataParityTests
         ["recommended_build"] = recipe.RecommendedBuild, ["optiscaler_root_files"] = List(recipe.OptiScalerRootFiles),
         ["reframework_upscaler"] = recipe.ReframeworkUpscaler, ["optiscaler_fg"] = recipe.OptiScalerFrameGeneration,
         ["game_settings"] = new JsonArray(recipe.GameSettings.Select(pair => (JsonNode)new JsonArray(pair.Key, pair.Value)).ToArray()),
+        ["proxy"] = recipe.Proxy, ["protect_dlls"] = recipe.ProtectDlls, ["legacy_ffx_swap"] = recipe.LegacyFfxSwap,
+        ["files"] = Map(recipe.Files), ["native_dlls"] = List(recipe.NativeDlls), ["needs"] = List(recipe.Needs),
+        ["anr_settings"] = new JsonArray(recipe.AnrSettings.Select(pair => (JsonNode)new JsonArray(pair.Key, pair.Value)).ToArray()),
+        ["game_config"] = new JsonArray(recipe.GameConfig.Select(change => (JsonNode)new JsonArray(change.File, change.Element, change.Value)).ToArray()),
+        ["mod_launch_exe"] = recipe.ModLaunchExe is { } launch ? new JsonArray(launch.Key, launch.Value) : null,
+        ["mod_settings"] = new JsonObject(recipe.ModSettings.Select(pair => new KeyValuePair<string, JsonNode?>(pair.Key, Map(pair.Value)))),
+        ["mod_frame_generation"] = recipe.ModFrameGeneration, ["fg_note"] = recipe.FgNote, ["notes"] = recipe.Notes,
         ["platform"] = recipe.Platform, ["status"] = recipe.Status,
         ["ordered_dependencies"] = List(catalog.DependencyOrder(recipe.Dependencies, recipe.Platform).Select(dependency => dependency.Id)),
     };
