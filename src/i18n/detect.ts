@@ -8,5 +8,6 @@ export function steamLangToLang(raw: string | null | undefined): Lang {
   if (v === "de" || v.startsWith("german")) return "de";
   if (v === "fr" || v.startsWith("french")) return "fr";
   if (v === "pt-br" || v === "brazilian" || v === "brazilian portuguese") return "pt-BR";
+  if (v === "zh-cn" || v === "zh" || v === "schinese" || v === "chinese" || v === "simplified chinese") return "zh-CN";
   return "es";
 }

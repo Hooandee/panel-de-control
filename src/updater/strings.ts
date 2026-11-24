@@ -167,6 +167,29 @@ const STRINGS: Record<Lang, UpdaterStrings> = {
     },
     availableTitle: "Mise à jour disponible",
   },
+  "zh-CN": {
+    floating: { title: "有新版本可用", update: "更新", later: "稍后" },
+    panel: {
+      version: "版本",
+      latest: "（最新）",
+      newPrefix: "新",
+      checking: "正在检查…",
+      check: "检查更新",
+      update: "查看更新内容并安装",
+      error: "检查失败，请检查网络连接。",
+    },
+    modal: {
+      title: "更新内容",
+      noNotes: "此版本没有更新说明。",
+      install: "安装更新",
+      installing: "正在安装…",
+      installed: "更新已安装。",
+      restartNote: "重启 Decky 后生效。",
+      restart: "重启 Decky",
+      failed: "安装失败，请重试。",
+    },
+    availableTitle: "有可用更新",
+  },
 };
 
 export function getUpdaterStrings(lang: Lang): UpdaterStrings {
