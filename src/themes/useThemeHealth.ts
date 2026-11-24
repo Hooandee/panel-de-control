@@ -5,6 +5,7 @@ import { readThemeHealth } from "./themeCleanupHost";
 import {
   cleanupNeeded,
   cleanupPlan,
+  coexistingThemes,
   diagnoseThemeHealth,
   hooandeeNames,
   interfaceThemeNames,
@@ -127,7 +128,11 @@ export function useThemeHealth(controller: ThemesController): ThemeHealthView {
     undo: backend?.undo ?? null,
     recheck,
     cleanUp: (keepActive) => run(
-      (keep) => controller.cleanUp(keep, () => removeCssLoaderStyles(steamDocuments()), keepActive),
+      (keep) => controller.cleanUp(
+        [...keep, ...coexistingThemes(controller.snapshot, keep, plan)],
+        () => removeCssLoaderStyles(steamDocuments()),
+        keepActive,
+      ),
       (health) => health.folders.some((folder) => SET_ASIDE_KINDS.has(folder.kind)),
     ),
     undoCleanup: () => run(controller.undoCleanup, (health) => health.undo.available),

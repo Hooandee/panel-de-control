@@ -338,12 +338,29 @@ def test_frontend_crash_diagnostics_names_plugin_and_crash(tmp_path):
         {
             "error_type": "TypeError",
             "source": "cef_log.previous.txt",
+            "origin": "panel",
         }
     ]
     assert {signal["kind"] for signal in diagnostics["signals"]} == {
         "plugin_load_error",
         "shared_context_crash",
     }
+
+
+def test_plugin_load_error_names_a_known_plugin_by_fixed_origin(tmp_path):
+    # PDC-AHYE: 17 load errors under Decky 4.0.0-pre1 without saying whether CSS Loader was one.
+    current = tmp_path / "cef_log.txt"
+    _write(
+        current,
+        "Decky PluginLoader: Error loading plugin CSS Loader (v2.1.3) TypeError: boom\n"
+        "Decky PluginLoader: Error loading plugin CSS Loader (v2.1.3) TypeError: boom\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(current)])
+
+    assert diagnostics["plugin_load_errors"] == [
+        {"error_type": "TypeError", "source": "cef_log.txt", "origin": "css_loader"},
+    ]
 
 
 def test_frontend_crash_diagnostics_does_not_parse_error_from_plugin_name(tmp_path):
@@ -359,8 +376,8 @@ def test_frontend_crash_diagnostics_does_not_parse_error_from_plugin_name(tmp_pa
     diagnostics = frontend_crash_diagnostics([str(previous)])
 
     assert diagnostics["plugin_load_errors"] == [
-        {"error_type": "TypeError", "source": "cef_log.previous.txt"},
-        {"error_type": "ReferenceError", "source": "cef_log.previous.txt"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
+        {"error_type": "ReferenceError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
     ]
 
 
@@ -418,8 +435,9 @@ def test_frontend_crash_diagnostics_never_includes_free_form_cef_text(tmp_path):
     ):
         assert secret not in serialized
     assert diagnostics["plugin_load_errors"] == [
-        {"error_type": "TypeError", "source": "cef_log.previous.txt"},
-        {"error_type": "ReferenceError", "source": "cef_log.previous.txt"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "panel"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
+        {"error_type": "ReferenceError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
     ]
     assert all("line" not in signal for signal in diagnostics["signals"])
 

@@ -943,6 +943,7 @@ export const ptBR: Record<string, string> = {
   "themes.action.activating": "Ativando…",
   "themes.action.deactivate": "Desativar tema",
   "themes.action.deactivating": "Desativando…",
+  "themes.action.activated": "Tema ativado",
   "themes.action.install": "Instalar tema",
   "themes.early.badge": "Early",
   "themes.early.title": "Acesso antecipado",

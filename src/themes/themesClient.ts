@@ -940,8 +940,8 @@ export class ThemesClient {
       recoveryKeptCurrent: false,
       sectionHandoff: null,
     });
-    const observe = operation.kind === "installing" || operation.kind === "activating"
-      ? beginThemeObservation(operation.kind) : undefined;
+    const observe = operation.kind === "installing" || operation.kind === "activating" || operation.kind === "deactivating"
+      ? beginThemeObservation(operation.kind, operation.themeId) : undefined;
     try {
       const recovered = await this.reconcilePendingRecovery();
       if (recovered && this.current.runtimeInstallHold !== null) {
