@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "catalogId": "hooandee-loop",
   "cssLoaderName": "Hooandee Loop",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "displayName": {
     "es": "Loop",
     "en": "Loop",
@@ -16,9 +16,9 @@
   "author": "Hooandee",
   "tags": [],
   "artifact": {
-    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-loop/0.1.4/theme.zip",
-    "size": 56879,
-    "sha256": "03ab709304781c9258f907257c7db4a333dfb1eac87d8105e453c6064c1c760b"
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-loop/0.1.5/theme.zip",
+    "size": 57814,
+    "sha256": "99f9523aecb8587885905c00f976ee742d745454206ffebbc6b12bb5677c7d55"
   },
   "minimumVersions": {
     "panel": "0.89.0",
@@ -26,8 +26,8 @@
     "cssLoaderBackend": 9
   },
   "notes": {
-    "es": "Loop ya no muestra los juegos que has ocultado en Steam. El tráiler del Ambiente sigue al juego seleccionado, y los juegos recién instalados o comprados aparecen enseguida. Activarlo al arrancar ya no puede estropear tu biblioteca de Steam. Al moverte por el carrusel suena el sonido de navegación de Steam en las dos direcciones.",
-    "en": "Loop no longer shows the games you have hidden in Steam. The Ambient trailer follows the selected game, and newly installed or purchased games show up right away. Turning it on at startup can no longer break your Steam library. Moving through the carousel plays Steam's navigation sound in both directions.",
-    "it": "Loop non mostra più i giochi che hai nascosto in Steam. Il trailer dell'Ambiente segue il gioco selezionato e i giochi appena installati o acquistati compaiono subito. Attivarlo all'avvio non può più rovinare la tua libreria di Steam. Muovendoti nel carosello si sente il suono di navigazione di Steam in entrambe le direzioni."
+    "es": "La batería del carril muestra un rayo mientras se carga. Nueva opción para ver en gris en Inicio los juegos que no tienes instalados, y un juego que se está cerrando ya no se queda en gris.",
+    "en": "The rail battery shows a bolt while charging. New option to show the games you don't have installed in grey on Home, and a game that is closing no longer turns grey.",
+    "it": "La batteria della barra mostra un fulmine durante la ricarica. Nuova opzione per mostrare in grigio nella Home i giochi non installati, e un gioco che si sta chiudendo non diventa più grigio."
   }
 }
