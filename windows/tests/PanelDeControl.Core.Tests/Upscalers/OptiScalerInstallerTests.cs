@@ -117,6 +117,48 @@ public sealed class OptiScalerInstallerTests : IDisposable
         Assert.Equal("anti_cheat", error.Code);
     }
 
+    [Fact]
+    public async Task AnrFrameGenGoesInBesideOptiScalerTenAndComesOutWithIt()
+    {
+        var before = Snapshot(_game);
+        var nightly = Unpacked(Catalog.Asset("optiscaler-10-nightly")!);
+        Write(nightly, "OptiScaler.dll", "optiscaler 10");
+        Write(nightly, "OptiScaler.ini", "[Upscalers]\r\nDx12Upscaler=auto\r\n");
+        Write(nightly, "OptiScaler/fakenvapi.dll", "fakenvapi");
+        var addOn = Unpacked(Catalog.Asset(Catalog.AnrFrameGen)!);
+        Write(addOn, Catalog.AnrProvider + "/dlssg/nvngx_dlssg.dll", "anr fg");
+        Write(addOn, Catalog.AnrProvider + "/models/fg.bin", "model");
+        var installer = new OptiScalerInstaller(Catalog, _cache, "rdna35");
+
+        var install = await installer.InstallAsync(Dlss, null, new OptiScalerInstallRequest
+        {
+            Build = "fsr-4.1.2-beta",
+            Choice = new UpscalerChoice { FrameGen = true, FrameGenRoute = "anr" },
+        }, null, _ => false, null, CancellationToken.None);
+
+        var custom = Path.Combine(_game, "Binaries", "Win64", "OptiScaler", "custom", Catalog.AnrProvider);
+        Assert.True(install.Anr);
+        Assert.Equal("anr fg", File.ReadAllText(Path.Combine(custom, "dlssg", "nvngx_dlssg.dll")));
+        Assert.Equal("model", File.ReadAllText(Path.Combine(custom, "models", "fg.bin")));
+        OptiScalerInstaller.Uninstall(install);
+        Assert.Equal(before, Snapshot(_game));
+    }
+
+    [Fact]
+    public async Task AnrNeedsAGpuItIsBuiltFor()
+    {
+        var error = await Assert.ThrowsAsync<UpscalerException>(() => new OptiScalerInstaller(Catalog, _cache, "nvidia").InstallAsync(Dlss, null,
+            new OptiScalerInstallRequest { Build = "fsr-4.1.2-beta", Choice = new UpscalerChoice { FrameGen = true, FrameGenRoute = "anr" } },
+            null, _ => false, null, CancellationToken.None));
+        Assert.Equal("anr_build", error.Code);
+    }
+
+    private GameAnalysis Dlss() => new(
+        Array.Empty<ExeCandidate>(), "Binaries/Win64/Game.exe", new[] { "d3d12", "dxgi" }, false, Path.Combine(_game, "Binaries", "Win64"),
+        new[] { new KeyValuePair<string, IReadOnlyList<string>>("dlss", new[] { "Binaries/Win64/nvngx_dlss.dll" }),
+                new KeyValuePair<string, IReadOnlyList<string>>("dlssg", new[] { "Binaries/Win64/nvngx_dlssg.dll" }) },
+        Array.Empty<string>(), null, false, false, null);
+
     public void Dispose()
     {
         if (Directory.Exists(_root))

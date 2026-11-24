@@ -24,6 +24,9 @@ public sealed class InstalledUpscaler
     /// <summary>The game libraries the DLL mode swapped, relative to <see cref="Target"/>.</summary>
     public IReadOnlyList<string> DllTargets { get; set; } = Array.Empty<string>();
 
+    /// <summary>Whether the Apex Neural Rendering FG add-on went in beside OptiScaler.</summary>
+    public bool Anr { get; set; }
+
     /// <summary>Launch arguments the game's recipe asks for on Windows.</summary>
     public IReadOnlyList<string> Args { get; set; } = Array.Empty<string>();
 
@@ -101,6 +104,11 @@ public sealed class OptiScalerInstaller
         {
             throw new UpscalerException("anti_cheat");
         }
+        var wantsAnr = request.Choice.FrameGen && request.Choice.FrameGenRoute == "anr";
+        if (wantsAnr && !UpscalerPlanner.AnrCapable(_catalog, build, _gpu))
+        {
+            throw new UpscalerException("anr_build");
+        }
         var target = analysis.Target;
         var effective = UpscalerPlanner.ForGame(_catalog, build, Inputs(analysis), _gpu, recipe?.Dependencies ?? Array.Empty<string>());
         RequestedFrameGen(analysis, recipe, effective, request.Choice);
@@ -108,7 +116,11 @@ public sealed class OptiScalerInstaller
         // Everything is downloaded before the current install comes out: a failed or cancelled download leaves the
         // game exactly as it was.
         GameFiles.RecoverOrphan(target, claimed);
-        var paths = await FetchAsync(UpscalerPlanner.BuildAssets(_catalog, effective), progress, cancel).ConfigureAwait(false);
+        var paths = await FetchAsync(Needed(effective, wantsAnr), progress, cancel).ConfigureAwait(false);
+        if (wantsAnr)
+        {
+            AnrSources(paths[_catalog.AnrFrameGen], "");
+        }
         if (previous is not null)
         {
             GameFiles.Remove(previous.Target);
@@ -124,7 +136,7 @@ public sealed class OptiScalerInstaller
 
         var proxy = request.Proxy ?? DefaultProxy;
         effective = UpscalerPlanner.ForGame(_catalog, build, Inputs(analysis), _gpu, recipe?.Dependencies ?? Array.Empty<string>());
-        var assets = UpscalerPlanner.BuildAssets(_catalog, effective);
+        var assets = Needed(effective, wantsAnr);
         if (assets.Any(asset => !paths.ContainsKey(asset.Id)))
         {
             paths = await FetchAsync(assets, progress, cancel).ConfigureAwait(false);
@@ -165,8 +177,16 @@ public sealed class OptiScalerInstaller
             }
         }
 
+        if (wantsAnr)
+        {
+            foreach (var pair in AnrSources(paths[_catalog.AnrFrameGen], prefix))
+            {
+                Put(ordered, pair.Key, pair.Value);
+            }
+        }
+
         var frameGen = RequestedFrameGen(analysis, recipe, effective, request.Choice);
-        var panel = PanelIni.Compute(_catalog, effective, recipe?.Ini, false, request.Choice, frameGen);
+        var panel = PanelIni.Compute(_catalog, effective, recipe?.Ini, false, request.Choice, frameGen, previous?.Anr == true);
         var manifest = GameFiles.Apply(target, ordered, IniText.Apply(baseIni, panel));
         return new InstalledUpscaler
         {
@@ -177,6 +197,7 @@ public sealed class OptiScalerInstaller
             Exe = analysis.Exe,
             Options = Clean(request.Choice),
             FrameGenRoute = frameGen?.Route,
+            Anr = wantsAnr,
             Args = recipe?.Args ?? Array.Empty<string>(),
             Managed = panel.Select(pair => pair.Key).OrderBy(key => key, StringComparer.Ordinal).ToList(),
             Components = assets.Select(asset => new KeyValuePair<string, string>(asset.Id, asset.Sha256)).ToList(),
@@ -208,6 +229,31 @@ public sealed class OptiScalerInstaller
         return requested;
     }
 
+    private IReadOnlyList<UpscalerAsset> Needed(UpscalerBuild build, bool anr)
+    {
+        var assets = UpscalerPlanner.BuildAssets(_catalog, build).ToList();
+        if (anr && _catalog.Asset(_catalog.AnrFrameGen) is { } addOn && !assets.Contains(addOn))
+        {
+            assets.Add(addOn);
+        }
+        return assets;
+    }
+
+    /// <summary>ANR's provider folder as OptiScaler 10 finds it: <c>custom/&lt;provider&gt;/</c> next to OptiScaler.dll.</summary>
+    private IReadOnlyList<KeyValuePair<string, string>> AnrSources(string unpacked, string prefix)
+    {
+        var root = Path.Combine(unpacked, _catalog.AnrProvider);
+        if (!File.Exists(Path.Combine(root, "dlssg", "nvngx_dlssg.dll")))
+        {
+            throw new UpscalerException("anr_layout");
+        }
+        return Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .Select(path => new KeyValuePair<string, string>(
+                prefix + "custom/" + _catalog.AnrProvider + "/" + path.Substring(root.Length + 1).Replace(Path.DirectorySeparatorChar, '/'), path))
+            .ToList();
+    }
+
     private async Task<Dictionary<string, string>> FetchAsync(IReadOnlyList<UpscalerAsset> assets, IProgress<long>? progress, CancellationToken cancel)
     {
         var paths = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -227,7 +273,7 @@ public sealed class OptiScalerInstaller
         Quality = choice.Quality is not null && _catalog.QualityRatios.ContainsKey(choice.Quality) ? choice.Quality : null,
         Sharpness = choice.Sharpness is not null && _catalog.Sharpness.ContainsKey(choice.Sharpness) ? choice.Sharpness : null,
         FrameGen = choice.FrameGen,
-        FrameGenRoute = choice.FrameGenRoute is "game" or "optiscaler" ? choice.FrameGenRoute : null,
+        FrameGenRoute = choice.FrameGenRoute is "game" or "optiscaler" or "anr" ? choice.FrameGenRoute : null,
         Model = string.IsNullOrEmpty(choice.Model) ? null : choice.Model,
     };
 

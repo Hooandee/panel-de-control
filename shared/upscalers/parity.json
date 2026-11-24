@@ -19,7 +19,7 @@
     "install_upscaler": {
       "windows": "partial",
       "op": "install",
-      "note": "optiscaler and dll; helixsr, recipe dependencies and ANR pending"
+      "note": "optiscaler (with sharpness, FG route and ANR) and dll; helixsr and recipe dependencies pending"
     },
     "uninstall_upscaler": {
       "windows": "done",

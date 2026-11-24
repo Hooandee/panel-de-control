@@ -425,6 +425,7 @@ public sealed class UpscalerStateStore
             DllTargets = install.Get("dll_targets") is DataArray targets
                 ? targets.Items.OfType<DataString>().Select(item => item.Value).ToList()
                 : new List<string>(),
+            Anr = install.Get("anr") is DataBool { Value: true },
             Args = Strings(install.Get("args")),
             AddedArgs = Strings(install.Get("added_args")),
             Managed = managed,
@@ -465,6 +466,7 @@ public sealed class UpscalerStateStore
             })).ToList())),
             Member("managed", new DataArray(install.Managed.Select(key => (DataValue)new DataString(key)).ToList())),
             Member("dll_targets", new DataArray(install.DllTargets.Select(path => (DataValue)new DataString(path)).ToList())),
+            Member("anr", new DataBool(install.Anr)),
             Member("args", new DataArray(install.Args.Select(arg => (DataValue)new DataString(arg)).ToList())),
             Member("added_args", new DataArray(install.AddedArgs.Select(arg => (DataValue)new DataString(arg)).ToList())),
         });

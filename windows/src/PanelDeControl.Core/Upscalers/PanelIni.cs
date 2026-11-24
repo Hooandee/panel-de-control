@@ -22,7 +22,7 @@ public static class PanelIni
     private static readonly string[] QualityModes = { "DLAA", "UltraQuality", "Quality", "Balanced", "Performance", "UltraPerformance" };
 
     public static IReadOnlyList<KeyValuePair<string, string>> Compute(BuildCatalog catalog, UpscalerBuild build,
-        IReadOnlyDictionary<string, string>? recipeIni, bool optiPatcher, UpscalerChoice choice, FrameGenPlan? frameGenPlan)
+        IReadOnlyDictionary<string, string>? recipeIni, bool optiPatcher, UpscalerChoice choice, FrameGenPlan? frameGenPlan, bool anrFiles = false)
     {
         var values = new OrderedValues();
         values.SetAll(catalog.BaseIni);
@@ -37,7 +37,7 @@ public static class PanelIni
             values.Set("Plugins.LoadAsiPlugins", "true");
         }
         values.SetAll(UpscalerPlanner.ModelOverrides(build, choice.Model));
-        values.SetAll(UpscalerPlanner.FrameGenOverrides(frameGenPlan, choice.FrameGen));
+        values.SetAll(UpscalerPlanner.FrameGenOverrides(frameGenPlan, choice.FrameGen, anrFiles));
         return values.Pairs;
     }
 

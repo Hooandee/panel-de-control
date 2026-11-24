@@ -71,6 +71,8 @@ public sealed class UpscalersRequest
         Experimental = experimental;
     }
 
+    private static readonly string[] FrameGenRoutes = { "game", "optiscaler", "anr" };
+
     [DataMember(Name = "operation", Order = 1, IsRequired = true)]
     public UpscalersOperation Operation { get; private set; }
 
@@ -90,6 +92,16 @@ public sealed class UpscalersRequest
     [DataMember(Name = "experimental", Order = 6, EmitDefaultValue = false)]
     public bool? Experimental { get; private set; }
 
+    [DataMember(Name = "sharpness", Order = 7, EmitDefaultValue = false)]
+    public string? Sharpness { get; private set; }
+
+    /// <summary>Frame generation on, through <see cref="FrameGenRoute"/> (<c>game</c>, <c>optiscaler</c> or <c>anr</c>).</summary>
+    [DataMember(Name = "fg", Order = 8, EmitDefaultValue = false)]
+    public bool? FrameGen { get; private set; }
+
+    [DataMember(Name = "fg_route", Order = 9, EmitDefaultValue = false)]
+    public string? FrameGenRoute { get; private set; }
+
     public static UpscalersRequest Overview() => new(UpscalersOperation.Overview);
 
     public static UpscalersRequest Game(string appId) => new(UpscalersOperation.Game, appId: appId);
@@ -98,8 +110,14 @@ public sealed class UpscalersRequest
 
     public static UpscalersRequest Cover(string appId) => new(UpscalersOperation.Cover, appId: appId);
 
-    public static UpscalersRequest Install(string appId, string build, string? quality, string? model, bool experimental) =>
-        new(UpscalersOperation.Install, appId, build, quality, model, experimental);
+    public static UpscalersRequest Install(string appId, string build, string? quality, string? model, bool experimental,
+        string? sharpness = null, bool frameGen = false, string? frameGenRoute = null) =>
+        new(UpscalersOperation.Install, appId, build, quality, model, experimental)
+        {
+            Sharpness = sharpness,
+            FrameGen = frameGen ? true : null,
+            FrameGenRoute = frameGenRoute,
+        };
 
     public static UpscalersRequest Uninstall(string appId, bool experimental) =>
         new(UpscalersOperation.Uninstall, appId, experimental: experimental);
@@ -111,14 +129,16 @@ public sealed class UpscalersRequest
         bool Absent(string? field) => field is null;
         bool Token(string? field) => field is { Length: > 0 and <= MaximumFieldLength } && field.All(IsTokenCharacter);
         bool Optional(string? field) => field is null || Token(field);
+        var noFrameGen = Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute);
         var appId = AppId is { Length: > 0 and <= MaximumAppIdLength } && AppId.All(character => character is >= '0' and <= '9');
         var valid = Operation switch
         {
             UpscalersOperation.Overview or UpscalersOperation.Job =>
-                Absent(AppId) && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null,
-            UpscalersOperation.Game or UpscalersOperation.Cover => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null,
-            UpscalersOperation.Install => appId && Token(Build) && Optional(Quality) && Optional(Model),
-            UpscalersOperation.Uninstall => appId && Absent(Build) && Absent(Quality) && Absent(Model),
+                Absent(AppId) && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null && noFrameGen,
+            UpscalersOperation.Game or UpscalersOperation.Cover => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null && noFrameGen,
+            UpscalersOperation.Install => appId && Token(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness)
+                && (FrameGenRoute is null || Array.IndexOf(FrameGenRoutes, FrameGenRoute) >= 0),
+            UpscalersOperation.Uninstall => appId && Absent(Build) && Absent(Quality) && Absent(Model) && noFrameGen,
             _ => false,
         };
         if (!valid)

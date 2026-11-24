@@ -329,7 +329,24 @@ public sealed class UpscalerService : IUpscalersController
 
         GameGuards.EnsureCanInstall(app, runningImages());
         var job = jobs.Begin("install", appId);
-        var choice = new UpscalerChoice { Quality = request.Quality, Model = request.Model };
+        if (request.Sharpness is not null && !data.Catalog.Sharpness.ContainsKey(request.Sharpness))
+        {
+            throw new UpscalerException("invalid_sharpness");
+        }
+
+        if (request.FrameGen == true && request.FrameGenRoute == "anr" && !UpscalerPlanner.AnrCapable(data.Catalog, build, Gpu.Generation))
+        {
+            throw new UpscalerException("anr_build");
+        }
+
+        var choice = new UpscalerChoice
+        {
+            Quality = request.Quality,
+            Model = request.Model,
+            Sharpness = request.Sharpness,
+            FrameGen = request.FrameGen == true,
+            FrameGenRoute = request.FrameGenRoute,
+        };
         _ = start(() => RunInstallAsync(app, build.Id, choice, recipe));
         return Ok(job: job);
     }
