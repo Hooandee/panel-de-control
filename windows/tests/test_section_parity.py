@@ -5,7 +5,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 MANIFEST = REPO / "src" / "customize" / "manifest.tsx"
 CATALOG = REPO / "windows" / "src" / "PanelDeControl.Core" / "Presentation" / "SectionCatalog.cs"
-WINDOWS_ONLY_BLOCKS = {"energy"}
+WINDOWS_ONLY_BLOCKS = {"energy", "upscalers"}
 LINUX_ONLY_SECTIONS = {"ambient", "upscalers"}
 # The PlayStation 5 only runs Linux; its console cards have no Windows counterpart.
 LINUX_ONLY_BLOCKS = {"consoleLight", "consoleTemps", "consoleThermal"}

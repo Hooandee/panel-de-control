@@ -51,6 +51,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly RefreshRateClient refreshClient = new();
     private readonly CpuControlClient cpuClient = new();
     private readonly ThemesView themesView = new();
+    private readonly UpscalersView upscalersView = new();
     private readonly ThemesClient steamHomeClient = new();
     private bool steamHomeRefreshInProgress;
     private CancellationTokenSource? cpuDebounce;
@@ -107,6 +108,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         InitializeComponent();
         ThemeLibraryHost.Content = themesView;
+        UpscalersHost.Content = upscalersView;
         PowerArcTrack.Data = CreatePowerArcGeometry(1);
         PowerArcFill.Data = CreatePowerArcGeometry(0);
         ApplyAccent(ReadSavedAccent());
@@ -428,7 +430,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private Task RefreshThemesWhenShownAsync()
     {
         var shown = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
-        return shown ? themesView.RefreshAsync() : Task.CompletedTask;
+        return shown ? Task.WhenAll(themesView.RefreshAsync(), upscalersView.RefreshAsync()) : Task.CompletedTask;
     }
 
     private async Task ApplySnapshotWhenReadyAsync(
@@ -1649,6 +1651,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (!wasThemes && sections[index].Definition.Id == "themes")
         {
             _ = themesView.RefreshAsync();
+            _ = upscalersView.RefreshAsync();
         }
 
         var current = sections[index].Definition;
