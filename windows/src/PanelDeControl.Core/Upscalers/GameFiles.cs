@@ -15,16 +15,17 @@ public static class GameFiles
     /// <summary>Written by OptiScaler while the game runs: Panel saves the game's copy and drops its own.</summary>
     public static readonly IReadOnlyList<string> Generated = new[] { "OptiScaler.log" };
 
-    /// <summary>Configs Panel seeds for a recipe tool (REFramework); not installed on Windows yet.</summary>
-    private static readonly IReadOnlyList<string> Seeded = new[] { "re2_fw_config.txt" };
+    /// <summary>Configs Panel seeds for a recipe tool (REFramework); on removal only the keys Panel set go back.</summary>
+    private static readonly IReadOnlyList<string> Seeded = new[] { ReframeworkConfig.FileName };
 
     private static readonly UTF8Encoding Utf8 = new(false);
 
     /// <param name="sources">Where each file goes, relative to <paramref name="target"/>, and the file it is copied from.</param>
     /// <param name="iniText">OptiScaler.ini as Panel writes it; null for the DLL mode, which only swaps FidelityFX DLLs.</param>
     /// <param name="copy">The file copy, replaceable so a test can fail it halfway.</param>
+    /// <param name="protect">Leaves Panel's libraries and the saved originals read-only (a recipe's <c>protect_dlls</c>).</param>
     public static GameManifest Apply(string target, IReadOnlyList<KeyValuePair<string, string>> sources, string? iniText,
-        Action<string, string>? copy = null)
+        Action<string, string>? copy = null, bool protect = false)
     {
         copy ??= (source, destination) => File.Copy(source, destination, false);
         var meta = Path.Combine(target, GameManifest.Folder);
@@ -68,7 +69,12 @@ public static class GameFiles
             throw Translate(error);
         }
         manifest.Incomplete = false;
+        manifest.ReadOnly = protect;
         Save(journal, manifest);
+        if (protect)
+        {
+            ReadOnlyLibraries(target, manifest);
+        }
         return manifest;
     }
 
@@ -184,13 +190,22 @@ public static class GameFiles
             {
                 continue;
             }
-            if (Seeded.Contains(pair.Key))
+            var seeded = Seeded.Contains(pair.Key);
+            if (pair.Value is null || manifest.Owned.Contains(pair.Key) || Sha256(path) == pair.Value || (seeded && !manifest.Backups.Contains(pair.Key)))
             {
-                throw new UpscalerException("recipe_unsupported", "manifest holds a seeded recipe config");
-            }
-            if (pair.Value is null || manifest.Owned.Contains(pair.Key) || Sha256(path) == pair.Value)
-            {
+                Writable(path);
                 File.Delete(path);
+            }
+            else if (seeded)
+            {
+                // REFramework rewrote its config while installed: only the keys Panel set go back to the user's.
+                var original = File.Exists(saved) && !IsLink(saved) ? File.ReadAllText(saved, Utf8) : "";
+                var current = File.ReadAllText(path, Utf8);
+                File.WriteAllText(path, ReframeworkConfig.WithKeys(current, ReframeworkConfig.Keys(original, ReframeworkConfig.AllKeys)), Utf8);
+                if (File.Exists(saved))
+                {
+                    File.Delete(saved);
+                }
             }
             else
             {
@@ -207,11 +222,24 @@ public static class GameFiles
                 }
             }
         }
+        foreach (var directory in manifest.Dirs.Where(name => name.Contains("custom/") && name.EndsWith("/dlssg", StringComparison.Ordinal)))
+        {
+            // ANR FG writes a log per launch beside its provider.
+            var folder = Join(target, directory);
+            if (Directory.Exists(folder) && !IsLink(folder))
+            {
+                foreach (var log in Directory.GetFiles(folder, "nr_fg-*.log"))
+                {
+                    File.Delete(log);
+                }
+            }
+        }
         foreach (var relative in manifest.Backups)
         {
             var saved = Join(Path.Combine(meta, "backup"), relative);
             if (Exists(saved) && !Exists(Join(target, relative)))
             {
+                Writable(saved);
                 Replace(saved, Join(target, relative));
             }
         }
@@ -230,6 +258,44 @@ public static class GameFiles
             DeleteTree(meta);
         }
         return kept;
+    }
+
+    /// <summary>Panel's own libraries and the game's backed-up originals; one Panel put over the game's stays writable for the updater.</summary>
+    private static void ReadOnlyLibraries(string target, GameManifest manifest)
+    {
+        var paths = manifest.Files.Where(pair => !manifest.Backups.Contains(pair.Key)).Select(pair => Join(target, pair.Key)).ToList();
+        var backup = Path.Combine(target, GameManifest.Folder, "backup");
+        if (Directory.Exists(backup) && !IsLink(backup))
+        {
+            paths.AddRange(Directory.GetFiles(backup, "*", SearchOption.AllDirectories));
+        }
+        foreach (var path in paths.Where(path => string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                if (File.Exists(path) && !IsLink(path))
+                {
+                    File.SetAttributes(path, File.GetAttributes(path) | FileAttributes.ReadOnly);
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    private static void Writable(string path)
+    {
+        try
+        {
+            if (File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReadOnly) != 0)
+            {
+                File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     private static void Place(string target, string relative, GameManifest manifest, string backup, string journal)

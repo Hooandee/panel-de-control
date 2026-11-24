@@ -347,7 +347,7 @@ public sealed class UpscalerService : IUpscalersController
             FrameGen = request.FrameGen == true,
             FrameGenRoute = request.FrameGenRoute,
         };
-        _ = start(() => RunInstallAsync(app, build.Id, choice, recipe));
+        _ = start(() => RunInstallAsync(app, build.Id, choice, Resolved(app, build.Engine)));
         return Ok(job: job);
     }
 
@@ -365,7 +365,7 @@ public sealed class UpscalerService : IUpscalersController
         return Ok(job: job);
     }
 
-    private async Task RunInstallAsync(SteamApp app, string buildId, UpscalerChoice choice, GameRecipe? recipe)
+    private async Task RunInstallAsync(SteamApp app, string buildId, UpscalerChoice choice, ResolvedRecipe? recipe)
     {
         var appId = app.AppId;
         Record(appId, "install", "started", buildId, null);
@@ -391,14 +391,14 @@ public sealed class UpscalerService : IUpscalersController
                 ? await new DllInstaller(catalog, cache).InstallAsync(
                     buildId,
                     app.Root,
-                    () => Analyze(app, recipe),
+                    () => Analyze(app, recipe?.Exe),
                     recipe?.LegacyFfxSwap ?? true,
                     previous?.Install,
                     false,
                     progress,
                     CancellationToken.None).ConfigureAwait(false)
                 : await new OptiScalerInstaller(catalog, cache, Gpu.Generation).InstallAsync(
-                    () => Analyze(app, recipe),
+                    () => Analyze(app, recipe?.Exe),
                     recipe,
                     new OptiScalerInstallRequest { Build = buildId, Choice = choice },
                     previous?.Install,
@@ -757,7 +757,10 @@ public sealed class UpscalerService : IUpscalersController
 
     private GameRecipe? Recipe(SteamApp app) => data.Recipes?.Match(app.AppId, "optiscaler", Platform, Arch, app.BuildId);
 
-    private GameAnalysis Analyze(SteamApp app, GameRecipe? recipe) => GameFolder.Analyze(fileSystem, app.Root, null, recipe?.Exe);
+    private ResolvedRecipe? Resolved(SteamApp app, string engine) =>
+        data.Resolver.Resolve(app.AppId, engine, Platform, Arch, app.BuildId, fileSystem, app.Root);
+
+    private GameAnalysis Analyze(SteamApp app, string? exe) => GameFolder.Analyze(fileSystem, app.Root, null, exe);
 
     // The scan reads executables: it is kept per game until the folder or Steam's state changes.
     private GameAnalysis Scan(SteamApp app, GameRecipe? recipe, bool force = false)
@@ -771,7 +774,7 @@ public sealed class UpscalerService : IUpscalersController
             }
         }
 
-        var analysis = Analyze(app, recipe ?? Recipe(app));
+        var analysis = Analyze(app, (recipe ?? Recipe(app))?.Exe);
         lock (scanLock)
         {
             scans[app.AppId] = (stamp, analysis);

@@ -34,8 +34,9 @@ public sealed class UpscalerData
 {
     private const string Prefix = "PanelDeControl.Hardware.Upscalers.";
 
-    public UpscalerData(BuildCatalog catalog, GpuFamily gpuRules, RecipeCatalog? recipes)
+    public UpscalerData(BuildCatalog catalog, GpuFamily gpuRules, RecipeCatalog? recipes, WikiRecipes? wiki = null)
     {
+        Resolver = new RecipeResolver(recipes, wiki);
         Catalog = catalog;
         GpuRules = gpuRules;
         Recipes = recipes;
@@ -46,6 +47,9 @@ public sealed class UpscalerData
     public GpuFamily GpuRules { get; }
 
     public RecipeCatalog? Recipes { get; }
+
+    /// <summary>The game's recipe as Linux resolves it: catalog entry, OptiScaler wiki facts and the RE Engine rule.</summary>
+    public RecipeResolver Resolver { get; }
 
     public static UpscalerData LoadEmbedded()
     {
@@ -62,7 +66,7 @@ public sealed class UpscalerData
             }
         }
 
-        return new UpscalerData(catalog, rules, files.Count > 0 ? RecipeCatalog.Load(files) : null);
+        return new UpscalerData(catalog, rules, files.Count > 0 ? RecipeCatalog.Load(files) : null, WikiRecipes.Load(Resource(assembly, "recipes_wiki.json")));
     }
 
     private static byte[]? Resource(Assembly assembly, string name)

@@ -27,6 +27,9 @@ public sealed class GameManifest
 
     public string? Engine { get; set; }
 
+    /// <summary>Panel's libraries and the game's saved originals are read-only: the game's launcher deletes unknown DLLs.</summary>
+    public bool ReadOnly { get; set; }
+
     public bool HasConfiguration => Configuration is DataObject { Count: > 0 };
 
     public string? Hash(string relative) => Files.FirstOrDefault(pair => pair.Key == relative).Value;
@@ -74,6 +77,7 @@ public sealed class GameManifest
         manifest.Owned.AddRange(Strings(document.Get("owned")));
         manifest.Incomplete = document.Get("incomplete") is DataBool { Value: true };
         manifest.Engine = (document.Get("engine") as DataString)?.Value;
+        manifest.ReadOnly = document.Get("read_only") is DataBool { Value: true };
         return manifest;
     }
 
@@ -94,6 +98,10 @@ public sealed class GameManifest
         if (Engine is not null)
         {
             members.Add(Member("engine", new DataString(Engine)));
+        }
+        if (ReadOnly)
+        {
+            members.Add(Member("read_only", new DataBool(true)));
         }
         return PythonJson.Write(new DataObject(members));
     }
