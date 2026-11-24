@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.95.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.95.0...panel-de-control-v0.95.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* themes, Ambient, upscalers and TDP fixes from user reports ([#1492](https://github.com/Hooandee/panel-de-control/issues/1492)) ([56a7bd3](https://github.com/Hooandee/panel-de-control/commit/56a7bd339c3a74801908a9b0168e9e80f3ec680a))
+
 ## [0.95.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.94.3...panel-de-control-v0.95.0) (2026-11-23)
 
 
