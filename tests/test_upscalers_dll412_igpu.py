@@ -17,11 +17,11 @@ def test_lite412_igpu_uses_pinned_exact_archive():
     assert build.engine == "dll"
     assert build.version == "4.1.2"
     assert build.models == (("lite", {}),)
-    assert asset.filename == "fsr4.1.2-igpu-cyboman-rdna3-2026-11-05.7z"
-    assert asset.size == 9553046
-    assert asset.sha256 == "6553cfeaa824fd1fa36985278e5ce835d27bbb758e99a1db5efaf331fe72dc4f"
+    assert asset.filename == "fsr4.1.2-igpu-cyboman-rdna3-2026-11-22.7z"
+    assert asset.size == 9826318
+    assert asset.sha256 == "0443047f44cbfb9670dbc719e069df77be37cabcde02b76176d59f682d79091d"
     assert asset.member == "4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll"
-    assert asset.urls == ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/" + asset.filename,)
+    assert asset.urls == ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-22/" + asset.filename,)
     assert build.legacy_replace == catalog.BUILDS["fsr-4.1.2-lite-dll"].legacy_replace
     assert asset != catalog.ASSETS[catalog.BUILDS["fsr-4.1.2-lite-dll"].replace[PROVIDER]]
 

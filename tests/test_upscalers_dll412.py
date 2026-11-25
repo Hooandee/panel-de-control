@@ -29,11 +29,11 @@ def test_dll412_lite_metadata_and_sdk_assets_are_separate():
     assert build.engine == "dll" and build.version == "4.1.2"
     assert build.models == (("lite", {}),)
     asset = catalog.ASSETS[build.replace[PROVIDER]]
-    assert asset.filename == "fsr4.1.2-igpu-cyboman-rdna2-2026-11-05.7z"
+    assert asset.filename == "fsr4.1.2-igpu-cyboman-rdna2-2026-11-22.7z"
     assert asset.member == "4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll"
-    assert asset.size == 9567439
-    assert asset.sha256 == "da7c7681bffe7ac60a01e859d5b107900d963557793ef67ddcfd03a832e1c03f"
-    assert asset.urls == ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/" + asset.filename,)
+    assert asset.size == 9889144
+    assert asset.sha256 == "8dd65d22b20f968f0d6529716cbcd05b12ca93d8e543f1e878fc5e08bbb1099c"
+    assert asset.urls == ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-22/" + asset.filename,)
     assert build.legacy_replace == catalog.BUILDS["fsr-4.1.1-lite-dll"].legacy_replace
     sdk = catalog.BUILDS["fsr-4.1.2-dll"]
     assert sdk.gpus == catalog.AMD

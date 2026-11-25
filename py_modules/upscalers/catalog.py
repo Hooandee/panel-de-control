@@ -179,15 +179,15 @@ ASSETS: dict[str, Asset] = {
             member="amd_fidelityfx_framegeneration_dx12.dll",
         ),
         Asset(
-            "fsr-4.1.2-lite-cyboman-dll", "fsr4.1.2-igpu-cyboman-rdna2-2026-11-05.7z",
-            "da7c7681bffe7ac60a01e859d5b107900d963557793ef67ddcfd03a832e1c03f", 9567439,
-            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/fsr4.1.2-igpu-cyboman-rdna2-2026-11-05.7z",),
+            "fsr-4.1.2-lite-cyboman-dll", "fsr4.1.2-igpu-cyboman-rdna2-2026-11-22.7z",
+            "8dd65d22b20f968f0d6529716cbcd05b12ca93d8e543f1e878fc5e08bbb1099c", 9889144,
+            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-22/fsr4.1.2-igpu-cyboman-rdna2-2026-11-22.7z",),
             member="4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll",
         ),
         Asset(
-            "fsr-4.1.2-lite-igpu-cyboman-dll", "fsr4.1.2-igpu-cyboman-rdna3-2026-11-05.7z",
-            "6553cfeaa824fd1fa36985278e5ce835d27bbb758e99a1db5efaf331fe72dc4f", 9553046,
-            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/fsr4.1.2-igpu-cyboman-rdna3-2026-11-05.7z",),
+            "fsr-4.1.2-lite-igpu-cyboman-dll", "fsr4.1.2-igpu-cyboman-rdna3-2026-11-22.7z",
+            "0443047f44cbfb9670dbc719e069df77be37cabcde02b76176d59f682d79091d", 9826318,
+            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-22/fsr4.1.2-igpu-cyboman-rdna3-2026-11-22.7z",),
             member="4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll",
         ),
         Asset(
