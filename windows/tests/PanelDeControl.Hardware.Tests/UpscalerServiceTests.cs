@@ -1179,13 +1179,14 @@ public sealed partial class UpscalerServiceTests : IDisposable
     }
 
     private UpscalerService Service(Action<UpscalerStateStore>? seed = null, Action? prepare = null, GpuFamilyResult? gpu = null, Func<byte[], int, ScaledCover?>? scaleCover = null,
-        ISteamLaunchOptions? launchOptions = null, HelixSr? helix = null, bool noHelix = false, HttpMessageHandler? network = null)
+        ISteamLaunchOptions? launchOptions = null, HelixSr? helix = null, bool noHelix = false, HttpMessageHandler? network = null,
+        UpscalerData? data = null, IUserArchive? archive = null)
     {
         var store = new UpscalerStateStore(StatePath);
         seed?.Invoke(store);
         prepare?.Invoke();
         return new UpscalerService(
-            Data,
+            data ?? Data,
             store,
             new AssetCache(Path.Combine(root, "cache"), "tar", network ?? new NoNetwork(), _ => long.MaxValue, new[] { TimeSpan.Zero }),
             PhysicalFileSystem.Instance,
@@ -1202,7 +1203,10 @@ public sealed partial class UpscalerServiceTests : IDisposable
             },
             scaleCover,
             launchOptions,
-            helix: noHelix ? null : helix ?? NewHelix(new FakeHelixBridge()));
+            helix: noHelix ? null : helix ?? NewHelix(new FakeHelixBridge()),
+            userArchive: archive ?? new UserArchive(null, null),
+            downloadFolders: () => new[] { Downloads, Desktop },
+            profile: Path.Combine(root, "profile"));
     }
 
     private async Task RunDeferredAsync()

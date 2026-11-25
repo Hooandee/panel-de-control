@@ -45,6 +45,9 @@ public sealed class InstalledUpscaler
 
     public int Files { get; set; }
 
+    /// <summary>The user's mod that went in with this install, as <c>filename</c> and <c>id</c>.</summary>
+    public KeyValuePair<string, string>? Mod { get; set; }
+
     /// <summary>HelixSR's route inside its bridge; only the FSR drop-in exists.</summary>
     public string Way { get; set; } = "";
 
@@ -68,6 +71,21 @@ public sealed class InstalledUpscaler
 
     /// <summary>Set by an install that kept the image controls' sharpness, for the caller to store; never saved with the install.</summary>
     public ImageSettingsReceipt? ImageReceipt { get; set; }
+}
+
+/// <summary>The user's mod for a game as an install needs it; <see cref="Sources"/> are the stored copies by destination beside the exe.</summary>
+public sealed class UserModInstall
+{
+    public string Filename { get; set; } = "";
+
+    public string Id { get; set; } = "";
+
+    /// <summary>The exe's folder relative to the game folder when the mod was added, '/' separated.</summary>
+    public string Target { get; set; } = "";
+
+    public string GameRoot { get; set; } = "";
+
+    public IReadOnlyList<KeyValuePair<string, string>> Sources { get; set; } = Array.Empty<KeyValuePair<string, string>>();
 }
 
 public sealed class OptiScalerInstallRequest
@@ -112,7 +130,7 @@ public sealed class OptiScalerInstaller
     /// <param name="automatic">The recipe's dependency packages and configuration, from <see cref="AutomaticRecipe.Plan"/>.</param>
     public async Task<InstalledUpscaler> InstallAsync(Func<GameAnalysis> analyze, ResolvedRecipe? recipe, OptiScalerInstallRequest request,
         InstalledUpscaler? previous, Func<string, bool> claimed, IProgress<long>? progress, CancellationToken cancel,
-        AutomaticRecipe? automatic = null)
+        AutomaticRecipe? automatic = null, UserModInstall? mod = null, Func<RecipeDependency, IReadOnlyDictionary<string, string>>? userFiles = null)
     {
         var build = _catalog.Build(request.Build);
         if (build is null || !build.Available)
@@ -153,8 +171,18 @@ public sealed class OptiScalerInstaller
         {
             AnrSources(paths[_catalog.AnrFrameGen], "");
         }
-        automatic?.Sources(paths);
+        automatic?.Sources(paths, userFiles);
+        if (mod is { Sources.Count: > 0 } && mod.Target != RelativeTo(mod.GameRoot, target))
+        {
+            throw new UpscalerException("mod_moved");
+        }
         cancel.ThrowIfCancellationRequested();
+        // The mod's settings as the user left them: the old install takes those files away with it.
+        var keptSettings = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var relative in mod is { Sources.Count: > 0 } && recipe is not null ? recipe.ModSettings.Keys : Enumerable.Empty<string>())
+        {
+            keptSettings[relative] = SmallText(Path.Combine(target, relative.Replace('/', Path.DirectorySeparatorChar)));
+        }
         var optiScalerBefore = previous is not null && previous.Engine == "optiscaler";
         var edited = optiScalerBefore ? previous!.Edited : Array.Empty<KeyValuePair<string, string>>();
         var imageKept = optiScalerBefore && previous!.ImageOverrides.Count > 0 && ReadIni(previous.Target) is { } oldIni
@@ -174,6 +202,13 @@ public sealed class OptiScalerInstaller
         }
 
         var proxy = request.Proxy ?? (recipe?.Proxy is { } named && _catalog.Proxies.Contains(named) ? named : null) ?? DefaultProxy;
+        var modSources = mod?.Sources ?? Array.Empty<KeyValuePair<string, string>>();
+        if (modSources.Any(pair => string.Equals(pair.Key, proxy, StringComparison.OrdinalIgnoreCase)))
+        {
+            // The mod brings its own loader under OptiScaler's usual name: OptiScaler takes another.
+            proxy = _catalog.Proxies.FirstOrDefault(name => name != "d3d12.dll" && !modSources.Any(pair => string.Equals(pair.Key, name, StringComparison.OrdinalIgnoreCase)))
+                ?? throw new UpscalerException("mod_conflict");
+        }
         effective = UpscalerPlanner.ForGame(_catalog, build, Inputs(analysis), _gpu, recipe?.Dependencies ?? Array.Empty<string>());
         var assets = Needed(effective, wantsAnr, recipe, automatic);
         if (assets.Any(asset => !paths.ContainsKey(asset.Id)))
@@ -194,7 +229,7 @@ public sealed class OptiScalerInstaller
         {
             injector = paths[effective.Injector!];
         }
-        var ordered = automatic is null ? new List<KeyValuePair<string, string>>() : automatic.Sources(paths).ToList();
+        var ordered = automatic is null ? new List<KeyValuePair<string, string>>() : automatic.Sources(paths, userFiles).ToList();
         foreach (var pair in sources)
         {
             Put(ordered, pair.Key, pair.Value);
@@ -237,6 +272,18 @@ public sealed class OptiScalerInstaller
             }
         }
 
+        var owned = new List<string>();
+        if (modSources.Count > 0)
+        {
+            if (modSources.Any(pair => string.Equals(pair.Key, GameFiles.IniName, StringComparison.OrdinalIgnoreCase)
+                || ordered.Any(known => GameManifest.PathComparer.Equals(known.Key, pair.Key))))
+            {
+                throw new UpscalerException("mod_conflict");
+            }
+            ordered.InsertRange(0, modSources);
+            owned.AddRange(modSources.Select(pair => pair.Key));
+        }
+
         var frameGen = RequestedFrameGen(analysis, recipe, effective, request.Choice, automatic is not null);
         var panel = PanelIni.Compute(_catalog, effective, recipe?.Ini, recipe?.OptiPatcher == true, request.Choice, frameGen, previous?.Anr == true);
         // Hand edits from the advanced editor survive a repair or a new version; Panel's own keys win over them.
@@ -266,8 +313,19 @@ public sealed class OptiScalerInstaller
             {
                 Put(ordered, ReframeworkConfig.FileName, SeedReframework(target, seeds, recipe, request.Choice));
             }
+            foreach (var settings in modSources.Count > 0 && recipe is not null ? recipe.ModSettings : new Dictionary<string, IReadOnlyDictionary<string, string>>())
+            {
+                var text = keptSettings.TryGetValue(settings.Key, out var kept) && kept.Length > 0
+                    ? kept
+                    : SmallText(Path.Combine(target, settings.Key.Replace('/', Path.DirectorySeparatorChar)));
+                var seed = Path.Combine(seeds, "mod-settings", settings.Key.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(Path.GetDirectoryName(seed)!);
+                File.WriteAllText(seed, IniText.Apply(text, settings.Value), new UTF8Encoding(false));
+                Put(ordered, settings.Key, seed);
+                owned.Add(settings.Key);
+            }
             manifest = GameFiles.Apply(target, ordered, ini, protect: recipe?.ProtectDlls == true,
-                configuration: automatic?.Configuration);
+                configuration: automatic?.Configuration, owned: owned);
         }
         finally
         {
@@ -297,6 +355,7 @@ public sealed class OptiScalerInstaller
             Components = assets.Select(asset => new KeyValuePair<string, string>(asset.Id, asset.Sha256)).ToList(),
             GameConfig = recipe is { GameConfig.Count: > 0 } ? GameConfigFiles.Carry(previous?.GameConfig, GameConfigFiles.Apply(_profile, recipe.GameConfig, _documents)).ToList() : Array.Empty<GameConfigRecord>(),
             Files = manifest.Files.Count,
+            Mod = mod is { Sources.Count: > 0 } ? new KeyValuePair<string, string>(mod.Filename, mod.Id) : null,
             Edited = carried,
             ImageOverrides = image,
             ImageReceipt = receipt,
@@ -340,6 +399,31 @@ public sealed class OptiScalerInstaller
         var seed = Path.Combine(seeds, ReframeworkConfig.FileName);
         File.WriteAllText(seed, ReframeworkConfig.WithKeys(current, values), new UTF8Encoding(false));
         return seed;
+    }
+
+    private static string SmallText(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.Exists && (info.Attributes & FileAttributes.ReparsePoint) == 0 && info.Length < ReframeworkConfig.MaximumBytes
+                ? File.ReadAllText(path, new UTF8Encoding(false, false))
+                : "";
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return "";
+        }
+    }
+
+    private static string RelativeTo(string root, string folder)
+    {
+        var separators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+        var full = Path.GetFullPath(folder).TrimEnd(separators);
+        var start = Path.GetFullPath(root).TrimEnd(separators);
+        return full.Length > start.Length && full.StartsWith(start, StringComparison.OrdinalIgnoreCase)
+            ? full.Substring(start.Length + 1).Replace(Path.DirectorySeparatorChar, '/')
+            : "";
     }
 
     private static string? ReadIni(string target)

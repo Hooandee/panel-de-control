@@ -84,6 +84,89 @@ public sealed class UpscalersControlTests
     }
 
     [Fact]
+    public void UserSourceRequestsRoundTripAndKeepTheirOperationNumbers()
+    {
+        static UpscalersRequest Back(UpscalersRequest request) => UpscalersWireCodec.DeserializeRequest(UpscalersWireCodec.SerializeRequest(request));
+        var path = @"C:\Users\Someone\Downloads\ERSS-FG 1.2.zip";
+        const string password = "p\"ss/w\\d";
+        var mod = Back(UpscalersRequest.AddMod("1245620", path, password, true));
+        Assert.Equal((UpscalersOperation.AddMod, "1245620", path, password, true), (mod.Operation, mod.AppId, mod.Path, mod.Password, mod.ExperimentalEnabled));
+        Assert.Null(Back(UpscalersRequest.AddMod("1245620", path, null, true)).Password);
+        Assert.Equal(UpscalersOperation.ModCandidates, Back(UpscalersRequest.ModCandidates("1245620")).Operation);
+        Assert.Equal(UpscalersOperation.RemoveMod, Back(UpscalersRequest.RemoveMod("1245620", true)).Operation);
+        var candidates = Back(UpscalersRequest.UserFileCandidates("puredark-upscaler-base"));
+        Assert.Equal((UpscalersOperation.UserFileCandidates, null, "puredark-upscaler-base"), (candidates.Operation, candidates.AppId, candidates.Dependency));
+        var add = Back(UpscalersRequest.AddUserFile("1462040", "puredark-upscaler-base", path, true));
+        Assert.Equal(("puredark-upscaler-base", path), (add.Dependency, add.Path));
+        var remove = Back(UpscalersRequest.RemoveUserFile("1462040", "puredark-upscaler-base", true));
+        Assert.Equal(("1462040", "puredark-upscaler-base"), (remove.AppId, remove.Dependency));
+        Assert.Equal(new[] { 18, 19, 20, 21, 22, 23 }, new[]
+        {
+            UpscalersOperation.ModCandidates, UpscalersOperation.AddMod, UpscalersOperation.RemoveMod,
+            UpscalersOperation.UserFileCandidates, UpscalersOperation.AddUserFile, UpscalersOperation.RemoveUserFile,
+        }.Select(op => (int)op));
+        var longest = UpscalersWireCodec.SerializeRequest(UpscalersRequest.AddMod("1245620", new string('\\', UpscalersRequest.MaximumPathLength),
+            new string('"', UpscalersRequest.MaximumPasswordLength), true));
+        Assert.True(longest.Length <= UpscalersWireCodec.MaximumRequestLength);
+    }
+
+    [Theory]
+    [InlineData("{\"operation\":\"add_mod\",\"appid\":\"1\"}")]
+    [InlineData("{\"operation\":\"add_mod\",\"appid\":\"1\",\"path\":\"C:\\\\a.zip\",\"dependency\":\"x\"}")]
+    [InlineData("{\"operation\":\"add_mod\",\"appid\":\"1\",\"path\":\"C:\\\\a.zip\",\"password\":\"\"}")]
+    [InlineData("{\"operation\":\"add_mod\",\"appid\":\"1\",\"path\":\"C:\\\\a.zip\",\"build\":\"fsr-3.1\"}")]
+    [InlineData("{\"operation\":\"add_mod\",\"appid\":\"1\",\"path\":\"C:\\\\a\\u0000.zip\"}")]
+    [InlineData("{\"operation\":\"mod_candidates\",\"appid\":\"1\",\"path\":\"C:\\\\a.zip\"}")]
+    [InlineData("{\"operation\":\"mod_candidates\",\"appid\":\"1\",\"experimental\":true}")]
+    [InlineData("{\"operation\":\"remove_mod\",\"appid\":\"1\",\"password\":\"x\"}")]
+    [InlineData("{\"operation\":\"user_file_candidates\"}")]
+    [InlineData("{\"operation\":\"user_file_candidates\",\"appid\":\"1\",\"dependency\":\"x\"}")]
+    [InlineData("{\"operation\":\"user_file_candidates\",\"dependency\":\"a b\"}")]
+    [InlineData("{\"operation\":\"add_user_file\",\"appid\":\"1\",\"dependency\":\"x\"}")]
+    [InlineData("{\"operation\":\"add_user_file\",\"appid\":\"1\",\"dependency\":\"x\",\"path\":\"C:\\\\a.zip\",\"password\":\"p\"}")]
+    [InlineData("{\"operation\":\"remove_user_file\",\"appid\":\"1\"}")]
+    [InlineData("{\"operation\":\"remove_user_file\",\"appid\":\"1\",\"dependency\":\"x\",\"path\":\"C:\\\\a.zip\"}")]
+    [InlineData("{\"operation\":\"install\",\"appid\":\"1\",\"build\":\"fsr-3.1\",\"path\":\"C:\\\\a.zip\"}")]
+    [InlineData("{\"operation\":\"set_exe\",\"appid\":\"1\",\"exe\":\"Game.exe\",\"password\":\"x\"}")]
+    [InlineData("{\"operation\":\"set_ini\",\"appid\":\"1\",\"key\":\"A.B\",\"value\":\"1\",\"dependency\":\"x\"}")]
+    [InlineData("{\"operation\":\"overview\",\"path\":\"C:\\\\a.zip\"}")]
+    [InlineData("{\"operation\":\"uninstall\",\"appid\":\"1\",\"password\":\"x\"}")]
+    public void InvalidUserSourceRequestsAreRefused(string payload)
+    {
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.DeserializeRequest(payload));
+    }
+
+    [Fact]
+    public void UserSourceAnswersAndTheGameMembersRoundTrip()
+    {
+        var found = Roundtrip(new UpscalersResponse
+        {
+            Status = UpscalersResponseStatus.Ok,
+            Candidates = new UpscalerCandidates
+            {
+                Folder = @"C:\Users\Someone\Downloads",
+                Candidates = new[] { new UpscalerCandidate { Path = @"C:\Users\Someone\Downloads\a.zip", Filename = "a.zip", Size = 12, Version = "1.1.2" } },
+                Downloading = new UpscalerDownloading { Filename = "b.zip.crdownload", Size = 3 },
+            },
+            Game = new UpscalerGameDetail
+            {
+                Mod = new UpscalerModStatus { Filename = "a.zip", Count = 9, Files = new[] { "ERSS2/ERSS-FG.toml" }, Applied = true, Removed = null },
+                ModDownload = "https://example.test/mod",
+                Recipe = new UpscalerRecipeStatus
+                {
+                    Dependencies = new[] { new UpscalerDependencyStatus { Id = "puredark-upscaler-base", Kind = "user_files", State = "user_file", UserState = "ready", Filename = "a.zip", Installed = "1.1.2" } },
+                },
+            },
+        });
+
+        Assert.Equal(("a.zip", 12L, "1.1.2", "b.zip.crdownload"), (found.Candidates!.Candidates[0].Filename, found.Candidates.Candidates[0].Size, found.Candidates.Candidates[0].Version, found.Candidates.Downloading!.Filename));
+        Assert.Equal((9, true, "ERSS2/ERSS-FG.toml"), (found.Game!.Mod!.Count, found.Game.Mod.Applied, found.Game.Mod.Files[0]));
+        Assert.Null(found.Game.Mod.Removed);
+        Assert.Equal("https://example.test/mod", found.Game.ModDownload);
+        Assert.Equal(("ready", "a.zip"), (found.Game.Recipe!.Dependencies![0].UserState, found.Game.Recipe.Dependencies[0].Filename));
+    }
+
+    [Fact]
     public void ForeignAnswersAndTheBackupMarkerRoundTrip()
     {
         var moved = Roundtrip(new UpscalersResponse { Status = UpscalersResponseStatus.Ok, Moved = new[] { "OptiScaler.ini", "dxgi.dll" } });
@@ -157,7 +240,7 @@ public sealed class UpscalersControlTests
     {
         var longBuild = new string('a', UpscalersRequest.MaximumFieldLength + 1);
         Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.Install("1", longBuild, null, null, true)));
-        Assert.Equal(1024, UpscalersWireCodec.MaximumRequestLength);
+        Assert.Equal(2048, UpscalersWireCodec.MaximumRequestLength);
     }
 
     [Fact]

@@ -588,6 +588,24 @@
   <data name="UpscalersErrNoForeign" xml:space="preserve"><value>Von einem anderen Tool ist nichts mehr da.</value></data>
   <data name="UpscalersErrStillPatched" xml:space="preserve"><value>Entferne zuerst den Upscaler von Panel.</value></data>
   <data name="UpscalersErrForeignBackupPending" xml:space="preserve"><value>Stelle zuerst wieder her, was Panel vom anderen Tool aufbewahrt hat.</value></data>
+  <data name="UpscalersSourcesTitle" xml:space="preserve"><value>Mods und eigene Dateien</value></data>
+  <data name="UpscalersSourcePath" xml:space="preserve"><value>Datei (zip, 7z oder rar; vollständiger Pfad)</value></data>
+  <data name="UpscalersModPassword" xml:space="preserve"><value>Archivpasswort</value></data>
+  <data name="UpscalersModAdd" xml:space="preserve"><value>Als Mod des Spiels verwenden</value></data>
+  <data name="UpscalersModRemove" xml:space="preserve"><value>Mod entfernen</value></data>
+  <data name="UpscalersModWhere" xml:space="preserve"><value>Hier herunterladen:</value></data>
+  <data name="UpscalersModStored" xml:space="preserve"><value>Mod gespeichert: {0} ({1} Dateien)</value></data>
+  <data name="UpscalersModApplied" xml:space="preserve"><value>im Spiel</value></data>
+  <data name="UpscalersUserFileAdd" xml:space="preserve"><value>Für {0} verwenden</value></data>
+  <data name="UpscalersUserFileRemove" xml:space="preserve"><value>Die für {0} entfernen</value></data>
+  <data name="UpscalersErrModPassword" xml:space="preserve"><value>Das Archiv hat ein Passwort: gib es ein und versuche es erneut.</value></data>
+  <data name="UpscalersErrModPasswordWrong" xml:space="preserve"><value>Das Passwort ist falsch.</value></data>
+  <data name="UpscalersErrModPasswordUnsupported" xml:space="preserve"><value>Für 7z- oder rar-Archive mit Passwort muss 7-Zip installiert sein.</value></data>
+  <data name="UpscalersErrModUnreadable" xml:space="preserve"><value>Diese Datei lässt sich nicht lesen oder hat unsicheren Inhalt.</value></data>
+  <data name="UpscalersErrModLayout" xml:space="preserve"><value>Ich weiß nicht, wohin die Dateien dieses Mods gehören.</value></data>
+  <data name="UpscalersErrModConflict" xml:space="preserve"><value>Der Mod bringt Dateien mit, die mit denen von Panel kollidieren.</value></data>
+  <data name="UpscalersErrModMoved" xml:space="preserve"><value>Der gespeicherte Mod ist nicht mehr da: füge ihn erneut hinzu.</value></data>
+  <data name="UpscalersErrUserFileWrong" xml:space="preserve"><value>Das ist nicht die Datei, die das Rezept verlangt.</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>DLL-Modus</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>Im DLL-Modus wird die Qualität im Spiel geändert.</value></data>

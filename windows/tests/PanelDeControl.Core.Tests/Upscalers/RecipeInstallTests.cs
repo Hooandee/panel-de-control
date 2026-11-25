@@ -130,7 +130,7 @@ public sealed class RecipeInstallTests : IDisposable
     }
 
     [Fact]
-    public void FilesTheUserHasToBringAreStillRefused()
+    public void FilesTheUserHasToBringDoNotStopTheInstall()
     {
         var files = RecipeFiles().ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         files["games/1462040.json"] = System.Text.Encoding.UTF8.GetBytes(
@@ -138,10 +138,122 @@ public sealed class RecipeInstallTests : IDisposable
         var catalog = RecipeCatalog.Load(files);
         var recipe = catalog.Match("1462040", "optiscaler", "windows", "amd64")!;
 
-        Assert.Equal("recipe_unsupported", Assert.Throws<UpscalerException>(() => AutomaticRecipe.Plan(catalog, recipe)).Code);
-        Assert.False(AutomaticRecipe.Installable(catalog, recipe));
-        Assert.True(AutomaticRecipe.Installable(Recipes, Recipes.Match("1462040", "optiscaler", "windows", "amd64")!));
+        var plan = AutomaticRecipe.Plan(catalog, recipe)!;
+
+        Assert.True(AutomaticRecipe.Installable(catalog, recipe));
+        Assert.Equal("puredark-upscaler-base", Assert.Single(plan.UserFileDependencies).Id);
+
     }
+
+    [Fact]
+    public async Task AFileTheUserBroughtGoesInWithTheRecipeAndComesOutWithIt()
+    {
+        Unpack("luma-ff7");
+        var (_, recipe, automatic) = RecipeWithUserFile();
+        var stored = Path.Combine(_root, "stored", "PDPerfPlugin.dll");
+        Write(Path.GetDirectoryName(stored)!, "PDPerfPlugin.dll", "plugin the user downloaded");
+        var before = Snapshot(_game);
+
+        var without = await InstallWith(recipe, automatic, userFiles: _ => new Dictionary<string, string>());
+        Assert.False(File.Exists(Path.Combine(Target, "PDPerfPlugin.dll")));
+        Assert.True(File.Exists(Path.Combine(Target, "ReShade64.dll")));
+        Assert.Empty(OptiScalerInstaller.Uninstall(without));
+        Assert.Equal(before, Snapshot(_game));
+
+        var with = await InstallWith(recipe, automatic, userFiles: dependency => new Dictionary<string, string> { [dependency.Files.Keys.Single()] = stored });
+
+        Assert.Equal("plugin the user downloaded", File.ReadAllText(Path.Combine(Target, "PDPerfPlugin.dll")));
+        Assert.Empty(OptiScalerInstaller.Uninstall(with));
+        Assert.Equal(before, Snapshot(_game));
+    }
+
+    [Fact]
+    public async Task AModGoesInBesideTheExeAndTheGameComesBackByteForByteWhenItIsRemoved()
+    {
+        Write(Target, "ERSS2/ERSS-FG.toml", "[Renderer]\nScalingMode = \"OFF\"\n");
+        Write(Target, "mod_loader.dll", "the game's own copy");
+        var before = Snapshot(_game);
+        var mod = AMod(("dxgi.dll", "mod's own loader"), ("mod_loader.dll", "the mod's version"), ("ERSS2/ERSS-FG.toml", "[Renderer]\nScalingMode = \"MOD\"\n"), ("sub/extra.bin", "extra"));
+
+        var install = await InstallWith(Resolve("1245620"), null, mod: mod);
+
+        Assert.NotEqual("dxgi.dll", install.Proxy);
+        Assert.Equal(("mod.zip", "id-1"), (install.Mod!.Value.Key, install.Mod.Value.Value));
+        Assert.Equal("mod's own loader", File.ReadAllText(Path.Combine(Target, "dxgi.dll")));
+        Assert.Equal("the mod's version", File.ReadAllText(Path.Combine(Target, "mod_loader.dll")));
+        Assert.Equal("extra", File.ReadAllText(Path.Combine(Target, "sub", "extra.bin")));
+        Assert.Equal("[Renderer]\nScalingMode=\"FSR3U\"\n[FrameGeneration]\nFrameGenMode=1\n", File.ReadAllText(Path.Combine(Target, "ERSS2", "ERSS-FG.toml")));
+        var manifest = GameFiles.ReadManifest(Target)!;
+        Assert.Contains("dxgi.dll", manifest.Owned);
+        Assert.Contains("ERSS2/ERSS-FG.toml", manifest.Owned);
+        Assert.Equal(4, manifest.Owned.Count);
+
+        // The game rewrote the mod's own settings while it ran: Panel's files go regardless of what they hold now.
+        File.WriteAllText(Path.Combine(Target, "sub", "extra.bin"), "changed by the mod");
+        Assert.Empty(OptiScalerInstaller.Uninstall(install));
+        Assert.Equal(before, Snapshot(_game));
+    }
+
+    [Fact]
+    public async Task TheSettingsTheUserLeftInAModAreKeptAcrossAReinstall()
+    {
+        var mod = AMod(("ERSS2/ERSS-FG.toml", "[Renderer]\nScalingMode = \"MOD\"\n[Other]\nKeep = 1\n"));
+        var first = await InstallWith(Resolve("1245620"), null, mod: mod);
+        File.WriteAllText(Path.Combine(Target, "ERSS2", "ERSS-FG.toml"), "[Renderer]\nScalingMode = \"FSR3U\"\n[Other]\nKeep = 2\n");
+
+        var second = await InstallWith(Resolve("1245620"), null, previous: first, mod: mod);
+
+        Assert.Equal("[Renderer]\nScalingMode=\"FSR3U\"\n[Other]\nKeep = 2\n[FrameGeneration]\nFrameGenMode=1\n", File.ReadAllText(Path.Combine(Target, "ERSS2", "ERSS-FG.toml")));
+        Assert.Empty(OptiScalerInstaller.Uninstall(second));
+        Assert.False(Directory.Exists(Path.Combine(Target, "ERSS2")));
+    }
+
+    [Fact]
+    public async Task AModThatWouldReplaceAPanelFileOrWasAddedForAnotherFolderLeavesTheGameAsItWas()
+    {
+        var before = Snapshot(_game);
+
+        Assert.Equal("mod_conflict", (await Assert.ThrowsAsync<UpscalerException>(() => InstallWith(null, null, mod: AMod(("OptiScaler.ini", "x"))))).Code);
+        Assert.Equal("mod_conflict", (await Assert.ThrowsAsync<UpscalerException>(() => InstallWith(null, null, mod: AMod(("D3D12_Optiscaler/D3D12Core.dll", "x"))))).Code);
+        var moved = AMod(("a.dll", "x"));
+        moved.Target = "Elsewhere/Win64";
+        Assert.Equal("mod_moved", (await Assert.ThrowsAsync<UpscalerException>(() => InstallWith(null, null, mod: moved))).Code);
+
+        Assert.Equal(before, Snapshot(_game));
+    }
+
+    private UserModInstall AMod(params (string Destination, string Content)[] files)
+    {
+        var folder = Path.Combine(_root, "stored-mod");
+        foreach (var file in files)
+        {
+            Write(folder, file.Destination, file.Content);
+        }
+
+        return new UserModInstall
+        {
+            Filename = "mod.zip",
+            Id = "id-1",
+            Target = "Binaries/Win64",
+            GameRoot = _game,
+            Sources = files.Select(file => new KeyValuePair<string, string>(file.Destination, Path.Combine(folder, file.Destination.Replace('/', Path.DirectorySeparatorChar)))).ToList(),
+        };
+    }
+
+    private (RecipeCatalog Catalog, ResolvedRecipe Recipe, AutomaticRecipe Automatic) RecipeWithUserFile()
+    {
+        var files = RecipeFiles().ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        files["games/1462040.json"] = System.Text.Encoding.UTF8.GetBytes(
+            System.Text.Encoding.UTF8.GetString(files["games/1462040.json"]).Replace("\"vc-redist-x64\"", "\"puredark-upscaler-base\""));
+        var catalog = RecipeCatalog.Load(files);
+        var recipe = new RecipeResolver(catalog).Resolve("1462040", "optiscaler", "windows", "x86_64", null, PhysicalFileSystem.Instance, _game)!;
+        return (catalog, recipe, AutomaticRecipe.Plan(catalog, catalog.Match("1462040", "optiscaler", "windows", "amd64"))!);
+    }
+
+    private Task<InstalledUpscaler> InstallWith(ResolvedRecipe? recipe, AutomaticRecipe? automatic, InstalledUpscaler? previous = null,
+        UserModInstall? mod = null, Func<RecipeDependency, IReadOnlyDictionary<string, string>>? userFiles = null) =>
+        new OptiScalerInstaller(Catalog, _cache, "rdna35", Path.Combine(_root, "profile")).InstallAsync(Analysis, recipe,
+            new OptiScalerInstallRequest { Build = "fsr-3.1" }, previous, _ => previous is not null, null, CancellationToken.None, automatic, mod, userFiles);
 
     [Theory]
     [InlineData("{ not json")]

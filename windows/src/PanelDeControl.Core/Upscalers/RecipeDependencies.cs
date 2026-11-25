@@ -54,8 +54,7 @@ public sealed class AutomaticRecipe
         {
             throw new UpscalerException("recipe_unsupported");
         }
-        // Windows has no store for the files a user brings: those recipes keep being refused.
-        if (order.Any(dependency => dependency.Kind == "user_files" || (dependency.Kind == "game_files" && !catalog.Assets.ContainsKey(dependency.Asset ?? ""))))
+        if (order.Any(dependency => dependency.Kind == "game_files" && !catalog.Assets.ContainsKey(dependency.Asset ?? "")))
         {
             throw new UpscalerException("recipe_unsupported");
         }
@@ -74,6 +73,9 @@ public sealed class AutomaticRecipe
             return false;
         }
     }
+
+    /// <summary>The dependencies only the user can download, in install order.</summary>
+    public IReadOnlyList<RecipeDependency> UserFileDependencies => _order.Where(dependency => dependency.Kind == "user_files").ToList();
 
     /// <summary>Every destination the dependencies place beside the exe.</summary>
     public IEnumerable<string> PlacedFiles => _order.SelectMany(dependency => dependency.Files.Keys);
@@ -95,11 +97,26 @@ public sealed class AutomaticRecipe
     }
 
     /// <summary>Destination beside the exe and the unpacked file it comes from, in install order.</summary>
-    public IReadOnlyList<KeyValuePair<string, string>> Sources(IReadOnlyDictionary<string, string> paths)
+    /// <param name="userFiles">The stored copies of what the user brought; a dependency they have not brought yet adds nothing and the rest installs.</param>
+    public IReadOnlyList<KeyValuePair<string, string>> Sources(IReadOnlyDictionary<string, string> paths,
+        Func<RecipeDependency, IReadOnlyDictionary<string, string>>? userFiles = null)
     {
         var result = new List<KeyValuePair<string, string>>();
-        foreach (var dependency in _order.Where(dependency => dependency.Kind == "game_files"))
+        foreach (var dependency in _order.Where(dependency => dependency.Kind is "game_files" or "user_files"))
         {
+            if (dependency.Kind == "user_files")
+            {
+                foreach (var file in userFiles?.Invoke(dependency) ?? new Dictionary<string, string>())
+                {
+                    if (result.Any(pair => GameManifest.PathComparer.Equals(pair.Key, file.Key)))
+                    {
+                        throw new UpscalerException("recipe_files_invalid");
+                    }
+                    result.Add(file);
+                }
+                continue;
+            }
+
             var root = Path.GetFullPath(paths[dependency.Asset!]);
             foreach (var file in dependency.Files)
             {

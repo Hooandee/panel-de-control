@@ -39,6 +39,19 @@ public sealed class UpscalersClient
 
     public Task<UpscalersResponse> RestoreForeignAsync(string appId, bool experimental) => SendAsync(UpscalersRequest.RestoreForeign(appId, experimental));
 
+    public Task<UpscalersResponse> ModCandidatesAsync(string appId) => SendAsync(UpscalersRequest.ModCandidates(appId));
+
+    public Task<UpscalersResponse> AddModAsync(string appId, string path, string? password, bool experimental) =>
+        SendAsync(UpscalersRequest.AddMod(appId, path, password, experimental));
+
+    public Task<UpscalersResponse> RemoveModAsync(string appId, bool experimental) => SendAsync(UpscalersRequest.RemoveMod(appId, experimental));
+
+    public Task<UpscalersResponse> AddUserFileAsync(string appId, string dependency, string path, bool experimental) =>
+        SendAsync(UpscalersRequest.AddUserFile(appId, dependency, path, experimental));
+
+    public Task<UpscalersResponse> RemoveUserFileAsync(string appId, string dependency, bool experimental) =>
+        SendAsync(UpscalersRequest.RemoveUserFile(appId, dependency, experimental));
+
     public Task<UpscalersResponse> VerifyAsync(string appId) => SendAsync(UpscalersRequest.Verify(appId));
 
     public Task<UpscalersResponse> CancelAsync(bool experimental) => SendAsync(UpscalersRequest.Cancel(experimental));
