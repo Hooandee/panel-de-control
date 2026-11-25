@@ -1721,7 +1721,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     // A disabled host disables every control inside it, including ones the readings later re-enable. The outer
     // host stays enabled and focusable so a controller can still move through, and scroll, a section of readings.
-    private static FrameworkElement ReadOnlyBlock(FrameworkElement block) => new ContentControl
+    private static FrameworkElement ReadOnlyBlock(FrameworkElement block) => new Button
     {
         Style = Components.Style("PdcFocusableBlockStyle"),
         Content = new ContentControl

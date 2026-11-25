@@ -65,8 +65,9 @@
     <Style x:Key="PdcBadgePillStyle" TargetType="Border" BasedOn="{StaticResource PdcPillStyle}">
         <Setter Property="BorderBrush" Value="{ThemeResource PdcAccentRimBrush}" />
     </Style>
-    <!-- Read-only card the controller can land on, so the D-pad scrolls sections with nothing to press. -->
-    <Style x:Key="PdcFocusableBlockStyle" TargetType="ContentControl">
+    <!-- Read-only card the controller can land on, so the D-pad scrolls sections with nothing to press. No pressed
+         look and no action. -->
+    <Style x:Key="PdcFocusableBlockStyle" TargetType="Button">
         <Setter Property="IsTabStop" Value="True" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
         <Setter Property="FocusVisualPrimaryBrush" Value="{ThemeResource PdcAccentBrush}" />
@@ -74,8 +75,24 @@
         <Setter Property="FocusVisualPrimaryThickness" Value="{StaticResource PdcFocusThickness}" />
         <Setter Property="FocusVisualMargin" Value="{ThemeResource PdcBlockFocusMargin}" />
         <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusSurface}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <!-- 2-D focus only lands on elements that pass hit testing; the content is disabled, so the root
+                         carries a transparent background to stay a candidate. -->
+                    <Grid Background="{ThemeResource PdcTransparentBrush}">
+                        <ContentPresenter
+                            Content="{TemplateBinding Content}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     <Style x:Key="PdcTabIndicatorStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource PdcTabIndicatorBrush}" />
