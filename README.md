@@ -132,10 +132,13 @@ si el kernel las publica mediante `ayaneo_ec`. El control de TDP está desactiva
 por defecto. Desactiva los demás gestores de TDP antes de activarlo en Ajustes.
 Auto-TDP y el mantenimiento del TDP con batería baja se activan por separado;
 este último no actúa mientras Auto-TDP esté activo. Panel usa RyzenAdj sin modificar
-y limita STAPM, PPT rápido y PPT lento a 25 W tanto con batería como con cargador.
-Requiere poder leer los límites y restaurar sus valores originales sin superar
-ese máximo. Los controles de CPU,
-GPU y ventilador quedan a cargo del sistema o de las herramientas que ya uses.
+y limita a 25 W los valores de STAPM, PPT rápido y PPT lento que aplica, tanto con
+batería como con cargador. Guarda los límites exactos antes de tomar el control
+y puede restaurarlos aunque superen los 25 W. Si cambia la fuente de alimentación
+o no se puede confirmar, Panel no escribe los límites guardados hasta confirmar
+de nuevo la fuente original. Esto restaura los valores guardados, no los de
+fábrica. Los controles de CPU, GPU y ventilador quedan a cargo del sistema o de
+las herramientas que ya uses.
 
 ## 📦 Instalación
 

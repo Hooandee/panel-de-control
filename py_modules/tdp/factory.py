@@ -16,6 +16,7 @@ from device_quirks import (
     xbox_ally_x_20_legacy_rail_floors,
     asus_legacy_overshoot_guard,
 )
+from lifecycle import read_mains_state
 from tdp.alib import AlibBackend
 from tdp.amd_dptc import AmdDptcBackend
 from tdp.arm_levels import ArmPerformanceLevels
@@ -334,6 +335,7 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
             require_readback=True,
             write_temp_limit=False,
             hard_write_max_mw=capped_max * 1000,
+            read_power_source=lambda: read_mains_state(root),
             safety_lock_path=_runtime_lock_path(root, f"ryzenadj-{device.key}.lock"),
             **kwargs,
         )

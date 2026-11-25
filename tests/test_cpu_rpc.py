@@ -172,6 +172,8 @@ def test_flip_ds_lifecycle_requires_opt_in_and_restores_tdp(tmp_path, monkeypatc
     files = {
         "class/dmi/id/sys_vendor": "AYANEO",
         "class/dmi/id/product_name": "FLIP 1S DS",
+        "class/power_supply/ACAD/type": "Mains",
+        "class/power_supply/ACAD/online": "0",
         "class/hwmon/hwmon7/name": "ayaneo_ec",
         "class/hwmon/hwmon7/fan1_input": "3599",
         "class/hwmon/hwmon7/pwm1_enable": "2",
@@ -196,7 +198,8 @@ def test_flip_ds_lifecycle_requires_opt_in_and_restores_tdp(tmp_path, monkeypatc
     plugin = _make_plugin(tmp_path, monkeypatch, fake_tdp=False)
     import main
 
-    original_limits = (20125, 24875, 22375)
+    monkeypatch.setattr(main, "read_on_ac", lambda: False)
+    original_limits = (28125, 54875, 45375)
     limits = original_limits
     rail_writes = []
 
@@ -212,7 +215,7 @@ def test_flip_ds_lifecycle_requires_opt_in_and_restores_tdp(tmp_path, monkeypatc
             return types.SimpleNamespace(returncode=0, stdout=stdout, stderr="")
         assert argv[1::2] == ["--stapm-limit", "--fast-limit", "--slow-limit"]
         limits = tuple(map(int, argv[2::2]))
-        assert all(0 < value <= 25000 for value in limits)
+        assert limits == original_limits or all(0 < value <= 25000 for value in limits)
         rail_writes.append(limits)
         return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -276,7 +279,6 @@ def test_flip_ds_lifecycle_requires_opt_in_and_restores_tdp(tmp_path, monkeypatc
             assert (await plugin.get_tdp_state())["auto_config"]["enabled"]
             assert not (await plugin.set_auto_tdp(False))["auto_tdp"]
 
-            monkeypatch.setattr(main, "read_on_ac", lambda: False)
             monkeypatch.setattr(plugin._battery, "read", lambda: {
                 "present": True, "percent": 20, "status": "Discharging",
             })

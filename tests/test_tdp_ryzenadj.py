@@ -886,7 +886,7 @@ def test_capped_auto_tdp_uses_the_same_transaction_as_manual_tdp(tmp_path):
         assert not backend.apply_auto_targets(targets, ac=True).ok
     assert runner.calls == []
     assert backend.apply_auto_targets(dict(pl1=25, pl2=25, pl3=25), ac=True).ok
-    assert backend.apply_auto_targets(dict(pl1=15, pl2=15, pl3=15), ac=False).ok
+    assert backend.apply_auto_targets(dict(pl1=15, pl2=15, pl3=15), ac=True).ok
     assert backend.release()
     assert [argv[2::2] for argv in runner.writes] == [
         ["25000", "25000", "25000"],
@@ -906,19 +906,8 @@ def test_capped_observation_does_not_confirm_rounded_rail_values(tmp_path):
     assert [rails[rail].applied_w for rail in ("pl1", "pl2", "pl3")] == [25, None, None]
 
 
-def test_capped_ryzenadj_rejects_fractionally_over_limit_baseline(tmp_path):
-    baseline = _snapshot_info(25).replace("25.000 | fast-limit", "25.001 | fast-limit")
-    runner = ScriptedRun(write_rcs=[], infos=[baseline])
-
-    result = _capped_backend(tmp_path, runner).set_tdp(20, ac=False)
-
-    assert not result.ok
-    assert "cannot safely restore baseline" in result.detail
-    assert runner.writes == []
-
-
 def test_capped_ryzenadj_rolls_back_readback_above_ceiling(tmp_path):
-    baseline = _snapshot_info(20, fast=24, slow=22)
+    baseline = _snapshot_info(28, fast=55, slow=45)
     overshoot = _snapshot_info(25).replace("25.000 | fast-limit", "25.001 | fast-limit")
     runner = ScriptedRun(write_rcs=[0, 0], infos=[baseline, overshoot, baseline])
 
@@ -927,15 +916,15 @@ def test_capped_ryzenadj_rolls_back_readback_above_ceiling(tmp_path):
     assert not result.ok
     assert "baseline restore confirmed" in result.detail
     assert [argv[2::2] for argv in runner.writes] == [
-        ["25000", "25000", "25000"], ["20000", "24000", "22000"],
+        ["25000", "25000", "25000"], ["28000", "55000", "45000"],
     ]
 
 
-def test_capped_ryzenadj_blocks_over_limit_restart_recovery(tmp_path):
+def test_capped_ryzenadj_blocks_invalid_restart_baseline(tmp_path):
     lock = tmp_path / "ryzenadj.lock"
     lock.write_text(json.dumps({
         "state": "circuit_open_transaction",
-        "baseline_mw": {"stapm": 20000, "fast": 25001, "slow": 22000},
+        "baseline_mw": {"stapm": 20000, "fast": 2**32, "slow": 22000},
     }), encoding="utf-8")
     runner = ScriptedRun(write_rcs=[], infos=[])
 
@@ -947,7 +936,7 @@ def test_capped_ryzenadj_blocks_over_limit_restart_recovery(tmp_path):
 
 
 def test_capped_ryzenadj_release_restores_original_baseline_after_two_applies(tmp_path):
-    baseline = _snapshot_info(20, fast=24, slow=22)
+    baseline = _snapshot_info(28, fast=55, slow=45).replace("55.000 | fast-limit", "55.125 | fast-limit")
     at_cap = _snapshot_info(25)
     runner = ScriptedRun(
         write_rcs=[0, 0, 0],
@@ -957,14 +946,14 @@ def test_capped_ryzenadj_release_restores_original_baseline_after_two_applies(tm
 
     assert backend.set_tdp(25, ac=True).ok
     assert not backend.safety_locked
-    assert backend.set_tdp(15, ac=False).ok
+    assert backend.set_tdp(15, ac=True).ok
     assert backend.release()
     assert backend.release()
     assert not (tmp_path / "ryzenadj.lock").exists()
     assert [argv[2::2] for argv in runner.writes] == [
         ["25000", "25000", "25000"],
         ["15000", "15000", "15000"],
-        ["20000", "24000", "22000"],
+        ["28000", "55125", "45000"],
     ]
 
 
@@ -978,7 +967,7 @@ def test_capped_ryzenadj_does_not_reassert_after_external_limit_change(tmp_path)
     lock = tmp_path / "ryzenadj.lock"
     active = lock.read_bytes()
 
-    result = backend.set_tdp(15, ac=False)
+    result = backend.set_tdp(15, ac=True)
 
     assert not result.ok
     assert "changed outside Panel" in result.detail
@@ -1002,7 +991,7 @@ def test_capped_ryzenadj_release_does_not_restore_over_external_limits(tmp_path)
 
 
 def test_capped_ryzenadj_recovers_original_baseline_after_restart(tmp_path):
-    baseline = _snapshot_info(20, fast=24, slow=22)
+    baseline = _snapshot_info(28, fast=55, slow=45)
     runner = ScriptedRun(write_rcs=[0], infos=[baseline, _snapshot_info(25)])
     assert _capped_backend(tmp_path, runner).set_tdp(25, ac=True).ok
 
@@ -1015,7 +1004,7 @@ def test_capped_ryzenadj_recovers_original_baseline_after_restart(tmp_path):
     assert restarted.recover_runtime_transaction()["ok"]
     assert not restarted.safety_locked
     assert not (tmp_path / "ryzenadj.lock").exists()
-    assert [argv[2::2] for argv in recovery.writes] == [["20000", "24000", "22000"]]
+    assert [argv[2::2] for argv in recovery.writes] == [["28000", "55000", "45000"]]
 
 
 def test_capped_ryzenadj_restart_clears_journal_if_baseline_already_restored(tmp_path):
@@ -1032,7 +1021,31 @@ def test_capped_ryzenadj_restart_clears_journal_if_baseline_already_restored(tmp
     assert recovery.writes == []
 
 
-def _capped_backend(tmp_path, runner):
+def test_capped_ryzenadj_defers_restore_until_baseline_power_source_returns(tmp_path):
+    on_ac = True
+    baseline = _snapshot_info(28, fast=55, slow=45)
+    target = _snapshot_info(15)
+    runner = ScriptedRun(write_rcs=[0, 0], infos=[baseline, target, target, target, target, target, baseline])
+    backend = _capped_backend(tmp_path, runner, read_power_source=lambda: on_ac)
+    assert backend.set_tdp(15, ac=True).ok
+    lock = tmp_path / "ryzenadj.lock"
+    active = lock.read_bytes()
+
+    on_ac = False
+    assert not backend.set_tdp(20, ac=False).ok
+    assert not backend.release()
+    on_ac = None
+    assert not backend.release()
+    assert len(runner.writes) == 1
+    assert lock.read_bytes() == active
+
+    on_ac = True
+    assert backend.release()
+    assert runner.writes[-1][2::2] == ["28000", "55000", "45000"]
+    assert not lock.exists()
+
+
+def _capped_backend(tmp_path, runner, *, read_power_source=lambda: True):
     return RyzenadjBackend(
         FALLBACK,
         resolve=lambda: "/usr/bin/ryzenadj",
@@ -1040,6 +1053,7 @@ def _capped_backend(tmp_path, runner):
         require_readback=True,
         safety_lock_path=str(tmp_path / "ryzenadj.lock"),
         hard_write_max_mw=25000,
+        read_power_source=read_power_source,
     )
 
 
