@@ -330,3 +330,39 @@ public sealed class LatestReleases
         }
     }
 }
+
+/// <summary>Fetches an asset at its newest verified release, as <c>_fetch_assets</c> does; any failure of that release means the catalog's own.</summary>
+public static class LatestAssets
+{
+    /// <summary>The asset to download: the newest verified release of a tracked one unless <paramref name="pinnedOnly"/>, else the pinned one.</summary>
+    public static async Task<UpscalerAsset> ResolveAsync(LatestReleases? latest, UpscalerAsset pinned, bool pinnedOnly, CancellationToken cancel)
+    {
+        if (latest is null || pinnedOnly || !latest.Tracked(pinned))
+        {
+            return pinned;
+        }
+
+        try
+        {
+            return await latest.ResolveAsync(pinned, cancel).ConfigureAwait(false);
+        }
+        catch (Exception) when (!cancel.IsCancellationRequested)
+        {
+            return pinned;
+        }
+    }
+
+    public static async Task<(string Path, UpscalerAsset Chosen)> EnsureAsync(AssetCache cache, LatestReleases? latest, UpscalerAsset pinned, bool pinnedOnly,
+        IProgress<long>? progress, CancellationToken cancel)
+    {
+        var chosen = await ResolveAsync(latest, pinned, pinnedOnly, cancel).ConfigureAwait(false);
+        try
+        {
+            return (await cache.EnsureAsync(chosen, progress, cancel).ConfigureAwait(false), chosen);
+        }
+        catch (AssetException error) when (chosen.Sha256 != pinned.Sha256 && error.Code is not ("cancelled" or "no_space"))
+        {
+            return (await cache.EnsureAsync(pinned, progress, cancel).ConfigureAwait(false), pinned);
+        }
+    }
+}

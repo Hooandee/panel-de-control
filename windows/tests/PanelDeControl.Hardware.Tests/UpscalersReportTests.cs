@@ -56,6 +56,28 @@ public sealed class UpscalersReportTests : IDisposable
     }
 
     [Fact]
+    public void SectionCarriesTheIniPanelWroteAgainstTheOneThereNowAndTheHandEdits()
+    {
+        File.WriteAllText(Path.Combine(game, "OptiScaler.ini"), "[Tweaks]\r\nScale=1.5\r\n\r\n[Log]\r\nLogLevel=2\r\n");
+        store.SetInstall("100", new InstalledUpscaler
+        {
+            Build = "fsr-3.1",
+            Engine = "optiscaler",
+            Target = game,
+            Edited = new[] { new KeyValuePair<string, string>("Tweaks.Scale", "1.5") },
+            IniWritten = new IniWritten(7, new[] { new KeyValuePair<string, string>("Log.LogLevel", "3"), new KeyValuePair<string, string>("Tweaks.Scale", "1.5") }),
+        }, 5);
+
+        var ini = UpscalersReportSection.Build(store, null, null)["games"]![0]!["ini"]!;
+
+        Assert.Equal("2", ini["values"]!["Log.LogLevel"]!.GetValue<string>());
+        Assert.Equal(("changed", 7d), (ini["drift"]!["status"]!.GetValue<string>(), ini["drift"]!["written_at"]!.GetValue<double>()));
+        Assert.Equal(("3", "2"), (ini["drift"]!["keys"]!["Log.LogLevel"]!["panel"]!.GetValue<string>(), ini["drift"]!["keys"]!["Log.LogLevel"]!["now"]!.GetValue<string>()));
+        Assert.Equal(("Tweaks.Scale", "1.5"), (ini["advanced"]![0]!["key"]!.GetValue<string>(), ini["advanced"]![0]!["value"]!.GetValue<string>()));
+        Assert.DoesNotContain("Hooandee", ini.ToJsonString());
+    }
+
+    [Fact]
     public void WhatIsNotReadIsNullNeverInvented()
     {
         store.SetInstall("100", new InstalledUpscaler { Build = "fsr-3.1", Target = game }, 5);

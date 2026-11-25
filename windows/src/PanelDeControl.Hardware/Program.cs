@@ -108,7 +108,8 @@ public static class Program
                 () => upscalerIdentity.Read().Profile?.Key,
                 launchOptions: new SteamLaunchOptions(steamDevTools),
                 vcRuntime: new VcRuntimeProbe().InstalledVersion,
-                helix: HelixSr.ForCatalog(upscalerData.Catalog, UpscalerPaths.Root));
+                helix: HelixSr.ForCatalog(upscalerData.Catalog, UpscalerPaths.Root),
+                latest: new LatestReleases(upscalerData.Catalog.Tracks, Path.Combine(UpscalerPaths.Root, "latest-releases.json")));
             _ = Task.Run(() => upscalerService.Gpu);
             var upscalersServer = new UpscalersPipeServer(
                 UpscalersPipeServer.PackagedPipeName,

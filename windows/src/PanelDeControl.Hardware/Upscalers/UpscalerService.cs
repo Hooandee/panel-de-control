@@ -41,6 +41,7 @@ public sealed partial class UpscalerService : IUpscalersController
     private readonly ISteamLaunchOptions? launchOptions;
     private int retrying;
     private readonly Func<string?> vcRuntime;
+    private readonly LatestReleases? latest;
     private readonly HelixSr? helix;
     private readonly Dictionary<string, (double Until, UpscalerCover? Cover)> covers = new(StringComparer.Ordinal);
     private readonly object coverLock = new();
@@ -64,8 +65,10 @@ public sealed partial class UpscalerService : IUpscalersController
         HelixSr? helix = null,
         IUserArchive? userArchive = null,
         Func<IReadOnlyList<string>>? downloadFolders = null,
-        string? profile = null)
+        string? profile = null,
+        LatestReleases? latest = null)
     {
+        this.latest = latest;
         this.data = data;
         this.store = store;
         this.cache = cache;
@@ -127,6 +130,10 @@ public sealed partial class UpscalerService : IUpscalersController
                     return await Task.Run(() => ImageSettingsOf(request.AppId!), cancellationToken).ConfigureAwait(false);
                 case UpscalersOperation.Verify:
                     return await Task.Run(() => Verify(request.AppId!), cancellationToken).ConfigureAwait(false);
+                case UpscalersOperation.Diagnose:
+                    return await Task.Run(() => Diagnose(request.AppId!), cancellationToken).ConfigureAwait(false);
+                case UpscalersOperation.Compat:
+                    return await Task.Run(() => Compat(request.Appids!), cancellationToken).ConfigureAwait(false);
                 case UpscalersOperation.ModCandidates:
                     return await Task.Run(ModCandidates, cancellationToken).ConfigureAwait(false);
                 case UpscalersOperation.UserFileCandidates:
@@ -498,7 +505,7 @@ public sealed partial class UpscalerService : IUpscalersController
                 jobs.Stage("download", assets.GroupBy(asset => asset.Sha256, StringComparer.Ordinal).Sum(group => group.Last().Size));
                 foreach (var asset in assets)
                 {
-                    await cache.EnsureAsync(asset, null, cancel).ConfigureAwait(false);
+                    await LatestAssets.EnsureAsync(cache, latest, asset, false, null, cancel).ConfigureAwait(false);
                 }
 
                 cancel.ThrowIfCancellationRequested();
@@ -523,6 +530,7 @@ public sealed partial class UpscalerService : IUpscalersController
             try
             {
                 var installedAt = clock();
+                WroteIni(install, app.Root);
                 if (install.Engine == "optiscaler")
                 {
                     store.SetImageReceipt(appId, install.ImageReceipt, new StoredUpscaler(install, installedAt));
@@ -584,8 +592,14 @@ public sealed partial class UpscalerService : IUpscalersController
         var catalog = data.Catalog;
         var buildId = plan.Id;
         var assets = UpscalerPlanner.BuildAssets(catalog, plan).Concat(automatic?.Assets() ?? Array.Empty<UpscalerAsset>()).ToList();
-        var total = assets.GroupBy(asset => asset.Sha256, StringComparer.Ordinal).Sum(group => group.Last().Size);
-        var pending = assets.Any(asset => !cache.Ready(asset));
+        var resolved = new List<UpscalerAsset>();
+        foreach (var asset in assets)
+        {
+            resolved.Add(await LatestAssets.ResolveAsync(latest, asset, false, cancel).ConfigureAwait(false));
+        }
+
+        var total = resolved.GroupBy(asset => asset.Sha256, StringComparer.Ordinal).Sum(group => group.Last().Size);
+        var pending = resolved.Any(asset => !cache.Ready(asset));
         jobs.Stage(pending ? "download" : "install", total);
         var progress = new Progress<long>(done =>
         {
@@ -606,7 +620,7 @@ public sealed partial class UpscalerService : IUpscalersController
                 progress,
                 cancel,
                 folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder))).ConfigureAwait(false)
-            : await new OptiScalerInstaller(catalog, cache, Gpu.Generation).InstallAsync(
+            : await new OptiScalerInstaller(catalog, cache, Gpu.Generation, latest: latest).InstallAsync(
                 () => Analyze(app, recipe?.Exe),
                 recipe,
                 new OptiScalerInstallRequest { Build = buildId, Choice = choice },
@@ -999,16 +1013,29 @@ public sealed partial class UpscalerService : IUpscalersController
         }
 
         var pinned = catalog.Asset(build.Archive)!;
-        if (runner.ReleaseReady && (runner.Digest ?? pinned.Sha256) == pinned.Sha256)
+        var newest = await LatestAssets.ResolveAsync(latest, pinned, false, cancel).ConfigureAwait(false);
+        if (runner.ReleaseReady && (runner.Digest ?? pinned.Sha256) == newest.Sha256)
         {
             return;
         }
 
-        jobs.Stage("download", pinned.Size);
-        var archive = await cache.EnsureAsync(pinned, new Progress<long>(jobs.Progress), cancel).ConfigureAwait(false);
+        jobs.Stage("download", newest.Size);
+        var (archive, chosen) = await LatestAssets.EnsureAsync(cache, latest, pinned, false, new Progress<long>(jobs.Progress), cancel).ConfigureAwait(false);
         jobs.Stage(HelixSr.UnpackStage);
-        runner.UnpackRelease(archive, pinned.Sha256);
-        Discard(pinned);
+        try
+        {
+            runner.UnpackRelease(archive, chosen.Sha256);
+        }
+        catch (UpscalerException) when (chosen.Sha256 != pinned.Sha256)
+        {
+            // A newer release this bridge cannot unpack: the catalog's own, before the game is touched.
+            Discard(chosen);
+            archive = await cache.EnsureAsync(pinned, new Progress<long>(jobs.Progress), cancel).ConfigureAwait(false);
+            runner.UnpackRelease(archive, pinned.Sha256);
+            chosen = pinned;
+        }
+
+        Discard(chosen);
     }
 
     /// <summary>The downloaded archive is only a means to the unpacked folder; its copy in the cache goes.</summary>
@@ -1325,9 +1352,10 @@ public sealed partial class UpscalerService : IUpscalersController
     private UpscalersResponse Ok(UpscalersOverview? overview = null, UpscalerGameDetail? game = null, UpscalerJobStatus? job = null, UpscalerCover? cover = null,
         UpscalerOptions? options = null, UpscalerIniSection[]? ini = null, UpscalerImageSettings? image = null, UpscalerIniEdit? iniEdit = null,
         UpscalerVerification? verify = null, string[]? moved = null, string[]? restored = null, string[]? kept = null,
-        UpscalerCandidates? candidates = null) =>
+        UpscalerCandidates? candidates = null, UpscalerDiagnosis? diagnosis = null, UpscalerCompat? compat = null) =>
         new()
         {
+            Diagnosis = diagnosis, Compat = compat,
             Moved = moved, Restored = restored, Kept = kept, Candidates = candidates,
             Status = UpscalersResponseStatus.Ok, Overview = overview, Game = game, Job = job ?? jobs.Snapshot(), Cover = cover,
             Options = options, Ini = ini, Image = image, IniEdit = iniEdit, Verify = verify,

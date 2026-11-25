@@ -66,6 +66,9 @@ public sealed class InstalledUpscaler
     /// <summary>Sharpness keys the image controls own, so a new quality or a reinstall keeps them.</summary>
     public IReadOnlyList<KeyValuePair<string, string>> ImageOverrides { get; set; } = Array.Empty<KeyValuePair<string, string>>();
 
+    /// <summary>What Panel left in OptiScaler.ini the last time it wrote it; a report compares it with the file as it is now.</summary>
+    public IniWritten? IniWritten { get; set; }
+
     /// <summary>When a new model went in without a reinstall: the log only counts from then on (Unix seconds).</summary>
     public double? VerificationSince { get; set; }
 
@@ -113,11 +116,14 @@ public sealed class OptiScalerInstaller
     private readonly string _gpu;
     private readonly string? _profile;
     private readonly string? _documents;
+    private readonly LatestReleases? _latest;
 
     /// <param name="profile">The user's profile folder, where a recipe's game settings live; the real one when omitted.</param>
     /// <param name="documents">The Documents folder for settings under <c>Documents/</c>; the real one (OneDrive included) when no profile is given, else <c>profile/Documents</c>.</param>
-    public OptiScalerInstaller(BuildCatalog catalog, AssetCache cache, string gpu, string? profile = null, string? documents = null)
+    /// <param name="latest">Resolves each tracked asset to its newest verified release; the catalog's pinned asset when it is null or cannot.</param>
+    public OptiScalerInstaller(BuildCatalog catalog, AssetCache cache, string gpu, string? profile = null, string? documents = null, LatestReleases? latest = null)
     {
+        _latest = latest;
         _catalog = catalog;
         _cache = cache;
         _gpu = gpu;
@@ -166,12 +172,37 @@ public sealed class OptiScalerInstaller
         // Everything is downloaded before the current install comes out: a failed or cancelled download leaves the
         // game exactly as it was.
         GameFiles.RecoverOrphan(target, claimed);
-        var paths = await FetchAsync(Needed(effective, wantsAnr, recipe, automatic), progress, cancel).ConfigureAwait(false);
+        var pinnedOnly = new HashSet<string>(StringComparer.Ordinal);
+        var chosen = new Dictionary<string, UpscalerAsset>(StringComparer.Ordinal);
+        var first = Needed(effective, wantsAnr, recipe, automatic);
+        var paths = await FetchAsync(first, pinnedOnly, chosen, progress, cancel).ConfigureAwait(false);
         if (wantsAnr)
         {
-            AnrSources(paths[_catalog.AnrFrameGen], "");
+            try
+            {
+                AnrSources(paths[_catalog.AnrFrameGen], "");
+            }
+            catch (UpscalerException) when (Newer(chosen, _catalog.AnrFrameGen))
+            {
+                // A newer add-on laid out differently: the catalog's own release, before the game is touched.
+                pinnedOnly.Add(_catalog.AnrFrameGen);
+                paths = await FetchAsync(first, pinnedOnly, chosen, progress, cancel).ConfigureAwait(false);
+                AnrSources(paths[_catalog.AnrFrameGen], "");
+            }
         }
-        automatic?.Sources(paths, userFiles);
+        try
+        {
+            automatic?.Sources(paths, userFiles);
+        }
+        catch (UpscalerException) when (automatic is not null && automatic.Assets().Any(asset => Newer(chosen, asset.Id)))
+        {
+            foreach (var asset in automatic.Assets())
+            {
+                pinnedOnly.Add(asset.Id);
+            }
+            paths = await FetchAsync(first, pinnedOnly, chosen, progress, cancel).ConfigureAwait(false);
+            automatic.Sources(paths, userFiles);
+        }
         if (mod is { Sources.Count: > 0 } && !string.Equals(mod.Target, RelativeTo(mod.GameRoot, target), StringComparison.OrdinalIgnoreCase))
         {
             throw new UpscalerException("mod_moved");
@@ -214,7 +245,7 @@ public sealed class OptiScalerInstaller
         if (assets.Any(asset => !paths.ContainsKey(asset.Id)))
         {
             // The previous install is already out of the game: this fetch finishes the swap.
-            paths = await FetchAsync(assets, progress, CancellationToken.None).ConfigureAwait(false);
+            paths = await FetchAsync(assets, pinnedOnly, chosen, progress, CancellationToken.None).ConfigureAwait(false);
         }
         var archive = _catalog.Asset(effective.Archive)!;
         var sources = OptiScalerRelease.Sources(paths[archive.Id], archive.Generation);
@@ -352,7 +383,7 @@ public sealed class OptiScalerInstaller
             Anr = wantsAnr,
             Args = recipe?.Args ?? Array.Empty<string>(),
             Managed = panel.Select(pair => pair.Key).OrderBy(key => key, StringComparer.Ordinal).ToList(),
-            Components = assets.Select(asset => new KeyValuePair<string, string>(asset.Id, asset.Sha256)).ToList(),
+            Components = assets.Select(asset => new KeyValuePair<string, string>(asset.Id, chosen.TryGetValue(asset.Id, out var picked) ? picked.Sha256 : asset.Sha256)).ToList(),
             GameConfig = recipe is { GameConfig.Count: > 0 } ? GameConfigFiles.Carry(previous?.GameConfig, GameConfigFiles.Apply(_profile, recipe.GameConfig, _documents)).ToList() : Array.Empty<GameConfigRecord>(),
             Files = manifest.Files.Count,
             Mod = mod is { Sources.Count: > 0 } ? new KeyValuePair<string, string>(mod.Filename, mod.Id) : null,
@@ -511,7 +542,8 @@ public sealed class OptiScalerInstaller
             .ToList();
     }
 
-    private async Task<Dictionary<string, string>> FetchAsync(IReadOnlyList<UpscalerAsset> assets, IProgress<long>? progress, CancellationToken cancel)
+    private async Task<Dictionary<string, string>> FetchAsync(IReadOnlyList<UpscalerAsset> assets, ISet<string> pinnedOnly, IDictionary<string, UpscalerAsset> chosen,
+        IProgress<long>? progress, CancellationToken cancel)
     {
         var paths = new Dictionary<string, string>(StringComparer.Ordinal);
         var offset = 0L;
@@ -519,11 +551,16 @@ public sealed class OptiScalerInstaller
         {
             var start = offset;
             var step = progress is null ? null : new Progress<long>(done => progress.Report(start + done));
-            paths[asset.Id] = await _cache.EnsureAsync(asset, step, cancel).ConfigureAwait(false);
-            offset += asset.Size;
+            var (path, picked) = await LatestAssets.EnsureAsync(_cache, _latest, asset, pinnedOnly.Contains(asset.Id), step, cancel).ConfigureAwait(false);
+            paths[asset.Id] = path;
+            chosen[asset.Id] = picked;
+            offset += picked.Size;
         }
         return paths;
     }
+
+    private bool Newer(IDictionary<string, UpscalerAsset> chosen, string id) =>
+        chosen.TryGetValue(id, out var picked) && _catalog.Asset(id) is { } pinned && picked.Sha256 != pinned.Sha256;
 
     private UpscalerChoice Clean(UpscalerChoice choice) => new()
     {

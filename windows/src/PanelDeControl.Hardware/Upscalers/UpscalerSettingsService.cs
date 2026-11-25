@@ -69,6 +69,7 @@ public sealed partial class UpscalerService
                 var text = ReadIni(install.Target, app.Root, strict: false);
                 WriteIni(install.Target, app.Root, text, IniText.Apply(text, UpscalerSettings.FrameGenOff(install)));
                 install.Options = Copy(current, frameGen: false);
+                WroteIni(install, app.Root);
                 SaveInstall(appId, install, stored.InstalledAt);
                 return Ok(options: UpscalerOptions.From(install.Options));
             }
@@ -119,6 +120,7 @@ public sealed partial class UpscalerService
             var modelChanged = !SameMapping(UpscalerPlanner.ModelOverrides(build, choice.Model), UpscalerPlanner.ModelOverrides(build, current.Model));
             install.Options = Copy(choice, frameGen: choice.FrameGen);
             install.FrameGenRoute = frameGen?.Route;
+            WroteIni(install, app.Root);
             var now = clock();
             if (modelChanged)
             {
@@ -161,6 +163,7 @@ public sealed partial class UpscalerService
         var text = ReadIni(install.Target, root, strict: false);
         WriteIni(install.Target, root, text, IniText.Apply(text, UpscalerSettings.RunningOverrides(data.Catalog, install, choice, text)));
         install.Options = Copy(choice, frameGen: current.FrameGen);
+        WroteIni(install, root);
         SaveInstall(appId, install, stored.InstalledAt);
         Record(appId, "configure", "done", install.Build, null);
         return Ok(options: UpscalerOptions.From(install.Options, live: false));
@@ -187,6 +190,7 @@ public sealed partial class UpscalerService
             var index = install.Edited.ToList().FindIndex(pair => pair.Key == edit.Key);
             edited.Insert(index < 0 ? edited.Count : index, edit);
             install.Edited = edited;
+            WroteIni(install, root);
             SaveInstall(appId, install, store.Install(appId)!.InstalledAt);
             Record(appId, "ini_set", "done", install.Build, null);
             return Ok(iniEdit: new UpscalerIniEdit { Key = edit.Key, Value = edit.Value });
@@ -262,6 +266,7 @@ public sealed partial class UpscalerService
 
                 if (stored is not null)
                 {
+                    SaveIniWritten(appId, stored, target.Root);
                     WriteRecord(stored.Install, stored.InstalledAt);
                 }
 
@@ -298,6 +303,7 @@ public sealed partial class UpscalerService
                 store.SetImageReceipt(appId, null, stored);
                 if (stored is not null)
                 {
+                    SaveIniWritten(appId, stored, target.Root);
                     WriteRecord(stored.Install, stored.InstalledAt);
                 }
 
@@ -394,6 +400,20 @@ public sealed partial class UpscalerService
         if (jobs.Snapshot() is { State: UpscalerJobStates.Running } job && (appId is null || job.AppId == appId))
         {
             throw new UpscalerException("busy");
+        }
+    }
+
+    /// <summary>The image controls wrote the INI after their receipt was saved: the record of what Panel wrote catches up.</summary>
+    private void SaveIniWritten(string appId, StoredUpscaler stored, string root)
+    {
+        WroteIni(stored.Install, root);
+        try
+        {
+            store.SetInstall(appId, stored.Install, stored.InstalledAt);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            log("upscalers.ini", exception.GetType().Name);
         }
     }
 

@@ -87,6 +87,14 @@ public enum UpscalersOperation
 
     [EnumMember(Value = "remove_user_file")]
     RemoveUserFile = 23,
+
+    /// <summary>The per-game support report: install, manifest, log verdict, OptiScaler.ini as Panel wrote it and as it is.</summary>
+    [EnumMember(Value = "diagnose")]
+    Diagnose = 24,
+
+    /// <summary>The upscaler inputs and preferred build of each game in a list of appids.</summary>
+    [EnumMember(Value = "compat")]
+    Compat = 25,
 }
 
 [DataContract]
@@ -199,6 +207,12 @@ public sealed class UpscalersRequest
     [DataMember(Name = "dependency", Order = 19, EmitDefaultValue = false)]
     public string? Dependency { get; private set; }
 
+    /// <summary>The games <see cref="UpscalersOperation.Compat"/> asks about.</summary>
+    [DataMember(Name = "appids", Order = 20, EmitDefaultValue = false)]
+    public string[]? Appids { get; private set; }
+
+    public const int MaximumCompatAppids = 100;
+    public const int MaximumCompatAppIdLength = 10;
     public const int MaximumIniKeyLength = 128;
     public const int MaximumExeLength = 512;
     public const int MaximumPathLength = 520;
@@ -280,6 +294,10 @@ public sealed class UpscalersRequest
     public static UpscalersRequest RemoveUserFile(string appId, string dependency, bool experimental) =>
         new(UpscalersOperation.RemoveUserFile, appId, experimental: experimental) { Dependency = dependency };
 
+    public static UpscalersRequest Diagnose(string appId) => new(UpscalersOperation.Diagnose, appId: appId);
+
+    public static UpscalersRequest Compat(string[] appids) => new(UpscalersOperation.Compat) { Appids = appids };
+
     public bool ExperimentalEnabled => Experimental == true;
 
     internal void Validate()
@@ -288,9 +306,9 @@ public sealed class UpscalersRequest
         bool Token(string? field) => field is { Length: > 0 and <= MaximumFieldLength } && field.All(IsTokenCharacter);
         bool Optional(string? field) => field is null || Token(field);
         var settingsFree = Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8) && Absent(Exe);
-        var noSource = Absent(Path) && Absent(Password) && Absent(Dependency);
+        var noSource = Absent(Path) && Absent(Password) && Absent(Dependency) && Appids is null;
         var noSettings = settingsFree && noSource;
-        var bare = Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && settingsFree;
+        var bare = Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && settingsFree && Appids is null;
         var noFrameGen = Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && noSettings;
         var noChoice = Absent(Build) && Absent(Quality) && Absent(Model) && noFrameGen;
         bool Printable(string? field, int limit) => field is { Length: > 0 } && field.Length <= limit && !field.Any(char.IsControl);
@@ -302,7 +320,10 @@ public sealed class UpscalersRequest
             UpscalersOperation.Game or UpscalersOperation.Cover => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null && noFrameGen,
             UpscalersOperation.Configure => appId && Absent(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && noSettings
                 && (FrameGenRoute is null || Array.IndexOf(FrameGenRoutes, FrameGenRoute) >= 0),
-            UpscalersOperation.Ini or UpscalersOperation.Image or UpscalersOperation.Verify => appId && Experimental is null && noChoice,
+            UpscalersOperation.Compat => Absent(AppId) && Experimental is null && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness)
+                && FrameGen is null && Absent(FrameGenRoute) && settingsFree && Absent(Path) && Absent(Password) && Absent(Dependency)
+                && Appids is { Length: > 0 and <= MaximumCompatAppids } && Appids.All(id => id is { Length: > 0 and <= MaximumCompatAppIdLength } && id.All(character => character is >= '0' and <= '9')),
+            UpscalersOperation.Ini or UpscalersOperation.Image or UpscalersOperation.Verify or UpscalersOperation.Diagnose => appId && Experimental is null && noChoice,
             UpscalersOperation.RestoreImage or UpscalersOperation.AdoptForeign or UpscalersOperation.RestoreForeign => appId && noChoice,
             UpscalersOperation.SetExe => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
                 && Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8) && noSource
@@ -987,6 +1008,12 @@ public sealed class UpscalersResponse
     [DataMember(Name = "candidates", Order = 16, EmitDefaultValue = false)]
     public UpscalerCandidates? Candidates { get; set; }
 
+    [DataMember(Name = "diagnosis", Order = 17, EmitDefaultValue = false)]
+    public UpscalerDiagnosis? Diagnosis { get; set; }
+
+    [DataMember(Name = "compat", Order = 18, EmitDefaultValue = false)]
+    public UpscalerCompat? Compat { get; set; }
+
     public static UpscalersResponse Rejected(string errorCode, UpscalerJobStatus? job = null) =>
         new() { Status = UpscalersResponseStatus.Rejected, ErrorCode = errorCode, Job = job };
 
@@ -998,6 +1025,7 @@ public sealed class UpscalersResponse
         var valid = (Status == UpscalersResponseStatus.Ok) == (ErrorCode is null)
             && (Moved is null || Moved.All(ForeignBackup.IsPlainName)) && (Restored is null || Restored.All(ForeignBackup.IsPlainName))
             && (Kept is null || Kept.All(ForeignBackup.IsPlainName))
+            && (Compat is null || Compat.Games is not null && Compat.Games.Select(game => game.AppId).Distinct().Count() == Compat.Games.Length)
             && (Overview is null || Overview.Games is not null && Overview.Games.Select(game => game.AppId).Distinct().Count() == Overview.Games.Length)
             && (Cover is null || Cover.Mime is UpscalerCover.Jpeg or UpscalerCover.Png && Cover.Data is { Length: > 0 and <= UpscalersWireCodec.MaximumCoverBytes / 3 * 4 + 4 });
         if (!valid)
