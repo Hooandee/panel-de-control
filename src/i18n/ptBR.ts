@@ -326,6 +326,7 @@ export const ptBR: Record<string, string> = {
   "up.launcher.lutris": "Jogo do Lutris: o Panel salva os ajustes no Lutris",
   "up.launcher.portproton": "Jogo do PortProton: os ajustes são salvos no PortProton",
   "up.lsfg.needBranch": "No Lossless Scaling, Propriedades, Betas, escolha o ramo lsfg-vk",
+  "up.lsfg.armNoLayer": "Não há camada lsfg-vk instalável no ARM64. Instale primeiro a camada Vulkan nativa v1",
   "up.lsfg.foreign": "Outra ferramenta já configura o Lossless Scaling",
   "up.lsfg.restart": "Reinicie o jogo para ativar",
   "up.lsfg.launchFailed": "Não foi possível salvar as opções de inicialização",

@@ -1443,7 +1443,7 @@ export const getUpscalerLive = callable<[appid: string], { result: string; resol
 export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow_scale: number; flow_manual?: boolean; manual_scale?: number | null; performance: boolean }
 export interface EngineUpdate { state: "current" | "available" | "updated" | "deferred" | "failed" | "unmanaged"; version: string; available?: string }
 export const refreshFrameGenEngine = callable<[engine: "mako" | "mako5" | "lsfg", apply?: boolean], EngineUpdate>("refresh_framegen_engine");
-export interface LsfgStatus { version?: string | null; installed: boolean; foreign: boolean; foreign_backup?: boolean; cleared?: string[]; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
+export interface LsfgStatus { arm?: boolean; unavailable?: string | null; version?: string | null; installed: boolean; foreign: boolean; foreign_backup?: boolean; cleared?: string[]; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
 export const adoptForeignLsfg = callable<[], LsfgStatus>("adopt_foreign_lsfg");
 export const restoreForeignLsfg = callable<[], LsfgStatus>("restore_foreign_lsfg");
 export const adoptForeignUpscaler = callable<[appid: string], { moved: string[] }>("adopt_foreign_upscaler");
