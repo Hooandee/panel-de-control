@@ -86,6 +86,10 @@ class Governor:
         self._uploads.append((self._clock(), kind, metric))
         self._last_hash = content_hash
 
+    @property
+    def last_shown(self) -> str | None:
+        return self._last_hash
+
     def forget_shown(self) -> None:
         self._last_hash = None
 

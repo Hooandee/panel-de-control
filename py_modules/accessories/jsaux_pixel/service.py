@@ -353,7 +353,7 @@ class PixelService:
             # Steam announced a suspend that never came: the worker kept ticking without a gap.
             self._log("WARNING", "suspend_expired")
             self.resume()
-        if not self._enabled or (self._scene_id is None and self._game_scene is None):
+        if not self._enabled or (self._scene_id is None and self._game_scene is None and not self._holds_content()):
             return
         with self._lock:
             now = self._clock()
@@ -519,7 +519,7 @@ class PixelService:
             if showing is None:
                 # Only a game scene was chosen and the game is over: hand the panel back to the
                 # firmware animation it shows on its own rather than freeze the last game frame.
-                if self._showing is not None and self._show_animation(_IDLE_ANIMATION, "restore", now):
+                if self._holds_content() and self._show_animation(_IDLE_ANIMATION, "restore", now):
                     self._showing, self._shown_options, self._rendered_key = None, {}, None
                 return
         scene = self._scenes[showing]
@@ -559,6 +559,10 @@ class PixelService:
         self._showing, self._restoring, self._on_alert = showing, False, self._alert is not None
         self._shown_options = dict(chosen)
         self._alert_shown(now)
+
+    def _holds_content(self) -> bool:
+        """Something of ours is on the panel (a game frame, the sleeping pet), not its own animation."""
+        return self._governor.last_shown not in (None, f"firmware:{_IDLE_ANIMATION}")
 
     def _alert_shown(self, now: float) -> None:
         if self._alert is not None and self._alert_until is None:

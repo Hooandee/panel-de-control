@@ -109,7 +109,13 @@ class WeatherSource:
         with self._lock:
             # A refresh under way also covers a reading gone stale (a long sleep): wait for it
             # rather than write "--" and the new reading a second later.
-            return key in self._busy or (key not in self._cache and key not in self._next_try)
+            if key in self._busy:
+                return True
+            if key not in self._cache:
+                return key not in self._next_try
+            # A stale reading after a long sleep: the first fetch often runs before the network is
+            # back, so give it one retry before writing "--".
+            return self._clock() - self._cache[key][0] >= _STALE_S and self._failures.get(key, 0) < 2
 
     def _refresh(self, key: tuple) -> None:
         params = urllib.parse.urlencode({

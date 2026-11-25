@@ -174,3 +174,14 @@ def test_negative_temperature_draws_its_minus_sign():
     assert cold.pixels() != plain.pixels()
     bar_row = 6 + 6
     assert any(cold.get(x, bar_row) != (0, 0, 0) for x in range(64))
+
+
+def test_a_stale_reading_waits_one_retry_before_showing_unknown():
+    clock = [1000.0]
+    fetch = Fetch({"api.open-meteo.com": FORECAST})
+    source = weather.WeatherSource(fetch=fetch, clock=lambda: clock[0], spawn=lambda fn: fn())
+    source.current(SEVILLE)
+    fetch.payloads = {}
+    clock[0] += 4 * 3600
+    assert source.current(SEVILLE) is None
+    assert source.pending(SEVILLE) is True

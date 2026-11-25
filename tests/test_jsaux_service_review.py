@@ -561,3 +561,33 @@ def test_a_game_scene_alone_hands_the_panel_back_when_the_game_ends(tmp_path):
         svc.tick()
     assert len(panel.commands(codec.Cmd.ANIMATION)) == 1
     assert svc.state()["showing"] is None
+
+
+def test_dropping_the_only_game_scene_mid_game_hands_the_panel_back(tmp_path):
+    panel, clock, game = FakePanel(), Clock(), {"value": {"appid": "1"}}
+    svc = _svc(tmp_path, panel, clock, game=game)
+    svc.set_game_scene("steady", {})
+    for _ in range(15):
+        clock.t += 1
+        svc.tick()
+    svc.set_game_scene(None)
+    for _ in range(3):
+        clock.t += 1
+        svc.tick()
+    assert len(panel.commands(codec.Cmd.ANIMATION)) == 1
+    assert svc.state()["showing"] is None
+
+
+def test_a_sleeping_pet_left_by_a_game_only_setup_is_handed_back_on_resume(tmp_path):
+    panel, clock = FakePanel(), Clock()
+    svc = _svc(tmp_path, panel, clock)
+    svc.set_game_scene("steady", {})
+    svc.set_on_suspend("pet")
+    svc.tick()
+    svc.suspend(lambda: Segment([Canvas()], [100]))
+    assert len(panel.uploads()) == 1
+    svc.resume()
+    for _ in range(3):
+        clock.t += 1
+        svc.tick()
+    assert len(panel.commands(codec.Cmd.ANIMATION)) == 1
