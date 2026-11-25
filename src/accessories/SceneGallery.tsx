@@ -5,7 +5,7 @@ import type { AccessorySceneMeta } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import type { Block } from "./ComposerEditor";
-import { Chip, ChipRow } from "./EditorShell";
+import { Chip, ChipRow, useLive } from "./EditorShell";
 import { MyCreations } from "./MyCreations";
 import { DecodedFrames } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
@@ -26,8 +26,9 @@ const SceneTile: FC<{ scene: AccessorySceneMeta; selected: boolean; onPanel: boo
     void loadPreview(scene.id).then((value) => { if (live) setDecoded(value); });
     return () => { live = false; };
   }, [scene.id]);
+  const pick = useLive(onPick);
   return (
-    <Focusable onActivate={onPick} onClick={onPick} onGamepadFocus={() => setFocused(true)} onGamepadBlur={() => setFocused(false)}
+    <Focusable onActivate={pick} onClick={pick} onGamepadFocus={() => setFocused(true)} onGamepadBlur={() => setFocused(false)}
       onOKActionDescription={t("accessories.action.preview")} style={tileStyle(focused, selected)}>
       <PixelPreview decoded={decoded} pitch={TILE_PITCH} animate={focused} label={t(scene.labelKey)} />
       <div style={{ display: "flex", alignItems: "center", gap: 5, width: "100%", justifyContent: "center", minWidth: 0 }}>

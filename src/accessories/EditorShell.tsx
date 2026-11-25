@@ -1,5 +1,5 @@
 import { DialogButton, Focusable, NavEntryPositionPreferences } from "@decky/ui";
-import { FC, ReactNode, RefObject, useLayoutEffect, useRef, useState } from "react";
+import { FC, ReactNode, RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { iconChipStyle } from "../components/chipStyle";
 import { useI18n } from "../i18n";
@@ -8,6 +8,17 @@ import { PANEL_H, PANEL_W } from "./pixelFrames";
 
 const MIN_PITCH = 3;
 const MAX_PITCH = 14;
+
+/**
+ * A stable handler that always runs the latest render's function. Steam keeps the gamepad
+ * handlers a Focusable had when it registered, so a plain closure would act on old state.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function useLive<A extends any[], R>(fn: (...args: A) => R): (...args: A) => R {
+  const latest = useRef(fn);
+  latest.current = fn;
+  return useCallback((...args: A) => latest.current(...args), []);
+}
 
 /** Largest whole LED pitch whose 64×54 matrix fits the element, following its size live. */
 export function useFitPitch(area: RefObject<HTMLElement | null>): number {

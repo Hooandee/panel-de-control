@@ -13,7 +13,7 @@ import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess"
 import { Box, snapMove } from "./composerSnap";
 import { DIRECTIONS } from "./DrawEditor";
 import { useEditorControls } from "./editorControls";
-import { Chip, ChipRow, EditorShell, IconButton, InspectorGroup } from "./EditorShell";
+import { Chip, ChipRow, EditorShell, IconButton, InspectorGroup, useLive } from "./EditorShell";
 import { decodeFrames, DecodedFrames, PANEL_H, PANEL_W } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
 
@@ -276,6 +276,16 @@ export const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => v
     sticker: <LuSmile />, drawing: <LuImage />,
   })[block.type];
 
+  const pad = {
+    toggle: useLive(() => { if (current) setGrabbing(!grabbing); }),
+    move: useLive(move),
+    bumper: useLive(onStageButton),
+    drop: useLive(stopGrab),
+    rotate: useLive(() => { if (current) rotate(); }),
+    duplicate: useLive(duplicate),
+    show: useLive(show),
+  };
+
   const renderStage = (pitch: number) => {
     const width = PANEL_W * pitch;
     const height = PANEL_H * pitch;
@@ -290,13 +300,13 @@ export const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => v
     return (
       // Steam hands every d-pad press to a Focusable that has a direction handler, so the panel only
       // takes them while a piece is held; otherwise the d-pad moves on to the rest of the editor.
-      <Focusable ref={stage} onActivate={() => current && setGrabbing(!grabbing)} onClick={() => current && setGrabbing(!grabbing)}
-        onGamepadDirection={grabbing ? move : undefined} onButtonDown={grabbing ? onStageButton : undefined}
+      <Focusable ref={stage} onActivate={pad.toggle} onClick={pad.toggle}
+        onGamepadDirection={grabbing ? pad.move : undefined} onButtonDown={grabbing ? pad.bumper : undefined}
         onGamepadBlur={() => setGrabbing(false)}
-        onSecondaryButton={() => { if (current) rotate(); }} onSecondaryActionDescription={t("accessories.compose.rotate")}
-        onOptionsButton={duplicate} onOptionsActionDescription={t("accessories.compose.duplicate")}
-        onMenuButton={show} onMenuActionDescription={t("accessories.draw.send")}
-        onCancelButton={grabbing ? stopGrab : undefined} onCancelActionDescription={grabbing ? t("accessories.compose.drop") : undefined}
+        onSecondaryButton={pad.rotate} onSecondaryActionDescription={t("accessories.compose.rotate")}
+        onOptionsButton={pad.duplicate} onOptionsActionDescription={t("accessories.compose.duplicate")}
+        onMenuButton={pad.show} onMenuActionDescription={t("accessories.draw.send")}
+        onCancelButton={grabbing ? pad.drop : undefined} onCancelActionDescription={grabbing ? t("accessories.compose.drop") : undefined}
         onOKActionDescription={t(grabbing ? "accessories.compose.drop" : "accessories.compose.grab")}
         style={{ position: "relative", width, height, borderRadius: theme.radius.md, flex: "0 0 auto" }}>
         <PixelPreview decoded={preview} pitch={pitch} animate />

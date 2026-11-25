@@ -9,7 +9,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { blankFrame, DRAW_PALETTE, encodeFrame, fill, getPixel, paint, Rgb } from "./drawing";
 import { useEditorControls } from "./editorControls";
-import { Chip, ChipRow, EditorShell, IconButton, InspectorGroup } from "./EditorShell";
+import { Chip, ChipRow, EditorShell, IconButton, InspectorGroup, useLive } from "./EditorShell";
 import { PANEL_H, PANEL_W } from "./pixelFrames";
 
 const MAX_FRAMES = 48;
@@ -34,7 +34,7 @@ const sameColour = (a: Rgb, b: Rgb) => a.every((v, k) => v === b[k]);
 function drawCanvas(ctx: CanvasRenderingContext2D, frame: Uint8Array, onion: Uint8Array | null, cursor: [number, number] | null, pitch: number) {
   ctx.fillStyle = theme.pixel.face;
   ctx.fillRect(0, 0, PANEL_W * pitch, PANEL_H * pitch);
-  const gap = pitch >= 6 ? 1 : 0;
+  const gap = pitch >= 4 ? 1 : 0;
   for (let y = 0; y < PANEL_H; y += 1) {
     for (let x = 0; x < PANEL_W; x += 1) {
       const [r, g, b] = getPixel(frame, x, y);
@@ -166,19 +166,27 @@ export const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void 
     }
   };
 
+  const pad = {
+    direction: useLive(onDirection),
+    bumper: useLive(onButton),
+    stop: useLive(stopPainting),
+    ok: useLive(() => { if (painting) apply(cursor[0], cursor[1]); else setPainting(true); }),
+    erase: useLive(() => { if (painting) apply(cursor[0], cursor[1], "eraser"); }),
+    fill: useLive(() => { if (painting) apply(cursor[0], cursor[1], "fill"); }),
+    send: useLive(() => void send()),
+  };
+
   const stage = (pitch: number) => (
     // Steam hands every d-pad press to a Focusable that has a direction handler, so the canvas
     // only takes them while painting.
-    <Focusable onGamepadDirection={painting ? onDirection : undefined} onButtonDown={painting ? onButton : undefined}
-      onOKButton={() => { if (painting) apply(cursor[0], cursor[1]); else setPainting(true); }}
-      onSecondaryButton={() => { if (painting) apply(cursor[0], cursor[1], "eraser"); }}
-      onOptionsButton={() => { if (painting) apply(cursor[0], cursor[1], "fill"); }}
-      onCancelButton={painting ? stopPainting : undefined}
+    <Focusable onGamepadDirection={painting ? pad.direction : undefined} onButtonDown={painting ? pad.bumper : undefined}
+      onOKButton={pad.ok} onSecondaryButton={pad.erase} onOptionsButton={pad.fill}
+      onCancelButton={painting ? pad.stop : undefined}
       onOKActionDescription={painting ? t(`accessories.draw.tool.${tool}`) : t("accessories.draw.start")}
       onCancelActionDescription={painting ? t("accessories.draw.stop") : undefined}
       onSecondaryActionDescription={painting ? t("accessories.draw.tool.eraser") : undefined}
       onOptionsActionDescription={painting ? t("accessories.draw.tool.fill") : undefined}
-      onMenuButton={() => void send()} onMenuActionDescription={t("accessories.draw.send")}
+      onMenuButton={pad.send} onMenuActionDescription={t("accessories.draw.send")}
       onGamepadFocus={() => { setCanvasFocused(true); setPainting(true); }}
       onGamepadBlur={() => { setCanvasFocused(false); setPainting(false); }} noFocusRing
       style={{ borderRadius: theme.radius.md, overflow: "hidden", flex: "0 0 auto", transition: "box-shadow 120ms ease",

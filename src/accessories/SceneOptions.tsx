@@ -5,6 +5,7 @@ import { FC, useState } from "react";
 import { accessoryEvent } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { useLive } from "./EditorShell";
 import { openCityModal } from "./CityModal";
 import { PetCare } from "./PetCare";
 
@@ -19,10 +20,11 @@ export const SCENE_THEMES: { id: string; from: string; to: string }[] = [
 const Swatch: FC<{ id: string; from: string; to: string; selected: boolean; onPick: () => void }> = ({ id, from, to, selected, onPick }) => {
   const { t } = useI18n();
   const [focused, setFocused] = useState(false);
+  const pick = useLive(onPick);
   return (
     <Focusable
-      onActivate={onPick}
-      onClick={onPick}
+      onActivate={pick}
+      onClick={pick}
       onGamepadFocus={() => setFocused(true)}
       onGamepadBlur={() => setFocused(false)}
       aria-label={t(`accessories.theme.${id}`)}

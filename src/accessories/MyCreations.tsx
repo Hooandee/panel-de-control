@@ -14,6 +14,7 @@ import { importImage } from "./imageImport";
 import { decodeFrames, DecodedFrames } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
 import { forgetPreviews } from "./useAccessories";
+import { useLive } from "./EditorShell";
 import { OnPanelDot, TileRows, tileStyle } from "./tiles";
 
 const TILE_PITCH = 1.75;
@@ -49,10 +50,13 @@ const Tile: FC<{
 }> = ({ selected, onPanel, label, onChoose, onEdit, onDelete, children }) => {
   const { t } = useI18n();
   const [focused, setFocused] = useState(false);
+  const choose = useLive(onChoose);
+  const edit = useLive(() => onEdit?.());
+  const remove = useLive(() => onDelete?.());
   return (
-    <Focusable onActivate={onChoose} onClick={onChoose}
-      onSecondaryButton={onEdit} onSecondaryActionDescription={onEdit ? t("accessories.draw.edit") : undefined}
-      onOptionsButton={onDelete} onOptionsActionDescription={onDelete ? t("accessories.draw.delete") : undefined}
+    <Focusable onActivate={choose} onClick={choose}
+      onSecondaryButton={onEdit ? edit : undefined} onSecondaryActionDescription={onEdit ? t("accessories.draw.edit") : undefined}
+      onOptionsButton={onDelete ? remove : undefined} onOptionsActionDescription={onDelete ? t("accessories.draw.delete") : undefined}
       onGamepadFocus={() => setFocused(true)} onGamepadBlur={() => setFocused(false)} style={tileStyle(focused, selected)}>
       {children}
       <div style={{ display: "flex", alignItems: "center", gap: 5, maxWidth: "100%", justifyContent: "center", minWidth: 0 }}>
