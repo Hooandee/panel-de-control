@@ -6,6 +6,7 @@ never invalidates an install.
 """
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
@@ -39,9 +40,25 @@ def _read(path: Path = CATALOG_PATH) -> dict:
     return raw
 
 
-_RAW = _read()
 _ARCHIVE_ROLES = ("optiscaler", "optiscaler_beta", "lsfg", "helixsr", "optipatcher")
-_ARCHIVES = _fields(_RAW["archives"], _ARCHIVE_ROLES)
+_UNREADABLE = (OSError, ValueError, KeyError, TypeError)
+# Set when the catalog could not be read: the rest of the plugin keeps working and Escaladores reports it unavailable.
+ERROR: str | None = None
+
+
+def _unavailable(error: Exception) -> None:
+    global ERROR
+    ERROR = str(error) or type(error).__name__
+    logging.getLogger(__name__).error("Upscaler catalog unavailable (%s: %s): Escaladores is off", type(error).__name__, ERROR)
+
+
+try:
+    _RAW = _read()
+    _ARCHIVES = _fields(_RAW["archives"], _ARCHIVE_ROLES)
+except _UNREADABLE as _error:
+    _unavailable(_error)
+    _RAW = None
+    _ARCHIVES = dict.fromkeys(_ARCHIVE_ROLES, "")
 OPTISCALER_ARCHIVE = _ARCHIVES["optiscaler"]
 OPTISCALER_BETA = _ARCHIVES["optiscaler_beta"]
 LSFG_ARCHIVE = _ARCHIVES["lsfg"]
@@ -187,7 +204,17 @@ def _parse(raw: dict) -> dict:
     }
 
 
-_DATA = _parse(_RAW)
+_EMPTY = {
+    "tracks": {}, "amd": (), "every_gpu": (), "assets": {}, "builds": {}, "preferred": {}, "quality_ratios": {},
+    "easy_modes": {}, "sharpness": {}, "proxies": (), "base_ini": {}, "ffx_loader": "", "anr_fg": "",
+    "anr_provider": "", "anr_builds": {},
+}
+_DATA = _EMPTY
+if _RAW is not None:
+    try:
+        _DATA = _parse(_RAW)
+    except _UNREADABLE as _error:
+        _unavailable(_error)
 ASSETS: dict[str, Asset] = _DATA["assets"]
 TRACKS: dict[str, Track] = _DATA["tracks"]
 AMD = _DATA["amd"]

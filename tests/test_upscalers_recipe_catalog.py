@@ -157,7 +157,7 @@ def test_oversized_file_rejected(catalog_dir):
 
 def test_bundled_fails_closed(monkeypatch):
     rc.bundled.cache_clear()
-    def fail():
+    def fail(*args, **options):
         raise rc.CatalogError('broken')
     monkeypatch.setattr(rc, 'load', fail)
     try:

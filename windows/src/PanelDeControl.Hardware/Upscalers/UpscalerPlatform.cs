@@ -66,7 +66,7 @@ public sealed class UpscalerData
             }
         }
 
-        return new UpscalerData(catalog, rules, files.Count > 0 ? RecipeCatalog.Load(files) : null, WikiRecipes.Load(Resource(assembly, "recipes_wiki.json")));
+        return new UpscalerData(catalog, rules, files.Count > 0 ? RecipeCatalog.Load(files, skipped => Trace.TraceWarning("Game recipe skipped: " + skipped)) : null, WikiRecipes.Load(Resource(assembly, "recipes_wiki.json")));
     }
 
     private static byte[]? Resource(Assembly assembly, string name)

@@ -319,4 +319,47 @@ public sealed class HelixSrTests : IDisposable
         await Assert.ThrowsAnyAsync<System.ComponentModel.Win32Exception>(() =>
             new HelixProcess().RunAsync(Path.Combine(root, "missing.exe"), Array.Empty<string>(), root, TimeSpan.FromSeconds(5), CancellationToken.None));
     }
+
+    [Fact]
+    public async Task AGrandchildThatKeepsTheOutputOpenCannotHoldTheRunPastTheTimeout()
+    {
+        var clock = Stopwatch.StartNew();
+
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            new HelixProcess().RunAsync("cmd.exe", new[] { "/c", "start /b ping.exe -n 15 127.0.0.1 & exit /b 0" }, root, TimeSpan.FromMilliseconds(700), CancellationToken.None));
+
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(8), clock.Elapsed.ToString());
+    }
+
+    [Fact]
+    public void AReleaseThatCannotBeSwappedInNorRestoredKeepsThePreviousOneAndTheNextUnpackBringsItBack()
+    {
+        var helix = New();
+        var archive = Zip("HelixSR-3.2.0.zip", "HelixSR-3.2.0/setup/helixsr_bridge.py", "HelixSR-3.2.0/new.txt");
+        helix.UnpackRelease(archive, new string('1', 64));
+        Put(Path.Combine(helix.Release, "old.txt"), "old");
+        var destination = helix.Release;
+        helix.MoveDirectory = (source, target) =>
+        {
+            var name = Path.GetFileName(source);
+            if (name.StartsWith(".unpack-", StringComparison.Ordinal) || name.StartsWith(".replaced-", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("locked");
+            }
+
+            Directory.Move(source, target);
+        };
+
+        Assert.Throws<InvalidOperationException>(() => helix.UnpackRelease(archive, new string('1', 64)));
+
+        Assert.False(Directory.Exists(destination));
+        var kept = Assert.Single(Directory.GetDirectories(helix.ReleasesFolder, ".replaced-*"));
+        Assert.True(File.Exists(Path.Combine(kept, "old.txt")));
+
+        helix.MoveDirectory = null;
+        helix.UnpackRelease(archive, new string('1', 64));
+
+        Assert.True(File.Exists(Path.Combine(destination, "new.txt")));
+        Assert.Empty(Directory.GetFileSystemEntries(helix.ReleasesFolder, ".*"));
+    }
 }

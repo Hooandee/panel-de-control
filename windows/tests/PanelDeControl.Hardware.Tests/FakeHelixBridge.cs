@@ -51,7 +51,7 @@ public sealed class FakeHelixBridge : IHelixProcess
     public static HelixProcessResult Fail(string error) =>
         new(1, new JsonObject { ["ok"] = false, ["error"] = error }.ToJsonString(), string.Empty);
 
-    private static HelixProcessResult Simulate(string[] line)
+    public static HelixProcessResult Simulate(string[] line)
     {
         var command = line[4];
         var game = line[Array.IndexOf(line, "--game") + 1];

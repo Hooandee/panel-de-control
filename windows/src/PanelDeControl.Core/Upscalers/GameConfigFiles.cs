@@ -67,6 +67,24 @@ public static class GameConfigFiles
         return records;
     }
 
+    /// <summary>A reinstall that left Panel's earlier edit in place finds it as <c>already</c>: the user's original value stays the one to put back.</summary>
+    public static IReadOnlyList<GameConfigRecord> Carry(IEnumerable<GameConfigRecord>? previous, IEnumerable<GameConfigRecord> records)
+    {
+        var earlier = (previous ?? Array.Empty<GameConfigRecord>()).Where(record => record.State == "set").ToList();
+        var carried = new List<GameConfigRecord>();
+        foreach (var record in records)
+        {
+            var before = earlier.FirstOrDefault(old => old.File == record.File && old.Tag == record.Tag && old.Path == record.Path);
+            if (record.State == "already" && before is not null)
+            {
+                record.State = "set";
+                record.Before = before.Before ?? "";
+            }
+            carried.Add(record);
+        }
+        return carried;
+    }
+
     private static string? Resolve(string? profile, string? documents, string file)
     {
         const string prefix = "Documents/";

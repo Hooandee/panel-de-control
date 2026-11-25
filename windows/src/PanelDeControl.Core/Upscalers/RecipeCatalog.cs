@@ -260,21 +260,41 @@ public sealed class RecipeCatalog
 
     public IReadOnlyDictionary<string, RecipeGame> Games { get; }
 
-    public static RecipeCatalog Load(IReadOnlyDictionary<string, byte[]> files)
+    /// <param name="skipped">When given, a game file that cannot be read or parsed is dropped and reported here instead of failing the whole catalog.</param>
+    public static RecipeCatalog Load(IReadOnlyDictionary<string, byte[]> files, Action<string>? skipped = null)
     {
         var gameFiles = files.Keys.Where(path => path.StartsWith("games/", StringComparison.Ordinal))
             .Select(path => path.Substring("games/".Length))
             .Where(name => !name.StartsWith(".", StringComparison.Ordinal))
             .ToList();
-        if (gameFiles.Count > 512 || gameFiles.Any(name => !GameFilePattern.IsMatch(name)))
+        if (gameFiles.Count > 512)
         {
             throw Error("invalid_game_files");
+        }
+        foreach (var name in gameFiles.Where(name => !GameFilePattern.IsMatch(name)).ToList())
+        {
+            if (skipped is null)
+            {
+                throw Error("invalid_game_files");
+            }
+            skipped("games/" + name + " (invalid_game_files)");
+            gameFiles.Remove(name);
         }
         var metadata = Object(Read(files, "catalog.json"), new[] { "schema_version", "catalog_version" });
         var rawAssets = Read(files, "assets.json");
         var rawDependencies = Read(files, "dependencies.json");
-        var rawGames = gameFiles.Select(name => new KeyValuePair<string, DataValue>(name.Substring(0, name.Length - ".json".Length), Read(files, "games/" + name)))
-            .ToList();
+        var rawGames = new List<KeyValuePair<string, DataValue>>();
+        foreach (var name in gameFiles)
+        {
+            try
+            {
+                rawGames.Add(new KeyValuePair<string, DataValue>(name.Substring(0, name.Length - ".json".Length), Read(files, "games/" + name)));
+            }
+            catch (DataFormatException error) when (skipped is not null)
+            {
+                skipped("games/" + name + " (" + error.Code + ")");
+            }
+        }
         if (!(metadata.Get("schema_version") is DataNumber { Integer: { } schema } && schema == 2))
         {
             throw Error("unsupported_schema");
@@ -320,38 +340,50 @@ public sealed class RecipeCatalog
         var games = new Dictionary<string, RecipeGame>(StringComparer.Ordinal);
         foreach (var raw in rawGames)
         {
-            if (!AppIdPattern.IsMatch(raw.Key))
+            try
             {
-                throw Error("invalid_appid");
+                games[raw.Key] = ReadGame(raw.Key, raw.Value, dependencies);
             }
-            var item = Object(raw.Value, new[] { "name", "linux", "windows" });
-            var name = Text(item.Get("name")!, 160);
-            var statuses = new Dictionary<string, string>(StringComparer.Ordinal);
-            var recipes = new Dictionary<string, GameRecipe>(StringComparer.Ordinal);
-            foreach (var platform in Platforms)
+            catch (DataFormatException error) when (skipped is not null)
             {
-                var block = item.Get(platform)!;
-                var status = block is DataObject blockObject && blockObject.Get("status") is DataString statusText ? statusText.Value : null;
-                if (status is not null && EmptyStatuses.Contains(status))
-                {
-                    Object(block, new[] { "status" });
-                }
-                else if (status is not null && RecipeStatuses.Contains(status))
-                {
-                    recipes[platform] = ReadRecipe(raw.Key, name, platform, block, dependencies);
-                }
-                else
-                {
-                    throw Error("invalid_status");
-                }
-                statuses[platform] = status;
+                skipped("games/" + raw.Key + ".json (" + error.Code + ")");
             }
-            games[raw.Key] = new RecipeGame(raw.Key, name, statuses, recipes);
         }
 
         var catalog = new RecipeCatalog(version, assets, dependencies, games);
         catalog.DependencyOrder(dependencies.Keys.ToList());
         return catalog;
+    }
+
+    private static RecipeGame ReadGame(string appId, DataValue raw, IReadOnlyDictionary<string, RecipeDependency> dependencies)
+    {
+        if (!AppIdPattern.IsMatch(appId))
+        {
+            throw Error("invalid_appid");
+        }
+        var item = Object(raw, new[] { "name", "linux", "windows" });
+        var name = Text(item.Get("name")!, 160);
+        var statuses = new Dictionary<string, string>(StringComparer.Ordinal);
+        var recipes = new Dictionary<string, GameRecipe>(StringComparer.Ordinal);
+        foreach (var platform in Platforms)
+        {
+            var block = item.Get(platform)!;
+            var status = block is DataObject blockObject && blockObject.Get("status") is DataString statusText ? statusText.Value : null;
+            if (status is not null && EmptyStatuses.Contains(status))
+            {
+                Object(block, new[] { "status" });
+            }
+            else if (status is not null && RecipeStatuses.Contains(status))
+            {
+                recipes[platform] = ReadRecipe(appId, name, platform, block, dependencies);
+            }
+            else
+            {
+                throw Error("invalid_status");
+            }
+            statuses[platform] = status;
+        }
+        return new RecipeGame(appId, name, statuses, recipes);
     }
 
     /// <summary>

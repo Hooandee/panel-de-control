@@ -431,18 +431,52 @@ def _recipe(appid: str, name: str, platform: str, item, dependencies) -> GameRec
                       flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings), platform=platform, status=item['status'], **extras)
 
 
-def load(path: Path = CATALOG_PATH) -> Catalog:
+def _entry(appid, item, dependencies) -> GameEntry:
+    if not isinstance(appid, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', appid):
+        raise CatalogError('invalid_appid')
+    item = _object(item, ('name', *_PLATFORMS))
+    name = _text(item['name'], 160)
+    statuses, recipes = {}, {}
+    for platform in _PLATFORMS:
+        block = item[platform]
+        status = block.get('status') if isinstance(block, dict) else None
+        if status in _EMPTY_STATUSES:
+            _object(block, ('status',))
+        elif status in _RECIPE_STATUSES:
+            recipes[platform] = _recipe(appid, name, platform, block, dependencies)
+        else:
+            raise CatalogError('invalid_status')
+        statuses[platform] = status
+    return GameEntry(appid, name, statuses, recipes)
+
+
+def load(path: Path = CATALOG_PATH, skip_broken_games: bool = False) -> Catalog:
+    """`skip_broken_games` drops a game file that cannot be read or parsed, and says so, instead of failing the whole catalog."""
     path = Path(path)
     games_path = path / 'games'
     if path.is_symlink() or not path.is_dir() or games_path.is_symlink() or not games_path.is_dir():
         raise CatalogError('invalid_catalog_directory')
     files = [f for f in games_path.iterdir() if not f.name.startswith('.')]
-    if len(files) > 512 or any(not re.fullmatch(r'[1-9][0-9]{0,9}\.json', f.name) for f in files):
+    if len(files) > 512:
+        raise CatalogError('invalid_game_files')
+    if skip_broken_games:
+        for f in [f for f in files if not re.fullmatch(r'[1-9][0-9]{0,9}\.json', f.name)]:
+            logging.getLogger(__name__).warning('Game recipe file skipped: %s (invalid_game_files)', f.name)
+            files.remove(f)
+    elif any(not re.fullmatch(r'[1-9][0-9]{0,9}\.json', f.name) for f in files):
         raise CatalogError('invalid_game_files')
     metadata = _object(_read(path / 'catalog.json'), ('schema_version', 'catalog_version'))
+    games = {}
+    for f in files:
+        try:
+            games[f.stem] = _read(f)
+        except (OSError, CatalogError) as error:
+            if not skip_broken_games:
+                raise
+            logging.getLogger(__name__).warning('Game recipe file skipped: %s (%s)', f.name, type(error).__name__ if isinstance(error, OSError) else error)
     raw = {**metadata, 'assets': _read(path / 'assets.json'),
            'dependencies': _read(path / 'dependencies.json'),
-           'games': {f.stem: _read(f) for f in files}}
+           'games': games}
     raw = _object(raw, ('schema_version', 'catalog_version', 'assets', 'dependencies', 'games'))
     if type(raw['schema_version']) is not int or raw['schema_version'] != 2:
         raise CatalogError('unsupported_schema')
@@ -506,22 +540,12 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
         dependencies[identifier] = dependency
     entries = {}
     for appid, item in raw['games'].items():
-        if not isinstance(appid, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', appid):
-            raise CatalogError('invalid_appid')
-        item = _object(item, ('name', *_PLATFORMS))
-        name = _text(item['name'], 160)
-        statuses, recipes = {}, {}
-        for platform in _PLATFORMS:
-            block = item[platform]
-            status = block.get('status') if isinstance(block, dict) else None
-            if status in _EMPTY_STATUSES:
-                _object(block, ('status',))
-            elif status in _RECIPE_STATUSES:
-                recipes[platform] = _recipe(appid, name, platform, block, dependencies)
-            else:
-                raise CatalogError('invalid_status')
-            statuses[platform] = status
-        entries[appid] = GameEntry(appid, name, statuses, recipes)
+        try:
+            entries[appid] = _entry(appid, item, dependencies)
+        except CatalogError as error:
+            if not skip_broken_games:
+                raise
+            logging.getLogger(__name__).warning('Game recipe skipped: %s (%s)', appid, error)
     catalog = Catalog(2, version, assets, dependencies, entries)
     catalog.dependency_order(dependencies)
     return catalog
@@ -530,7 +554,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
 @lru_cache(maxsize=1)
 def bundled() -> Catalog:
     try:
-        return load()
-    except (OSError, CatalogError):
-        logging.getLogger(__name__).warning('Game recipe catalog could not be loaded')
+        return load(skip_broken_games=True)
+    except (OSError, CatalogError) as error:
+        logging.getLogger(__name__).error('Game recipe catalog could not be loaded (%s): no recipes apply', type(error).__name__ if isinstance(error, OSError) else error)
         return Catalog(2, 0, {}, {}, {})

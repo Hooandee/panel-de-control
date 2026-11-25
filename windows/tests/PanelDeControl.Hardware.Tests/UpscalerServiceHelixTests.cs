@@ -506,4 +506,84 @@ public sealed partial class UpscalerServiceTests
 
         Assert.Equal(("running", "running"), (install.ErrorCode, uninstall.ErrorCode));
     }
+
+    private static HelixProcessResult InstallThenFail(string[] line, bool removeWorks)
+    {
+        if (line[4] == "install")
+        {
+            FakeHelixBridge.Simulate(line);
+            return FakeHelixBridge.Fail("died after swapping");
+        }
+
+        return removeWorks ? FakeHelixBridge.Simulate(line) : FakeHelixBridge.Fail("remove failed too");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ABridgeThatFailsAfterSwappingTheDllsPutsTheGamesFileBack(bool bridgeRemoveWorks)
+    {
+        var game = AddGame("100", "Plain");
+        var before = Snapshot(game);
+        var bridge = new FakeHelixBridge { Answer = line => InstallThenFail(line, bridgeRemoveWorks) };
+        SeedHelixArchives();
+
+        var job = await RunInstallAsync(Service(helix: NewHelix(bridge)));
+
+        Assert.Equal((UpscalerJobStates.Error, "helixsr_failed", "died after swapping"), (job.State, job.Error, job.Detail));
+        Assert.Equal(before, Snapshot(game));
+        Assert.Null(new UpscalerStateStore(StatePath).Install("100"));
+    }
+
+    [Fact]
+    public async Task AnInstallTheBridgeAnsweredButPanelCannotVerifyTakesHelixOutOfTheGame()
+    {
+        var game = AddGame("100", "Plain");
+        var before = Snapshot(game);
+        var bridge = new FakeHelixBridge
+        {
+            Answer = line =>
+            {
+                var result = FakeHelixBridge.Simulate(line);
+                return line[4] == "install" ? FakeHelixBridge.Ok(game, Path.Combine("..", "elsewhere", "helixsr.log")) : result;
+            },
+        };
+        SeedHelixArchives();
+
+        var job = await RunInstallAsync(Service(helix: NewHelix(bridge)));
+
+        Assert.Equal((UpscalerJobStates.Error, "install_unverified"), (job.State, job.Error));
+        Assert.Equal("remove", bridge.Calls.Last().Arguments[4]);
+        Assert.Equal(before, Snapshot(game));
+        Assert.Null(new UpscalerStateStore(StatePath).Install("100"));
+    }
+
+    [Fact]
+    public async Task SwitchingFromOptiScalerToHelixWhoseBridgeFailsDropsTheOptiScalerRecord()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        var bridge = new FakeHelixBridge { Answer = _ => FakeHelixBridge.Fail("no write access") };
+        SeedHelixArchives();
+
+        var job = await RunInstallAsync(Service(helix: NewHelix(bridge)));
+
+        Assert.Equal((UpscalerJobStates.Error, "helixsr_failed"), (job.State, job.Error));
+        Assert.False(File.Exists(Path.Combine(Target(game), "dxgi.dll")));
+        Assert.Null(new UpscalerStateStore(StatePath).Install("100"));
+    }
+
+    [Fact]
+    public async Task RemovingHelixWithNeitherRecordNorBridgeIsRefusedAndKeepsTheMarker()
+    {
+        var (game, _, helix) = await InstalledHelixAsync();
+        File.Delete(Path.Combine(Target(game), "helixsr-install.json"));
+        Directory.Delete(helix.ReleasesFolder, true);
+
+        var job = await RunUninstallAsync(Service(helix: helix));
+
+        Assert.Equal((UpscalerJobStates.Error, "helixsr_missing"), (job.State, job.Error));
+        Assert.True(File.Exists(Path.Combine(Target(game), GameManifest.Folder, GameFiles.HelixMarker)));
+        Assert.NotNull(new UpscalerStateStore(StatePath).Install("100"));
+    }
 }

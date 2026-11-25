@@ -60,6 +60,7 @@ export interface UpscalersOverview {
   }>;
   job: UpscalerJob | null;
   helixsr?: { downloaded: boolean };
+  catalog_error?: string | null;
 }
 
 export type FgRoute = "game" | "optiscaler" | "anr";
