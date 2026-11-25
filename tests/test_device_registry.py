@@ -402,7 +402,7 @@ def test_an_unnamed_chip_falls_back_to_its_gpu_pci_id(tmp_path, vendor, device, 
 
 
 @pytest.mark.parametrize("igpu", ["0x15bf", "0x150e", "0x1681"])
-@pytest.mark.parametrize("discrete", ["0x7590", "0x7550", "0x7551"])
+@pytest.mark.parametrize("discrete", ["0x7590", "0x7550"])
 def test_a_radeon_rdna4_card_wins_over_an_igpu_listed_first(tmp_path, igpu, discrete):
     from device_registry import gpu_generation
     _card(tmp_path, 0, "0x1002", igpu)

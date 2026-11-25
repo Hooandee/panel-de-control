@@ -130,7 +130,7 @@ _AMD_PCI = {
     # Discrete Radeon: RX 6000, RX 7000, RX 9000
     "0x73bf": "rdna2", "0x73df": "rdna2", "0x73ef": "rdna2", "0x73ff": "rdna2", "0x743f": "rdna2",
     "0x744c": "rdna3", "0x747e": "rdna3", "0x7480": "rdna3", "0x7483": "rdna3",
-    "0x7550": "rdna4", "0x7551": "rdna4", "0x7590": "rdna4",  # Navi 48 (RX 9070, R9700), Navi 44 (RX 9060)
+    "0x7550": "rdna4", "0x7590": "rdna4",  # Navi 48 (RX 9070), Navi 44 (RX 9060)
 }
 
 
