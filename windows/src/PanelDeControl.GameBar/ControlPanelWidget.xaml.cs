@@ -284,10 +284,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             DiagnosticsList.Children.Add(new TextBlock
             {
                 Text = line,
-                FontSize = 13,
                 Margin = new Thickness(0, 4, 0, 0),
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = ResourceBrush("PdcTextMutedBrush"),
+                Style = Components.Style("PdcLabelStyle"),
             });
         }
     }
@@ -1469,8 +1468,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
         SectionHeaderBlock.Margin = new Thickness(0, 0, 0, 24);
         SectionHeaderBlock.Visibility = Visibility.Visible;
-        SectionTitle.FontSize = 30;
-        SectionDescription.FontSize = 14;
+        SectionTitle.Style = Components.Style("PdcDisplayTitleStyle");
+        SectionDescription.Style = Components.Style("PdcLeadStyle");
         DesktopScroller.SizeChanged += (_, _) => ReflowDesktopColumns();
     }
 
@@ -1638,24 +1637,15 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var label = new TextBlock
             {
                 Text = Localized("Nav" + section.ResourceStem),
-                FontSize = 13,
-                VerticalAlignment = VerticalAlignment.Center,
+                Style = Components.Style("PdcTabLabelStyle"),
                 Visibility = desktopLayout ? Visibility.Visible : Visibility.Collapsed,
             };
             var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = desktopLayout ? 12 : 7 };
-            content.Children.Add(new FontIcon
-            {
-                FontFamily = (FontFamily)Application.Current.Resources["PdcIconFontFamily"],
-                FontSize = 16,
-                Glyph = section.Glyph,
-            });
+            content.Children.Add(new FontIcon { Glyph = section.Glyph, Style = Components.Style("PdcIconNavStyle") });
             content.Children.Add(label);
             var tab = new Button
             {
-                Style = (Style)Application.Current.Resources["PdcTabButtonStyle"],
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = desktopLayout ? HorizontalAlignment.Left : HorizontalAlignment.Center,
-                Padding = desktopLayout ? new Thickness(14, 11, 14, 11) : new Thickness(11, 8, 11, 8),
+                Style = Components.Style(desktopLayout ? "PdcNavButtonStyle" : "PdcTabButtonStyle"),
                 Content = content,
                 Tag = sections.Count,
             };
@@ -1691,20 +1681,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var layout = new Grid { ColumnSpacing = 14 };
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        // Tile and glyph carry the colour of the section (data); the rest is the catalog tile.
         layout.Children.Add(new Border
         {
-            Width = 38,
-            Height = 38,
-            CornerRadius = new CornerRadius(12),
+            Style = Components.Style("PdcIconTileStyle"),
             VerticalAlignment = VerticalAlignment.Top,
             Background = new SolidColorBrush(WithAlpha(accent, 0x30)),
-            Child = new FontIcon
-            {
-                FontFamily = (FontFamily)Application.Current.Resources["PdcIconFontFamily"],
-                FontSize = 16,
-                Glyph = block.Glyph,
-                Foreground = new SolidColorBrush(accent),
-            },
+            Child = new FontIcon { Glyph = block.Glyph, Style = Components.Style("PdcIconNavStyle"), Foreground = new SolidColorBrush(accent) },
         });
         var text = new StackPanel();
         text.Children.Add(new TextBlock
@@ -1722,9 +1705,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             Text = Localized("BlockPending"),
             Margin = new Thickness(0, 8, 0, 0),
-            FontSize = 11,
             Foreground = new SolidColorBrush(accent),
-            Style = (Style)Application.Current.Resources["PdcCaptionStyle"],
+            Style = Components.Style("PdcFineStyle"),
         });
         Grid.SetColumn(text, 1);
         layout.Children.Add(text);
@@ -1802,13 +1784,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
             view.Panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
             view.Label.Visibility = selected || desktopLayout ? Visibility.Visible : Visibility.Collapsed;
-            view.Tab.Background = selected && desktopLayout ? desktopFill : ResourceBrush("PdcTransparentBrush");
-            view.Tab.BorderBrush = sectionRim;
-            view.Tab.BorderThickness = new Thickness(selected && desktopLayout ? 1 : 0);
-            view.Tab.Foreground = ResourceBrush(
-                !selected ? "PdcTextMutedBrush"
-                : desktopLayout && Skins.Current == PdcSkin.Editorial ? "PdcTextPrimaryBrush"
-                : "PdcTabSelectedTextBrush");
+            Components.MarkTab(view.Tab, selected, desktopLayout, desktopFill, sectionRim);
             if (!desktopLayout)
             {
                 SectionTabs.ColumnDefinitions[position].Width = selected ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
@@ -2131,7 +2107,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             : StatusText(cycles);
         foreach (var value in new[] { BatteryHealthValue, BatteryCapacityValue, BatteryCyclesValue })
         {
-            value.FontSize = value.Text.Any(char.IsDigit) ? 20 : 13;
+            value.Style = Components.Style(value.Text.Any(char.IsDigit) ? "PdcValueSmallStyle" : "PdcLabelStyle");
         }
     }
 
@@ -2140,8 +2116,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var reading = FindReading(snapshot, id);
         var available = reading?.Status == ReadingStatus.Available && reading.Value.HasValue;
         target.Text = Format(snapshot, id, "0", "RPM");
-        target.FontSize = available ? 32 : 15;
-        target.Foreground = ResourceBrush(available ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
+        target.Style = Components.Style(available ? "PdcValueLargeStyle" : "PdcValueFallbackStyle");
     }
 
     private static void ApplyTemperature(TextBlock target, HardwareSnapshot snapshot, string id)
@@ -2149,12 +2124,15 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var reading = FindReading(snapshot, id);
         var celsius = reading?.Status == ReadingStatus.Available ? reading.Value : null;
         target.Text = Format(snapshot, id, "0", "°C");
-        target.FontSize = celsius.HasValue ? 40 : 15;
-        target.Foreground = ResourceBrush(
-            celsius >= 85 ? "PdcDangerBrush"
-            : celsius >= 70 ? "PdcWarnBrush"
-            : celsius.HasValue ? "PdcTextPrimaryBrush"
-            : "PdcTextMutedBrush");
+        target.Style = Components.Style(celsius.HasValue ? "PdcValueHugeStyle" : "PdcValueFallbackStyle");
+        if (celsius >= 70)
+        {
+            target.Foreground = ResourceBrush(celsius >= 85 ? "PdcDangerBrush" : "PdcWarnBrush");
+        }
+        else
+        {
+            target.ClearValue(TextBlock.ForegroundProperty);
+        }
     }
 
     private static Color BatteryColor(TelemetryReading? battery)
@@ -2324,14 +2302,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var swatch = new Button
             {
                 Tag = accent.Id,
-                Width = 36,
-                Height = 36,
-                Padding = new Thickness(0),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                CornerRadius = new CornerRadius(18),
-                Background = new SolidColorBrush(Colors.Transparent),
-                BorderThickness = new Thickness(0),
-                IsTabStop = true,
+                Style = Components.Style("PdcSwatchButtonStyle"),
                 Content = new Ellipse
                 {
                     Width = 26,
@@ -2355,9 +2326,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         foreach (var swatch in AccentSwatches.Children.OfType<Button>())
         {
-            var selected = Equals(swatch.Tag, id);
-            swatch.BorderBrush = ResourceBrush("PdcTextPrimaryBrush");
-            swatch.BorderThickness = new Thickness(selected ? 2 : 0);
+            Components.MarkSwatch(swatch, Equals(swatch.Tag, id));
         }
     }
 

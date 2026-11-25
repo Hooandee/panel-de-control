@@ -48,9 +48,8 @@ public sealed class ThemesView : UserControl
         connectionDetail.Style = Resource<Style>("PdcMutedStyle");
         connectionDetail.Margin = new Thickness(0, 4, 0, 0);
         connectionDetail.TextWrapping = TextWrapping.WrapWholeWords;
-        connectionAction.Style = Resource<Style>("PdcChipButtonStyle");
+        connectionAction.Style = Resource<Style>("PdcActionButtonStyle");
         connectionAction.Margin = new Thickness(0, 12, 0, 0);
-        connectionAction.Padding = new Thickness(14, 9, 14, 9);
         connectionAction.Click += ConnectionAction_Click;
         connectionCard = new Border
         {
@@ -218,8 +217,7 @@ public sealed class ThemesView : UserControl
         var cover = new Border
         {
             Margin = new Thickness(0, 0, 0, 14),
-            CornerRadius = Resource<CornerRadius>("PdcRadiusInset"),
-            Background = Resource<Brush>("PdcLayerBrush"),
+            Style = Resource<Style>("PdcMediaFrameStyle"),
             Child = image,
         };
         image.ImageFailed += (_, _) => cover.Visibility = Visibility.Collapsed;
@@ -237,10 +235,7 @@ public sealed class ThemesView : UserControl
 
     private void BuildRemoval(ThemeCard card)
     {
-        card.RemoveButton.Style = Resource<Style>("PdcSoftButtonStyle");
-        card.RemoveButton.Foreground = Resource<Brush>("PdcTextMutedBrush");
-        card.RemoveButton.HorizontalAlignment = HorizontalAlignment.Left;
-        card.RemoveButton.Padding = new Thickness(0, 8, 0, 2);
+        card.RemoveButton.Style = Resource<Style>("PdcLinkButtonStyle");
         card.RemoveButton.Margin = new Thickness(0, 6, 0, 0);
         card.RemoveButton.Click += (_, _) => SetRemovalConfirmation(card, true);
 
@@ -249,21 +244,15 @@ public sealed class ThemesView : UserControl
         card.RemoveDescription.Style = Resource<Style>("PdcMutedStyle");
         card.RemoveDescription.TextWrapping = TextWrapping.WrapWholeWords;
         card.RemoveDescription.Margin = new Thickness(0, 4, 0, 0);
-        card.RemoveConfirmButton.Style = Resource<Style>("PdcChipButtonStyle");
-        card.RemoveConfirmButton.Padding = new Thickness(14, 9, 14, 9);
-        card.RemoveConfirmButton.Background = new SolidColorBrush(WithAlpha(((SolidColorBrush)Resource<Brush>("PdcDangerBrush")).Color, 0x40));
-        card.RemoveConfirmButton.Foreground = Resource<Brush>("PdcDangerBrush");
-        card.RemoveConfirmButton.FontWeight = FontWeights.SemiBold;
+        card.RemoveConfirmButton.Style = Resource<Style>("PdcDangerButtonStyle");
         card.RemoveConfirmButton.Click += (_, _) => _ = RemoveAsync(card);
-        card.RemoveCancelButton.Style = Resource<Style>("PdcChipButtonStyle");
-        card.RemoveCancelButton.Padding = new Thickness(14, 9, 14, 9);
+        card.RemoveCancelButton.Style = Resource<Style>("PdcActionButtonStyle");
         card.RemoveCancelButton.Click += (_, _) => SetRemovalConfirmation(card, false);
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
         buttons.Children.Add(card.RemoveConfirmButton);
         buttons.Children.Add(card.RemoveCancelButton);
-        card.RemoveConfirm.Style = Resource<Style>("PdcInsetStyle");
-        card.RemoveConfirm.Padding = new Thickness(14, 12, 14, 14);
+        card.RemoveConfirm.Style = Resource<Style>("PdcInsetPanelStyle");
         card.RemoveConfirm.Margin = new Thickness(0, 10, 0, 0);
         card.RemoveConfirm.Child = new StackPanel { Children = { card.RemoveTitle, card.RemoveDescription, buttons } };
     }
@@ -307,8 +296,6 @@ public sealed class ThemesView : UserControl
         }
     }
 
-    private static Windows.UI.Color WithAlpha(Windows.UI.Color color, byte alpha) =>
-        Windows.UI.Color.FromArgb(alpha, color.R, color.G, color.B);
 
     private ThemeCard BuildCard(ThemeEntry theme)
     {
@@ -325,21 +312,12 @@ public sealed class ThemesView : UserControl
         card.Toggle.Style = Resource<Style>("PdcToggleStyle");
         card.Toggle.Toggled += (_, _) => _ = ToggleThemeAsync(card);
         card.Action.Style = Resource<Style>("PdcPrimaryButtonStyle");
-        card.Action.Padding = new Thickness(14, 9, 14, 9);
         card.Action.Margin = new Thickness(0, 12, 0, 0);
-        card.Action.HorizontalAlignment = HorizontalAlignment.Left;
         card.Action.Click += (_, _) => _ = InstallAsync(card);
-        card.EarlyAction.Style = Resource<Style>("PdcChipButtonStyle");
-        card.EarlyAction.Padding = new Thickness(14, 9, 14, 9);
+        card.EarlyAction.Style = Resource<Style>("PdcActionButtonStyle");
         card.EarlyAction.Margin = new Thickness(0, 12, 0, 0);
-        card.EarlyAction.HorizontalAlignment = HorizontalAlignment.Left;
         card.EarlyAction.Click += (_, _) => _ = InstallEarlyFromFileAsync(card);
-        card.OptionsButton.Style = Resource<Style>("PdcSoftButtonStyle");
-        card.OptionsButton.Foreground = Resource<Brush>("PdcTextPrimaryBrush");
-        card.OptionsButton.HorizontalAlignment = HorizontalAlignment.Stretch;
-        card.OptionsButton.HorizontalContentAlignment = HorizontalAlignment.Left;
-        card.OptionsButton.Padding = new Thickness(0, 10, 0, 4);
-        card.OptionsButton.FontWeight = FontWeights.SemiBold;
+        card.OptionsButton.Style = Resource<Style>("PdcDisclosureButtonStyle");
         card.OptionsButton.Margin = new Thickness(0, 8, 0, 0);
         card.OptionsButton.Click += (_, _) =>
         {

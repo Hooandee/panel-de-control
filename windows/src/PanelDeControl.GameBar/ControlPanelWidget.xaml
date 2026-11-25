@@ -40,40 +40,22 @@
                             <Ellipse x:Name="LiveHalo" Margin="-4" Fill="{StaticResource PdcOkBrush}" Opacity="0.3" />
                             <Ellipse x:Name="LiveDot" Fill="{StaticResource PdcOkBrush}" />
                         </Grid>
-                        <TextBlock
-                            x:Name="DeviceName"
-                            x:Uid="DeviceName"
-                            Grid.Column="1"
-                            FontFamily="{StaticResource PdcDisplayFontFamily}"
-                            FontSize="24"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource PdcTextPrimaryBrush}"
-                            TextTrimming="CharacterEllipsis" />
-                        <Border
-                            x:Name="EarlyBadge"
-                            Grid.Column="2"
-                            Padding="8,1,8,2"
-                            VerticalAlignment="Center"
-                            Background="{StaticResource PdcAccentBrush}"
-                            CornerRadius="{StaticResource PdcRadiusRound}">
-                            <TextBlock
-                                x:Name="EarlyBadgeText"
-                                FontSize="10"
-                                FontWeight="SemiBold"
-                                Foreground="{StaticResource PdcOnAccentBrush}" />
+                        <TextBlock x:Name="DeviceName" x:Uid="DeviceName" Grid.Column="1" Style="{StaticResource PdcHeadlineStyle}" />
+                        <Border x:Name="EarlyBadge" Grid.Column="2" Style="{StaticResource PdcBadgeStyle}">
+                            <TextBlock x:Name="EarlyBadgeText" Style="{StaticResource PdcBadgeTextStyle}" />
                         </Border>
                     </Grid>
                     <StackPanel x:Name="HeaderDetail" Margin="0,8,0,0" Orientation="Horizontal" Spacing="6">
                         <Border Style="{StaticResource PdcPillStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon FontFamily="{StaticResource PdcIconFontFamily}" FontSize="11" Glyph="&#xE945;" Foreground="{StaticResource PdcBrightnessBrush}" />
-                                <TextBlock x:Name="PowerSourceValue" Text="—" Style="{StaticResource PdcCaptionStyle}" Foreground="{StaticResource PdcTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                                <FontIcon Glyph="&#xE945;" Foreground="{StaticResource PdcBrightnessBrush}" Style="{StaticResource PdcIconSmallStyle}" />
+                                <TextBlock x:Name="PowerSourceValue" Text="—" Style="{StaticResource PdcPillTextStyle}" />
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource PdcPillStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon FontFamily="{StaticResource PdcIconFontFamily}" FontSize="11" Glyph="&#xEC4A;" Foreground="{StaticResource PdcAccentBrush}" />
-                                <TextBlock x:Name="PowerModeValue" Text="—" Style="{StaticResource PdcCaptionStyle}" Foreground="{StaticResource PdcTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                                <FontIcon Glyph="&#xEC4A;" Style="{StaticResource PdcIconSmallStyle}" />
+                                <TextBlock x:Name="PowerModeValue" Text="—" Style="{StaticResource PdcPillTextStyle}" />
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -87,19 +69,12 @@
                     IsTabStop="True"
                     Click="RefreshButton_Click"
                     Style="{StaticResource PdcIconButtonStyle}">
-                    <FontIcon x:Name="RefreshIcon" FontFamily="{StaticResource PdcIconFontFamily}" FontSize="15" Glyph="&#xE72C;" />
+                    <FontIcon x:Name="RefreshIcon" Glyph="&#xE72C;" Style="{StaticResource PdcIconNavStyle}" />
                 </Button>
             </Grid>
 
             <StackPanel x:Name="StatusBlock" Grid.Row="1">
-                <TextBlock
-                    x:Name="ConnectionStatus"
-                    x:Uid="ConnectionStatus"
-                    Margin="0,10,0,0"
-                    Visibility="Collapsed"
-                    Foreground="{StaticResource PdcWarnBrush}"
-                    AutomationProperties.LiveSetting="Polite"
-                    Style="{StaticResource PdcMutedStyle}" />
+                <TextBlock x:Name="ConnectionStatus" x:Uid="ConnectionStatus" Margin="0,10,0,0" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" Style="{StaticResource PdcWarnTextStyle}" />
                 <Button
                     x:Name="SteamHomeButton"
                     x:Uid="SteamHomeButton"
@@ -108,7 +83,7 @@
                     Click="SteamHomeButton_Click"
                     Style="{StaticResource PdcPrimaryButtonStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon FontFamily="{StaticResource PdcIconFontFamily}" FontSize="15" Glyph="&#xE80F;" />
+                        <FontIcon Glyph="&#xE80F;" Style="{StaticResource PdcIconNavStyle}" />
                         <TextBlock x:Uid="SteamHomeButtonText" />
                     </StackPanel>
                 </Button>
@@ -121,8 +96,8 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Margin="2,0,0,0" VerticalAlignment="Center" Padding="6,1,6,2" Style="{StaticResource PdcPillStyle}" AutomationProperties.AccessibilityView="Raw">
-                        <TextBlock Text="LB" FontSize="10" FontWeight="SemiBold" Style="{StaticResource PdcCaptionStyle}" />
+                    <Border Margin="2,0,0,0" Style="{StaticResource PdcKeyHintStyle}">
+                        <TextBlock Text="LB" Style="{StaticResource PdcMicroStyle}" />
                     </Border>
                     <ScrollViewer
                         x:Name="SectionTabsScroller"
@@ -133,14 +108,7 @@
                         VerticalScrollBarVisibility="Disabled"
                         SizeChanged="SectionTabsScroller_SizeChanged">
                         <Grid x:Name="SectionTabsLayer">
-                            <Border
-                                x:Name="TabIndicator"
-                                HorizontalAlignment="Left"
-                                CornerRadius="{StaticResource PdcRadiusInset}"
-                                Background="{StaticResource PdcAccentSoftBrush}"
-                                BorderBrush="{StaticResource PdcAccentRimBrush}"
-                                BorderThickness="{StaticResource PdcRimThickness}"
-                                IsHitTestVisible="False">
+                            <Border x:Name="TabIndicator" Style="{StaticResource PdcTabIndicatorStyle}">
                                 <Border.RenderTransform>
                                     <TranslateTransform x:Name="TabIndicatorShift" />
                                 </Border.RenderTransform>
@@ -148,19 +116,14 @@
                             <Grid x:Name="SectionTabs" ColumnSpacing="4" />
                         </Grid>
                     </ScrollViewer>
-                    <Border Grid.Column="2" Margin="0,0,2,0" VerticalAlignment="Center" Padding="6,1,6,2" Style="{StaticResource PdcPillStyle}" AutomationProperties.AccessibilityView="Raw">
-                        <TextBlock Text="RB" FontSize="10" FontWeight="SemiBold" Style="{StaticResource PdcCaptionStyle}" />
+                    <Border Grid.Column="2" Margin="0,0,2,0" Style="{StaticResource PdcKeyHintStyle}">
+                        <TextBlock Text="RB" Style="{StaticResource PdcMicroStyle}" />
                     </Border>
                 </Grid>
             </Border>
 
             <StackPanel x:Name="SectionHeaderBlock" Grid.Row="3" Margin="2,18,2,12" Visibility="Collapsed">
-                <TextBlock
-                    x:Name="SectionTitle"
-                    FontFamily="{StaticResource PdcDisplayFontFamily}"
-                    FontSize="20"
-                    FontWeight="SemiBold"
-                    Foreground="{StaticResource PdcTextPrimaryBrush}" />
+                <TextBlock x:Name="SectionTitle" Style="{StaticResource PdcPageTitleStyle}" />
                 <TextBlock x:Name="SectionDescription" Margin="0,2,0,0" Style="{StaticResource PdcMutedStyle}" />
             </StackPanel>
 
@@ -174,7 +137,7 @@
                 <ColumnDefinition Width="272" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Grid Background="{StaticResource PdcCardBrush}" BorderBrush="{StaticResource PdcCardRimBrush}" BorderThickness="0,0,1,0" Padding="18,22,18,18">
+            <Grid Style="{StaticResource PdcSidebarStyle}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -257,33 +220,15 @@
                             <TextBlock
                                 x:Name="PowerDrawValue"
                                 Text="—"
-                                FontSize="{StaticResource PdcHeroValueSize}"
-                                FontWeight="Light"
-                                Style="{StaticResource PdcValueStyle}" />
+                                Style="{StaticResource PdcHeroValueStyle}" />
                             <TextBlock
-                                x:Name="HeroWattsUnit"
-                                Margin="4,0,0,12"
-                                VerticalAlignment="Bottom"
-                                Text="W"
-                                FontFamily="{StaticResource PdcDisplayFontFamily}"
-                                FontSize="18"
-                                Foreground="{StaticResource PdcTextMutedBrush}" />
+                                x:Name="HeroWattsUnit" Text="W" Style="{StaticResource PdcUnitStyle}" />
                             <TextBlock
-                                x:Name="HeroPercentUnit"
-                                Margin="4,0,0,12"
-                                VerticalAlignment="Bottom"
-                                Text="%"
-                                Visibility="Collapsed"
-                                FontFamily="{StaticResource PdcDisplayFontFamily}"
-                                FontSize="18"
-                                Foreground="{StaticResource PdcTextMutedBrush}" />
+                                x:Name="HeroPercentUnit" Text="%" Visibility="Collapsed"
+                                Style="{StaticResource PdcUnitStyle}" />
                         </StackPanel>
                         <TextBlock
-                            x:Name="PowerZoneLabel"
-                            HorizontalAlignment="Center"
-                            FontSize="13"
-                            FontWeight="SemiBold"
-                            Style="{StaticResource PdcCaptionStyle}" />
+                            x:Name="PowerZoneLabel" Style="{StaticResource PdcZoneStyle}" />
                     </StackPanel>
                     <Grid x:Name="LinearHero" Height="22" Margin="2,0,2,4" VerticalAlignment="Bottom" Visibility="Collapsed" SizeChanged="LinearHero_SizeChanged">
                         <Rectangle Height="2" Fill="{StaticResource PdcTrackBrush}" />
@@ -308,7 +253,7 @@
                                 <TextBlock x:Uid="PowerLabel" Style="{StaticResource PdcTitleStyle}" />
                                 <TextBlock x:Name="PowerLimits" x:Uid="PowerLimits" Margin="0,2,0,0" Style="{StaticResource PdcCaptionStyle}" />
                             </StackPanel>
-                            <TextBlock x:Name="PowerValue" Grid.Column="1" Text="—" VerticalAlignment="Center" FontSize="22" Style="{StaticResource PdcValueStyle}" />
+                            <TextBlock x:Name="PowerValue" Grid.Column="1" Text="—" VerticalAlignment="Center" Style="{StaticResource PdcValueMediumStyle}" />
                         </Grid>
                         <StackPanel x:Name="TdpControls">
                             <Slider
@@ -322,7 +267,6 @@
                                 IsEnabled="False"
                                 IsTabStop="True"
                                 Style="{StaticResource PdcSliderStyle}"
-                                Foreground="{StaticResource PdcAccentBrush}"
                                 ValueChanged="TdpSlider_ValueChanged" />
                             <Grid x:Name="TdpPresetGrid" Margin="0,6,0,0" ColumnSpacing="6">
                                 <Grid.ColumnDefinitions>
@@ -359,18 +303,12 @@
                             AutomationProperties.LiveSetting="Polite"
                             Style="{StaticResource PdcMutedStyle}" />
                         <TextBlock
-                            x:Name="ManufacturerRecoveryHint"
-                            x:Uid="ManufacturerRecoveryHint"
-                            Margin="0,6,0,0"
-                            Foreground="{StaticResource PdcWarnBrush}"
-                            Visibility="Collapsed"
-                            Style="{StaticResource PdcMutedStyle}" />
+                            x:Name="ManufacturerRecoveryHint" x:Uid="ManufacturerRecoveryHint" Margin="0,6,0,0" Visibility="Collapsed" Style="{StaticResource PdcWarnTextStyle}" />
                         <TextBlock
                             x:Name="PowerReadbackHint"
                             x:Uid="PowerReadbackHint"
                             Margin="0,6,0,0"
-                            FontSize="11"
-                            Style="{StaticResource PdcMutedStyle}" />
+                            Style="{StaticResource PdcFineStyle}" />
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -390,7 +328,7 @@
                 </StackPanel>
             </Border>
 
-            <Border x:Name="BatteryCard" Tag="power.energy" Style="{StaticResource PdcCardStyle}" Padding="20,18">
+            <Border x:Name="BatteryCard" Tag="power.energy" Style="{StaticResource PdcCardStyle}">
                 <StackPanel>
                     <TextBlock x:Name="EnergyTitle" Style="{StaticResource PdcTitleStyle}" />
                     <Grid Margin="0,14,0,0" ColumnSpacing="24">
@@ -399,25 +337,25 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Grid Width="132" Height="132">
-                            <Ellipse x:Name="BatteryTrack" Stroke="{StaticResource PdcTrackBrush}" StrokeThickness="11" />
+                            <Ellipse x:Name="BatteryTrack" Style="{StaticResource PdcRingTrackStyle}" StrokeThickness="11" />
                             <Path x:Name="BatteryRing" StrokeThickness="11" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                            <Ellipse Margin="15" Stroke="{StaticResource PdcTrackBrush}" StrokeThickness="11" />
+                            <Ellipse Margin="15" Style="{StaticResource PdcRingTrackStyle}" StrokeThickness="11" />
                             <Path x:Name="CpuRing" Margin="15" StrokeThickness="11" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                            <Ellipse Margin="30" Stroke="{StaticResource PdcTrackBrush}" StrokeThickness="11" />
+                            <Ellipse Margin="30" Style="{StaticResource PdcRingTrackStyle}" StrokeThickness="11" />
                             <Path x:Name="GpuRing" Margin="30" StrokeThickness="11" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                         </Grid>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="12">
                             <Grid x:Name="BatteryRow">
-                                <TextBlock x:Name="BatteryCaption" x:Uid="BatteryLabel" VerticalAlignment="Center" Style="{StaticResource PdcCaptionStyle}" FontSize="13" />
-                                <TextBlock x:Name="BatteryValue" Text="—" HorizontalAlignment="Right" FontSize="22" Style="{StaticResource PdcValueStyle}" />
+                                <TextBlock x:Name="BatteryCaption" x:Uid="BatteryLabel" VerticalAlignment="Center" Style="{StaticResource PdcLabelStyle}" />
+                                <TextBlock x:Name="BatteryValue" Text="—" HorizontalAlignment="Right" Style="{StaticResource PdcValueMediumStyle}" />
                             </Grid>
                             <Grid>
-                                <TextBlock x:Name="TileCpuCaption" Text="CPU" VerticalAlignment="Center" Style="{StaticResource PdcCaptionStyle}" FontSize="13" />
-                                <TextBlock x:Name="TileCpuValue" Text="—" HorizontalAlignment="Right" FontSize="22" Style="{StaticResource PdcValueStyle}" />
+                                <TextBlock x:Name="TileCpuCaption" Text="CPU" VerticalAlignment="Center" Style="{StaticResource PdcLabelStyle}" />
+                                <TextBlock x:Name="TileCpuValue" Text="—" HorizontalAlignment="Right" Style="{StaticResource PdcValueMediumStyle}" />
                             </Grid>
                             <Grid>
-                                <TextBlock x:Name="TileGpuCaption" Text="GPU" VerticalAlignment="Center" Style="{StaticResource PdcCaptionStyle}" FontSize="13" />
-                                <TextBlock x:Name="TileGpuValue" Text="—" HorizontalAlignment="Right" FontSize="22" Style="{StaticResource PdcValueStyle}" />
+                                <TextBlock x:Name="TileGpuCaption" Text="GPU" VerticalAlignment="Center" Style="{StaticResource PdcLabelStyle}" />
+                                <TextBlock x:Name="TileGpuValue" Text="—" HorizontalAlignment="Right" Style="{StaticResource PdcValueMediumStyle}" />
                             </Grid>
                         </StackPanel>
                     </Grid>
@@ -432,9 +370,9 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource PdcIconTileStyle}"><FontIcon FontFamily="{StaticResource PdcIconFontFamily}" FontSize="15" Glyph="&#xEBA6;" Foreground="{StaticResource PdcOkBrush}" /></Border>
+                        <Border Style="{StaticResource PdcIconTileStyle}"><FontIcon Glyph="&#xEBA6;" Foreground="{StaticResource PdcOkBrush}" Style="{StaticResource PdcIconStyle}" /></Border>
                         <TextBlock x:Name="SystemBatteryTitle" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource PdcTitleStyle}" />
-                        <TextBlock x:Name="SystemBatteryValue" Grid.Column="2" Text="—" FontSize="22" Style="{StaticResource PdcValueStyle}" />
+                        <TextBlock x:Name="SystemBatteryValue" Grid.Column="2" Text="—" Style="{StaticResource PdcValueMediumStyle}" />
                     </Grid>
                     <TextBlock x:Name="SystemBatteryDetail" Margin="0,6,0,0" Style="{StaticResource PdcCaptionStyle}" />
                     <Grid Margin="0,14,0,0" ColumnSpacing="12">
@@ -445,15 +383,15 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel>
                             <TextBlock x:Name="BatteryHealthLabel" Style="{StaticResource PdcCaptionStyle}" />
-                            <TextBlock x:Name="BatteryHealthValue" Margin="0,2,0,0" Text="—" FontSize="20" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                            <TextBlock x:Name="BatteryHealthValue" Margin="0,2,0,0" Text="—"  TextWrapping="Wrap" Style="{StaticResource PdcValueSmallStyle}" />
                         </StackPanel>
                         <StackPanel Grid.Column="1">
                             <TextBlock x:Name="BatteryCapacityLabel" Style="{StaticResource PdcCaptionStyle}" />
-                            <TextBlock x:Name="BatteryCapacityValue" Margin="0,2,0,0" Text="—" FontSize="20" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                            <TextBlock x:Name="BatteryCapacityValue" Margin="0,2,0,0" Text="—"  TextWrapping="Wrap" Style="{StaticResource PdcValueSmallStyle}" />
                         </StackPanel>
                         <StackPanel Grid.Column="2">
                             <TextBlock x:Name="BatteryCyclesLabel" Style="{StaticResource PdcCaptionStyle}" />
-                            <TextBlock x:Name="BatteryCyclesValue" Margin="0,2,0,0" Text="—" FontSize="20" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                            <TextBlock x:Name="BatteryCyclesValue" Margin="0,2,0,0" Text="—"  TextWrapping="Wrap" Style="{StaticResource PdcValueSmallStyle}" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>
@@ -467,9 +405,9 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource PdcIconTileStyle}"><FontIcon FontFamily="{StaticResource PdcIconFontFamily}" FontSize="15" Glyph="&#xE767;" Foreground="{StaticResource PdcAccentBrush}" /></Border>
+                        <Border Style="{StaticResource PdcIconTileStyle}"><FontIcon Glyph="&#xE767;" Style="{StaticResource PdcIconStyle}" /></Border>
                         <TextBlock x:Uid="VolumeLabel" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource PdcTitleStyle}" />
-                        <TextBlock x:Name="VolumeValue" Grid.Column="2" Text="—" FontSize="22" Style="{StaticResource PdcValueStyle}" />
+                        <TextBlock x:Name="VolumeValue" Grid.Column="2" Text="—" Style="{StaticResource PdcValueMediumStyle}" />
                     </Grid>
                     <Slider
                         x:Name="VolumeSlider"
@@ -482,7 +420,6 @@
                         IsEnabled="False"
                         IsTabStop="True"
                         Style="{StaticResource PdcSliderStyle}"
-                        Foreground="{StaticResource PdcAccentBrush}"
                         ValueChanged="VolumeSlider_ValueChanged" />
                     <TextBlock x:Name="VolumeStatus" x:Uid="VolumeStatus" Style="{StaticResource PdcCaptionStyle}" />
                     <Grid Margin="0,16,0,0">
@@ -518,7 +455,7 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource PdcIconTileStyle}"><FontIcon FontFamily="{StaticResource PdcIconFontFamily}" FontSize="15" Glyph="&#xE950;" Foreground="{StaticResource PdcAccentBrush}" /></Border>
+                        <Border Style="{StaticResource PdcIconTileStyle}"><FontIcon Glyph="&#xE950;" Style="{StaticResource PdcIconStyle}" /></Border>
                         <TextBlock x:Name="CpuControlTitle" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource PdcTitleStyle}" />
                     </Grid>
                     <Grid Margin="0,14,0,0">
@@ -542,7 +479,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock x:Uid="CpuMaximumStateLabel" VerticalAlignment="Center" Style="{StaticResource PdcBodyStyle}" />
-                        <TextBlock x:Name="CpuMaximumStateValue" Grid.Column="1" Text="—" FontSize="20" Style="{StaticResource PdcValueStyle}" />
+                        <TextBlock x:Name="CpuMaximumStateValue" Grid.Column="1" Text="—"  Style="{StaticResource PdcValueSmallStyle}" />
                     </Grid>
                     <Slider
                         x:Name="CpuMaximumStateSlider"
@@ -555,10 +492,9 @@
                         IsEnabled="False"
                         IsTabStop="True"
                         Style="{StaticResource PdcSliderStyle}"
-                        Foreground="{StaticResource PdcAccentBrush}"
                         ValueChanged="CpuMaximumStateSlider_ValueChanged" />
                     <TextBlock x:Name="CpuControlStatus" AutomationProperties.LiveSetting="Polite" Style="{StaticResource PdcCaptionStyle}" />
-                    <TextBlock x:Name="CpuControlNote" Margin="0,10,0,0" FontSize="11" Style="{StaticResource PdcMutedStyle}" />
+                    <TextBlock x:Name="CpuControlNote" Margin="0,10,0,0" Style="{StaticResource PdcFineStyle}" />
                 </StackPanel>
             </Border>
 
@@ -570,15 +506,14 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource PdcIconTileStyle}"><FontIcon FontFamily="{StaticResource PdcIconFontFamily}" FontSize="15" Glyph="&#xE706;" Foreground="{StaticResource PdcBrightnessBrush}" /></Border>
+                        <Border Style="{StaticResource PdcIconTileStyle}"><FontIcon Glyph="&#xE706;" Foreground="{StaticResource PdcBrightnessBrush}" Style="{StaticResource PdcIconStyle}" /></Border>
                         <TextBlock x:Uid="BrightnessLabel" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource PdcTitleStyle}" />
                         <TextBlock
                             x:Name="BrightnessValue"
                             Grid.Column="2"
                             Text="—"
-                            FontSize="22"
                             AutomationProperties.LiveSetting="Polite"
-                            Style="{StaticResource PdcValueStyle}" />
+                            Style="{StaticResource PdcValueMediumStyle}" />
                     </Grid>
                     <Slider
                         x:Name="BrightnessSlider"
@@ -590,8 +525,7 @@
                         SmallChange="5"
                         IsEnabled="False"
                         IsTabStop="True"
-                        Style="{StaticResource PdcSliderStyle}"
-                        Foreground="{StaticResource PdcBrightnessBrush}"
+                        Style="{StaticResource PdcBrightnessSliderStyle}"
                         ValueChanged="BrightnessSlider_ValueChanged" />
                     <TextBlock x:Name="BrightnessStatus" x:Uid="BrightnessStatus" Style="{StaticResource PdcCaptionStyle}" />
                 </StackPanel>
@@ -604,7 +538,7 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource PdcIconTileStyle}"><FontIcon FontFamily="{StaticResource PdcIconFontFamily}" FontSize="15" Glyph="&#xE9CA;" Foreground="{StaticResource PdcAccentBrush}" /></Border>
+                        <Border Style="{StaticResource PdcIconTileStyle}"><FontIcon Glyph="&#xE9CA;" Style="{StaticResource PdcIconStyle}" /></Border>
                         <TextBlock x:Name="FanTitle" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource PdcTitleStyle}" />
                     </Grid>
                     <Grid Margin="0,14,0,0" ColumnSpacing="12">
@@ -613,12 +547,12 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <StackPanel>
-                            <TextBlock x:Name="FanOneLabel" Style="{StaticResource PdcCaptionStyle}" FontSize="13" />
-                            <TextBlock x:Name="FanOneValue" Margin="0,4,0,0" Text="—" FontSize="32" FontWeight="Light" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                            <TextBlock x:Name="FanOneLabel" Style="{StaticResource PdcLabelStyle}" />
+                            <TextBlock x:Name="FanOneValue" Margin="0,4,0,0" Text="—"  TextWrapping="Wrap" Style="{StaticResource PdcValueLargeStyle}" />
                         </StackPanel>
                         <StackPanel x:Name="FanTwoPanel" Grid.Column="1">
-                            <TextBlock x:Name="FanTwoLabel" Style="{StaticResource PdcCaptionStyle}" FontSize="13" />
-                            <TextBlock x:Name="FanTwoValue" Margin="0,4,0,0" Text="—" FontSize="32" FontWeight="Light" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                            <TextBlock x:Name="FanTwoLabel" Style="{StaticResource PdcLabelStyle}" />
+                            <TextBlock x:Name="FanTwoValue" Margin="0,4,0,0" Text="—"  TextWrapping="Wrap" Style="{StaticResource PdcValueLargeStyle}" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>
@@ -632,26 +566,26 @@
                 <Border x:Name="CpuCard" Style="{StaticResource PdcTileStyle}">
                     <StackPanel>
                         <Grid>
-                            <TextBlock Text="CPU" VerticalAlignment="Center" Style="{StaticResource PdcCaptionStyle}" FontSize="13" />
+                            <TextBlock Text="CPU" VerticalAlignment="Center" Style="{StaticResource PdcLabelStyle}" />
                             <Grid Width="30" Height="30" HorizontalAlignment="Right">
-                                <Ellipse Stroke="{StaticResource PdcTrackBrush}" StrokeThickness="4" />
+                                <Ellipse Style="{StaticResource PdcRingTrackStyle}" StrokeThickness="4" />
                                 <Path x:Name="CpuLoadRing" StrokeThickness="4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                             </Grid>
                         </Grid>
-                        <TextBlock x:Name="CpuTemperatureValue" Margin="0,8,0,0" Text="—" FontSize="40" FontWeight="Light" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                        <TextBlock x:Name="CpuTemperatureValue" Margin="0,8,0,0" Text="—"  TextWrapping="Wrap" Style="{StaticResource PdcValueHugeStyle}" />
                         <TextBlock x:Name="CpuLoadValue" x:Uid="CpuLoadValue" Margin="0,6,0,0" Style="{StaticResource PdcCaptionStyle}" />
                     </StackPanel>
                 </Border>
                 <Border x:Name="GpuCard" Grid.Column="1" Style="{StaticResource PdcTileStyle}">
                     <StackPanel>
                         <Grid>
-                            <TextBlock Text="GPU" VerticalAlignment="Center" Style="{StaticResource PdcCaptionStyle}" FontSize="13" />
+                            <TextBlock Text="GPU" VerticalAlignment="Center" Style="{StaticResource PdcLabelStyle}" />
                             <Grid Width="30" Height="30" HorizontalAlignment="Right">
-                                <Ellipse Stroke="{StaticResource PdcTrackBrush}" StrokeThickness="4" />
+                                <Ellipse Style="{StaticResource PdcRingTrackStyle}" StrokeThickness="4" />
                                 <Path x:Name="GpuLoadRing" StrokeThickness="4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                             </Grid>
                         </Grid>
-                        <TextBlock x:Name="GpuTemperatureValue" Margin="0,8,0,0" Text="—" FontSize="40" FontWeight="Light" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                        <TextBlock x:Name="GpuTemperatureValue" Margin="0,8,0,0" Text="—"  TextWrapping="Wrap" Style="{StaticResource PdcValueHugeStyle}" />
                         <TextBlock x:Name="GpuLoadValue" x:Uid="GpuLoadValue" Margin="0,6,0,0" Style="{StaticResource PdcCaptionStyle}" />
                     </StackPanel>
                 </Border>
@@ -702,7 +636,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock x:Name="ReportAreaLabel" VerticalAlignment="Center" Style="{StaticResource PdcBodyStyle}" />
-                        <TextBlock x:Name="ReportAreaValue" Grid.Column="1" VerticalAlignment="Center" FontWeight="SemiBold" Style="{StaticResource PdcBodyStyle}" />
+                        <TextBlock x:Name="ReportAreaValue" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource PdcBodyStrongStyle}" />
                     </Grid>
                     <TextBlock x:Name="ReportTextLabel" Margin="0,14,0,8" Style="{StaticResource PdcBodyStyle}" />
                     <TextBox
@@ -713,8 +647,8 @@
                         MaxLength="4000"
                         TextChanged="ReportText_TextChanged" />
                     <StackPanel Margin="0,12,0,0" Spacing="4">
-                        <TextBlock x:Name="ReportPrivacyPublic" FontSize="12" TextWrapping="WrapWholeWords" Style="{StaticResource PdcMutedStyle}" />
-                        <TextBlock x:Name="ReportPrivacyPrivate" FontSize="12" TextWrapping="WrapWholeWords" Style="{StaticResource PdcMutedStyle}" />
+                        <TextBlock x:Name="ReportPrivacyPublic" TextWrapping="WrapWholeWords" Style="{StaticResource PdcMutedStyle}" />
+                        <TextBlock x:Name="ReportPrivacyPrivate" TextWrapping="WrapWholeWords" Style="{StaticResource PdcMutedStyle}" />
                     </StackPanel>
                     <Grid Margin="0,14,0,0" ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
@@ -723,7 +657,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Button x:Name="ReportSendButton" IsEnabled="False" Style="{StaticResource PdcPrimaryButtonStyle}" Click="ReportSend_Click" />
-                        <Button x:Name="ReportCopyButton" Grid.Column="1" Padding="14,9" Visibility="Collapsed" Style="{StaticResource PdcChipButtonStyle}" Click="ReportCopy_Click" />
+                        <Button x:Name="ReportCopyButton" Grid.Column="1" Visibility="Collapsed" Style="{StaticResource PdcActionButtonStyle}" Click="ReportCopy_Click" />
                     </Grid>
                     <TextBlock
                         x:Name="ReportResultText"
@@ -734,18 +668,12 @@
                 </StackPanel>
             </Border>
 
-            <Border x:Name="DiagnosticsCard" Tag="settings.diagnostics" Style="{StaticResource PdcCardStyle}" Padding="6">
+            <Border x:Name="DiagnosticsCard" Tag="settings.diagnostics" Style="{StaticResource PdcFlushCardStyle}">
                 <StackPanel>
                     <Button
                         x:Name="DiagnosticsToggle"
                         x:Uid="DiagnosticsToggle"
-                        Padding="12,10"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Style="{StaticResource PdcSoftButtonStyle}"
-                        CornerRadius="{StaticResource PdcRadiusInset}"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource PdcTextPrimaryBrush}"
+                        Style="{StaticResource PdcDisclosureButtonStyle}"
                         Click="DiagnosticsToggle_Click" />
                     <StackPanel
                         x:Name="DiagnosticsList"

@@ -826,6 +826,62 @@ class DesignSystemTests(unittest.TestCase):
             used |= set(re.findall(r'Components\.(?:Brush|Style)\("(Pdc\w+)"\)', code))
         self.assertEqual(set(), used - defined)
 
+    # Design-system rules (kb design-system/windows.md): every visual piece is a catalog style; screens assign it and
+    # only add layout glue. Colours that carry meaning (a reading, a state) are the one thing a screen may set.
+    VISUAL = {"Background", "BorderBrush", "BorderThickness", "CornerRadius", "Padding", "FontSize", "FontWeight",
+              "Foreground", "FontFamily", "Fill", "Stroke", "Opacity", "CharacterSpacing"}
+    MEANING_BRUSHES = {"PdcOkBrush", "PdcWarnBrush", "PdcDangerBrush", "PdcBrightnessBrush", "PdcBoostBrush"}
+    DRAWINGS = {"Path", "Ellipse", "Rectangle"}
+    LAYOUT_ROOTS = {("Page", "Background"), ("Grid", "Padding"), ("StackPanel", "Padding")}
+
+    def _widget_elements(self):
+        for element in ElementTree.parse(WIDGET).getroot().iter():
+            tag = element.tag.split("}")[1]
+            attrs = {key: value for key, value in element.attrib.items() if "}" not in key}
+            yield tag, attrs, {key: value for key, value in attrs.items() if key in self.VISUAL}
+
+    def test_styled_elements_are_not_restyled_locally(self):
+        for tag, attrs, visual in self._widget_elements():
+            if "Style" not in attrs:
+                continue
+            for key, value in visual.items():
+                meaning = key == "Foreground" and value.strip("{}").split()[-1] in self.MEANING_BRUSHES
+                self.assertTrue(meaning, f"{tag} with {attrs['Style']} sets {key}={value}: add a catalog style")
+
+    def test_unstyled_elements_only_draw_with_tokens(self):
+        for tag, attrs, visual in self._widget_elements():
+            if "Style" in attrs or not visual:
+                continue
+            for key, value in visual.items():
+                allowed = tag in self.DRAWINGS or (tag, key) in self.LAYOUT_ROOTS
+                self.assertTrue(allowed, f"{tag} paints {key} without a catalog style")
+                self.assertTrue(value.startswith("{StaticResource ") or re.fullmatch(r"[\d.,]+", value), f"{tag} {key}={value}")
+
+    def test_no_visual_declaration_is_replicated(self):
+        seen = {}
+        for tag, attrs, visual in self._widget_elements():
+            if len(visual) >= 2:
+                combo = (tag, tuple(sorted(visual.items())))
+                self.assertNotIn(combo, seen, f"{combo} repeats: make it a catalog style")
+                seen[combo] = True
+
+    def test_code_built_ui_uses_the_catalog(self):
+        # Code builds with Components.Style(...); sizes, fonts, radii and paddings never appear as literals.
+        for path in PROJECT_DIR.glob("*.cs"):
+            if path.name == "Components.cs":
+                continue
+            code = path.read_text(encoding="utf-8")
+            for pattern in (r"\bFontSize\s*=", r"\bFontFamily\s*=", r"\bCornerRadius\s*=", r"\bPadding\s*=",
+                            r"new CornerRadius\(", r"Colors\.(?!Transparent)\w+", r"Color\.FromArgb\(\s*\d"):
+                self.assertIsNone(re.search(pattern, code), f"{path.name}: {pattern}")
+        # Data-driven colours (readings, zones, section colour) are the only brushes code assigns; they may not grow.
+        assignments = sum(
+            len(re.findall(r"\b(?:Background|Foreground|BorderBrush)\s*=", path.read_text(encoding="utf-8")))
+            for path in PROJECT_DIR.glob("*.cs")
+            if path.name != "Components.cs"
+        )
+        self.assertLessEqual(assignments, 16)
+
     def test_every_skin_defines_the_same_keys(self):
         key = re.compile(r'x:Key="([^"]+)"')
         skins = {

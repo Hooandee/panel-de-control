@@ -18,6 +18,7 @@
     <SolidColorBrush x:Key="PdcLayerStrongBrush" Color="#FF1C1C1A" />
     <SolidColorBrush x:Key="PdcTrackBrush" Color="#FF2C2C2A" />
     <SolidColorBrush x:Key="PdcRimHiBrush" Color="{StaticResource PdcSkinLimeColor}" />
+    <SolidColorBrush x:Key="PdcDangerSoftBrush" Color="#40E05A5A" />
     <SolidColorBrush x:Key="PdcWashBrush" Color="{StaticResource PdcSkinInkColor}" />
     <SolidColorBrush x:Key="PdcChoiceTextBrush" Color="#FF0C0C0C" />
     <SolidColorBrush x:Key="PdcTabSelectedTextBrush" Color="{StaticResource PdcSkinInkColor}" />

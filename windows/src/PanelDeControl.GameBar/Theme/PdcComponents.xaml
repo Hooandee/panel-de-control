@@ -33,6 +33,9 @@
         <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusInset}" />
         <Setter Property="Padding" Value="4" />
     </Style>
+    <Style x:Key="PdcInsetPanelStyle" TargetType="Border" BasedOn="{StaticResource PdcInsetStyle}">
+        <Setter Property="Padding" Value="14,12,14,14" />
+    </Style>
     <Style x:Key="PdcBarStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource PdcCardBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource PdcCardRimBrush}" />
@@ -56,6 +59,61 @@
         <Setter Property="BorderBrush" Value="{ThemeResource PdcCardRimBrush}" />
         <Setter Property="BorderThickness" Value="{ThemeResource PdcRimThickness}" />
         <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="PdcFlushCardStyle" TargetType="Border" BasedOn="{StaticResource PdcCardStyle}">
+        <Setter Property="Padding" Value="6" />
+    </Style>
+    <Style x:Key="PdcKeyHintStyle" TargetType="Border" BasedOn="{StaticResource PdcPillStyle}">
+        <Setter Property="Padding" Value="6,1,6,2" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+    </Style>
+    <Style x:Key="PdcBadgeStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource PdcAccentBrush}" />
+        <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusRound}" />
+        <Setter Property="Padding" Value="8,1,8,2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="PdcTabIndicatorStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource PdcTabIndicatorBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource PdcTabIndicatorRimBrush}" />
+        <Setter Property="BorderThickness" Value="{ThemeResource PdcRimThickness}" />
+        <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusInset}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style x:Key="PdcSidebarStyle" TargetType="Grid">
+        <Setter Property="Background" Value="{ThemeResource PdcCardBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource PdcCardRimBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,1,0" />
+        <Setter Property="Padding" Value="18,22,18,18" />
+    </Style>
+
+    <!-- Frame around a picture (theme covers): clips to the inset radius over a quiet layer while it loads. -->
+    <Style x:Key="PdcMediaFrameStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource PdcLayerBrush}" />
+        <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusInset}" />
+    </Style>
+
+    <!-- Icons -->
+    <Style x:Key="PdcIconStyle" TargetType="FontIcon">
+        <Setter Property="FontFamily" Value="{StaticResource PdcIconFontFamily}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Foreground" Value="{ThemeResource PdcAccentBrush}" />
+    </Style>
+    <Style x:Key="PdcIconSmallStyle" TargetType="FontIcon" BasedOn="{StaticResource PdcIconStyle}">
+        <Setter Property="FontSize" Value="11" />
+    </Style>
+    <!-- Inside a button: no Foreground, so the glyph follows the button's selected and muted states. -->
+    <Style x:Key="PdcIconNavStyle" TargetType="FontIcon">
+        <Setter Property="FontFamily" Value="{StaticResource PdcIconFontFamily}" />
+        <Setter Property="FontSize" Value="16" />
+    </Style>
+
+    <!-- Drawn gauges: the empty part of every ring and arc. -->
+    <Style x:Key="PdcRingTrackStyle" TargetType="Ellipse">
+        <Setter Property="Stroke" Value="{ThemeResource PdcTrackBrush}" />
     </Style>
 
     <!-- Text -->
@@ -91,6 +149,86 @@
     <Style x:Key="PdcInlineValueStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcValueStyle}">
         <Setter Property="FontSize" Value="17" />
         <Setter Property="FontWeight" Value="Normal" />
+    </Style>
+    <!-- Type scale. A size that is not here is a new step on this scale, never a local FontSize. -->
+    <Style x:Key="PdcHeadlineStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{ThemeResource PdcDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource PdcTextPrimaryBrush}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style x:Key="PdcPageTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcHeadlineStyle}">
+        <Setter Property="FontSize" Value="20" />
+    </Style>
+    <Style x:Key="PdcLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcCaptionStyle}">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="PdcFineStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcMutedStyle}">
+        <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style x:Key="PdcMicroStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcCaptionStyle}">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style x:Key="PdcBadgeTextStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcMicroStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource PdcOnAccentBrush}" />
+    </Style>
+    <Style x:Key="PdcPillTextStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcCaptionStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource PdcTextPrimaryBrush}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style x:Key="PdcWarnTextStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcMutedStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource PdcWarnBrush}" />
+    </Style>
+    <Style x:Key="PdcBodyStrongStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcBodyStyle}">
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style x:Key="PdcZoneStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcLabelStyle}">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="PdcUnitStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{ThemeResource PdcDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="Foreground" Value="{ThemeResource PdcTextMutedBrush}" />
+        <Setter Property="Margin" Value="4,0,0,12" />
+        <Setter Property="VerticalAlignment" Value="Bottom" />
+    </Style>
+    <Style x:Key="PdcDisplayTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcHeadlineStyle}">
+        <Setter Property="FontSize" Value="30" />
+    </Style>
+    <Style x:Key="PdcLeadStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcMutedStyle}">
+        <Setter Property="FontSize" Value="14" />
+    </Style>
+    <!-- Inside a tab or nav button: no Foreground, so the label follows the button's selected and muted states. -->
+    <Style x:Key="PdcTabLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{ThemeResource PdcFontFamily}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- A reading that is not a number (no sensor, not supported) shown where a value goes. -->
+    <Style x:Key="PdcValueFallbackStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcMutedStyle}">
+        <Setter Property="FontSize" Value="15" />
+    </Style>
+    <Style x:Key="PdcValueSmallStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcValueStyle}">
+        <Setter Property="FontSize" Value="20" />
+    </Style>
+    <Style x:Key="PdcValueMediumStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcValueStyle}">
+        <Setter Property="FontSize" Value="22" />
+    </Style>
+    <Style x:Key="PdcValueLargeStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcValueStyle}">
+        <Setter Property="FontSize" Value="32" />
+        <Setter Property="FontWeight" Value="Light" />
+    </Style>
+    <Style x:Key="PdcValueHugeStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcValueStyle}">
+        <Setter Property="FontSize" Value="40" />
+        <Setter Property="FontWeight" Value="Light" />
+    </Style>
+    <Style x:Key="PdcHeroValueStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcValueStyle}">
+        <Setter Property="FontSize" Value="{ThemeResource PdcHeroValueSize}" />
+        <Setter Property="FontWeight" Value="Light" />
     </Style>
 
     <!-- Buttons: hover lifts a wash, press shrinks fast, release springs back. -->
@@ -176,7 +314,21 @@
         <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusInset}" />
         <Setter Property="Foreground" Value="{ThemeResource PdcTextMutedBrush}" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
-        <Setter Property="Padding" Value="4,9" />
+        <Setter Property="Padding" Value="11,8" />
+    </Style>
+    <!-- Side menu entry of the desktop app. -->
+    <Style x:Key="PdcNavButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcTabButtonStyle}">
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Padding" Value="14,11" />
+    </Style>
+    <!-- Accent colour dot: always a circle, the selected one ringed. -->
+    <Style x:Key="PdcSwatchButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
+        <Setter Property="Width" Value="36" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="BorderBrush" Value="{ThemeResource PdcTextPrimaryBrush}" />
     </Style>
     <Style x:Key="PdcSegmentButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
         <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusChip}" />
@@ -200,7 +352,33 @@
         <Setter Property="BorderBrush" Value="{ThemeResource PdcRimHiBrush}" />
         <Setter Property="Foreground" Value="{ThemeResource PdcOnAccentBrush}" />
         <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="Padding" Value="16,10" />
+    </Style>
+    <!-- A chip that hugs its label: secondary actions next to a primary one. -->
+    <Style x:Key="PdcActionButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcChipButtonStyle}">
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Padding" Value="14,9" />
+    </Style>
+    <Style x:Key="PdcDangerButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcActionButtonStyle}">
+        <Setter Property="Background" Value="{ThemeResource PdcDangerSoftBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource PdcDangerBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <!-- Full-width row that opens or closes a section below it. -->
+    <Style x:Key="PdcDisclosureButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
+        <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusInset}" />
+        <Setter Property="Foreground" Value="{ThemeResource PdcTextPrimaryBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Padding" Value="12,10" />
+    </Style>
+    <!-- Text-only row action (theme options, remove): no surface, label weight. -->
+    <Style x:Key="PdcLinkButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource PdcTextMutedBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Padding" Value="0,8,0,2" />
     </Style>
 
     <!-- Slider: track, fill (glow in skins that have one, LED gaps in skins that cut them) and a knob that grows while held. -->
@@ -210,6 +388,7 @@
         <Setter Property="FocusVisualSecondaryBrush" Value="{ThemeResource PdcShellBrush}" />
         <Setter Property="FocusVisualPrimaryThickness" Value="{StaticResource PdcFocusThickness}" />
         <Setter Property="FocusVisualMargin" Value="-6,-2" />
+        <Setter Property="Foreground" Value="{ThemeResource PdcAccentBrush}" />
         <Setter Property="IsTabStop" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
@@ -278,6 +457,10 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <Style x:Key="PdcBrightnessSliderStyle" TargetType="Slider" BasedOn="{StaticResource PdcSliderStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource PdcBrightnessBrush}" />
     </Style>
 
     <!-- Toggle: a track that fills with the accent and a knob that glides across with a soft overshoot. -->
