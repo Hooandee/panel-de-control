@@ -753,7 +753,7 @@ class GameBarLocalizationTests(unittest.TestCase):
             )
 
     def test_widget_has_no_hard_coded_visible_text(self):
-        allowed = {"—", "↻", "CPU", "GPU", "W", "%", "LB", "RB"}
+        allowed = {"—", "↻", "CPU", "GPU", "W", "%"}
         visible = (
             "Text",
             "Content",

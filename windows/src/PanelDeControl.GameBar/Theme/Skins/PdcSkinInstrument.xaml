@@ -59,6 +59,7 @@
     <Thickness x:Key="PdcCardBorderThickness">1</Thickness>
     <Thickness x:Key="PdcCardPadding">16,14</Thickness>
     <Thickness x:Key="PdcCardMargin">0,0,0,10</Thickness>
+    <Thickness x:Key="PdcBlockFocusMargin">-2,-2,-2,8</Thickness>
     <CornerRadius x:Key="PdcRadiusSurface">2</CornerRadius>
     <CornerRadius x:Key="PdcRadiusInset">2</CornerRadius>
     <CornerRadius x:Key="PdcRadiusChip">1</CornerRadius>

@@ -62,17 +62,20 @@
     <Style x:Key="PdcFlushCardStyle" TargetType="Border" BasedOn="{StaticResource PdcCardStyle}">
         <Setter Property="Padding" Value="6" />
     </Style>
-    <Style x:Key="PdcKeyHintStyle" TargetType="Border" BasedOn="{StaticResource PdcPillStyle}">
-        <Setter Property="Padding" Value="6,1,6,2" />
-        <Setter Property="MinHeight" Value="0" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+    <Style x:Key="PdcBadgePillStyle" TargetType="Border" BasedOn="{StaticResource PdcPillStyle}">
+        <Setter Property="BorderBrush" Value="{ThemeResource PdcAccentRimBrush}" />
     </Style>
-    <Style x:Key="PdcBadgeStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource PdcAccentBrush}" />
-        <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusRound}" />
-        <Setter Property="Padding" Value="8,1,8,2" />
-        <Setter Property="VerticalAlignment" Value="Center" />
+    <!-- Read-only card the controller can land on, so the D-pad scrolls sections with nothing to press. -->
+    <Style x:Key="PdcFocusableBlockStyle" TargetType="ContentControl">
+        <Setter Property="IsTabStop" Value="True" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualPrimaryBrush" Value="{ThemeResource PdcAccentBrush}" />
+        <Setter Property="FocusVisualSecondaryBrush" Value="{ThemeResource PdcShellBrush}" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="{StaticResource PdcFocusThickness}" />
+        <Setter Property="FocusVisualMargin" Value="{ThemeResource PdcBlockFocusMargin}" />
+        <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusSurface}" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
     </Style>
     <Style x:Key="PdcTabIndicatorStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource PdcTabIndicatorBrush}" />
@@ -163,8 +166,9 @@
         <Setter Property="FontSize" Value="10" />
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
-    <Style x:Key="PdcBadgeTextStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcMicroStyle}">
-        <Setter Property="Foreground" Value="{ThemeResource PdcOnAccentBrush}" />
+    <Style x:Key="PdcBadgePillTextStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcCaptionStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource PdcAccentBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <!-- A horizontal row gives its children unlimited width, so the cap is what lets two pills share it. -->
     <Style x:Key="PdcPillTextStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcCaptionStyle}">
@@ -301,6 +305,14 @@
         <Setter Property="BorderBrush" Value="{ThemeResource PdcCardRimBrush}" />
         <Setter Property="BorderThickness" Value="{ThemeResource PdcRimThickness}" />
         <Setter Property="Foreground" Value="{ThemeResource PdcTextPrimaryBrush}" />
+    </Style>
+    <!-- Secondary header action: just the glyph, no surface, so it never competes with the device name. -->
+    <Style x:Key="PdcQuietIconButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcIconButtonStyle}">
+        <Setter Property="Width" Value="36" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Background" Value="{ThemeResource PdcTransparentBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{ThemeResource PdcTextMutedBrush}" />
     </Style>
     <Style x:Key="PdcTabButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
         <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusInset}" />

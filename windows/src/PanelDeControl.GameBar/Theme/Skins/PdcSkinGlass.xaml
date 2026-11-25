@@ -8,6 +8,9 @@
     <Color x:Key="PdcSkinTextColor">#EBFFFFFF</Color>
     <Color x:Key="PdcSkinClearColor">#00FFFFFF</Color>
 
+    <!-- Game Bar draws widgets translucent: text needs more than the Linux values to stay readable. -->
+    <SolidColorBrush x:Key="PdcTextPrimaryBrush" Color="#FAFFFFFF" />
+    <SolidColorBrush x:Key="PdcTextMutedBrush" Color="#B8FFFFFF" />
     <SolidColorBrush x:Key="PdcShellBrush" Color="#FF06070A" />
     <SolidColorBrush x:Key="PdcKnobBrush" Color="#FFFFFFFF" />
     <SolidColorBrush x:Key="PdcTransparentBrush" Color="{StaticResource PdcSkinClearColor}" />
@@ -31,11 +34,10 @@
     <SolidColorBrush x:Key="PdcTabIndicatorRimBrush" Color="#FF4EA1FF" Opacity="0.7" />
 
     <!-- The cut-glass look: a reflection band over the first pixels of every surface and a lit upper lip. -->
-    <LinearGradientBrush x:Key="PdcCardBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,140">
-        <GradientStop Offset="0" Color="#1EFFFFFF" />
-        <GradientStop Offset="0.38" Color="#10FFFFFF" />
-        <GradientStop Offset="0.39" Color="#08FFFFFF" />
-        <GradientStop Offset="1" Color="#05FFFFFF" />
+    <!-- Reflection fades out with no edge: a hard step reads as a card header that does not match the title row. -->
+    <LinearGradientBrush x:Key="PdcCardBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,160">
+        <GradientStop Offset="0" Color="#1CFFFFFF" />
+        <GradientStop Offset="1" Color="#07FFFFFF" />
     </LinearGradientBrush>
     <LinearGradientBrush x:Key="PdcCardRimBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,48">
         <GradientStop Offset="0" Color="#80FFFFFF" />
@@ -44,9 +46,7 @@
     </LinearGradientBrush>
     <LinearGradientBrush x:Key="PdcChipBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,44">
         <GradientStop Offset="0" Color="#1AFFFFFF" />
-        <GradientStop Offset="0.45" Color="#0EFFFFFF" />
-        <GradientStop Offset="0.46" Color="#07FFFFFF" />
-        <GradientStop Offset="1" Color="#05FFFFFF" />
+        <GradientStop Offset="1" Color="#07FFFFFF" />
     </LinearGradientBrush>
     <LinearGradientBrush x:Key="PdcShellFadeBrush" StartPoint="0.5,0" EndPoint="0.5,1">
         <GradientStop Offset="0" Color="#08FFFFFF" />
@@ -57,6 +57,7 @@
     <Thickness x:Key="PdcCardBorderThickness">1</Thickness>
     <Thickness x:Key="PdcCardPadding">18,16</Thickness>
     <Thickness x:Key="PdcCardMargin">0,0,0,12</Thickness>
+    <Thickness x:Key="PdcBlockFocusMargin">-2,-2,-2,10</Thickness>
     <CornerRadius x:Key="PdcRadiusSurface">22</CornerRadius>
     <CornerRadius x:Key="PdcRadiusInset">14</CornerRadius>
     <CornerRadius x:Key="PdcRadiusChip">12</CornerRadius>
