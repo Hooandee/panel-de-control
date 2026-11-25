@@ -580,6 +580,9 @@
   <data name="UpscalersApis" xml:space="preserve"><value>Graphics APIs</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>DLL mode</value></data>
+  <data name="UpscalersDllNoOptions" xml:space="preserve"><value>In DLL mode, change quality in the game.</value></data>
+  <data name="UpscalersDllCheck" xml:space="preserve"><value>Check the version in the game settings</value></data>
+  <data name="UpscalersInstalledDll" xml:space="preserve"><value>{0} installed. Check the version in the game settings.</value></data>
   <data name="UpscalersModel_full" xml:space="preserve"><value>Full</value></data>
   <data name="UpscalersActivate" xml:space="preserve"><value>Turn on {0}</value></data>
   <data name="UpscalersDeactivate" xml:space="preserve"><value>Turn off {0}</value></data>

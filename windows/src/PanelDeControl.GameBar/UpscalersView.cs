@@ -670,9 +670,11 @@ public sealed class UpscalersView : UserControl
             else
             {
                 title = !string.IsNullOrEmpty(installed.Label)
-                    ? string.Format(Localized("UpscalersStatusInstalled"), installed.Label)
+                    ? string.Format(Localized("UpscalersStatusInstalled"), DllLabel(installed.Build, installed.Label!))
                     : Localized(installed.Build.Length == 0 ? "UpscalersStateInstalledUnknown" : "UpscalersStateInstalled");
-                sub = resultText.Text.Length == 0 && installed.Build.Length != 0 ? Localized("UpscalersStatusPending") : string.Empty;
+                sub = resultText.Text.Length == 0 && installed.Build.Length != 0
+                    ? Localized(IsDll(installed.Build) ? "UpscalersDllCheck" : "UpscalersStatusPending")
+                    : string.Empty;
             }
         }
         else if (detail.Foreign is not null || detail.Game.State == UpscalerGameStates.Foreign)
@@ -855,6 +857,10 @@ public sealed class UpscalersView : UserControl
         UpdateActionState();
     }
 
+    private bool IsDll(string build) => detail?.Builds.FirstOrDefault(entry => entry.Id == build)?.Engine == "dll";
+
+    private string DllLabel(string build, string label) => IsDll(build) ? label + " · " + Localized("UpscalersDllMode") : label;
+
     private string SelectedBadge()
     {
         var build = detail?.Builds.FirstOrDefault(entry => entry.Id == selectedBuild);
@@ -873,6 +879,10 @@ public sealed class UpscalersView : UserControl
             chip.IsEnabled = !jobRunning;
         }
 
+        // In the DLL mode the game's own menu sets the quality, as on Linux.
+        var dllChosen = selectedBuild is not null && IsDll(selectedBuild);
+        qualityHost.Visibility = dllChosen ? Visibility.Collapsed : Visibility.Visible;
+        qualityLabel.Text = Localized(dllChosen ? "UpscalersDllNoOptions" : "UpscalersQualityLabel");
         foreach (var chip in qualityRow.Children.OfType<Button>())
         {
             var active = Equals(chip.Tag, selectedQuality);
@@ -1070,7 +1080,9 @@ public sealed class UpscalersView : UserControl
             {
                 good = installed is not null && installed.Status == UpscalerGameStates.Installed;
                 message = good
-                    ? string.Format(Localized("UpscalersInstalledOk"), installed!.Label ?? string.Empty)
+                    ? IsDll(installed!.Build)
+                        ? string.Format(Localized("UpscalersInstalledDll"), DllLabel(installed.Build, installed.Label ?? string.Empty))
+                        : string.Format(Localized("UpscalersInstalledOk"), installed.Label ?? string.Empty)
                     : Localized("UpscalersUnconfirmed");
             }
             else
