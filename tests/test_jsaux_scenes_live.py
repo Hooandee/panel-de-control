@@ -148,3 +148,16 @@ def test_side_cover_without_a_capsule_crops_the_wide_art_and_skips_missing_numbe
 @pytest.mark.parametrize("minutes,text", [(45, "45 MIN"), (125, "2H 05"), (725, "12 H"), (60_000, "1000 H")])
 def test_play_time_reads_naturally(minutes, text):
     assert game.play_time(minutes) == text
+
+
+def test_long_game_names_break_at_syllables_and_fit_the_side_column():
+    from accessories.jsaux_pixel.render import fonts
+    from accessories.jsaux_pixel.scenes import game
+
+    width = 64 - 36 - 3 - 1
+    assert game._wrap("STARDEW VALLEY", width, 3) == ["STAR-", "DEW", "VALLEY"]
+    assert game._wrap("CYBERPUNK 2077", width, 3) == ["CYBER-", "PUNK", "2077"]
+    assert game._wrap("WARFRAME", width, 3) == ["WAR-", "FRAME"]
+    assert game._wrap("RED DEAD REDEMPTION 2", width, 3)[-1] == "REDEM."
+    for name in ("METAPHOR: REFANTAZIO", "ARKNIGHTS: ENDFIELD", "BALDUR'S GATE 3"):
+        assert all(fonts.measure(line, fonts.TINY) <= width for line in game._wrap(name, width, 3))

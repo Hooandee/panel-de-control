@@ -178,20 +178,54 @@ def _wrap(text: str, width: int, max_lines: int) -> list[str]:
         if lines and fonts.measure(f"{lines[-1]} {word}", fonts.TINY) <= width:
             lines[-1] = f"{lines[-1]} {word}"
             continue
-        while fonts.measure(word, fonts.TINY) > width and len(word) > 1:
-            cut = len(word)
-            while cut > 1 and fonts.measure(word[:cut], fonts.TINY) > width:
-                cut -= 1
-            lines.append(word[:cut])
+        # A word wider than the column breaks with a hyphen, at a syllable when one fits.
+        while fonts.measure(word, fonts.TINY) > width and len(word) > 3:
+            fitting = [cut for cut in range(2, len(word) - 1) if fonts.measure(word[:cut] + "-", fonts.TINY) <= width]
+            if not fitting:
+                break
+            syllables = [cut for cut in fitting if cut in _syllable_breaks(word)]
+            cut = max(syllables or fitting)
+            lines.append(word[:cut] + "-")
             word = word[cut:]
         lines.append(word)
     if len(lines) > max_lines:
-        lines = lines[:max_lines]
-        last = lines[-1]
-        while last and fonts.measure(last + ".", fonts.TINY) > width:
+        # The last line takes the rest of the name, rejoined across hyphens and cut to fit.
+        rest = " ".join(lines[max_lines - 1:]).replace("- ", "")
+        last = rest
+        while last and fonts.measure(last.rstrip(" :-") + ".", fonts.TINY) > width:
             last = last[:-1]
-        lines[-1] = last + "."
+        lines = lines[:max_lines - 1] + [last.rstrip(" :-") + "."]
     return lines
+
+
+_VOWELS = set("AEIOUYÁÉÍÓÚÜ")
+# Consonant pairs that start a syllable together, so a break goes before them.
+_ONSETS = {"BL", "BR", "CH", "CL", "CR", "DR", "FL", "FR", "GL", "GR", "KN", "PH", "PL", "PR", "SH", "TH", "TR", "WH"}
+
+
+def _syllable_breaks(word: str) -> set[int]:
+    """Positions inside a word where a hyphen reads naturally: before a single consonant between
+    vowels, and inside a consonant cluster before its last consonant or the pair that opens a syllable."""
+    upper = word.upper()
+    breaks: set[int] = set()
+    i = 0
+    while i < len(upper):
+        if upper[i] in _VOWELS:
+            j = i + 1
+            while j < len(upper) and upper[j].isalpha() and upper[j] not in _VOWELS:
+                j += 1
+            if j < len(upper) and upper[j] in _VOWELS and j > i + 1:
+                cluster = upper[i + 1:j]
+                if len(cluster) == 1:
+                    breaks.add(i + 1)
+                elif cluster[-2:] in _ONSETS:
+                    breaks.add(j - 2)
+                else:
+                    breaks.add(j - 1)
+            i = j
+        else:
+            i += 1
+    return breaks
 
 
 def _trophy(canvas: Canvas, x: int, y: int) -> None:
