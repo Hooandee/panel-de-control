@@ -1,5 +1,6 @@
 using System.Text;
 using PanelDeControl.Core.Data;
+using static PanelDeControl.Core.Upscalers.InstallPaths;
 
 namespace PanelDeControl.Core.Upscalers;
 
@@ -327,17 +328,5 @@ public sealed class AutomaticRecipe
             }
         }
         return true;
-    }
-
-    private static bool IsLink(string path)
-    {
-        try
-        {
-            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return false;
-        }
     }
 }

@@ -1,7 +1,8 @@
-using System.Net;
 using PanelDeControl.Core.FileSystem;
 using PanelDeControl.Core.Upscalers;
 using Xunit;
+using PanelDeControl.TestSupport;
+using static PanelDeControl.TestSupport.TestTree;
 
 namespace PanelDeControl.Core.Tests.Upscalers;
 
@@ -38,7 +39,7 @@ public sealed class RecipeInstallTests : IDisposable
     [Fact]
     public async Task WarframeLoadsAsWinmmAndItsLibrariesSurviveTheLauncher()
     {
-        var before = Snapshot();
+        var before = Snapshot(_game);
         var recipe = Resolve("230410");
 
         var install = await Install(recipe);
@@ -50,14 +51,14 @@ public sealed class RecipeInstallTests : IDisposable
         Assert.True(GameFiles.ReadManifest(Target)!.ReadOnly);
 
         Assert.Empty(OptiScalerInstaller.Uninstall(install));
-        Assert.Equal(before, Snapshot());
+        Assert.Equal(before, Snapshot(_game));
     }
 
     [Fact]
     public async Task RecipeFilesGoInAndREFrameworkStartsWithItsMenuClosed()
     {
         Write(Target, ReframeworkConfig.FileName, "Graphics_Fov=90\nREFrameworkConfig_MenuOpen=true\n");
-        var before = Snapshot();
+        var before = Snapshot(_game);
         var recipe = Resolve("2054970");
 
         var install = await Install(recipe);
@@ -75,7 +76,7 @@ public sealed class RecipeInstallTests : IDisposable
         Assert.Contains("REFrameworkConfig_MenuOpen=true", restored);
         Assert.DoesNotContain("REFrameworkConfig_RememberMenuState", restored);
         Assert.False(File.Exists(Path.Combine(Target, "dinput8.dll")));
-        Assert.NotEqual(before, Snapshot());
+        Assert.NotEqual(before, Snapshot(_game));
     }
 
     [Theory]
@@ -85,7 +86,7 @@ public sealed class RecipeInstallTests : IDisposable
     {
         Unpack(dependency);
         Write(Target, "ReShade.ini", "[Luma]\nSRUserType=0\n[GENERAL]\nValue=mine\n");
-        var before = Snapshot();
+        var before = Snapshot(_game);
         var install = await Install(Resolve(appId), Automatic(appId));
 
         Assert.Equal("dxgi.dll", File.ReadAllText(Path.Combine(Target, "ReShade64.dll")));
@@ -98,7 +99,7 @@ public sealed class RecipeInstallTests : IDisposable
         Assert.Empty(Directory.GetDirectories(Path.Combine(_root, "cache"), ".recipe-*"));
 
         Assert.Empty(OptiScalerInstaller.Uninstall(install));
-        Assert.Equal(before, Snapshot());
+        Assert.Equal(before, Snapshot(_game));
     }
 
     [Fact]
@@ -120,12 +121,12 @@ public sealed class RecipeInstallTests : IDisposable
     {
         Unpack("luma-ff7");
         File.Delete(Path.Combine(Unpacked("luma-ff7"), "Luma-Final Fantasy VII Remake.addon"));
-        var before = Snapshot();
+        var before = Snapshot(_game);
 
         var error = await Assert.ThrowsAsync<UpscalerException>(() => Install(Resolve("1462040"), Automatic("1462040")));
 
         Assert.Equal("recipe_files_invalid", error.Code);
-        Assert.Equal(before, Snapshot());
+        Assert.Equal(before, Snapshot(_game));
     }
 
     [Fact]
@@ -304,23 +305,5 @@ public sealed class RecipeInstallTests : IDisposable
         return Directory.EnumerateFiles(root, "*.json", SearchOption.AllDirectories)
             .Where(path => !Path.GetFileName(path).Equals("schema.json", StringComparison.Ordinal))
             .ToDictionary(path => Path.GetRelativePath(root, path).Replace('\\', '/'), File.ReadAllBytes, StringComparer.Ordinal);
-    }
-
-    private static void Write(string root, string relative, string text)
-    {
-        var path = Path.Combine(root, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, text);
-    }
-
-    private string Snapshot() => string.Join("\n", Directory
-        .GetFileSystemEntries(_game, "*", SearchOption.AllDirectories)
-        .OrderBy(path => path, StringComparer.Ordinal)
-        .Select(path => path.Substring(_game.Length) + (File.Exists(path) ? "=" + File.ReadAllText(path) : "/")));
-
-    private sealed class NoNetwork : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
     }
 }

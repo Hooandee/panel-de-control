@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using PanelDeControl.Core.Upscalers;
 using PanelDeControl.Hardware.Upscalers;
+using static PanelDeControl.TestSupport.TestTree;
 using Xunit;
 
 namespace PanelDeControl.Hardware.Tests;

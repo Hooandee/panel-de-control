@@ -1,4 +1,5 @@
 using System.Text;
+using static PanelDeControl.Core.Upscalers.InstallPaths;
 
 namespace PanelDeControl.Core.Upscalers;
 
@@ -402,17 +403,4 @@ public sealed class OptiScalerInstaller
 
     private static IReadOnlyDictionary<string, IReadOnlyList<string>> Inputs(GameAnalysis analysis) =>
         analysis.Inputs.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
-
-    private static void Put(List<KeyValuePair<string, string>> sources, string relative, string path)
-    {
-        var index = sources.FindIndex(pair => GameManifest.PathComparer.Equals(pair.Key, relative));
-        if (index >= 0)
-        {
-            sources[index] = new KeyValuePair<string, string>(relative, path);
-        }
-        else
-        {
-            sources.Add(new KeyValuePair<string, string>(relative, path));
-        }
-    }
 }

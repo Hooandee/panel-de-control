@@ -71,13 +71,13 @@ public sealed class GameManifest
                 manifest.Files.Add(new KeyValuePair<string, string?>(member.Key, (member.Value as DataString)?.Value));
             }
         }
-        manifest.Backups.AddRange(Strings(document.Get("backups")));
-        manifest.Dirs.AddRange(Strings(document.Get("dirs")));
+        manifest.Backups.AddRange(DataValue.StringItems(document.Get("backups")));
+        manifest.Dirs.AddRange(DataValue.StringItems(document.Get("dirs")));
         if (document.Get("configuration") is { } configuration)
         {
             manifest.Configuration = configuration;
         }
-        manifest.Owned.AddRange(Strings(document.Get("owned")));
+        manifest.Owned.AddRange(DataValue.StringItems(document.Get("owned")));
         manifest.Incomplete = document.Get("incomplete") is DataBool { Value: true };
         manifest.Engine = (document.Get("engine") as DataString)?.Value;
         manifest.ReadOnly = document.Get("read_only") is DataBool { Value: true };
@@ -110,7 +110,4 @@ public sealed class GameManifest
     }
 
     private static KeyValuePair<string, DataValue> Member(string key, DataValue value) => new(key, value);
-
-    private static IEnumerable<string> Strings(DataValue? value) =>
-        value is DataArray array ? array.Items.OfType<DataString>().Select(item => item.Value) : Enumerable.Empty<string>();
 }

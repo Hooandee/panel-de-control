@@ -11,7 +11,7 @@ namespace PanelDeControl.Core.Tests.Upscalers;
 
 public sealed class AssetCacheTests : IDisposable
 {
-    // The system bsdtar the product uses: System32	ar.exe on Windows.
+    // The system bsdtar the product uses (System32\tar.exe on Windows).
     private static readonly string Tar = OperatingSystem.IsWindows() ? Path.Combine(Environment.SystemDirectory, "tar.exe") : "/usr/bin/tar";
     private readonly string _root = Path.Combine(Path.GetTempPath(), "pdc-assets-" + Guid.NewGuid().ToString("N"));
     private static readonly TimeSpan[] NoWait = { TimeSpan.Zero };

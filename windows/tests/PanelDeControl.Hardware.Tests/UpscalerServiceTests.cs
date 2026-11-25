@@ -3,9 +3,10 @@ using System.Net;
 using System.Text;
 using PanelDeControl.Core.FileSystem;
 using PanelDeControl.Core.Upscalers;
-using PanelDeControl.Hardware;
 using PanelDeControl.Hardware.Upscalers;
 using Xunit;
+using PanelDeControl.TestSupport;
+using static PanelDeControl.TestSupport.TestTree;
 
 namespace PanelDeControl.Hardware.Tests;
 
@@ -863,23 +864,5 @@ public sealed partial class UpscalerServiceTests : IDisposable
     private static void WriteManifest(string target)
     {
         Write(target, ".pdc-upscaler/manifest.json", "{\"files\": {}, \"backups\": [], \"dirs\": [], \"configuration\": {}, \"owned\": []}");
-    }
-
-    private static void Write(string folder, string relative, string text)
-    {
-        var path = Path.Combine(folder, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, text);
-    }
-
-    private static string Snapshot(string folder) => string.Join("\n", Directory
-        .GetFileSystemEntries(folder, "*", SearchOption.AllDirectories)
-        .OrderBy(path => path, StringComparer.Ordinal)
-        .Select(path => path.Substring(folder.Length) + (File.Exists(path) ? "=" + File.ReadAllText(path) : "/")));
-
-    private sealed class NoNetwork : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
     }
 }

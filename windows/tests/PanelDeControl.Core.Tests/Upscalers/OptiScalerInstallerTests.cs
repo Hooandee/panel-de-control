@@ -1,6 +1,7 @@
-using System.Net;
 using PanelDeControl.Core.Upscalers;
 using Xunit;
+using PanelDeControl.TestSupport;
+using static PanelDeControl.TestSupport.TestTree;
 
 namespace PanelDeControl.Core.Tests.Upscalers;
 
@@ -179,23 +180,5 @@ public sealed class OptiScalerInstallerTests : IDisposable
         var folder = Path.Combine(_root, "cache", asset.Sha256, "unpacked");
         Write(folder, ".complete", asset.Sha256);
         return folder;
-    }
-
-    private static void Write(string root, string relative, string text)
-    {
-        var path = Path.Combine(root, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, text);
-    }
-
-    private static string Snapshot(string folder) => string.Join("\n", Directory
-        .GetFileSystemEntries(folder, "*", SearchOption.AllDirectories)
-        .OrderBy(path => path, StringComparer.Ordinal)
-        .Select(path => path.Substring(folder.Length) + (File.Exists(path) ? "=" + File.ReadAllText(path) : "/")));
-
-    private sealed class NoNetwork : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
     }
 }

@@ -82,7 +82,7 @@ public static class UpscalerPlanner
     // Device rules the Linux backend keeps in code next to the catalog.
     private static readonly HashSet<string> RdnaThreeIgpuDevices = new(StringComparer.Ordinal) { "rog_ally", "rog_ally_x", "legion_go", "legion_go_s" };
     private static readonly HashSet<string> SteamDecks = new(StringComparer.Ordinal) { "steam_deck_lcd", "steam_deck_oled" };
-    // AMD's FP8 SDK providers ship their own FSR 3.1.6 and use it when the GPU can't run FP8 FSR 4 (seen on the Ally).
+    // AMD's FP8 SDK providers ship their own FSR 3.1.6 and use it when the GPU can't run FP8 FSR 4.
     private static readonly HashSet<string> Fp8Sdk = new(StringComparer.Ordinal) { "fsr-4.1.2-dll", "fsr-4.1.1-dll" };
 
     public static string PreferredBuild(BuildCatalog catalog, string gpu, string? recommendedBuild)

@@ -363,7 +363,7 @@ public sealed class UpscalerStateStore
                     _installs[game.Key] = stored;
                 }
 
-                if (entry.Get("stranded_args") is DataArray strandedArgs && Strings(strandedArgs) is { Count: > 0 } args)
+                if (entry.Get("stranded_args") is DataArray strandedArgs && DataValue.StringItems(strandedArgs) is { Count: > 0 } args)
                 {
                     _strandedArgs[game.Key] = args.ToList();
                 }
@@ -518,8 +518,8 @@ public sealed class UpscalerStateStore
                 ? targets.Items.OfType<DataString>().Select(item => item.Value).ToList()
                 : new List<string>(),
             Anr = install.Get("anr") is DataBool { Value: true },
-            Args = Strings(install.Get("args")),
-            AddedArgs = Strings(install.Get("added_args")),
+            Args = DataValue.StringItems(install.Get("args")),
+            AddedArgs = DataValue.StringItems(install.Get("added_args")),
             Way = Text(install.Get("way")) ?? "",
             ExeFolder = Text(install.Get("exe_folder")) ?? "",
             Log = Text(install.Get("log")) ?? "",
@@ -544,9 +544,6 @@ public sealed class UpscalerStateStore
 
     private static StoredUpscaler Copy(StoredUpscaler stored) =>
         ReadInstall((DataObject)WriteInstall(stored)) ?? stored;
-
-    private static IReadOnlyList<string> Strings(DataValue? value) =>
-        value is DataArray list ? list.Items.OfType<DataString>().Select(item => item.Value).ToList() : new List<string>();
 
     internal static DataValue WriteInstall(StoredUpscaler stored)
     {
