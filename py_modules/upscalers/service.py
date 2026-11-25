@@ -1332,11 +1332,15 @@ class UpscalerService:
 
     def _drop(self, install: dict, root: Path) -> list[str]:
         """Take an install out of the game, whichever engine put it there."""
+        if not _is_helix(install) and install.get("engine") != "proton":
+            kept = self._remove(Path(install["target"]))
+            # Settings go back only once the files are out: a refused removal leaves both as they were.
+            if not (Path(install["target"]) / games.MANIFEST_DIR / "manifest.json").exists():
+                game_config.restore(install.get("game_config"))
+            return kept
         game_config.restore(install.get("game_config"))
         if install.get("engine") == "proton":
             return []
-        if not _is_helix(install):
-            return self._remove(Path(install["target"]))
         old_target = Path(install.get("target", ""))
         record = _relocated(Path(install.get("helix_file", "")), old_target, root)
         if not record.is_file():
@@ -1885,38 +1889,51 @@ class UpscalerService:
         backups = set(manifest.get("backups", []))
         owned = set(manifest.get("owned", []))
         for relative, digest in manifest.get("files", {}).items():
-            path = target / relative
-            if not path.is_file():
-                continue
-            if digest is None and relative in backups and not (meta / "backup" / relative).exists():
-                continue
-            if digest is None or relative in owned or sha256(path) == digest or (relative in _SEEDED and relative not in backups):
-                path.unlink()
-            elif relative in configuration:
-                auto_recipes.restore_configuration(path, meta / "backup" / relative, configuration[relative])
-            elif relative in _SEEDED:
-                # REFramework rewrote its config while installed: only the keys Panel set go back to the user's.
-                saved = meta / "backup" / relative
-                original = saved.read_text(encoding="utf-8", errors="replace") if saved.is_file() else ""
-                current = path.read_text(encoding="utf-8", errors="replace")
-                path.write_text(_with_keys(current, _keys(original, (*REFRAMEWORK_CLOSED, *REFRAMEWORK_UPSCALER_KEYS))), encoding="utf-8")
-                saved.unlink(missing_ok=True)
-            else:
+            try:
+                path = target / relative
+                if not path.is_file():
+                    continue
+                if digest is None and relative in backups and not (meta / "backup" / relative).exists():
+                    continue
+                if digest is None or relative in owned or sha256(path) == digest or (relative in _SEEDED and relative not in backups):
+                    path.unlink()
+                elif relative in configuration:
+                    auto_recipes.restore_configuration(path, meta / "backup" / relative, configuration[relative])
+                elif relative in _SEEDED:
+                    # REFramework rewrote its config while installed: only the keys Panel set go back to the user's.
+                    saved = meta / "backup" / relative
+                    original = saved.read_text(encoding="utf-8", errors="replace") if saved.is_file() else ""
+                    current = path.read_text(encoding="utf-8", errors="replace")
+                    path.write_text(_with_keys(current, _keys(original, (*REFRAMEWORK_CLOSED, *REFRAMEWORK_UPSCALER_KEYS))), encoding="utf-8")
+                    saved.unlink(missing_ok=True)
+                else:
+                    kept.append(relative)
+            except Exception:
                 kept.append(relative)
         for generated in _GENERATED if manifest.get("engine") != "dll" else ():
-            if (target / generated).is_file() and generated not in manifest.get("backups", []):
-                (target / generated).unlink()
+            try:
+                if (target / generated).is_file() and generated not in manifest.get("backups", []):
+                    (target / generated).unlink()
+            except OSError:
+                pass
         for directory in manifest.get("dirs", []):
             # ANR FG writes a log per launch beside its provider.
             if directory.endswith(f"custom/{catalog.ANR_PROVIDER}/dlssg"):
-                for log in (target / directory).glob("nr_fg-*.log"):
-                    log.unlink(missing_ok=True)
+                try:
+                    for log in (target / directory).glob("nr_fg-*.log"):
+                        log.unlink(missing_ok=True)
+                except OSError:
+                    pass
         for relative in manifest.get("backups", []):
             saved = meta / "backup" / relative
-            if saved.exists() and not (target / relative).exists():
-                os.replace(saved, target / relative)
-                if manifest.get("read_only"):
-                    _set_writable(target / relative, True)
+            try:
+                if saved.exists() and not (target / relative).exists():
+                    os.replace(saved, target / relative)
+                    if manifest.get("read_only"):
+                        _set_writable(target / relative, True)
+            except OSError:
+                if relative not in kept:
+                    kept.append(relative)
         for directory in sorted(manifest.get("dirs", []), key=len, reverse=True):
             try:
                 (target / directory).rmdir()

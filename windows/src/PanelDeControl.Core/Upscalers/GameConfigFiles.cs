@@ -30,14 +30,17 @@ public static class GameConfigFiles
     private const int MaximumBytes = 512 * 1024;
     private static readonly UTF8Encoding Strict = new(false, true);
 
-    public static IReadOnlyList<GameConfigRecord> Apply(string? profile, IEnumerable<GameConfigChange> entries)
+    /// <param name="profile">The user's profile folder.</param>
+    /// <param name="entries">The settings to change; a path under <c>Documents/</c> follows the Documents folder.</param>
+    /// <param name="documents">Where Documents really is (OneDrive moves it); <c>profile/Documents</c> when omitted.</param>
+    public static IReadOnlyList<GameConfigRecord> Apply(string? profile, IEnumerable<GameConfigChange> entries, string? documents = null)
     {
         var records = new List<GameConfigRecord>();
         foreach (var entry in entries)
         {
             var record = new GameConfigRecord { File = entry.File, Tag = entry.Element, Value = entry.Value };
             records.Add(record);
-            var path = string.IsNullOrEmpty(profile) ? null : System.IO.Path.Combine(profile, entry.File.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            var path = Resolve(profile, documents, entry.File);
             var text = path is null ? null : Read(path);
             var match = text is null ? null : Element(entry.Element).Match(text);
             if (path is null || text is null || match is null || !match.Success)
@@ -62,6 +65,17 @@ public static class GameConfigFiles
             }
         }
         return records;
+    }
+
+    private static string? Resolve(string? profile, string? documents, string file)
+    {
+        const string prefix = "Documents/";
+        if (file.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            var folder = string.IsNullOrEmpty(documents) ? (string.IsNullOrEmpty(profile) ? null : System.IO.Path.Combine(profile, "Documents")) : documents;
+            return folder is null ? null : System.IO.Path.Combine(folder, file.Substring(prefix.Length).Replace('/', System.IO.Path.DirectorySeparatorChar));
+        }
+        return string.IsNullOrEmpty(profile) ? null : System.IO.Path.Combine(profile, file.Replace('/', System.IO.Path.DirectorySeparatorChar));
     }
 
     public static void Restore(IEnumerable<GameConfigRecord> records)

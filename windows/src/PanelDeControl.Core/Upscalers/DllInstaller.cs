@@ -32,8 +32,10 @@ public sealed class DllInstaller
     /// <param name="analyze">Reads the game folder; called again once the previous install is out.</param>
     /// <param name="legacySwap">False when the game's recipe keeps its own <c>amd_fidelityfx_dx12.dll</c>.</param>
     /// <param name="previous">Panel's current install in this game, taken out once every download is ready.</param>
+    /// <param name="claimed">Whether some other install of Panel's owns a folder; leftovers nobody claims are cleared first.</param>
     public async Task<InstalledUpscaler> InstallAsync(string buildId, string root, Func<GameAnalysis> analyze, bool legacySwap,
-        InstalledUpscaler? previous, bool confirmAntiCheat, IProgress<long>? progress, CancellationToken cancel)
+        InstalledUpscaler? previous, bool confirmAntiCheat, IProgress<long>? progress, CancellationToken cancel,
+        Func<string, bool>? claimed = null)
     {
         var build = _catalog.Build(buildId);
         if (build is null || !build.Available)
@@ -103,7 +105,10 @@ public sealed class DllInstaller
         if (previous is not null)
         {
             OptiScalerInstaller.Uninstall(previous);
-            GameFiles.RecoverOrphan(root, _ => false);
+        }
+        GameFiles.RecoverOrphan(root, previous is null && claimed is not null ? claimed : _ => false);
+        if (previous is not null)
+        {
             analysis = analyze();
             targets = Targets(analysis, legacySwap);
         }
@@ -210,7 +215,19 @@ public sealed class DllInstaller
         }
         var full = Path.GetFullPath(path);
         var top = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        return !full.StartsWith(top, StringComparison.OrdinalIgnoreCase);
+        if (!full.StartsWith(top, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        // A junction or symlink between the game folder and the file would carry it somewhere else.
+        for (var folder = Path.GetDirectoryName(full); folder is not null && folder.Length >= top.Length; folder = Path.GetDirectoryName(folder))
+        {
+            if (IsLink(folder))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static bool IsLink(string path)
@@ -240,7 +257,7 @@ public sealed class DllInstaller
 
     private static void Put(List<KeyValuePair<string, string>> sources, string relative, string path)
     {
-        var index = sources.FindIndex(pair => pair.Key == relative);
+        var index = sources.FindIndex(pair => GameManifest.PathComparer.Equals(pair.Key, relative));
         if (index >= 0)
         {
             sources[index] = new KeyValuePair<string, string>(relative, path);

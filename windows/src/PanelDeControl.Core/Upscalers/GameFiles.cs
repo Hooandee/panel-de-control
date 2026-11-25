@@ -70,11 +70,15 @@ public static class GameFiles
                 }
             }
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        catch (Exception error)
         {
             Save(journal, manifest);
-            RemoveFiles(target);
-            throw Translate(error);
+            RemoveFiles(target, false);
+            if (error is IOException or UnauthorizedAccessException)
+            {
+                throw Translate(error);
+            }
+            throw;
         }
         manifest.Incomplete = false;
         manifest.ReadOnly = protect;
@@ -130,6 +134,8 @@ public static class GameFiles
                         if (!IsLink(destination) && Inside(Path.GetFullPath(destination), root))
                         {
                             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                            Writable(saved);
+                            Writable(destination);
                             Replace(saved, destination);
                         }
                     }
@@ -168,7 +174,8 @@ public static class GameFiles
         return text.ToString();
     }
 
-    private static IReadOnlyList<string> RemoveFiles(string target)
+    /// <param name="strict">False for a rollback, where an entry that points outside the game was never placed.</param>
+    private static IReadOnlyList<string> RemoveFiles(string target, bool strict = true)
     {
         var meta = Path.Combine(target, GameManifest.Folder);
         var manifest = ReadManifest(target);
@@ -177,47 +184,34 @@ public static class GameFiles
             return Array.Empty<string>();
         }
         var record = Path.Combine(meta, PanelInstallRecord.FileName);
-        if (File.Exists(record) && !IsLink(record))
+        try
         {
-            File.Delete(record);
+            if (File.Exists(record) && !IsLink(record))
+            {
+                File.Delete(record);
+            }
         }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+        }
+        // One file that will not come out must not leave the game's backed-up originals out of it: each step is best
+        // effort and a failure counts as kept, so the manifest stays for another attempt.
         var kept = new List<string>();
+        UpscalerException? refused = null;
         foreach (var pair in manifest.Files)
         {
-            var path = Join(target, pair.Key);
-            if (!File.Exists(path))
+            try
             {
-                continue;
-            }
-            var saved = Join(Path.Combine(meta, "backup"), pair.Key);
-            if (pair.Value is null && manifest.Backups.Contains(pair.Key) && !Exists(saved))
-            {
-                continue;
-            }
-            var seeded = Seeded.Contains(pair.Key);
-            if (pair.Value is null || manifest.Owned.Contains(pair.Key) || Sha256(path) == pair.Value || (seeded && !manifest.Backups.Contains(pair.Key)))
-            {
-                Writable(path);
-                File.Delete(path);
-            }
-            else if (manifest.Configuration is DataObject configuration && configuration.Get(pair.Key) is DataObject changes)
-            {
-                AutomaticRecipe.RestoreConfiguration(path, saved, changes.Members
-                    .Where(change => change.Value is DataString)
-                    .ToDictionary(change => change.Key, change => ((DataString)change.Value).Value, StringComparer.Ordinal));
-            }
-            else if (seeded)
-            {
-                // REFramework rewrote its config while installed: only the keys Panel set go back to the user's.
-                var original = File.Exists(saved) && !IsLink(saved) ? File.ReadAllText(saved, Utf8) : "";
-                var current = File.ReadAllText(path, Utf8);
-                File.WriteAllText(path, ReframeworkConfig.WithKeys(current, ReframeworkConfig.Keys(original, ReframeworkConfig.AllKeys)), Utf8);
-                if (File.Exists(saved))
+                if (!RemoveOne(target, meta, manifest, pair))
                 {
-                    File.Delete(saved);
+                    kept.Add(pair.Key);
                 }
             }
-            else
+            catch (UpscalerException error) when (error.Code == "unsafe_folder")
+            {
+                refused ??= error;
+            }
+            catch (Exception)
             {
                 kept.Add(pair.Key);
             }
@@ -226,31 +220,61 @@ public static class GameFiles
         {
             foreach (var generated in Generated)
             {
-                if (File.Exists(Join(target, generated)) && !manifest.Backups.Contains(generated))
+                try
                 {
-                    File.Delete(Join(target, generated));
+                    if (File.Exists(Join(target, generated)) && !manifest.Backups.Contains(generated))
+                    {
+                        File.Delete(Join(target, generated));
+                    }
+                }
+                catch (Exception)
+                {
                 }
             }
         }
         foreach (var directory in manifest.Dirs.Where(name => name.Contains("custom/") && name.EndsWith("/dlssg", StringComparison.Ordinal)))
         {
             // ANR FG writes a log per launch beside its provider.
-            var folder = Join(target, directory);
-            if (Directory.Exists(folder) && !IsLink(folder))
+            try
             {
-                foreach (var log in Directory.GetFiles(folder, "nr_fg-*.log"))
+                var folder = Join(target, directory);
+                if (Directory.Exists(folder) && !IsLink(folder))
                 {
-                    File.Delete(log);
+                    foreach (var log in Directory.GetFiles(folder, "nr_fg-*.log"))
+                    {
+                        File.Delete(log);
+                    }
                 }
+            }
+            catch (UpscalerException error) when (error.Code == "unsafe_folder")
+            {
+                refused ??= error;
+            }
+            catch (Exception)
+            {
             }
         }
         foreach (var relative in manifest.Backups)
         {
-            var saved = Join(Path.Combine(meta, "backup"), relative);
-            if (Exists(saved) && !Exists(Join(target, relative)))
+            try
             {
-                Writable(saved);
-                Replace(saved, Join(target, relative));
+                var saved = Join(Path.Combine(meta, "backup"), relative);
+                if (Exists(saved) && !Exists(Join(target, relative)))
+                {
+                    Writable(saved);
+                    Replace(saved, Join(target, relative));
+                }
+            }
+            catch (UpscalerException error) when (error.Code == "unsafe_folder")
+            {
+                refused ??= error;
+            }
+            catch (Exception)
+            {
+                if (!kept.Contains(relative))
+                {
+                    kept.Add(relative);
+                }
             }
         }
         foreach (var directory in manifest.Dirs.OrderByDescending(name => name.Length))
@@ -259,15 +283,67 @@ public static class GameFiles
             {
                 Directory.Delete(Join(target, directory), false);
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            catch (UpscalerException error) when (error.Code == "unsafe_folder")
+            {
+                refused ??= error;
+            }
+            catch (Exception)
             {
             }
+        }
+        if (refused is not null && strict)
+        {
+            throw refused;
         }
         if (kept.Count == 0)
         {
             DeleteTree(meta);
         }
         return kept;
+    }
+
+    /// <summary>Takes one manifest file out; false when it stays because something else changed it since.</summary>
+    private static bool RemoveOne(string target, string meta, GameManifest manifest, KeyValuePair<string, string?> pair)
+    {
+        var path = Join(target, pair.Key);
+        if (!File.Exists(path))
+        {
+            return true;
+        }
+        var saved = Join(Path.Combine(meta, "backup"), pair.Key);
+        if (pair.Value is null && manifest.Backups.Contains(pair.Key) && !Exists(saved))
+        {
+            return true;
+        }
+        var seeded = Seeded.Contains(pair.Key);
+        if (pair.Value is null || manifest.Owned.Contains(pair.Key) || Sha256(path) == pair.Value || (seeded && !manifest.Backups.Contains(pair.Key)))
+        {
+            Writable(path);
+            File.Delete(path);
+        }
+        else if (manifest.Configuration is DataObject configuration && configuration.Get(pair.Key) is DataObject changes)
+        {
+            AutomaticRecipe.RestoreConfiguration(path, saved, changes.Members
+                .Where(change => change.Value is DataString)
+                .ToDictionary(change => change.Key, change => ((DataString)change.Value).Value, StringComparer.Ordinal));
+        }
+        else if (seeded)
+        {
+            // REFramework rewrote its config while installed: only the keys Panel set go back to the user's.
+            var original = File.Exists(saved) && !IsLink(saved) ? File.ReadAllText(saved, Utf8) : "";
+            var current = File.ReadAllText(path, Utf8);
+            File.WriteAllText(path, ReframeworkConfig.WithKeys(current, ReframeworkConfig.Keys(original, ReframeworkConfig.AllKeys)), Utf8);
+            if (File.Exists(saved))
+            {
+                Writable(saved);
+                File.Delete(saved);
+            }
+        }
+        else
+        {
+            return false;
+        }
+        return true;
     }
 
     /// <summary>Panel's own libraries and the game's backed-up originals; one Panel put over the game's stays writable for the updater.</summary>
@@ -314,6 +390,10 @@ public static class GameFiles
         for (var depth = 1; depth < parts.Length; depth++)
         {
             var parent = string.Join("/", parts, 0, depth);
+            if (IsLink(Join(target, parent)))
+            {
+                throw new UpscalerException("unsafe_folder", "linked folder in the game");
+            }
             if (!Exists(Join(target, parent)))
             {
                 manifest.Dirs.Add(parent);
@@ -383,6 +463,10 @@ public static class GameFiles
         {
             if (Directory.Exists(folder))
             {
+                foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+                {
+                    Writable(file);
+                }
                 Directory.Delete(folder, true);
             }
         }
@@ -424,6 +508,16 @@ public static class GameFiles
         if (!Inside(Path.GetFullPath(full), Path.GetFullPath(root)))
         {
             throw new UpscalerException("unsafe_folder", "manifest path outside the game folder");
+        }
+        // A junction or symlink between the game folder and the file would carry it somewhere else.
+        var folder = root;
+        for (var depth = 0; depth < parts.Length - 1; depth++)
+        {
+            folder = Path.Combine(folder, parts[depth]);
+            if (IsLink(folder))
+            {
+                throw new UpscalerException("unsafe_folder", "linked folder in the game");
+            }
         }
         return full;
     }

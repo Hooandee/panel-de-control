@@ -396,7 +396,8 @@ public sealed class UpscalerService : IUpscalersController
                     previous?.Install,
                     false,
                     progress,
-                    CancellationToken.None).ConfigureAwait(false)
+                    CancellationToken.None,
+                    folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder))).ConfigureAwait(false)
                 : await new OptiScalerInstaller(catalog, cache, Gpu.Generation).InstallAsync(
                     () => Analyze(app, recipe?.Exe),
                     recipe,

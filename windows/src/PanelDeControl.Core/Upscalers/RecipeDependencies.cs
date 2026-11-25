@@ -74,6 +74,9 @@ public sealed class AutomaticRecipe
         }
     }
 
+    /// <summary>Every destination the dependencies place beside the exe.</summary>
+    public IEnumerable<string> PlacedFiles => _order.SelectMany(dependency => dependency.Files.Keys);
+
     /// <summary>The packages to download and unpack before the game is touched.</summary>
     public IReadOnlyList<UpscalerAsset> Assets()
     {
@@ -100,7 +103,7 @@ public sealed class AutomaticRecipe
             foreach (var file in dependency.Files)
             {
                 var source = Path.GetFullPath(Path.Combine(root, file.Value.Replace('/', Path.DirectorySeparatorChar)));
-                if (!Plain(root, source) || result.Any(pair => pair.Key == file.Key))
+                if (!Plain(root, source) || result.Any(pair => GameManifest.PathComparer.Equals(pair.Key, file.Key)))
                 {
                     throw new UpscalerException("recipe_files_invalid");
                 }
