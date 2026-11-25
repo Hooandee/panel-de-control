@@ -442,6 +442,8 @@ export const it: Record<string, string> = {
   "up.back": "Giochi",
   "up.wiki.updating": "Aggiornamento informazioni…",
   "up.list.linux": "Gioco Linux",
+  "up.list.unavailable.unifideck_no_exe": "Nessun eseguibile trovato",
+  "up.list.unavailable.unifideck_missing": "File del gioco non trovato",
   "up.list.none": "Nessun upscaler proprio",
   "up.build.soonLine": "{name} arriva presto",
   "up.build.mayNotRun": "Potrebbe non funzionare sulla tua GPU",

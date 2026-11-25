@@ -442,6 +442,8 @@ export const ptBR: Record<string, string> = {
   "up.back": "Jogos",
   "up.wiki.updating": "Atualizando informações…",
   "up.list.linux": "Jogo de Linux",
+  "up.list.unavailable.unifideck_no_exe": "Nenhum executável encontrado",
+  "up.list.unavailable.unifideck_missing": "Arquivo do jogo não encontrado",
   "up.list.none": "Sem upscaler próprio",
   "up.build.soonLine": "{name} chega em breve",
   "up.build.mayNotRun": "Pode não rodar na sua GPU",

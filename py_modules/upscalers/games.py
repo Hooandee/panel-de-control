@@ -287,9 +287,9 @@ def _script_shortcut(home: str, appid: str, name: str, exe: str, launch_options:
     key = launchers.unifideck_key(launch_options) if home and "unifideck" in exe.lower() else None
     if key:
         row = launchers.unifideck_row(home, key)
-        if row is None or not row[0]:
+        if row is None or row[0] == "xcloud" or not row[0]:
             return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True,
-                             unavailable="unifideck_not_installed" if row is None else "unifideck_no_exe")
+                             unavailable="unifideck_no_exe" if row and not row[0] else "unifideck_not_installed")
         if not Path(row[0]).is_file():
             return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True,
                              unavailable="unifideck_missing")
