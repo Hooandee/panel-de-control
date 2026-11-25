@@ -9,7 +9,8 @@
     KeyDown="Page_KeyDown"
     mc:Ignorable="d">
 
-    <Grid>
+    <!-- Arrow keys move focus in 2-D like the D-pad: in compact Game Bar, Tab and Ctrl+Tab belong to Game Bar. -->
+    <Grid XYFocusKeyboardNavigation="Enabled">
         <Grid x:Name="AuroraHost" IsHitTestVisible="False" />
         <Rectangle Fill="{StaticResource PdcBackdropRowsBrush}" IsHitTestVisible="False" />
         <Rectangle Fill="{StaticResource PdcBackdropColumnsBrush}" IsHitTestVisible="False" />

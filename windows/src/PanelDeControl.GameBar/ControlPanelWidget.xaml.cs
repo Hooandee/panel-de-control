@@ -1651,6 +1651,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             };
             AutomationProperties.SetName(tab, Localized("Nav" + section.ResourceStem));
             tab.Click += SectionTab_Click;
+            tab.GotFocus += SectionTab_GotFocus;
             var tabHost = !desktopLayout
                 ? (Panel)SectionTabs
                 : section.Id == PinnedSectionId ? DesktopNavPinned : DesktopNav;
@@ -1721,6 +1722,16 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         byte Mix(byte channel) => (byte)(channel + ((255 - channel) * 0.35));
         return Color.FromArgb(color.A, Mix(color.R), Mix(color.G), Mix(color.B));
+    }
+
+    // In the Game Bar bar the section follows the focus, so D-pad or arrows left and right change section without
+    // LB/RB, which compact Game Bar keeps to switch widgets. Pointer focus leaves selection to the click.
+    private void SectionTab_GotFocus(object sender, RoutedEventArgs args)
+    {
+        if (!desktopLayout && sender is Button { Tag: int index, FocusState: FocusState.Keyboard } && index != selectedSection)
+        {
+            SelectSection(index);
+        }
     }
 
     private void SectionTab_Click(object sender, RoutedEventArgs args)
@@ -1797,6 +1808,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             TabIndicator.BorderBrush = sectionRim;
             PlaceTabIndicator(animate: true);
             sections[index].Tab.StartBringIntoView();
+            // Down from the header lands on the open section, not on whichever tab sits under the button.
+            RefreshButton.XYFocusDown = sections[index].Tab;
         }
 
         if (desktopLayout)
