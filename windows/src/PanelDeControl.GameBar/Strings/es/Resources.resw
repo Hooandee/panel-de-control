@@ -627,6 +627,7 @@
   <data name="UpscalersErrForeignHelix" xml:space="preserve"><value>HelixSR puesto por otra herramienta: quítalo con su instalador.</value></data>
   <data name="UpscalersErrNoForeign" xml:space="preserve"><value>No queda nada de otra herramienta que apartar.</value></data>
   <data name="UpscalersErrStillPatched" xml:space="preserve"><value>Quita antes el escalador de Panel.</value></data>
+  <data name="UpscalersErrForeignBackupPending" xml:space="preserve"><value>Restaura antes lo que Panel guardó de la otra herramienta.</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>Modo DLL</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>En Modo DLL, cambia la calidad desde el juego.</value></data>

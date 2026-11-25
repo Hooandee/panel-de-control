@@ -63,6 +63,36 @@ public sealed partial class UpscalerServiceTests
     }
 
     [Fact]
+    public async Task ASecondAdoptWaitsForTheFirstBackupToBeRestored()
+    {
+        var game = ForeignGame();
+        var service = Service();
+        Assert.Equal(UpscalersResponseStatus.Ok, (await Send(service, UpscalersRequest.AdoptForeign("100", true))).Status);
+        File.WriteAllText(Path.Combine(Target(game), "OptiScaler.ini"), "[Upscalers]");
+
+        var second = await Send(service, UpscalersRequest.AdoptForeign("100", true));
+
+        Assert.Equal("foreign_backup_pending", second.ErrorCode);
+        Assert.True(File.Exists(Path.Combine(Target(game), "OptiScaler.ini")));
+    }
+
+    [Fact]
+    public async Task AnythingLeftInTheBackupThatTheRecordMissesIsNeverDeleted()
+    {
+        ForeignGame();
+        var service = Service();
+        await Send(service, UpscalersRequest.AdoptForeign("100", true));
+        var backup = BackupFolder();
+        File.WriteAllText(Path.Combine(backup, "copied-but-unrecorded.dll"), "only copy");
+
+        var restored = await Send(service, UpscalersRequest.RestoreForeign("100", true));
+
+        Assert.Equal(new[] { "copied-but-unrecorded.dll" }, restored.Kept);
+        Assert.Equal("only copy", File.ReadAllText(Path.Combine(backup, "copied-but-unrecorded.dll")));
+        Assert.NotNull(new UpscalerStateStore(StatePath).ForeignBackupOf("100"));
+    }
+
+    [Fact]
     public async Task AnItemWhoseNameIsTakenAgainStaysInTheBackupAndIsReportedAsKept()
     {
         var game = ForeignGame();

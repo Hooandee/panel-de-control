@@ -43,6 +43,11 @@ public sealed partial class UpscalerService
                 throw new UpscalerException("foreign_helix");
             }
 
+            if (ForeignBackupOf(app, target) is not null)
+            {
+                throw new UpscalerException("foreign_backup_pending");
+            }
+
             var items = ForeignItems(target);
             var swaps = HelixSwaps(target);
             if (items.Count == 0 && swaps.Count == 0)
@@ -66,9 +71,9 @@ public sealed partial class UpscalerService
             SaveForeignBackup(appId, record);
             foreach (var name in items)
             {
-                MoveEntry(Path.Combine(target, name), Path.Combine(folder, name));
                 record.Items.Add(name);
                 SaveForeignBackup(appId, record);
+                MoveEntry(Path.Combine(target, name), Path.Combine(folder, name));
             }
 
             foreach (var name in swaps)
@@ -98,14 +103,16 @@ public sealed partial class UpscalerService
             var app = steam.Find(appId) ?? throw new UpscalerException("not_installed");
             EnsureNoJob(appId);
             var record = ForeignBackupOf(app, Scan(app, null).Target) ?? throw new UpscalerException("no_foreign");
-            if (Stored(appId) is not null)
+            if (Stored(appId) is not null || PanelFolder(app, Scan(app, null)) is not null)
             {
                 throw new UpscalerException("still_patched");
             }
 
             GameGuards.EnsureClosed(app, runningImages());
             record.Target = InstallRelocation.Relocated(record.Target, record.Target, app.Root);
-            if (!record.HasValidNames || !IsInside(record.Dir, ForeignRoot) || !IsInside(record.Target, app.Root) && !SamePath(record.Target, app.Root)
+            if (!record.HasValidNames || !SamePath(Path.GetDirectoryName(Path.GetFullPath(record.Dir)), Path.Combine(ForeignRoot, appId))
+                || record.Items.Concat(record.Swaps).Any(name => ContainsLink(Path.Combine(record.Dir, name)))
+                || !IsInside(record.Target, app.Root) && !SamePath(record.Target, app.Root)
                 || TraversesLink(app.Root, record.Target) || TraversesLink(StateFolder, record.Dir) || !Directory.Exists(record.Target))
             {
                 throw new UpscalerException("unsupported_layout");
@@ -144,14 +151,27 @@ public sealed partial class UpscalerService
                 if (Present(Path.Combine(backup, name)))
                 {
                     MoveEntry(Path.Combine(backup, name), Path.Combine(target, name));
+                    restored.Add(name);
                 }
 
-                restored.Add(name);
                 record.Items.Remove(name);
                 SaveForeignBackup(appId, record);
             }
 
             ForgetScan(appId);
+            var unknown = Directory.EnumerateFileSystemEntries(backup)
+                .Select(Path.GetFileName)
+                .Where(name => name is not null && !string.Equals(name, ForeignBackup.FileName, StringComparison.OrdinalIgnoreCase)
+                    && !kept.Contains(name, StringComparer.OrdinalIgnoreCase))
+                .Cast<string>()
+                .ToList();
+            if (unknown.Count > 0)
+            {
+                record.Items.AddRange(unknown);
+                SaveForeignBackup(appId, record);
+                kept.AddRange(unknown);
+            }
+
             if (kept.Count > 0)
             {
                 Record(appId, "restore_foreign", "partial", null, null);

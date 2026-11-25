@@ -393,6 +393,7 @@ public sealed partial class UpscalersView
         "foreign_helix" => "UpscalersErrForeignHelix",
         "no_foreign" => "UpscalersErrNoForeign",
         "still_patched" => "UpscalersErrStillPatched",
+        "foreign_backup_pending" => "UpscalersErrForeignBackupPending",
         "cancelled" => "UpscalersErrCancelled",
         _ => null,
     };
