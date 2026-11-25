@@ -1,0 +1,489 @@
+{
+  "schema_version": 1,
+  "algorithm": "upscalers.launch_options",
+  "cases": [
+    {
+      "id": "apply_empty_launch",
+      "op": "apply",
+      "input": {
+        "launch": "",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "-dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "apply_bare_command",
+      "op": "apply",
+      "input": {
+        "launch": "%command%",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "%command% -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "apply_bare_args",
+      "op": "apply",
+      "input": {
+        "launch": "-novid",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "-novid -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "apply_suffix_after_command",
+      "op": "apply",
+      "input": {
+        "launch": "%command% -dx12",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "%command% -dx12 -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "apply_already_present",
+      "op": "apply",
+      "input": {
+        "launch": "%command% -dx11",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "%command% -dx11",
+        "added": []
+      }
+    },
+    {
+      "id": "apply_partially_present",
+      "op": "apply",
+      "input": {
+        "launch": "-dx11 -novid",
+        "args": [
+          "-dx11",
+          "-skipintro"
+        ]
+      },
+      "expected": {
+        "value": "-dx11 -novid -skipintro",
+        "added": [
+          "-skipintro"
+        ]
+      }
+    },
+    {
+      "id": "apply_multiple_args",
+      "op": "apply",
+      "input": {
+        "launch": "",
+        "args": [
+          "-dx11",
+          "-skipintro"
+        ]
+      },
+      "expected": {
+        "value": "-dx11 -skipintro",
+        "added": [
+          "-dx11",
+          "-skipintro"
+        ]
+      }
+    },
+    {
+      "id": "apply_no_args",
+      "op": "apply",
+      "input": {
+        "launch": "mangohud %command%",
+        "args": []
+      },
+      "expected": {
+        "value": "mangohud %command%",
+        "added": []
+      }
+    },
+    {
+      "id": "apply_user_wrapper_kept",
+      "op": "apply",
+      "input": {
+        "launch": "mangohud %command% -novid",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "mangohud %command% -novid -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "apply_user_env_kept",
+      "op": "apply",
+      "input": {
+        "launch": "FOO=1 %command%",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "FOO=1 %command% -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "apply_quoted_arg_kept",
+      "op": "apply",
+      "input": {
+        "launch": "%command% -title \"a b\"",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "%command% -title \"a b\" -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "apply_escaped_space_kept",
+      "op": "apply",
+      "input": {
+        "launch": "%command% -title a\\ b",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "%command% -title a\\ b -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "apply_double_command",
+      "op": "apply",
+      "input": {
+        "launch": "%command% %command%",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "apply_shell_operator",
+      "op": "apply",
+      "input": {
+        "launch": "sh -c \"a; b\" %command%",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "apply_unbalanced_quote",
+      "op": "apply",
+      "input": {
+        "launch": "%command% \"oops",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "apply_unifideck_id",
+      "op": "apply",
+      "input": {
+        "launch": "epic:abc123 FOO=1",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "epic:abc123 FOO=1 -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "apply_unifideck_with_wrapper",
+      "op": "apply",
+      "input": {
+        "launch": "mangohud %command% gog:12345 FOO=1",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "mangohud %command% gog:12345 FOO=1 -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "apply_extra_whitespace",
+      "op": "apply",
+      "input": {
+        "launch": "   %command%    -novid  ",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "%command% -novid -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "apply_wine_overrides_untouched",
+      "op": "apply",
+      "input": {
+        "launch": "WINEDLLOVERRIDES=\"dxgi=n,b\" %command%",
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "WINEDLLOVERRIDES=\"dxgi=n,b\" %command% -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "revert_only_added",
+      "op": "revert",
+      "input": {
+        "launch": "-dx11",
+        "added": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": ""
+      }
+    },
+    {
+      "id": "revert_only_added_with_command",
+      "op": "revert",
+      "input": {
+        "launch": "%command% -dx11",
+        "added": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": ""
+      }
+    },
+    {
+      "id": "revert_user_arg_kept",
+      "op": "revert",
+      "input": {
+        "launch": "-dx11 -novid",
+        "added": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "-novid"
+      }
+    },
+    {
+      "id": "revert_nothing_added",
+      "op": "revert",
+      "input": {
+        "launch": "%command% -dx11",
+        "added": []
+      },
+      "expected": {
+        "value": "%command% -dx11"
+      }
+    },
+    {
+      "id": "revert_not_present",
+      "op": "revert",
+      "input": {
+        "launch": "%command% -novid",
+        "added": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "%command% -novid"
+      }
+    },
+    {
+      "id": "revert_wrapper_keeps_command",
+      "op": "revert",
+      "input": {
+        "launch": "mangohud %command% -dx11",
+        "added": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "mangohud %command%"
+      }
+    },
+    {
+      "id": "revert_env_keeps_command",
+      "op": "revert",
+      "input": {
+        "launch": "FOO=1 %command% -dx11",
+        "added": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "FOO=1 %command%"
+      }
+    },
+    {
+      "id": "revert_malformed",
+      "op": "revert",
+      "input": {
+        "launch": "%command% %command% -dx11",
+        "added": [
+          "-dx11"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "revert_empty_launch",
+      "op": "revert",
+      "input": {
+        "launch": "",
+        "added": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": ""
+      }
+    },
+    {
+      "id": "revert_unifideck_id",
+      "op": "revert",
+      "input": {
+        "launch": "epic:abc123 -dx11 FOO=1",
+        "added": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "epic:abc123 FOO=1"
+      }
+    },
+    {
+      "id": "replace_swap_arg",
+      "op": "replace",
+      "input": {
+        "launch": "%command% -dx12",
+        "removed": [
+          "-dx12"
+        ],
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "-dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "replace_keeps_user_arg",
+      "op": "replace",
+      "input": {
+        "launch": "%command% -novid -dx12",
+        "removed": [
+          "-dx12"
+        ],
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "%command% -novid -dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "replace_same_arg",
+      "op": "replace",
+      "input": {
+        "launch": "%command% -dx11",
+        "removed": [
+          "-dx11"
+        ],
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": {
+        "value": "-dx11",
+        "added": [
+          "-dx11"
+        ]
+      }
+    },
+    {
+      "id": "replace_malformed",
+      "op": "replace",
+      "input": {
+        "launch": "%command% %command%",
+        "removed": [
+          "-dx12"
+        ],
+        "args": [
+          "-dx11"
+        ]
+      },
+      "expected": null
+    }
+  ]
+}

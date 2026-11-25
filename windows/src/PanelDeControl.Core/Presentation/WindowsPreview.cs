@@ -5,12 +5,13 @@ namespace PanelDeControl.Core.Presentation;
 
 /// <summary>
 /// What the Windows widget offers while Windows support is in preview: only blocks with real readings or
-/// actions are shown, sections with none are hidden, and everything outside the themes section is read only
+/// actions are shown, sections with none are hidden, and everything outside the interactive sections is read only
 /// except blocks that change nothing on the machine: showing diagnostics and sending a report.
 /// </summary>
 public static class WindowsPreview
 {
-    public const string InteractiveSectionId = "themes";
+    // Upscalers only write to game folders the user owns and only after its own experimental switch.
+    private static readonly HashSet<string> InteractiveSections = new() { "themes", "upscalers" };
 
     private static readonly HashSet<string> MachineNeutralBlocks = new() { "settings.diagnostics", "settings.reports" };
 
@@ -21,5 +22,5 @@ public static class WindowsPreview
         sections.Where(section => VisibleBlocks(section).Count > 0).ToArray();
 
     public static bool IsReadOnly(SectionDefinition section, BlockDefinition block) =>
-        section.Id != InteractiveSectionId && !MachineNeutralBlocks.Contains(section.Id + "." + block.Id);
+        !InteractiveSections.Contains(section.Id) && !MachineNeutralBlocks.Contains(section.Id + "." + block.Id);
 }

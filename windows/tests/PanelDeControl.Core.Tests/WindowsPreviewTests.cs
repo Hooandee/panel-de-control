@@ -11,23 +11,26 @@ public sealed class WindowsPreviewTests
     {
         var visible = WindowsPreview.VisibleSections(SectionCatalog.All);
 
-        Assert.Equal(new[] { "power", "system", "fans", "themes", "settings" }, visible.Select(section => section.Id));
+        Assert.Equal(new[] { "power", "system", "fans", "upscalers", "themes", "settings" }, visible.Select(section => section.Id));
         Assert.All(visible, section => Assert.All(WindowsPreview.VisibleBlocks(section), block => Assert.Equal(BlockState.Available, block.State)));
         Assert.DoesNotContain(WindowsPreview.VisibleBlocks(SectionCatalog.Find("power")), block => block.Id == "autoTdp");
     }
 
     [Fact]
-    public void OnlyThemesChangeTheMachineWhileDiagnosticsAndReportsStayUsable()
+    public void OnlyThemesAndUpscalersChangeTheMachineWhileDiagnosticsAndReportsStayUsable()
     {
-        var themes = SectionCatalog.Find("themes");
-        Assert.All(themes.Blocks, block => Assert.False(WindowsPreview.IsReadOnly(themes, block)));
+        foreach (var id in new[] { "themes", "upscalers" })
+        {
+            var section = SectionCatalog.Find(id);
+            Assert.All(section.Blocks, block => Assert.False(WindowsPreview.IsReadOnly(section, block)));
+        }
 
         var settings = SectionCatalog.Find("settings");
         Assert.False(WindowsPreview.IsReadOnly(settings, settings.Blocks.Single(block => block.Id == "diagnostics")));
         Assert.False(WindowsPreview.IsReadOnly(settings, settings.Blocks.Single(block => block.Id == "reports")));
 
         Assert.All(
-            SectionCatalog.All.Where(section => section.Id != "themes"),
+            SectionCatalog.All.Where(section => section.Id is not ("themes" or "upscalers")),
             section => Assert.All(
                 section.Blocks.Where(block => !(section.Id == "settings" && block.Id is "diagnostics" or "reports")),
                 block => Assert.True(WindowsPreview.IsReadOnly(section, block))));

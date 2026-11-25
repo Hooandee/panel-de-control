@@ -470,4 +470,151 @@
   <data name="SteamHomeButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Aller à l'accueil de Steam</value>
   </data>
+  <data name="BlockUpscalersTitle" xml:space="preserve"><value>Upscalers</value></data>
+  <data name="BlockUpscalersDesc" xml:space="preserve"><value>FSR, XeSS et génération d'images dans vos jeux Steam (expérimental).</value></data>
+  <data name="UpscalersExperimentalName" xml:space="preserve"><value>Activer les upscalers expérimentaux</value></data>
+  <data name="UpscalersExperimentalHelp" xml:space="preserve"><value>Expérimental : modifie des fichiers de vos jeux. Désactivé par défaut.</value></data>
+  <data name="UpscalersIntro" xml:space="preserve"><value>Ajoutez FSR, XeSS et la génération d'images à vos jeux Steam. Expérimental.</value></data>
+  <data name="UpscalersLoading" xml:space="preserve"><value>Chargement…</value></data>
+  <data name="UpscalersGpu" xml:space="preserve"><value>GPU : {0}</value></data>
+  <data name="UpscalersGpuUnknown" xml:space="preserve"><value>non détectée</value></data>
+  <data name="UpscalersNoSteam" xml:space="preserve"><value>Steam est introuvable.</value></data>
+  <data name="UpscalersNoGames" xml:space="preserve"><value>Aucun jeu installé.</value></data>
+  <data name="UpscalersStateInstalled" xml:space="preserve"><value>Installé</value></data>
+  <data name="UpscalersStateInstalledUnknown" xml:space="preserve"><value>Installé par Panel (version inconnue)</value></data>
+  <data name="UpscalersStateMissing" xml:space="preserve"><value>Fichiers introuvables</value></data>
+  <data name="UpscalersStateForeign" xml:space="preserve"><value>OptiScaler installé à la main</value></data>
+  <data name="UpscalersStateRunning" xml:space="preserve"><value>En cours</value></data>
+  <data name="UpscalersStateUpdating" xml:space="preserve"><value>Mise à jour en cours</value></data>
+  <data name="UpscalersBuildLabel" xml:space="preserve"><value>Upscaler et modèles</value></data>
+  <data name="UpscalersQualityLabel" xml:space="preserve"><value>Qualité</value></data>
+  <data name="UpscalersQuality_native" xml:space="preserve"><value>Natif</value></data>
+  <data name="UpscalersQuality_quality" xml:space="preserve"><value>Qualité</value></data>
+  <data name="UpscalersQuality_balanced" xml:space="preserve"><value>Équilibré</value></data>
+  <data name="UpscalersQuality_performance" xml:space="preserve"><value>Performance</value></data>
+  <data name="UpscalersMegabytes" xml:space="preserve"><value>{0} Mo</value></data>
+  <data name="UpscalersRecommended" xml:space="preserve"><value>Recommandée</value></data>
+  <data name="UpscalersProgressPrepare" xml:space="preserve"><value>Préparation…</value></data>
+  <data name="UpscalersProgressDownloadStart" xml:space="preserve"><value>Téléchargement…</value></data>
+  <data name="UpscalersProgressDownload" xml:space="preserve"><value>Téléchargement · {0} / {1} Mo</value></data>
+  <data name="UpscalersProgressInstall" xml:space="preserve"><value>Installation…</value></data>
+  <data name="UpscalersProgressRestore" xml:space="preserve"><value>Restauration des fichiers d'origine…</value></data>
+  <data name="UpscalersInstalledOk" xml:space="preserve"><value>{0} installé. Joue un peu pour le vérifier.</value></data>
+  <data name="UpscalersRemovedOk" xml:space="preserve"><value>Retiré. Les fichiers d'origine sont restaurés.</value></data>
+  <data name="UpscalersUnconfirmed" xml:space="preserve"><value>Impossible de confirmer le résultat. Rouvrez le panneau.</value></data>
+  <data name="UpscalersErrRunning" xml:space="preserve"><value>Fermez d'abord le jeu.</value></data>
+  <data name="UpscalersErrUpdating" xml:space="preserve"><value>Steam met le jeu à jour. Attendez la fin.</value></data>
+  <data name="UpscalersErrUpdatePending" xml:space="preserve"><value>Le jeu a une mise à jour Steam en attente. Terminez-la d'abord.</value></data>
+  <data name="UpscalersErrBusy" xml:space="preserve"><value>Une autre opération est déjà en cours.</value></data>
+  <data name="UpscalersErrAntiCheat" xml:space="preserve"><value>Ce jeu utilise un anti-cheat : il ne peut pas être modifié.</value></data>
+  <data name="UpscalersErrProtectedFolder" xml:space="preserve"><value>Le dossier du jeu est protégé. Il ne peut pas être modifié.</value></data>
+  <data name="UpscalersErrForeign" xml:space="preserve"><value>Le jeu a déjà un upscaler d'un autre outil. Il reste intact.</value></data>
+  <data name="UpscalersErrRecipeUnsupported" xml:space="preserve"><value>Ce jeu nécessite des réglages que Windows ne sait pas encore appliquer.</value></data>
+  <data name="UpscalersErrExperimentalRequired" xml:space="preserve"><value>Activez l'option expérimentale pour installer ou retirer.</value></data>
+  <data name="UpscalersErrDownload" xml:space="preserve"><value>Impossible de télécharger ou vérifier le fichier. Vérifiez votre connexion et réessayez.</value></data>
+  <data name="UpscalersErrNoSpace" xml:space="preserve"><value>Espace disque insuffisant.</value></data>
+  <data name="UpscalersErrInstallUnverified" xml:space="preserve"><value>L'installation n'a pas pu être vérifiée. Retirez-la puis réinstallez.</value></data>
+  <data name="UpscalersErrFilesKept" xml:space="preserve"><value>Certains fichiers ont été conservés car ils ont changé depuis l'installation.</value></data>
+  <data name="UpscalersErrNoExe" xml:space="preserve"><value>L'exécutable du jeu est introuvable.</value></data>
+  <data name="UpscalersErrNoBuilds" xml:space="preserve"><value>Aucune version disponible pour votre GPU.</value></data>
+  <data name="UpscalersErrCompanion" xml:space="preserve"><value>Impossible de joindre le service Panel de Control.</value></data>
+  <data name="UpscalersProgressPython" xml:space="preserve"><value>Préparation de Python pour HelixSR…</value></data>
+  <data name="UpscalersProgressUnpack" xml:space="preserve"><value>Préparation de HelixSR…</value></data>
+  <data name="UpscalersHelixPick" xml:space="preserve"><value>Dans le jeu, choisissez AMD FSR. La qualité se règle dans son menu.</value></data>
+  <data name="UpscalersErrHelixNoFsr" xml:space="preserve"><value>Ce jeu n'a pas FSR 3.1, HLX FSR 4 n'a donc rien à remplacer.</value></data>
+  <data name="UpscalersErrHelixFailed" xml:space="preserve"><value>HelixSR n'a pas pu terminer.</value></data>
+  <data name="UpscalersErrHelixMissing" xml:space="preserve"><value>HelixSR n'est pas téléchargé.</value></data>
+  <data name="UpscalersErrGeneric" xml:space="preserve"><value>L'opération n'a pas pu être terminée.</value></data>
+  <data name="NavUpscalers" xml:space="preserve">
+    <value>Upscalers</value>
+  </data>
+  <data name="NavUpscalersDesc" xml:space="preserve">
+    <value>Une image plus nette et plus de FPS dans vos jeux</value>
+  </data>
+  <data name="UpscalersUntested" xml:space="preserve">
+    <value>Peut ne pas fonctionner sur votre GPU</value>
+  </data>
+  <data name="UpscalersExperimentalLabel" xml:space="preserve"><value>Expérimental</value></data>
+  <data name="UpscalersBack" xml:space="preserve"><value>Jeux</value></data>
+  <data name="UpscalersStatusNone" xml:space="preserve"><value>Aucun upscaler de Panel de Control</value></data>
+  <data name="UpscalersStatusInstalled" xml:space="preserve"><value>{0} installé</value></data>
+  <data name="UpscalersStatusPending" xml:space="preserve"><value>Joue un peu pour le vérifier</value></data>
+  <data name="UpscalersForeignTitle" xml:space="preserve"><value>Il a déjà un OptiScaler qui n'est pas celui de Panel de Control</value></data>
+  <data name="UpscalersSubUses" xml:space="preserve"><value>Utilise {0}</value></data>
+  <data name="UpscalersAdvanced" xml:space="preserve"><value>Avancé</value></data>
+  <data name="UpscalersExe" xml:space="preserve"><value>Exécutable du jeu</value></data>
+  <data name="UpscalersApis" xml:space="preserve"><value>API graphiques</value></data>
+  <data name="UpscalersSettingsTitle" xml:space="preserve"><value>Réglages sans réinstaller</value></data>
+  <data name="UpscalersFrameGen" xml:space="preserve"><value>Génération d'images</value></data>
+  <data name="UpscalersRoute_game" xml:space="preserve"><value>Celle du jeu</value></data>
+  <data name="UpscalersRoute_optiscaler" xml:space="preserve"><value>OptiFG</value></data>
+  <data name="UpscalersRoute_anr" xml:space="preserve"><value>Apex ANR</value></data>
+  <data name="UpscalersApply" xml:space="preserve"><value>Appliquer les changements</value></data>
+  <data name="UpscalersApplied" xml:space="preserve"><value>Enregistré</value></data>
+  <data name="UpscalersAppliedNextLaunch" xml:space="preserve"><value>Enregistré. Redémarrez le jeu pour l'appliquer</value></data>
+  <data name="UpscalersSharpness" xml:space="preserve"><value>Netteté</value></data>
+  <data name="UpscalersSharpnessApply" xml:space="preserve"><value>Appliquer les réglages d’image</value></data>
+  <data name="UpscalersRestore" xml:space="preserve"><value>Restaurer les réglages d’image</value></data>
+  <data name="UpscalersInt8" xml:space="preserve"><value>Accélération INT8</value></data>
+  <data name="UpscalersIniTitle" xml:space="preserve"><value>Toutes les options d'OptiScaler</value></data>
+  <data name="UpscalersIniKey" xml:space="preserve"><value>Option (Section.Clé)</value></data>
+  <data name="UpscalersIniValue" xml:space="preserve"><value>Valeur</value></data>
+  <data name="UpscalersIniSave" xml:space="preserve"><value>Enregistrer l'option</value></data>
+  <data name="UpscalersIniSaved" xml:space="preserve"><value>Enregistré. Redémarrez le jeu pour l'appliquer</value></data>
+  <data name="UpscalersIniManaged" xml:space="preserve"><value>Géré par Panel</value></data>
+  <data name="UpscalersErrIniManaged" xml:space="preserve"><value>Panel gère cette option : modifiez-la avec les réglages ci-dessus.</value></data>
+  <data name="UpscalersErrIniKey" xml:space="preserve"><value>OptiScaler.ini n'a pas cette option.</value></data>
+  <data name="UpscalersErrIniValue" xml:space="preserve"><value>Cette valeur n'est pas valide pour cette option.</value></data>
+  <data name="UpscalersErrAnrReinstall" xml:space="preserve"><value>ANR demande de réinstaller l'upscaler avec OptiScaler 10.</value></data>
+  <data name="UpscalersErrFgRoute" xml:space="preserve"><value>Cette génération d'images n'est pas disponible dans ce jeu.</value></data>
+  <data name="UpscalersErrIniChanged" xml:space="preserve"><value>OptiScaler.ini a changé entre-temps. Réessayez.</value></data>
+  <data name="UpscalersVerify" xml:space="preserve"><value>Vérifier maintenant</value></data>
+  <data name="UpscalersVerdict_not_run" xml:space="preserve"><value>Le jeu n'a pas encore été lancé avec l'upscaler</value></data>
+  <data name="UpscalersVerdict_loaded" xml:space="preserve"><value>Chargé ; mise à l'échelle pas encore confirmée</value></data>
+  <data name="UpscalersVerdict_active" xml:space="preserve"><value>Fonctionne</value></data>
+  <data name="UpscalersVerdict_broken" xml:space="preserve"><value>L'installation est cassée</value></data>
+  <data name="UpscalersCancel" xml:space="preserve"><value>Annuler</value></data>
+  <data name="UpscalersExeLabel" xml:space="preserve"><value>Exécutable du jeu (chemin dans son dossier)</value></data>
+  <data name="UpscalersExeSave" xml:space="preserve"><value>Utiliser cet exécutable</value></data>
+  <data name="UpscalersExeAuto" xml:space="preserve"><value>Le détecter automatiquement</value></data>
+  <data name="UpscalersErrInvalidExe" xml:space="preserve"><value>Cet exécutable n'est pas dans le dossier du jeu.</value></data>
+  <data name="UpscalersErrCancelled" xml:space="preserve"><value>Annulé. Le jeu est resté tel quel.</value></data>
+  <data name="UpscalersAdoptForeign" xml:space="preserve"><value>Mettre de côté celui d'un autre outil</value></data>
+  <data name="UpscalersRestoreForeign" xml:space="preserve"><value>Restaurer le précédent</value></data>
+  <data name="UpscalersAdoptedForeign" xml:space="preserve"><value>Mis de côté. Vous pouvez activer celui de Panel</value></data>
+  <data name="UpscalersRestoredForeign" xml:space="preserve"><value>Restauré tel quel</value></data>
+  <data name="UpscalersForeignKept" xml:space="preserve"><value>Restent de côté</value></data>
+  <data name="UpscalersErrForeignHelix" xml:space="preserve"><value>HelixSR d'un autre outil : retirez-le avec son installeur.</value></data>
+  <data name="UpscalersErrNoForeign" xml:space="preserve"><value>Plus rien d'un autre outil à mettre de côté.</value></data>
+  <data name="UpscalersErrStillPatched" xml:space="preserve"><value>Retirez d'abord l'upscaler de Panel.</value></data>
+  <data name="UpscalersErrForeignBackupPending" xml:space="preserve"><value>Restaurez d'abord ce que Panel a mis de côté de l'autre outil.</value></data>
+  <data name="UpscalersSourcesTitle" xml:space="preserve"><value>Mods et vos fichiers</value></data>
+  <data name="UpscalersSourcePath" xml:space="preserve"><value>Fichier (zip, 7z ou rar ; chemin complet)</value></data>
+  <data name="UpscalersModPassword" xml:space="preserve"><value>Mot de passe de l'archive</value></data>
+  <data name="UpscalersModAdd" xml:space="preserve"><value>Utiliser comme mod du jeu</value></data>
+  <data name="UpscalersModRemove" xml:space="preserve"><value>Retirer le mod</value></data>
+  <data name="UpscalersModWhere" xml:space="preserve"><value>Téléchargez-le ici :</value></data>
+  <data name="UpscalersModStored" xml:space="preserve"><value>Mod enregistré : {0} ({1} fichiers)</value></data>
+  <data name="UpscalersModApplied" xml:space="preserve"><value>dans le jeu</value></data>
+  <data name="UpscalersUserFileAdd" xml:space="preserve"><value>Utiliser pour {0}</value></data>
+  <data name="UpscalersUserFileRemove" xml:space="preserve"><value>Retirer celui de {0}</value></data>
+  <data name="UpscalersErrModPassword" xml:space="preserve"><value>Cette archive a un mot de passe : saisissez-le et réessayez.</value></data>
+  <data name="UpscalersErrModPasswordWrong" xml:space="preserve"><value>Le mot de passe est incorrect.</value></data>
+  <data name="UpscalersErrModPasswordUnsupported" xml:space="preserve"><value>Les archives zip, 7z ou rar protégées exigent 7-Zip installé.</value></data>
+  <data name="UpscalersErrModPasswordInvalid" xml:space="preserve"><value>Le mot de passe ne peut pas contenir de guillemets (&quot;).</value></data>
+  <data name="UpscalersErrModNameUnsupported" xml:space="preserve"><value>Sans 7-Zip installé, les noms de fichiers de cette archive sont illisibles. Installe 7-Zip.</value></data>
+  <data name="UpscalersErrModUnreadable" xml:space="preserve"><value>Impossible de lire ce fichier, ou son contenu n'est pas sûr.</value></data>
+  <data name="UpscalersErrModLayout" xml:space="preserve"><value>Je ne sais pas où va chaque fichier de ce mod.</value></data>
+  <data name="UpscalersErrModConflict" xml:space="preserve"><value>Le mod apporte des fichiers en conflit avec ceux de Panel.</value></data>
+  <data name="UpscalersErrModMoved" xml:space="preserve"><value>Le mod enregistré n'est plus là : ajoutez-le à nouveau.</value></data>
+  <data name="UpscalersErrUserFileWrong" xml:space="preserve"><value>Ce n'est pas le fichier demandé par la recette.</value></data>
+  <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
+  <data name="UpscalersDllMode" xml:space="preserve"><value>Mode DLL</value></data>
+  <data name="UpscalersDllNoOptions" xml:space="preserve"><value>En mode DLL, réglez la qualité dans le jeu.</value></data>
+  <data name="UpscalersDllCheck" xml:space="preserve"><value>Vérifiez la version dans les paramètres du jeu</value></data>
+  <data name="UpscalersInstalledDll" xml:space="preserve"><value>{0} installé. Vérifiez la version dans les paramètres du jeu.</value></data>
+  <data name="UpscalersModel_full" xml:space="preserve"><value>Complet</value></data>
+  <data name="UpscalersActivate" xml:space="preserve"><value>Activer {0}</value></data>
+  <data name="UpscalersDeactivate" xml:space="preserve"><value>Désactiver {0}</value></data>
+  <data name="UpscalersDeactivatePlain" xml:space="preserve"><value>Désactiver</value></data>
 </root>

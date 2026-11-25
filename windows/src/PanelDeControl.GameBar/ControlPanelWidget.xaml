@@ -608,6 +608,12 @@
                 HorizontalContentAlignment="Stretch"
                 IsTabStop="False" />
 
+            <ContentControl
+                x:Name="UpscalersHost"
+                Tag="upscalers.games"
+                HorizontalContentAlignment="Stretch"
+                IsTabStop="False" />
+
             <Border x:Name="AccentCard" Tag="themes.accent" Style="{StaticResource PdcCardStyle}">
                 <StackPanel>
                     <TextBlock x:Uid="AccentLabel" Style="{StaticResource PdcTitleStyle}" />

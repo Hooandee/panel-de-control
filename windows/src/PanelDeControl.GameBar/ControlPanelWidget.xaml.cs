@@ -36,6 +36,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 {
     private static readonly ResourceLoader Strings = ResourceLoader.GetForViewIndependentUse();
     private const string AccentSettingKey = "accent";
+    private const string SectionSettingKey = "section";
     private const double ArcCenterX = 100;
     private const double ArcCenterY = 92;
     private const double ArcRadius = 78;
@@ -51,8 +52,10 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly RefreshRateClient refreshClient = new();
     private readonly CpuControlClient cpuClient = new();
     private readonly ThemesView themesView = new();
+    private readonly UpscalersView upscalersView = new();
     private readonly ThemesClient steamHomeClient = new();
     private bool steamHomeRefreshInProgress;
+    private bool reloadGameOnRefresh;
     private CancellationTokenSource? cpuDebounce;
     private bool cpuRefreshInProgress;
     private bool cpuWritePending;
@@ -107,6 +110,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         InitializeComponent();
         ThemeLibraryHost.Content = themesView;
+        UpscalersHost.Content = upscalersView;
         PowerArcTrack.Data = CreatePowerArcGeometry(1);
         PowerArcFill.Data = CreatePowerArcGeometry(0);
         ApplyAccent(ReadSavedAccent());
@@ -150,7 +154,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 }
 
                 BuildSections();
-                SelectSection(0);
+                SelectSection(ReadSavedSection());
             }
             catch (Exception exception)
             {
@@ -195,6 +199,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (gameBarWidget is null || gameBarWidget.Visible)
         {
             refreshTimer.Start();
+            reloadGameOnRefresh = true;
             await Task.WhenAll(RefreshAsync(), ApplySteamHomeAsync());
         }
     }
@@ -229,6 +234,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (sender.Visible)
         {
             refreshTimer.Start();
+            reloadGameOnRefresh = true;
             await Task.WhenAll(RefreshAsync(), ApplySteamHomeAsync());
         }
         else
@@ -427,8 +433,15 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private Task RefreshThemesWhenShownAsync()
     {
-        var shown = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
-        return shown ? themesView.RefreshAsync() : Task.CompletedTask;
+        var reloadGame = reloadGameOnRefresh;
+        reloadGameOnRefresh = false;
+        var shown = sections.Count > selectedSection ? sections[selectedSection].Definition.Id : null;
+        return shown switch
+        {
+            "themes" => themesView.RefreshAsync(),
+            "upscalers" => reloadGame ? upscalersView.RefreshAsync() : upscalersView.RefreshListAsync(),
+            _ => Task.CompletedTask,
+        };
     }
 
     private async Task ApplySnapshotWhenReadyAsync(
@@ -1644,14 +1657,20 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void SelectSection(int index)
     {
-        var wasThemes = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
+        var previous = sections.Count > selectedSection ? sections[selectedSection].Definition.Id : null;
         selectedSection = index;
-        if (!wasThemes && sections[index].Definition.Id == "themes")
+        var next = sections[index].Definition.Id;
+        if (previous != next && next == "themes")
         {
             _ = themesView.RefreshAsync();
         }
+        else if (previous != next && next == "upscalers")
+        {
+            _ = upscalersView.RefreshAsync();
+        }
 
         var current = sections[index].Definition;
+        SaveSection(next);
         var accent = ToColor(current.AccentArgb);
         for (var position = 0; position < sections.Count; position++)
         {
@@ -2223,6 +2242,34 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             catch
             {
             }
+        }
+    }
+
+    private int ReadSavedSection()
+    {
+        try
+        {
+            if (ApplicationData.Current.LocalSettings.Values[SectionSettingKey] is string id)
+            {
+                var index = sections.FindIndex(section => section.Definition.Id == id);
+                return index >= 0 ? index : 0;
+            }
+        }
+        catch
+        {
+        }
+
+        return 0;
+    }
+
+    private static void SaveSection(string id)
+    {
+        try
+        {
+            ApplicationData.Current.LocalSettings.Values[SectionSettingKey] = id;
+        }
+        catch
+        {
         }
     }
 

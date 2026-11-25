@@ -41,7 +41,8 @@ _MODS = {
 
 def _mod(appid: str) -> _Mod | None:
     game = recipe_catalog.bundled().games.get(str(appid))
-    return next((_MODS[dep] for dep in game.dependencies if dep in _MODS), None) if game else None
+    recipes = game.recipes.values() if game else ()
+    return next((_MODS[dep] for recipe in recipes for dep in recipe.dependencies if dep in _MODS), None)
 
 
 def _file(root: Path, target: Path, name: str, limit: int) -> Path | None:

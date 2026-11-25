@@ -567,6 +567,14 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("Dispatcher.HasThreadAccess", code)
         self.assertIn("Dispatcher.RunAsync", code)
 
+    def test_widget_reloads_the_open_game_when_it_becomes_visible_but_not_on_the_timer(self):
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+
+        self.assertEqual(2, code.count("reloadGameOnRefresh = true;"))
+        self.assertIn("reloadGame ? upscalersView.RefreshAsync() : upscalersView.RefreshListAsync()", code)
+        tick = code.split("OnRefreshTimerTick(object sender, object args)", 1)[1].split("}", 1)[0]
+        self.assertNotIn("reloadGameOnRefresh", tick)
+
     def test_suspension_does_not_dispose_the_live_widget_page(self):
         code = APP_CODE.read_text(encoding="utf-8")
 

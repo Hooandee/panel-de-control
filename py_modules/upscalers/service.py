@@ -249,7 +249,7 @@ class UpscalerService:
     # ---- read side -----------------------------------------------------------
     @staticmethod
     def _mod_frame_generation(appid: str, install: dict) -> str | None:
-        recipe = recipes.RECIPES.get(str(appid))
+        recipe = recipes.recipe_for(str(appid)) if install.get("mod") else None
         return recipe.mod_frame_generation if recipe and install.get("mod") else None
 
     def overview(self) -> dict:
@@ -277,6 +277,7 @@ class UpscalerService:
             "engines": self._engine_summaries(),
             "job": self.job(),
             "helixsr": {"downloaded": self.helix.ready()},
+            "catalog_error": catalog.ERROR,
         }
 
     @staticmethod
@@ -915,12 +916,7 @@ class UpscalerService:
         solution = solution_plan.resolve(self.gpu, analysis, recipe, archive_asset.generation, build.engine, choice.get("fg_route"), dependencies_ready=bool(automatic))
         fg_plan = _requested_fg(solution, choice)
         wiki_ini = wiki.resolve_settings(base_ini, recipe.wiki_settings) if recipe else {}
-        panel = {
-            **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
-            **({"Plugins.LoadAsiPlugins": "true"} if recipe and recipe.optipatcher else {}),
-            **catalog.model_overrides(build, choice.get("model")),
-            **catalog.fg_overrides(fg_plan, choice.get("fg") == "on", bool(previous.get("anr"))),
-        }
+        panel = panel_ini(build, recipe, choice, fg_plan, bool(previous.get("anr")))
         managed = sorted(panel)
         # The wiki's settings are a starting point the user may change in the editor; Panel's own keys win over them
         # and hand edits from the advanced editor survive a repair or a new version.
@@ -1031,7 +1027,8 @@ class UpscalerService:
             "added_args": [],
         }
         if recipe and recipe.game_config:
-            entry["install"]["game_config"] = game_config.apply(game_config.prefix_user(self.home, installed), recipe.game_config)
+            entry["install"]["game_config"] = game_config.carry(
+                previous.get("game_config"), game_config.apply(game_config.prefix_user(self.home, installed), recipe.game_config))
         # What an earlier install put in the launch options is still there, and still Panel's to take out.
         fresh = entry["install"]
         fresh["added_args"] = [arg for arg in previous.get("added_args", []) if arg in fresh["args"]]
@@ -1230,7 +1227,11 @@ class UpscalerService:
             raise UpscalerError("foreign")
 
         self._update_job(phase="copy")
-        game = self._helix("install", installed.root)
+        try:
+            game = self._helix("install", installed.root)
+        except UpscalerError:
+            self._undo_helix(installed.root, target)
+            raise
         exe_folder = Path(game.get("exe_folder") or target)
         options = _clean_options({**choice, "fg": "off"})
         log = Path(game["log_path"]) if game.get("log_path") else exe_folder / "helixsr.log"
@@ -1337,11 +1338,15 @@ class UpscalerService:
 
     def _drop(self, install: dict, root: Path) -> list[str]:
         """Take an install out of the game, whichever engine put it there."""
+        if not _is_helix(install) and install.get("engine") != "proton":
+            kept = self._remove(Path(install["target"]))
+            # Settings go back only once the files are out: a refused removal leaves both as they were.
+            if not (Path(install["target"]) / games.MANIFEST_DIR / "manifest.json").exists():
+                game_config.restore(install.get("game_config"))
+            return kept
         game_config.restore(install.get("game_config"))
         if install.get("engine") == "proton":
             return []
-        if not _is_helix(install):
-            return self._remove(Path(install["target"]))
         old_target = Path(install.get("target", ""))
         record = _relocated(Path(install.get("helix_file", "")), old_target, root)
         if not record.is_file():
@@ -1368,6 +1373,19 @@ class UpscalerService:
                 generated.unlink()
         shutil.rmtree(_relocated(old_target / games.MANIFEST_DIR, old_target, root), ignore_errors=True)
         return []
+
+    def _undo_helix(self, root: Path, folder: Path) -> None:
+        """A failed install may have swapped DLLs before it failed: the bridge takes them out, else the recorded swaps are undone by hand."""
+        try:
+            self._helix("remove", root)
+            return
+        except UpscalerError:
+            pass
+        try:
+            helixsr.restore_by_hand(folder)
+        except OSError as error:
+            if self.logger:
+                self.logger.warning(f"HelixSR undo after a failed install: {type(error).__name__}")
 
     def _restore_helix_by_hand(self, folder: Path, reason: str) -> None:
         if not helixsr.restore_by_hand(folder):
@@ -1890,38 +1908,51 @@ class UpscalerService:
         backups = set(manifest.get("backups", []))
         owned = set(manifest.get("owned", []))
         for relative, digest in manifest.get("files", {}).items():
-            path = target / relative
-            if not path.is_file():
-                continue
-            if digest is None and relative in backups and not (meta / "backup" / relative).exists():
-                continue
-            if digest is None or relative in owned or sha256(path) == digest or (relative in _SEEDED and relative not in backups):
-                path.unlink()
-            elif relative in configuration:
-                auto_recipes.restore_configuration(path, meta / "backup" / relative, configuration[relative])
-            elif relative in _SEEDED:
-                # REFramework rewrote its config while installed: only the keys Panel set go back to the user's.
-                saved = meta / "backup" / relative
-                original = saved.read_text(encoding="utf-8", errors="replace") if saved.is_file() else ""
-                current = path.read_text(encoding="utf-8", errors="replace")
-                path.write_text(_with_keys(current, _keys(original, (*REFRAMEWORK_CLOSED, *REFRAMEWORK_UPSCALER_KEYS))), encoding="utf-8")
-                saved.unlink(missing_ok=True)
-            else:
+            try:
+                path = target / relative
+                if not path.is_file():
+                    continue
+                if digest is None and relative in backups and not (meta / "backup" / relative).exists():
+                    continue
+                if digest is None or relative in owned or sha256(path) == digest or (relative in _SEEDED and relative not in backups):
+                    path.unlink()
+                elif relative in configuration:
+                    auto_recipes.restore_configuration(path, meta / "backup" / relative, configuration[relative])
+                elif relative in _SEEDED:
+                    # REFramework rewrote its config while installed: only the keys Panel set go back to the user's.
+                    saved = meta / "backup" / relative
+                    original = saved.read_text(encoding="utf-8", errors="replace") if saved.is_file() else ""
+                    current = path.read_text(encoding="utf-8", errors="replace")
+                    path.write_text(_with_keys(current, _keys(original, (*REFRAMEWORK_CLOSED, *REFRAMEWORK_UPSCALER_KEYS))), encoding="utf-8")
+                    saved.unlink(missing_ok=True)
+                else:
+                    kept.append(relative)
+            except (OSError, ValueError, UpscalerError, auto_recipes.RecipeError):
                 kept.append(relative)
         for generated in _GENERATED if manifest.get("engine") != "dll" else ():
-            if (target / generated).is_file() and generated not in manifest.get("backups", []):
-                (target / generated).unlink()
+            try:
+                if (target / generated).is_file() and generated not in manifest.get("backups", []):
+                    (target / generated).unlink()
+            except OSError:
+                pass
         for directory in manifest.get("dirs", []):
             # ANR FG writes a log per launch beside its provider.
             if directory.endswith(f"custom/{catalog.ANR_PROVIDER}/dlssg"):
-                for log in (target / directory).glob("nr_fg-*.log"):
-                    log.unlink(missing_ok=True)
+                try:
+                    for log in (target / directory).glob("nr_fg-*.log"):
+                        log.unlink(missing_ok=True)
+                except OSError:
+                    pass
         for relative in manifest.get("backups", []):
             saved = meta / "backup" / relative
-            if saved.exists() and not (target / relative).exists():
-                os.replace(saved, target / relative)
-                if manifest.get("read_only"):
-                    _set_writable(target / relative, True)
+            try:
+                if saved.exists() and not (target / relative).exists():
+                    os.replace(saved, target / relative)
+                    if manifest.get("read_only"):
+                        _set_writable(target / relative, True)
+            except OSError:
+                if relative not in kept:
+                    kept.append(relative)
         for directory in sorted(manifest.get("dirs", []), key=len, reverse=True):
             try:
                 (target / directory).rmdir()
@@ -2641,6 +2672,16 @@ def _image_overrides(install: dict, text: str) -> dict:
     if not install.get("image_overrides"):
         return {}
     return {key: value for key in image_settings.MANAGED_SHARPNESS_KEYS if (value := ini.read(text, key)) is not None}
+
+
+def panel_ini(build, recipe, choice: dict, fg_plan, anr_files: bool = False) -> dict[str, str]:
+    """The OptiScaler.ini keys Panel owns for this install, in the order they are written."""
+    return {
+        **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
+        **({"Plugins.LoadAsiPlugins": "true"} if recipe and recipe.optipatcher else {}),
+        **catalog.model_overrides(build, choice.get("model")),
+        **catalog.fg_overrides(fg_plan, choice.get("fg") == "on", anr_files),
+    }
 
 
 def _option_overrides(choice: dict, reset: bool = False) -> dict[str, str]:

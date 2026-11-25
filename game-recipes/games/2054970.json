@@ -1,0 +1,57 @@
+{
+  "name": "Dragon's Dogma 2",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Dragons-Dogma-2"
+    ],
+    "files": {
+      "dinput8.dll": "reframework-nightly"
+    },
+    "native_dlls": [
+      "dinput8"
+    ],
+    "notes": "RE Engine exposes its upscaler to OptiScaler only through REFramework."
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/Dragons-Dogma-2"
+    ],
+    "files": {
+      "dinput8.dll": "reframework-nightly"
+    },
+    "native_dlls": [
+      "dinput8"
+    ],
+    "notes": "RE Engine exposes its upscaler to OptiScaler only through REFramework."
+  }
+}

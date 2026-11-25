@@ -22,9 +22,17 @@ public static class PackageNamedPipeServerFactory
         return Create(pipeName, includeWorldAccess: false);
     }
 
+    public static NamedPipeServerStream CreateConcurrentControl(string pipeName)
+    {
+        return Create(pipeName, includeWorldAccess: false, maxInstances: ConcurrentInstances);
+    }
+
+    private const int ConcurrentInstances = 8;
+
     private static NamedPipeServerStream Create(
         string pipeName,
-        bool includeWorldAccess)
+        bool includeWorldAccess,
+        int maxInstances = 1)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -51,7 +59,7 @@ public static class PackageNamedPipeServerFactory
         return NamedPipeServerStreamAcl.Create(
             AppContainerNames.ServerPipeName(pipeName, process.SessionId, packageSid.Value),
             PipeDirection.InOut,
-            1,
+            maxInstances,
             PipeTransmissionMode.Byte,
             PipeOptions.Asynchronous,
             0,

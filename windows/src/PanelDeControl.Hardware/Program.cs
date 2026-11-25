@@ -1,5 +1,8 @@
+using PanelDeControl.Core.FileSystem;
+using PanelDeControl.Core.Upscalers;
 using PanelDeControl.Hardware.Reports;
 using PanelDeControl.Hardware.Themes;
+using PanelDeControl.Hardware.Upscalers;
 
 namespace PanelDeControl.Hardware;
 
@@ -88,6 +91,31 @@ public static class Program
                 new ThemesController(themeService, themeEngine, focusReturner),
                 PackageNamedPipeServerFactory.CreateControl);
 
+            var upscalerData = UpscalerData.LoadEmbedded();
+            var upscalerStore = new UpscalerStateStore(UpscalerPaths.StateFile);
+            var steamRoots = new SteamRootSource(steam);
+            Func<IReadOnlyList<string>> steamRootList = steamRoots.Roots;
+            Func<IReadOnlyList<string>> runningImages = RunningImages.Read;
+            var upscalerIdentity = new DeviceIdentityReader(DeviceCatalogResource.TryLoad());
+            var upscalerService = new UpscalerService(
+                upscalerData,
+                upscalerStore,
+                new AssetCache(UpscalerPaths.CacheRoot, UpscalerPaths.Tar),
+                PhysicalFileSystem.Instance,
+                new SteamGames(PhysicalFileSystem.Instance, steamRootList),
+                runningImages,
+                () => GpuFamilyReader.Read(upscalerData.GpuRules),
+                () => upscalerIdentity.Read().Profile?.Key,
+                launchOptions: new SteamLaunchOptions(steamDevTools),
+                vcRuntime: new VcRuntimeProbe().InstalledVersion,
+                helix: HelixSr.ForCatalog(upscalerData.Catalog, UpscalerPaths.Root),
+                latest: new LatestReleases(upscalerData.Catalog.Tracks, Path.Combine(UpscalerPaths.Root, "latest-releases.json")));
+            _ = Task.Run(() => upscalerService.Gpu);
+            var upscalersServer = new UpscalersPipeServer(
+                UpscalersPipeServer.PackagedPipeName,
+                upscalerService,
+                PackageNamedPipeServerFactory.CreateConcurrentControl);
+
             using var reportHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
             var reportServer = new ReportPipeServer(
                 ReportPipeServer.PackagedPipeName,
@@ -99,7 +127,8 @@ public static class Program
                         reportHttp,
                         new Uri(Environment.GetEnvironmentVariable("PDC_REPORT_URL") ?? ReportSender.DefaultServiceUrl),
                         ReportSender.DefaultOfflineFolder),
-                    ReportController.DefaultLogs),
+                    ReportController.DefaultLogs,
+                    () => UpscalersReportSection.Build(upscalerStore, upscalerService.Gpu, upscalerData.Recipes?.CatalogVersion)),
                 PackageNamedPipeServerFactory.CreateControl);
 
             using var brokerLifetime = new CancellationTokenSource();
@@ -112,6 +141,7 @@ public static class Program
                 SuperviseAsync("refresh", () => refreshServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("cpu", () => cpuServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("reports", () => reportServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("upscalers", () => upscalersServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("themes.engine", () => themeEngine.RunAsync(token), token),
                 SuperviseAsync("themes.pipe", () => themesServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("themes.focus", () => focusReturner.RunAsync(token), token),

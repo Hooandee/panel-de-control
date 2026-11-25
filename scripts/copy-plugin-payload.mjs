@@ -5,7 +5,7 @@ import {
   mkdirSync,
   rmSync,
 } from "node:fs";
-import { basename, extname, relative, resolve, sep } from "node:path";
+import { basename, extname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const PAYLOAD_ENTRIES = [
@@ -18,9 +18,11 @@ const PAYLOAD_ENTRIES = [
   "LICENSE",
   "py_modules",
   "game-recipes",
+  "shared/upscalers",
   "assets",
   "bin",
 ];
+const DATA_DIRECTORIES = ["game-recipes", join("shared", "upscalers")];
 const FORBIDDEN_DIRECTORIES = new Set([
   ".theme-private",
   "theme-packages",
@@ -49,7 +51,8 @@ function includePayloadPath(sourceRoot, sourcePath) {
   }
   const segments = path.split(sep);
   if (segments.includes("__pycache__")) return false;
-  if (segments[0] === "game-recipes" && segments.slice(1).some((segment) => segment.startsWith("."))) return false;
+  if (DATA_DIRECTORIES.some((directory) => path === directory || path.startsWith(`${directory}${sep}`))
+    && segments.some((segment) => segment.startsWith("."))) return false;
   if (segments.some((segment) => FORBIDDEN_DIRECTORIES.has(segment))) return false;
   if (ALLOWED_PAYLOAD_FILES.has(segments.join("/"))) return true;
   const suffix = extname(path).toLowerCase();

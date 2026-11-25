@@ -16,6 +16,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../../src/PanelDeControl.GameBar/TdpControlClient.cs" Link="GameBar/TdpControlClient.cs" />
+    <Compile Include="../Shared/TestTree.cs" Link="Shared/TestTree.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />

@@ -1,26 +1,55 @@
 {
   "name": "The Witcher 3: Wild Hunt",
-  "revision": 1,
-  "conditions": {
-    "engine": [
-      "optiscaler"
+  "linux": {
+    "status": "tested",
+    "revision": 2,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "exe": "bin/x64_dx12/witcher3.exe",
+    "args": [
+      "--launcher-skip",
+      "-dx12"
     ],
-    "platform": [
-      "linux"
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
     ],
-    "arch": [
-      "x86_64"
-    ]
+    "recommended_input": "xess",
+    "fg_note": "reflexOff",
+    "notes": "REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers. FSR Frame Generation is disabled while Reflex is on."
   },
-  "exe": "bin/x64_dx12/witcher3.exe",
-  "args": [
-    "--launcher-skip",
-    "-dx12"
-  ],
-  "ini": {},
-  "dependencies": [],
-  "source_urls": [
-    "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
-  ],
-  "recommended_input": "xess"
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "exe": "bin/x64_dx12/witcher3.exe",
+    "args": [
+      "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
+    ],
+    "fg_note": "reflexOff",
+    "notes": "REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers. FSR Frame Generation is disabled while Reflex is on. On Windows the launcher skip is left out: it only matters under Proton. The XeSS input hint was measured on Linux only and is left out."
+  }
 }

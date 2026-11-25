@@ -14,11 +14,21 @@ CATALOG_PATH = Path(__file__).resolve().parents[2] / 'game-recipes'
 _ID = re.compile(r'[a-z0-9][a-z0-9-]{0,79}\Z')
 _HASH = re.compile(r'[a-f0-9]{64}\Z')
 _ENGINES = {'optiscaler', 'dll', 'helixsr', 'proton', 'mako'}
-_PLATFORMS = {'linux', 'windows', 'darwin', 'android'}
+_PLATFORMS = ('linux', 'windows')
+# A block with a recipe applies on its OS; the other statuses only record that nothing applies there.
+_RECIPE_STATUSES = {'tested', 'untested'}
+_EMPTY_STATUSES = {'unknown', 'not_applicable'}
+# Dependency kinds that only exist on one OS.
+_PLATFORM_DEPENDENCIES = {'proton_dependency': 'linux', 'windows_redist': 'windows'}
 _ARCHES = {'x86_64', 'aarch64'}
 _VERBS = {'vcrun2022', 'msvcrt40'}
+_REDISTRIBUTABLES = {'vc14_x64'}
+_REDIST_PAGE_HOSTS = {'learn.microsoft.com'}
 # Pages a user_files dependency may point the user to; Panel never downloads from them.
 _PAGE_HOSTS = {'www.nexusmods.com', 'nexusmods.com', 'github.com', 'www.patreon.com'}
+_PROXY = re.compile(r'[A-Za-z0-9_]+\.dll\Z')
+_WORD = re.compile(r'[A-Za-z0-9_]+\Z')
+_NEEDS = ('reframework', 'nvngx_dlss', 'anti_cheat_off', 'luma', 'mod')
 _VERSION = re.compile(r'[0-9]+(?:\.[0-9]+){0,3}\Z')
 # TutorialProgress=4 marks ReShade's tutorial done: otherwise its splash stays over the game until Home is pressed.
 _CONFIGURATION = {'ReShade.ini': {'Luma.SRUserType': {'2'}, 'OVERLAY.TutorialProgress': {'4'}}}
@@ -84,6 +94,38 @@ class GameRecipe:
     optiscaler_fg: bool = True
     # Options the user must change in the game's own menu, as (setting, value) in the game's words.
     game_settings: tuple[tuple[str, str], ...] = ()
+    # The DLL name OptiScaler loads as instead of dxgi.dll.
+    proxy: str | None = None
+    # The game's launcher deletes unknown libraries beside the exe at every start; read-only ones survive.
+    protect_dlls: bool = False
+    # False when the game fails to start with FSR 4's loader in place of its FSR 3.1 amd_fidelityfx_dx12.dll.
+    legacy_ffx_swap: bool = True
+    # Extra files placed beside the exe: destination -> id of a build catalog asset.
+    files: dict[str, str] = field(default_factory=dict)
+    native_dlls: tuple[str, ...] = ()
+    needs: tuple[str, ...] = ()
+    # What the game's own menu needs so its DLSS Frame Generation reaches ANR, as (setting, value).
+    anr_settings: tuple[tuple[str, str], ...] = ()
+    # (file relative to the user's profile folder, XML element, text) set on install and put back on removal.
+    game_config: tuple[tuple[str, str, str], ...] = ()
+    # With a user's mod in: (launcher Steam starts, exe to start instead).
+    mod_launch_exe: tuple[str, str] | None = None
+    # The mod's own settings: file beside the exe -> `Section.Key` -> value.
+    mod_settings: dict[str, dict[str, str]] = field(default_factory=dict)
+    mod_frame_generation: str | None = None
+    fg_note: str | None = None
+    notes: str | None = None
+    platform: str = 'linux'
+    status: str = 'tested'
+
+
+@dataclass(frozen=True)
+class GameEntry:
+    """One game: a block per OS, each with its own recipe or only a status."""
+    appid: str
+    name: str
+    statuses: dict[str, str]
+    recipes: dict[str, GameRecipe]
 
 
 @dataclass(frozen=True)
@@ -92,21 +134,21 @@ class Catalog:
     catalog_version: int
     assets: dict[str, AssetSpec]
     dependencies: dict[str, DependencySpec]
-    games: dict[str, GameRecipe]
+    games: dict[str, GameEntry]
 
     def match(self, appid: str, engine: str, platform: str | None = None, arch: str | None = None, game_build: str | None = None) -> GameRecipe | None:
-        entry = self.games.get(str(appid))
+        game = self.games.get(str(appid))
+        platform = (platform or host_platform.system()).lower()
+        entry = game.recipes.get(platform) if game else None
         if entry is None:
             return None
         if 'game_builds' in entry.conditions and game_build not in entry.conditions['game_builds']:
             return None
-        platform = (platform or host_platform.system()).lower()
         arch = (arch or host_platform.machine()).lower()
         arch = {'amd64': 'x86_64', 'arm64': 'aarch64'}.get(arch, arch)
-        return entry if all(value in entry.conditions[key] for key, value in
-                            (('engine', engine), ('platform', platform), ('arch', arch))) else None
+        return entry if engine in entry.conditions['engine'] and arch in entry.conditions['arch'] else None
 
-    def dependency_order(self, ids) -> tuple[DependencySpec, ...]:
+    def dependency_order(self, ids, platform: str | None = None) -> tuple[DependencySpec, ...]:
         visited, active, ordered = set(), set(), []
         def visit(identifier):
             if identifier in active or identifier not in self.dependencies:
@@ -116,6 +158,8 @@ class Catalog:
             active.add(identifier)
             dependency = self.dependencies[identifier]
             for child in dependency.requires:
+                if platform is not None and _foreign(self.dependencies.get(child), platform):
+                    continue
                 visit(child)
             active.remove(identifier)
             visited.add(identifier)
@@ -180,14 +224,14 @@ def _url(value, asset=False):
     return value
 
 
-def _page_url(value):
+def _page_url(value, hosts=_PAGE_HOSTS):
     value = _text(value, 2048)
     try:
         parsed = urlsplit(value)
         port = parsed.port
     except ValueError:
         raise CatalogError('untrusted_origin') from None
-    if parsed.scheme != 'https' or parsed.hostname not in _PAGE_HOSTS or parsed.username or parsed.password or port is not None:
+    if parsed.scheme != 'https' or parsed.hostname not in hosts or parsed.username or parsed.password or port is not None:
         raise CatalogError('untrusted_origin')
     return value
 
@@ -225,20 +269,216 @@ def _read(path: Path):
         raise CatalogError('invalid_json') from None
 
 
-def load(path: Path = CATALOG_PATH) -> Catalog:
+def _foreign(dependency: DependencySpec | None, platform: str) -> bool:
+    return dependency is not None and _PLATFORM_DEPENDENCIES.get(dependency.kind, platform) != platform
+
+
+def _closure(ids, dependencies, platform: str) -> list[DependencySpec]:
+    # A shared dependency may require OS-specific runtimes; on another OS those edges do not apply.
+    seen, pending = {}, list(ids)
+    while pending:
+        identifier = pending.pop()
+        if identifier in seen or identifier not in dependencies:
+            continue
+        seen[identifier] = dependencies[identifier]
+        pending.extend(child for child in seen[identifier].requires if not _foreign(dependencies.get(child), platform))
+    return list(seen.values())
+
+
+def _pairs(value, limit=16):
+    if not isinstance(value, list) or len(value) > limit:
+        raise CatalogError('invalid_pairs')
+    pairs = []
+    for entry in value:
+        entry = _object(entry, ('setting', 'value'))
+        pairs.append((_text(entry['setting'], 80), _text(entry['value'], 80)))
+    return tuple(pairs)
+
+
+def _extras(item) -> dict:
+    """Fields a recipe adds to what the OptiScaler install does for the game."""
+    extras = {}
+    if 'proxy' in item:
+        if not isinstance(item['proxy'], str) or not _PROXY.fullmatch(item['proxy']):
+            raise CatalogError('invalid_proxy')
+        extras['proxy'] = item['proxy']
+    for key, default in (('protect_dlls', False), ('legacy_ffx_swap', True)):
+        extras[key] = item.get(key, default)
+        if type(extras[key]) is not bool:
+            raise CatalogError('invalid_' + key)
+    files = item.get('files', {})
+    if not isinstance(files, dict) or len(files) > 16:
+        raise CatalogError('invalid_files')
+    extras['files'] = {_path(destination): _identifier(asset) for destination, asset in files.items()}
+    extras['native_dlls'] = _strings(item.get('native_dlls', []), lambda v: v if isinstance(v, str) and _WORD.fullmatch(v) else _bad('invalid_native_dll'), 8)
+    extras['needs'] = _strings(item.get('needs', []), lambda v: v if v in _NEEDS else _bad('invalid_need'), len(_NEEDS))
+    extras['anr_settings'] = _pairs(item.get('anr_settings', []))
+    config = item.get('game_config', [])
+    if not isinstance(config, list) or len(config) > 8:
+        raise CatalogError('invalid_game_config')
+    rows = []
+    for entry in config:
+        entry = _object(entry, ('file', 'element', 'value'))
+        if not isinstance(entry['element'], str) or not _WORD.fullmatch(entry['element']):
+            raise CatalogError('invalid_game_config')
+        rows.append((_path(entry['file']), entry['element'], _text(entry['value'], 80)))
+    extras['game_config'] = tuple(rows)
+    if 'mod_launch_exe' in item:
+        launch = _object(item['mod_launch_exe'], ('launcher', 'exe'))
+        names = (_text(launch['launcher'], 128), _text(launch['exe'], 128))
+        if any('/' in name or '\\' in name for name in names):
+            raise CatalogError('invalid_mod_launch_exe')
+        extras['mod_launch_exe'] = names
+    mod_settings = item.get('mod_settings', {})
+    if not isinstance(mod_settings, dict) or len(mod_settings) > 8:
+        raise CatalogError('invalid_mod_settings')
+    extras['mod_settings'] = {}
+    for filename, values in mod_settings.items():
+        if not isinstance(values, dict) or not values or len(values) > 16:
+            raise CatalogError('invalid_mod_settings')
+        extras['mod_settings'][_path(filename)] = {_text(key, 80): _text(value, 80) for key, value in values.items()}
+    for key, limit in (('mod_frame_generation', 80), ('fg_note', 40), ('notes', 400)):
+        if key in item:
+            extras[key] = _text(item[key], limit)
+    if 'fg_note' in extras and not _WORD.fullmatch(extras['fg_note']):
+        raise CatalogError('invalid_fg_note')
+    return extras
+
+
+def _bad(code):
+    raise CatalogError(code)
+
+
+def _recipe(appid: str, name: str, platform: str, item, dependencies) -> GameRecipe:
+    item = _object(item, ('status', 'revision', 'conditions', 'args', 'ini', 'dependencies', 'source_urls'), ('exe', 'tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings', 'proxy', 'protect_dlls', 'legacy_ffx_swap', 'files', 'native_dlls', 'needs', 'anr_settings', 'game_config', 'mod_launch_exe', 'mod_settings', 'mod_frame_generation', 'fg_note', 'notes'))
+    conditions = _object(item['conditions'], ('engine', 'arch'), ('game_builds',))
+    allowed = {'engine': _ENGINES, 'arch': _ARCHES}
+    parsed_conditions = {}
+    for key, values in conditions.items():
+        if key == 'game_builds':
+            builds = _strings(values, _game_build)
+            if not builds:
+                raise CatalogError('invalid_conditions')
+            parsed_conditions[key] = builds
+            continue
+        values = _strings(values, _text, 8)
+        if not values or not set(values) <= allowed[key]:
+            raise CatalogError('invalid_conditions')
+        parsed_conditions[key] = values
+    args = _strings(item['args'], lambda value: _text(value, 128), 16)
+    if any(not re.fullmatch(r'--?[A-Za-z0-9][A-Za-z0-9_=.-]*', value) for value in args):
+        raise CatalogError('invalid_game_argument')
+    settings = item['ini']
+    if not isinstance(settings, dict) or len(settings) > 128:
+        raise CatalogError('invalid_ini')
+    for key, value in settings.items():
+        if not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9_]+\.[A-Za-z0-9_]+', key):
+            raise CatalogError('invalid_ini_key')
+        _text(value, 256)
+    ids = _strings(item['dependencies'], _identifier)
+    if not set(ids) <= dependencies.keys():
+        raise CatalogError('missing_dependency')
+    if any(_foreign(dependencies[identifier], platform) for identifier in ids) or any(
+            _foreign(dependency, platform) for dependency in _closure(ids, dependencies, platform)):
+        raise CatalogError('dependency_not_for_platform')
+    sources = _strings(item['source_urls'], _url, 16)
+    if not sources:
+        raise CatalogError('missing_source')
+    configuration = item.get('configuration', {})
+    if not isinstance(configuration, dict) or configuration.keys() - _CONFIGURATION.keys():
+        raise CatalogError('unsupported_configuration')
+    for filename, changes in configuration.items():
+        _path(filename)
+        if not isinstance(changes, dict) or not changes or changes.keys() - _CONFIGURATION[filename].keys():
+            raise CatalogError('unsupported_configuration')
+        if any(not isinstance(value, str) or value not in _CONFIGURATION[filename][key] for key, value in changes.items()):
+            raise CatalogError('unsupported_configuration')
+    for key, allowed in (("effective_api", ("d3d11", "d3d12", "vulkan")), ("quality_owner", ("panel", "game"))):
+        if key in item and item[key] not in allowed:
+            raise CatalogError("invalid_" + key)
+    recommended_input = item.get('recommended_input')
+    if 'recommended_input' in item and (not isinstance(recommended_input, str) or recommended_input not in ('dlss', 'fsr31', 'fsr2', 'xess')):
+        raise CatalogError('invalid_recommended_input')
+    recommended_build = item.get('recommended_build')
+    if 'recommended_build' in item and (not isinstance(recommended_build, str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,79}', recommended_build)):
+        raise CatalogError('invalid_recommended_build')
+    root_files = _strings(item.get('optiscaler_root_files', []), _path, 8)
+    if any('/' in name or not name.lower().endswith('.dll') for name in root_files):
+        raise CatalogError('invalid_root_files')
+    flags = {}
+    for key, default in (('reframework_upscaler', False), ('optiscaler_fg', True)):
+        flags[key] = item.get(key, default)
+        if type(flags[key]) is not bool:
+            raise CatalogError('invalid_' + key)
+    raw_settings = item.get('game_settings', [])
+    if not isinstance(raw_settings, list) or len(raw_settings) > 8:
+        raise CatalogError('invalid_game_settings')
+    game_settings = []
+    for entry in raw_settings:
+        entry = _object(entry, ('setting', 'value'))
+        game_settings.append((_text(entry['setting'], 80), _text(entry['value'], 40)))
+    extras = _extras(item)
+    tested_builds = _strings(item.get('tested_game_builds', []), _game_build)
+    tested_at = item.get('tested_at')
+    if tested_at is not None:
+        try:
+            if not isinstance(tested_at, str) or date.fromisoformat(tested_at).isoformat() != tested_at or not tested_builds:
+                raise ValueError()
+        except ValueError:
+            raise CatalogError('invalid_test_date') from None
+    return GameRecipe(appid, name, _integer(item['revision'], 2**31 - 1),
+                      parsed_conditions, _path(item['exe']) if 'exe' in item else None, args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
+                      flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings), platform=platform, status=item['status'], **extras)
+
+
+def _entry(appid, item, dependencies) -> GameEntry:
+    if not isinstance(appid, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', appid):
+        raise CatalogError('invalid_appid')
+    item = _object(item, ('name', *_PLATFORMS))
+    name = _text(item['name'], 160)
+    statuses, recipes = {}, {}
+    for platform in _PLATFORMS:
+        block = item[platform]
+        status = block.get('status') if isinstance(block, dict) else None
+        if status in _EMPTY_STATUSES:
+            _object(block, ('status',))
+        elif status in _RECIPE_STATUSES:
+            recipes[platform] = _recipe(appid, name, platform, block, dependencies)
+        else:
+            raise CatalogError('invalid_status')
+        statuses[platform] = status
+    return GameEntry(appid, name, statuses, recipes)
+
+
+def load(path: Path = CATALOG_PATH, skip_broken_games: bool = False) -> Catalog:
+    """`skip_broken_games` drops a game file that cannot be read or parsed, and says so, instead of failing the whole catalog."""
     path = Path(path)
     games_path = path / 'games'
     if path.is_symlink() or not path.is_dir() or games_path.is_symlink() or not games_path.is_dir():
         raise CatalogError('invalid_catalog_directory')
     files = [f for f in games_path.iterdir() if not f.name.startswith('.')]
-    if len(files) > 512 or any(not re.fullmatch(r'[1-9][0-9]{0,9}\.json', f.name) for f in files):
+    if len(files) > 512:
+        raise CatalogError('invalid_game_files')
+    if skip_broken_games:
+        for f in [f for f in files if not re.fullmatch(r'[1-9][0-9]{0,9}\.json', f.name)]:
+            logging.getLogger(__name__).warning('Game recipe file skipped: %s (invalid_game_files)', f.name)
+            files.remove(f)
+    elif any(not re.fullmatch(r'[1-9][0-9]{0,9}\.json', f.name) for f in files):
         raise CatalogError('invalid_game_files')
     metadata = _object(_read(path / 'catalog.json'), ('schema_version', 'catalog_version'))
+    games = {}
+    for f in files:
+        try:
+            games[f.stem] = _read(f)
+        except (OSError, CatalogError) as error:
+            if not skip_broken_games:
+                raise
+            logging.getLogger(__name__).warning('Game recipe file skipped: %s (%s)', f.name, type(error).__name__ if isinstance(error, OSError) else error)
     raw = {**metadata, 'assets': _read(path / 'assets.json'),
            'dependencies': _read(path / 'dependencies.json'),
-           'games': {f.stem: _read(f) for f in files}}
+           'games': games}
     raw = _object(raw, ('schema_version', 'catalog_version', 'assets', 'dependencies', 'games'))
-    if type(raw['schema_version']) is not int or raw['schema_version'] != 1:
+    if type(raw['schema_version']) is not int or raw['schema_version'] != 2:
         raise CatalogError('unsupported_schema')
     version = _integer(raw['catalog_version'], 2**31 - 1)
     for key in ('assets', 'dependencies', 'games'):
@@ -274,6 +514,14 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
                 raise CatalogError('unsupported_dependency')
             dependency = DependencySpec(identifier, kind, None, {}, 'winetricks', item['verb'],
                                         _strings(item.get('requires', []), _identifier))
+        elif kind == 'windows_redist':
+            item = _object(item, ('kind', 'provider', 'component', 'min_version', 'page_url'), ('requires',))
+            if item['provider'] != 'microsoft' or not isinstance(item['component'], str) or item['component'] not in _REDISTRIBUTABLES:
+                raise CatalogError('unsupported_dependency')
+            dependency = DependencySpec(identifier, kind, None, {}, 'microsoft', item['component'],
+                                        _strings(item.get('requires', []), _identifier),
+                                        version=_version(item['min_version']),
+                                        page_url=_page_url(item['page_url'], _REDIST_PAGE_HOSTS))
         elif kind == 'user_files':
             item = _object(item, ('kind', 'name', 'page_url', 'version', 'files'), ('avoid_versions', 'requires', 'download_url'))
             if not isinstance(item['files'], dict) or not 0 < len(item['files']) <= 32:
@@ -292,84 +540,13 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
         dependencies[identifier] = dependency
     entries = {}
     for appid, item in raw['games'].items():
-        if not isinstance(appid, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', appid):
-            raise CatalogError('invalid_appid')
-        item = _object(item, ('name', 'revision', 'conditions', 'args', 'ini', 'dependencies', 'source_urls'), ('exe', 'tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings'))
-        conditions = _object(item['conditions'], ('engine', 'platform', 'arch'), ('game_builds',))
-        allowed = {'engine': _ENGINES, 'platform': _PLATFORMS, 'arch': _ARCHES}
-        parsed_conditions = {}
-        for key, values in conditions.items():
-            if key == 'game_builds':
-                builds = _strings(values, _game_build)
-                if not builds:
-                    raise CatalogError('invalid_conditions')
-                parsed_conditions[key] = builds
-                continue
-            values = _strings(values, _text, 8)
-            if not values or not set(values) <= allowed[key]:
-                raise CatalogError('invalid_conditions')
-            parsed_conditions[key] = values
-        args = _strings(item['args'], lambda value: _text(value, 128), 16)
-        if any(not re.fullmatch(r'--?[A-Za-z0-9][A-Za-z0-9_=.-]*', value) for value in args):
-            raise CatalogError('invalid_game_argument')
-        settings = item['ini']
-        if not isinstance(settings, dict) or len(settings) > 128:
-            raise CatalogError('invalid_ini')
-        for key, value in settings.items():
-            if not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9_]+\.[A-Za-z0-9_]+', key):
-                raise CatalogError('invalid_ini_key')
-            _text(value, 256)
-        ids = _strings(item['dependencies'], _identifier)
-        if not set(ids) <= dependencies.keys():
-            raise CatalogError('missing_dependency')
-        sources = _strings(item['source_urls'], _url, 16)
-        if not sources:
-            raise CatalogError('missing_source')
-        configuration = item.get('configuration', {})
-        if not isinstance(configuration, dict) or configuration.keys() - _CONFIGURATION.keys():
-            raise CatalogError('unsupported_configuration')
-        for filename, changes in configuration.items():
-            _path(filename)
-            if not isinstance(changes, dict) or not changes or changes.keys() - _CONFIGURATION[filename].keys():
-                raise CatalogError('unsupported_configuration')
-            if any(not isinstance(value, str) or value not in _CONFIGURATION[filename][key] for key, value in changes.items()):
-                raise CatalogError('unsupported_configuration')
-        for key, allowed in (("effective_api", ("d3d11", "d3d12", "vulkan")), ("quality_owner", ("panel", "game"))):
-            if key in item and item[key] not in allowed:
-                raise CatalogError("invalid_" + key)
-        recommended_input = item.get('recommended_input')
-        if 'recommended_input' in item and (not isinstance(recommended_input, str) or recommended_input not in ('dlss', 'fsr31', 'fsr2', 'xess')):
-            raise CatalogError('invalid_recommended_input')
-        recommended_build = item.get('recommended_build')
-        if 'recommended_build' in item and (not isinstance(recommended_build, str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,79}', recommended_build)):
-            raise CatalogError('invalid_recommended_build')
-        root_files = _strings(item.get('optiscaler_root_files', []), _path, 8)
-        if any('/' in name or not name.lower().endswith('.dll') for name in root_files):
-            raise CatalogError('invalid_root_files')
-        flags = {}
-        for key, default in (('reframework_upscaler', False), ('optiscaler_fg', True)):
-            flags[key] = item.get(key, default)
-            if type(flags[key]) is not bool:
-                raise CatalogError('invalid_' + key)
-        raw_settings = item.get('game_settings', [])
-        if not isinstance(raw_settings, list) or len(raw_settings) > 8:
-            raise CatalogError('invalid_game_settings')
-        game_settings = []
-        for entry in raw_settings:
-            entry = _object(entry, ('setting', 'value'))
-            game_settings.append((_text(entry['setting'], 80), _text(entry['value'], 40)))
-        tested_builds = _strings(item.get('tested_game_builds', []), _game_build)
-        tested_at = item.get('tested_at')
-        if tested_at is not None:
-            try:
-                if not isinstance(tested_at, str) or date.fromisoformat(tested_at).isoformat() != tested_at or not tested_builds:
-                    raise ValueError()
-            except ValueError:
-                raise CatalogError('invalid_test_date') from None
-        entries[appid] = GameRecipe(appid, _text(item['name'], 160), _integer(item['revision'], 2**31 - 1),
-                                   parsed_conditions, _path(item['exe']) if 'exe' in item else None, args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
-                                   flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings))
-    catalog = Catalog(1, version, assets, dependencies, entries)
+        try:
+            entries[appid] = _entry(appid, item, dependencies)
+        except CatalogError as error:
+            if not skip_broken_games:
+                raise
+            logging.getLogger(__name__).warning('Game recipe skipped: %s (%s)', appid, error)
+    catalog = Catalog(2, version, assets, dependencies, entries)
     catalog.dependency_order(dependencies)
     return catalog
 
@@ -377,7 +554,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
 @lru_cache(maxsize=1)
 def bundled() -> Catalog:
     try:
-        return load()
-    except (OSError, CatalogError):
-        logging.getLogger(__name__).warning('Game recipe catalog could not be loaded')
-        return Catalog(1, 0, {}, {}, {})
+        return load(skip_broken_games=True)
+    except (OSError, CatalogError) as error:
+        logging.getLogger(__name__).error('Game recipe catalog could not be loaded (%s): no recipes apply', type(error).__name__ if isinstance(error, OSError) else error)
+        return Catalog(2, 0, {}, {}, {})

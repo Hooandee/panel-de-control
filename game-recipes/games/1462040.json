@@ -1,46 +1,84 @@
 {
   "name": "FINAL FANTASY VII REMAKE INTERGRADE",
-  "revision": 5,
-  "conditions": {
-    "engine": [
-      "optiscaler"
+  "linux": {
+    "status": "tested",
+    "revision": 5,
+    "conditions": {
+      "engine": [
+        "optiscaler"
+      ],
+      "arch": [
+        "x86_64"
+      ]
+    },
+    "exe": "End/Binaries/Win64/ff7remake_.exe",
+    "args": [
+      "-dx11"
     ],
-    "platform": [
-      "linux"
+    "ini": {
+      "Plugins.LoadReshade": "true",
+      "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+      "luma-ff7",
+      "vcrun2022",
+      "msvcrt40"
     ],
-    "arch": [
-      "x86_64"
-    ]
+    "source_urls": [
+      "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-800",
+      "https://github.com/optiscaler/OptiScaler/wiki/FINAL-FANTASY-VII-REMAKE-INTERGRADE",
+      "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [
+      "21888968"
+    ],
+    "configuration": {
+      "ReShade.ini": {
+        "Luma.SRUserType": "2",
+        "OVERLAY.TutorialProgress": "4"
+      }
+    },
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_input": "dlss",
+    "recommended_build": "fsr-4.1.2-beta"
   },
-  "exe": "End/Binaries/Win64/ff7remake_.exe",
-  "args": [
-    "-dx11"
-  ],
-  "ini": {
-    "Plugins.LoadReshade": "true",
-    "Hotfix.CreateD3D12DeviceForLuma": "false"
-  },
-  "dependencies": [
-    "luma-ff7",
-    "vcrun2022",
-    "msvcrt40"
-  ],
-  "source_urls": [
-    "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-800",
-    "https://github.com/optiscaler/OptiScaler/wiki/FINAL-FANTASY-VII-REMAKE-INTERGRADE",
-    "https://github.com/Winetricks/winetricks"
-  ],
-  "tested_game_builds": [
-    "21888968"
-  ],
-  "configuration": {
-    "ReShade.ini": {
-      "Luma.SRUserType": "2",
-      "OVERLAY.TutorialProgress": "4"
-    }
-  },
-  "effective_api": "d3d11",
-  "quality_owner": "game",
-  "recommended_input": "dlss",
-  "recommended_build": "fsr-4.1.2-beta"
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler"
+      ],
+      "arch": [
+        "x86_64"
+      ]
+    },
+    "exe": "End/Binaries/Win64/ff7remake_.exe",
+    "args": [
+      "-dx11"
+    ],
+    "ini": {
+      "Plugins.LoadReshade": "true",
+      "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+      "luma-ff7",
+      "vc-redist-x64"
+    ],
+    "source_urls": [
+      "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-800",
+      "https://github.com/optiscaler/OptiScaler/wiki/FINAL-FANTASY-VII-REMAKE-INTERGRADE"
+    ],
+    "configuration": {
+      "ReShade.ini": {
+        "Luma.SRUserType": "2",
+        "OVERLAY.TutorialProgress": "4"
+      }
+    },
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_input": "dlss",
+    "recommended_build": "fsr-4.1.2-beta"
+  }
 }

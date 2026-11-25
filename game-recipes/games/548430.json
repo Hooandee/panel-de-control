@@ -1,0 +1,61 @@
+{
+  "name": "Deep Rock Galactic",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [
+      "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "anr_settings": [
+      {
+        "setting": "Frame Generation",
+        "value": "On"
+      }
+    ],
+    "notes": "The game asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build."
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler",
+        "dll"
+      ],
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "args": [
+      "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "anr_settings": [
+      {
+        "setting": "Frame Generation",
+        "value": "On"
+      }
+    ],
+    "notes": "The game asks for its API at launch; DLSS Frame Generation only exists in its DirectX 12 build."
+  }
+}

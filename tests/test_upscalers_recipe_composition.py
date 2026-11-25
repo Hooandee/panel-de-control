@@ -271,7 +271,7 @@ def test_reframework_placed_under_another_name_gets_no_dinput8(tmp_path):
 
 def test_monster_hunter_rise_installs_as_d3d12_with_reframework_through_reshade(steam, re_catalog, proc, monkeypatch):
     # PDC-AHVV: as dxgi.dll beside REFramework's dinput8.dll OptiScaler loaded but the game never offered DLSS.
-    monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["1446780"], appid=APPID))
+    monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.recipe_for("1446780", platform="linux", arch="x86_64"), appid=APPID))
     without_bundled_recipes(monkeypatch)
     _, game = steam
     _write(game / recipes.RE_ENGINE_MARKER)
