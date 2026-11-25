@@ -1925,6 +1925,7 @@ export const de: Record<string, string> = {
   "report.cat.upscalers": "Upscaler",
   "report.cat.themes": "Themes",
   "report.cat.ambient": "Ambiente",
+  "report.cat.accessories": "Zubehör",
   "report.cat.other": "Sonstiges",
   "report.section.describe": "Beschreibe, was passiert ist (erforderlich)",
   "report.section.describe.feature": "Beschreibe deinen Wunsch (erforderlich)",

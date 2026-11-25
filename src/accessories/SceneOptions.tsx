@@ -1,0 +1,130 @@
+import { DialogButton, Focusable, ToggleField } from "@decky/ui";
+import { LuMapPin, LuPause, LuPlay, LuRotateCcw } from "react-icons/lu";
+import { FC, useState } from "react";
+
+import { accessoryEvent } from "../api";
+import { useI18n } from "../i18n";
+import { theme } from "../theme";
+import { useLive } from "./EditorShell";
+import { openCityModal } from "./CityModal";
+import { PetCare } from "./PetCare";
+
+export const SCENE_THEMES: { id: string; from: string; to: string }[] = [
+  { id: "aurora", from: "#b078ff", to: "#40dcff" },
+  { id: "sunset", from: "#ff963c", to: "#ff4678" },
+  { id: "mint", from: "#5af0aa", to: "#3caaff" },
+  { id: "mono", from: "#ebe8fa", to: "#c8c4e1" },
+  { id: "ledbar", from: "#ff71ce", to: "#01cdfe" },
+];
+
+const Swatch: FC<{ id: string; from: string; to: string; selected: boolean; onPick: () => void }> = ({ id, from, to, selected, onPick }) => {
+  const { t } = useI18n();
+  const [focused, setFocused] = useState(false);
+  const pick = useLive(onPick);
+  return (
+    <Focusable
+      onActivate={pick}
+      onClick={pick}
+      onGamepadFocus={() => setFocused(true)}
+      onGamepadBlur={() => setFocused(false)}
+      aria-label={t(`accessories.theme.${id}`)}
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, flex: "1 1 0", minWidth: 0, padding: "6px 0", borderRadius: theme.radius.sm,
+        background: focused ? "rgba(255,255,255,0.08)" : "transparent" }}
+    >
+      <span style={{
+        width: 26, height: 26, borderRadius: 13, background: `linear-gradient(135deg, ${from}, ${to})`,
+        boxShadow: selected ? `0 0 0 2px ${theme.color.surfaceRaised}, 0 0 0 4px ${theme.color.accent}, 0 0 12px ${from}88` : `0 0 8px ${from}44`,
+        transform: focused ? "scale(1.1)" : "scale(1)", transition: "transform 120ms ease, box-shadow 160ms ease",
+      }} />
+      <span style={{ fontSize: 10, fontWeight: 650, lineHeight: 1.15, textAlign: "center", color: selected ? theme.color.textPrimary : theme.color.textMuted }}>
+        {t(`accessories.theme.${id}`)}
+      </span>
+    </Focusable>
+  );
+};
+
+const Segmented: FC<{ values: string[]; current: string; labelPrefix: string; onPick: (value: string) => void }> = ({ values, current, labelPrefix, onPick }) => {
+  const { t } = useI18n();
+  return (
+    <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.xs }}>
+      {values.map((value) => {
+        const selected = current === value;
+        const choose = () => onPick(value);
+        return (
+          <DialogButton key={value} onClick={choose}
+            style={{ flex: 1, minWidth: 0, padding: "8px 4px", fontWeight: 700, whiteSpace: "normal", lineHeight: 1.2,
+              background: selected ? theme.color.accent : "rgba(255,255,255,0.06)",
+              color: selected ? theme.color.onAccent : theme.color.textPrimary }}>
+            {t(`${labelPrefix}.${value}`)}
+          </DialogButton>
+        );
+      })}
+    </Focusable>
+  );
+};
+
+const SpeedrunControls: FC<{ paused: boolean; onChanged?: () => void }> = ({ paused, onChanged }) => {
+  const { t } = useI18n();
+  const send = (action: string) => void accessoryEvent("speedrun", { action }).then(() => onChanged?.()).catch(() => undefined);
+  const button = { flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontWeight: 700,
+    padding: "8px 4px", whiteSpace: "normal", lineHeight: 1.2 } as const;
+  return (
+    <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.xs }}>
+      <DialogButton style={button} onClick={() => send("reset")}>
+        <LuRotateCcw /> {t("accessories.speedrun.reset")}
+      </DialogButton>
+      <DialogButton style={button} onClick={() => send(paused ? "resume" : "pause")}>
+        {paused ? <LuPlay /> : <LuPause />} {t(paused ? "accessories.speedrun.resume" : "accessories.speedrun.pause")}
+      </DialogButton>
+    </Focusable>
+  );
+};
+
+export const SceneOptions: FC<{
+  options: string[];
+  values: Record<string, unknown>;
+  onChange: (values: Record<string, unknown>) => void;
+  speedrunPaused?: boolean;
+  onRunChanged?: () => void;
+}> = ({ options, values, onChange, speedrunPaused = false, onRunChanged }) => {
+  const { t } = useI18n();
+  if (!options.length) return null;
+  const current = typeof values.theme === "string" ? values.theme : "aurora";
+  return (
+    <div style={{ ...theme.card, padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+      {options.includes("care") && <PetCare />}
+      {options.includes("run") && <SpeedrunControls paused={speedrunPaused} onChanged={onRunChanged} />}
+      {options.includes("theme") && (
+        <Focusable flow-children="row" style={{ display: "flex", gap: 4 }}>
+          {SCENE_THEMES.map((swatch) => (
+            <Swatch key={swatch.id} {...swatch} selected={current === swatch.id}
+              onPick={() => onChange({ ...values, theme: swatch.id })} />
+          ))}
+        </Focusable>
+      )}
+      {options.includes("city") && (
+        // A fixed label: the text turns into the city's name while the dialog is open, and focus
+        // comes back to this button by its label.
+        <DialogButton onClick={() => openCityModal((city) => onChange({ ...values, city }))} aria-label={t("accessories.city.pick")}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.sm }}>
+          <LuMapPin size={15} />
+          {typeof (values.city as { name?: string } | undefined)?.name === "string"
+            ? (values.city as { name: string }).name
+            : t("accessories.city.pick")}
+        </DialogButton>
+      )}
+      {options.includes("style") && (
+        <Segmented values={["icon", "sky"]} current={values.style === "sky" ? "sky" : "icon"} labelPrefix="accessories.style"
+          onPick={(style) => onChange({ ...values, style })} />
+      )}
+      {options.includes("layout") && (
+        <Segmented values={["full", "side"]} current={values.layout === "side" ? "side" : "full"} labelPrefix="accessories.layout"
+          onPick={(layout) => onChange({ ...values, layout })} />
+      )}
+      {options.includes("hour12") && (
+        <ToggleField label={t("accessories.hour12")} checked={values.hour12 === true}
+          onChange={(on) => onChange({ ...values, hour12: on })} bottomSeparator="none" />
+      )}
+    </div>
+  );
+};

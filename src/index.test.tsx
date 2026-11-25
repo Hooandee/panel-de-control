@@ -38,7 +38,7 @@ const persistentServices = vi.hoisted(() => {
   };
 });
 
-vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory, openFilePicker: vi.fn(), toaster: { toast: vi.fn() } }));
+vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory, openFilePicker: vi.fn(), toaster: { toast: vi.fn() }, routerHook: { addRoute: vi.fn(), removeRoute: vi.fn() } }));
 vi.mock("./ambient", () => ({ startAmbient: ambient.start, ambientThemeChannel: {}, AmbienteSection: () => null, AmbientPlayerBlock: () => null }));
 vi.mock("./platform/gameSessions", () => ({ createGameSessionPort: () => ({}) }));
 vi.mock("./upscalers/overlays", () => ({ startUpscalerOverlays: () => () => {} }));
@@ -104,6 +104,9 @@ vi.mock("./components/QamPanelGate", () => ({
 vi.mock("./qam/pluginRuntime", () => ({ startPluginQamRuntime: qamRuntime.start }));
 
 vi.mock("./tdp/gameWatcher", () => ({ startGameWatcher: persistentServices.startGameWatcher }));
+vi.mock("./accessories/gameArt", () => ({ startAccessoryArtWatcher: () => () => undefined }));
+vi.mock("./accessories/steamEvents", () => ({ startAccessorySteamEvents: () => () => undefined }));
+vi.mock("./accessories/editorRoute", () => ({ closeAccessoryEditor: () => undefined }));
 vi.mock("./system/ecoAmbient", () => ({ startEcoAmbient: () => () => {} }));
 vi.mock("./system/valueToast", () => ({
   refreshValueToast: vi.fn(),

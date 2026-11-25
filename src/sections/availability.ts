@@ -9,6 +9,9 @@ import { effectiveEnabled } from "../customize/moduleLogic";
 // Sections whose whole content is blocks (no fixed core): hiding every block
 // leaves an empty tab, so the tab itself disappears. Potencia is excluded — it
 // keeps its fixed power-arc core even with its blocks hidden.
+// The JSAUX PIXEL faceplate only fits the Steam Machine.
+const ACCESSORIES_TAB = "accessories";
+
 const FULLY_MODULAR = new Set(["system", "display", "fans", "mandos"]);
 
 /** A section the device can't use at all → never list it (shell nor editor).
@@ -19,6 +22,7 @@ export function sectionHiddenOnDevice(
   id: string,
 ): boolean {
   if (id === "mandos") return !!device && device.key.startsWith("steam_deck");
+  if (id === ACCESSORIES_TAB) return device?.key !== "steam_machine";
   return false;
 }
 

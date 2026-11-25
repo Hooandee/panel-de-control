@@ -14,6 +14,7 @@ import { LimpiezaSection } from "./LimpiezaSection";
 import { EscaladoresSection } from "./EscaladoresSection";
 import { TemasSection } from "./TemasSection";
 import { AjustesSection } from "./AjustesSection";
+import { AccesoriosSection } from "./AccesoriosSection";
 import { AmbienteSection, AmbientPlayerBlock } from "../ambient";
 import { registerBlock } from "../customize/blocks";
 import { buildSections } from "./registryModel";
@@ -42,6 +43,7 @@ const COMPONENTS: Record<string, FC> = {
   params: ParametrosSection,
   upscalers: EscaladoresSection,
   cleaner: LimpiezaSection,
+  accessories: AccesoriosSection,
   ambient: AmbienteSection,
   themes: TemasSection,
   settings: AjustesSection,

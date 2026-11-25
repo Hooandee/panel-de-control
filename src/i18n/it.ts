@@ -1751,6 +1751,7 @@ export const it: Record<string, string> = {
   "report.cat.other": "Altro",
   "report.cat.themes": "Temi",
   "report.cat.ambient": "Atmosfera",
+  "report.cat.accessories": "Accessori",
   "report.section.describe": "Descrivi cosa è successo (obbligatorio)",
   "report.section.describe.feature": "Descrivi cosa vorresti (obbligatorio)",
   "report.describe.hint": "Senza una descrizione non posso capire il problema. Dimmi cosa ti aspettavi e cosa è successo.",

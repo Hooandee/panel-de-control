@@ -78,6 +78,12 @@ from Panel. Themes in early access show an Early label and install from their zi
 🎮 **Controllers.** Button remapping that works with Handheld Daemon and InputPlumber. Still
 in beta.
 
+🟪 **Accessories.** If your Steam Machine wears the JSAUX PIXEL faceplate, Panel runs it with
+nothing else to install: clocks, animated art, the cover and stats of the game you're playing,
+your city's weather, a pet that reacts to what you do and a drawing mode to make and animate your
+own art with the controller. Animations play on the display by themselves, so its memory barely
+gets touched. Experimental.
+
 🧩 **Your way.** Reorder and hide tabs, build your own views and pick an accent color. Everything
 works with the controller, and updates show up on their own in the quick access menu.
 
@@ -150,6 +156,11 @@ If you have a device I don't, your reports are what help me polish it the most.
 
 Panel learns from how you play to fine-tune its suggestions, but all of it stays on your device. You
 can turn it off or wipe it anytime from Settings.
+
+If you put the weather scene on the JSAUX PIXEL display, Panel asks Open-Meteo for the weather in
+the city you pick. That's the only thing that leaves your device, and only while that scene is on.
+If you press "Use my location" while picking a city, Panel asks ipwho.is for a rough city based on
+your IP, just that once.
 
 > [!WARNING]
 > Panel runs with root permissions and changes power, thermal and firmware settings. It's built to

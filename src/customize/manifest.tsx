@@ -4,7 +4,7 @@ import {
   LuLeaf, LuBatteryCharging, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
   LuLightbulb, LuLamp, LuShieldAlert, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
   LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket, LuLayoutDashboard, LuPaintbrush, LuPuzzle, LuHardDrive, LuScaling,
-  LuMonitorCog, LuImage, LuRadio,
+  LuMonitorCog, LuImage, LuRadio, LuGrid3X3,
 } from "react-icons/lu";
 import type { SectionIcon } from "../sections/types";
 import type { LearningTag } from "../learning/logic";
@@ -53,6 +53,7 @@ export const TABS: TabMeta[] = [
   { id: "params", labelKey: "nav.params", descriptionKey: "nav.params.desc", accent: "#955e44", icon: (size) => <LuRocket size={size} /> },
   { id: "upscalers", labelKey: "nav.upscalers", descriptionKey: "nav.upscalers.desc", accent: "#b0533f", icon: (size) => <LuScaling size={size} /> },
   { id: "cleaner", labelKey: "nav.cleaner", descriptionKey: "nav.cleaner.desc", accent: "#507e86", icon: (size) => <LuHardDrive size={size} /> },
+  { id: "accessories", labelKey: "nav.accessories", descriptionKey: "nav.accessories.desc", accent: "#7a5fb0", icon: (size) => <LuGrid3X3 size={size} /> },
   { id: "ambient", labelKey: "nav.ambient", descriptionKey: "nav.ambient.desc", accent: "#5f7fb0", icon: (size) => <LuImage size={size} /> },
   { id: "themes", labelKey: "nav.themes", descriptionKey: "nav.themes.desc", accent: "#925783", icon: (size) => <LuPaintbrush size={size} /> },
   { id: "settings", labelKey: "nav.settings", descriptionKey: "nav.settings.desc", accent: "#626b73", icon: (size) => <LuSettings size={size} /> },
