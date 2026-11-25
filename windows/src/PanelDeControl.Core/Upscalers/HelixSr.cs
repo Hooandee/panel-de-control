@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using PanelDeControl.Core.Data;
+using static PanelDeControl.Core.Upscalers.InstallPaths;
 
 namespace PanelDeControl.Core.Upscalers;
 
@@ -396,18 +397,6 @@ public static class HelixRestore
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-        }
-    }
-
-    private static bool IsLink(string path)
-    {
-        try
-        {
-            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            return false;
         }
     }
 

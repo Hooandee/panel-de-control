@@ -22,6 +22,10 @@ public abstract class DataValue
     }
 
     public static DataValue Parse(string text) => new DataReader(text).ReadDocument();
+
+    /// <summary>The string items of an array; anything else yields none.</summary>
+    internal static IReadOnlyList<string> StringItems(DataValue? value) =>
+        value is DataArray array ? array.Items.OfType<DataString>().Select(item => item.Value).ToList() : new List<string>();
 }
 
 public sealed class DataObject : DataValue

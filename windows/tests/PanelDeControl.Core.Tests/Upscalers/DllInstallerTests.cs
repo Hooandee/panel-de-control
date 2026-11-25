@@ -1,7 +1,8 @@
-using System.Net;
 using System.Runtime.InteropServices;
 using PanelDeControl.Core.Upscalers;
 using Xunit;
+using PanelDeControl.TestSupport;
+using static PanelDeControl.TestSupport.TestTree;
 
 namespace PanelDeControl.Core.Tests.Upscalers;
 
@@ -34,9 +35,9 @@ public sealed class DllInstallerTests : IDisposable
         var names = new[] { Provider, DllInstaller.Loader, "_storage_/" + DllInstaller.Legacy, "_storage_/" + DllInstaller.Loader, "_storage_/" + Provider };
         foreach (var name in names)
         {
-            Write("bin/x64_dx12/" + name, "original:" + name);
+            Write(_game, "bin/x64_dx12/" + name, "original:" + name);
         }
-        var before = Snapshot();
+        var before = Snapshot(_game);
         var build = Catalog.Build("fsr-4.1.2-lite-dll")!;
         var installer = new DllInstaller(Catalog, _cache);
 
@@ -51,13 +52,13 @@ public sealed class DllInstallerTests : IDisposable
         Assert.Equal("original:" + DllInstaller.Loader, Read("bin/x64_dx12/" + DllInstaller.Loader));
 
         Assert.Empty(GameFiles.Remove(install.Target));
-        Assert.Equal(before, Snapshot());
+        Assert.Equal(before, Snapshot(_game));
     }
 
     [Fact]
     public async Task ARecipeThatKeepsTheGamesFsr31LibraryLeavesNothingToSwap()
     {
-        Write("bin/x64_dx12/" + DllInstaller.Legacy, "ffx 1.0.1");
+        Write(_game, "bin/x64_dx12/" + DllInstaller.Legacy, "ffx 1.0.1");
         var analysis = Analysis(new[] { "bin/x64_dx12/" + DllInstaller.Legacy });
 
         Assert.Empty(DllInstaller.Targets(analysis, legacySwap: false));
@@ -69,8 +70,8 @@ public sealed class DllInstallerTests : IDisposable
     [Fact]
     public async Task AnOptiScalerInstallInTheRootIsAConflict()
     {
-        Write("bin/x64_dx12/" + Provider, "game fsr");
-        Write(GameManifest.Folder + "/" + GameManifest.FileName, "{}");
+        Write(_game, "bin/x64_dx12/" + Provider, "game fsr");
+        Write(_game, GameManifest.Folder + "/" + GameManifest.FileName, "{}");
 
         var error = await Assert.ThrowsAsync<UpscalerException>(() => new DllInstaller(Catalog, _cache)
             .InstallAsync("fsr-4.1.2-dll", _game, () => Analysis(new[] { "bin/x64_dx12/" + Provider }), true, null, false, null, CancellationToken.None,
@@ -81,8 +82,8 @@ public sealed class DllInstallerTests : IDisposable
     [Fact]
     public async Task LeftoversNoInstallClaimsAreClearedBeforeTheConflictCheck()
     {
-        Write("bin/x64_dx12/" + Provider, "game fsr");
-        Write(GameManifest.Folder + "/" + GameManifest.FileName, "{}");
+        Write(_game, "bin/x64_dx12/" + Provider, "game fsr");
+        Write(_game, GameManifest.Folder + "/" + GameManifest.FileName, "{}");
         var install = await new DllInstaller(Catalog, _cache)
             .InstallAsync("fsr-4.1.2-dll", _game, () => Analysis(new[] { "bin/x64_dx12/" + Provider }), true, null, false, null, CancellationToken.None);
 
@@ -119,15 +120,15 @@ public sealed class DllInstallerTests : IDisposable
         {
             return;
         }
-        Write("bin/x64_dx12/" + Provider, "original");
-        var before = Snapshot();
+        Write(_game, "bin/x64_dx12/" + Provider, "original");
+        var before = Snapshot(_game);
 
         var install = await new DllInstaller(Catalog, _cache).InstallAsync("fsr-4.1.2-dll", _game,
             () => Analysis(new[] { "bin/x64_dx12/" + Provider, "Bin/x64_dx12/" + Provider }), true, null, false, null, CancellationToken.None);
 
         Assert.Equal(1, install.Files);
         Assert.Empty(GameFiles.Remove(install.Target));
-        Assert.Equal(before, Snapshot());
+        Assert.Equal(before, Snapshot(_game));
     }
 
     [Fact]
@@ -141,7 +142,7 @@ public sealed class DllInstallerTests : IDisposable
     [Fact]
     public async Task AntiCheatNeedsConfirmation()
     {
-        Write("bin/x64_dx12/" + Provider, "game fsr");
+        Write(_game, "bin/x64_dx12/" + Provider, "game fsr");
 
         var error = await Assert.ThrowsAsync<UpscalerException>(() => new DllInstaller(Catalog, _cache)
             .InstallAsync("fsr-4.1.2-dll", _game, () => Analysis(new[] { "bin/x64_dx12/" + Provider }, antiCheat: true), true, null, false, null, CancellationToken.None));
@@ -160,25 +161,7 @@ public sealed class DllInstallerTests : IDisposable
         Array.Empty<ExeCandidate>(), "bin/x64_dx12/Game.exe", new[] { "d3d12" }, false, Path.Combine(_game, "bin", "x64_dx12"),
         Array.Empty<KeyValuePair<string, IReadOnlyList<string>>>(), targets, null, antiCheat, false, null);
 
-    private void Write(string relative, string text)
-    {
-        var path = Path.Combine(_game, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, text);
-    }
-
     private string Read(string relative) => File.ReadAllText(Path.Combine(_game, relative));
-
-    private string Snapshot() => string.Join("\n", Directory
-        .GetFileSystemEntries(_game, "*", SearchOption.AllDirectories)
-        .OrderBy(path => path, StringComparer.Ordinal)
-        .Select(path => path.Substring(_game.Length) + (File.Exists(path) ? "=" + File.ReadAllText(path) : "/")));
-
-    private sealed class NoNetwork : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-    }
 }
 
 public sealed class DllTargetSupportTests

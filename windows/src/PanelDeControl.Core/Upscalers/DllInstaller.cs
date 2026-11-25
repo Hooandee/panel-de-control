@@ -1,3 +1,5 @@
+using static PanelDeControl.Core.Upscalers.InstallPaths;
+
 namespace PanelDeControl.Core.Upscalers;
 
 /// <summary>
@@ -230,18 +232,6 @@ public sealed class DllInstaller
         return false;
     }
 
-    private static bool IsLink(string path)
-    {
-        try
-        {
-            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return false;
-        }
-    }
-
     private static string Join(string root, string relative) => Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
 
     private static string Relative(string root, string path) =>
@@ -254,17 +244,4 @@ public sealed class DllInstaller
     }
 
     private static string Name(string path) => Path.GetFileName(path.Replace('\\', '/')).ToLowerInvariant();
-
-    private static void Put(List<KeyValuePair<string, string>> sources, string relative, string path)
-    {
-        var index = sources.FindIndex(pair => GameManifest.PathComparer.Equals(pair.Key, relative));
-        if (index >= 0)
-        {
-            sources[index] = new KeyValuePair<string, string>(relative, path);
-        }
-        else
-        {
-            sources.Add(new KeyValuePair<string, string>(relative, path));
-        }
-    }
 }

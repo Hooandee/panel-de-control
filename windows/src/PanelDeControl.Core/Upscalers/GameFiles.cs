@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using PanelDeControl.Core.Data;
+using static PanelDeControl.Core.Upscalers.InstallPaths;
 
 namespace PanelDeControl.Core.Upscalers;
 
@@ -524,23 +525,6 @@ public static class GameFiles
 
     private static bool Exists(string path) => File.Exists(path) || Directory.Exists(path) || IsLink(path);
 
-    private static bool IsLink(string path)
-    {
-        try
-        {
-            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return false;
-        }
-    }
-
-    private static bool Inside(string path, string root)
-    {
-        var prefix = root.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ? root : root + Path.DirectorySeparatorChar;
-        return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
-    }
 }
 
 public sealed class UpscalerException : Exception
