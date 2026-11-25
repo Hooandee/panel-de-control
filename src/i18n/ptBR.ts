@@ -320,6 +320,7 @@ export const ptBR: Record<string, string> = {
   "up.section.model": "Modelo",
   "up.model.full": "Completo",
   "up.model.lite": "Leve",
+  "up.model.lossy": "Lossy (não idêntico ao da AMD)",
   "up.model.help": "O leve usa menos GPU; o completo mantém um pouco mais de detalhe fino",
   "up.launcher.heroic": "Jogo do Heroic: o Panel salva os ajustes no Heroic",
   "up.launcher.lutris": "Jogo do Lutris: o Panel salva os ajustes no Lutris",

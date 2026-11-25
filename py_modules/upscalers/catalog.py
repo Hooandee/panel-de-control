@@ -191,6 +191,18 @@ ASSETS: dict[str, Asset] = {
             member="4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll",
         ),
         Asset(
+            "fsr-4.1.2-lite-dgpu-cyboman-dll", "fsr4.1.2-cyboman-rx7000-2026-11-22.7z",
+            "bcd719dca0bfb791aec8987bad796eceb65fc887b3d1d45a4969d7b55e6f195d", 13284673,
+            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-22/fsr4.1.2-cyboman-rx7000-2026-11-22.7z",),
+            member="4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll",
+        ),
+        Asset(
+            "fsr-4.1.2-lite-dgpu-lossy-cyboman-dll", "fsr4.1.2-cyboman-rx7000-2026-11-22.7z",
+            "bcd719dca0bfb791aec8987bad796eceb65fc887b3d1d45a4969d7b55e6f195d", 13284673,
+            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-22/fsr4.1.2-cyboman-rx7000-2026-11-22.7z",),
+            member="4.1.2l-lossy/amd_fidelityfx_upscaler_dx12.dll",
+        ),
+        Asset(
             "fsr-4.1.1-lite-exact-dll", "FSR4_INT8_4.1.1_Lite_Exact.zip",
             "dac25f79687f955d7651451c24e9a827e1989e61389565befce267b0b2fef68e", 22379952,
             ("https://github.com/Optiscaler-Client/Optiscaler-Extras/releases/download/FSR_4.1.1_Lite_Exact/FSR4_INT8_4.1.1_Lite_Exact.zip",),
@@ -231,6 +243,17 @@ BUILDS: dict[str, Build] = {
         Build(
             "fsr-4.1.2-lite-igpu-dll", "fsr", "4.1.2", ("rdna3",), image=3, cost=2, engine="dll", way="fsr",
             replace={"amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-igpu-cyboman-dll"}, models=(("lite", {}),),
+            legacy_replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.2-dll-{part}" for part in ("loader", "framegeneration")},
+        ),
+        Build(
+            "fsr-4.1.2-lite-dgpu-dll", "fsr", "4.1.2", ("rdna3",), image=3, cost=2, engine="dll", way="fsr",
+            replace={"amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-dgpu-cyboman-dll"}, models=(("lite", {}),),
+            legacy_replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.2-dll-{part}" for part in ("loader", "framegeneration")},
+        ),
+        # Retrained weights: close to AMD's Lite picture, not identical. Never the default.
+        Build(
+            "fsr-4.1.2-lite-dgpu-lossy-dll", "fsr", "4.1.2", ("rdna3",), image=3, cost=2, engine="dll", way="fsr",
+            replace={"amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-dgpu-lossy-cyboman-dll"}, models=(("lossy", {}),),
             legacy_replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.2-dll-{part}" for part in ("loader", "framegeneration")},
         ),
         Build(
@@ -366,7 +389,12 @@ def preferred_build(gpu: str, recipe=None) -> str:
     return PREFERRED.get(gpu, "fsr-3.1")
 
 
+_DGPU_CYBOMAN = frozenset({"fsr-4.1.2-lite-dgpu-dll", "fsr-4.1.2-lite-dgpu-lossy-dll"})
+
+
 def build_supported(build: Build, gpu: str, device: str = "") -> bool:
+    if build.id in _DGPU_CYBOMAN:
+        return gpu == "rdna3" and device == "steam_machine"
     if build.id == "fsr-4.1.2-lite-igpu-dll":
         return gpu == "rdna3" and device in ("rog_ally", "rog_ally_x", "legion_go", "legion_go_s")
     if build.id == "fsr-4.1.2-dll" and device in ("steam_deck_lcd", "steam_deck_oled"):

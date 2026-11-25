@@ -44,7 +44,7 @@ export function badgeLabel(build: Pick<BuildInfo, "family" | "version" | "models
   if (!build) return { full: fallback, short: fallback };
   if (build.family === "proton") return { full: build.version, short: build.version };
   const family = build.family === "xess" ? "XeSS" : build.family === "helixsr" ? "HLX" : "FSR";
-  const lite = build.models?.includes("lite") && model !== "full" ? " Lite" : "";
+  const lite = build.models?.includes("lossy") ? " Lossy" : build.models?.includes("lite") && model !== "full" ? " Lite" : "";
   const major = build.version.split(".")[0];
   return { full: `${family} ${build.version}${lite}`.trim(), short: `${family} ${major}${lite}`.trim() };
 }
