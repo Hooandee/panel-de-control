@@ -11822,7 +11822,7 @@ class Plugin(AmbientRpc):
                 return options
             return {**options, "city": bool(options.get("city"))}
 
-        return {key: private(value) if key in ("options", "game_options") else value
+        return {key: private(value) if key in ("options", "game_options", "shown_options") else value
                 for key, value in state.items() if key != "catalog"}
 
     async def set_accessory_scene(self, scene_id, options=None) -> dict:

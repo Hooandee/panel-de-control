@@ -280,8 +280,8 @@ class ComposedScene(Scene):
 
     def __init__(self, library: Library):
         self._library = library
-        self._steps: dict[int, Stepper] = {}
-        self._values: dict[int, float | None] = {}
+        self._steps: dict[tuple[int, str], Stepper] = {}
+        self._values: dict[tuple[int, str], float | None] = {}
 
     def _blocks(self, ctx: SceneContext) -> list[dict]:
         try:
@@ -296,16 +296,19 @@ class ComposedScene(Scene):
         values = []
         for index, block in enumerate(blocks):
             if block["type"] == "metric":
-                step = self._steps.setdefault(index, Stepper(10 if block["metric"].endswith("pct") or block["metric"] == "fps" else 3, 4))
+                # Keyed by the metric too: the same piece slot can hold another reading in the game
+                # layout or after an edit, and must not inherit its steps.
+                slot = (index, block["metric"])
+                step = self._steps.setdefault(slot, Stepper(10 if block["metric"].endswith("pct") or block["metric"] == "fps" else 3, 4))
                 raw = ctx.metrics.get(block["metric"])
-                self._values[index] = step(raw if isinstance(raw, (int, float)) else None)
-                values.append(self._values[index])
+                self._values[slot] = step(raw if isinstance(raw, (int, float)) else None)
+                values.append(self._values[slot])
         return hour, tuple(values), repr(blocks)
 
     def render(self, ctx: SceneContext) -> Segment:
         blocks = self._blocks(ctx)
         cache: dict = {}
-        values = {id(block): self._values.get(index) for index, block in enumerate(blocks) if block["type"] == "metric"}
+        values = {id(block): self._values.get((index, block["metric"])) for index, block in enumerate(blocks) if block["type"] == "metric"}
         mode = refresh_mode(blocks, self._library, cache)
         cycle = _cycle(blocks, self._library, cache)
 

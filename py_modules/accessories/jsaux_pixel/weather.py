@@ -107,7 +107,9 @@ class WeatherSource:
     def pending(self, city: dict) -> bool:
         key = (round(float(city["lat"]), 2), round(float(city["lon"]), 2))
         with self._lock:
-            return key not in self._cache and (key in self._busy or key not in self._next_try)
+            # A refresh under way also covers a reading gone stale (a long sleep): wait for it
+            # rather than write "--" and the new reading a second later.
+            return key in self._busy or (key not in self._cache and key not in self._next_try)
 
     def _refresh(self, key: tuple) -> None:
         params = urllib.parse.urlencode({

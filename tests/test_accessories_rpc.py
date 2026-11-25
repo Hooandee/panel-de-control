@@ -41,10 +41,12 @@ def test_reports_keep_the_weather_city_out(plugin, monkeypatch):  # noqa: F811
     city = {"name": "Sevilla", "lat": 37.39, "lon": -5.98}
 
     async def state():
-        return {"scene": "weather", "options": {"city": city, "theme": "aurora"}, "game_options": {}, "catalog": [1]}
+        return {"scene": "weather", "options": {"city": city, "theme": "aurora"}, "game_options": {},
+                "shown_options": {"city": city}, "catalog": [1]}
 
     monkeypatch.setattr(plugin, "get_accessories_state", state)
     report = asyncio.run(plugin._accessories_report_state())
     assert report["options"] == {"city": True, "theme": "aurora"}
+    assert report["shown_options"] == {"city": True}
     assert "catalog" not in report
     assert "Sevilla" not in repr(report)

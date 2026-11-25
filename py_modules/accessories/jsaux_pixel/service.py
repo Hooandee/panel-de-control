@@ -65,6 +65,7 @@ def _valid_night(night: dict) -> bool:
 SUSPEND_MODES = ("off", "pet")
 _RESUME_JUMP_S = 30.0
 _SUSPEND_TIMEOUT_S = 180.0
+_IDLE_ANIMATION = 0
 
 
 class PixelService:
@@ -229,7 +230,7 @@ class PixelService:
         if scene_id not in self._scenes:
             raise ValueError(f"unknown scene {scene_id!r}")
         with self._lock:
-            if self._scene_id is None:
+            if self._scene_id is None and self._game_scene is None:
                 return
             self._alert, self._alert_until = (scene_id, dict(alert), seconds, self._clock()), None
             # The governor spaces alerts itself; a wait left by a live reading would make it stale.
@@ -252,7 +253,7 @@ class PixelService:
                 return
             self._suspended, self._suspended_at = True, self._clock()
             self._log("INFO", "suspend", mode=self._on_suspend)
-            if self._link is None or self._scene_id is None:
+            if self._link is None or (self._scene_id is None and self._game_scene is None):
                 return
             now = self._clock()
             try:
@@ -263,6 +264,8 @@ class PixelService:
                         self._rendered_key = ("suspend",)
                         return
                     # Out of budget: a dark panel beats an alert or a live dashboard left all night.
+                    if self._link is None:
+                        return
                     reply = self._request(codec.frame(1, codec.Cmd.POWER, b"\x00"))
                     if reply is not None and codec.is_ack(reply, 1, codec.Cmd.POWER):
                         self._power_sent = False
@@ -514,6 +517,10 @@ class PixelService:
             showing = self._game_scene if playing else self._scene_id
             chosen = self._game_options if playing else self._options
             if showing is None:
+                # Only a game scene was chosen and the game is over: hand the panel back to the
+                # firmware animation it shows on its own rather than freeze the last game frame.
+                if self._showing is not None and self._show_animation(_IDLE_ANIMATION, "restore", now):
+                    self._showing, self._shown_options, self._rendered_key = None, {}, None
                 return
         scene = self._scenes[showing]
         options = {**chosen, **self._option_extras(chosen)}

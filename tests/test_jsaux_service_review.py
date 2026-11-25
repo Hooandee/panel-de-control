@@ -545,3 +545,19 @@ def test_the_last_composition_is_remembered_after_another_scene(tmp_path):
         context=lambda now: SceneContext(now=now), handshake=lambda link: True, official_active=lambda: False,
     )
     assert again.state()["last_layout"] == layout
+
+
+def test_a_game_scene_alone_hands_the_panel_back_when_the_game_ends(tmp_path):
+    panel, clock, game = FakePanel(), Clock(), {"value": {"appid": "1"}}
+    svc = _svc(tmp_path, panel, clock, game=game)
+    svc.set_game_scene("steady", {})
+    for _ in range(15):
+        clock.t += 1
+        svc.tick()
+    assert len(panel.uploads()) == 1
+    game["value"] = None
+    for _ in range(15):
+        clock.t += 1
+        svc.tick()
+    assert len(panel.commands(codec.Cmd.ANIMATION)) == 1
+    assert svc.state()["showing"] is None

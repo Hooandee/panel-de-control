@@ -193,3 +193,12 @@ def test_a_piece_pushed_off_the_edge_is_clamped_instead_of_blanking_the_layout()
 
     blocks = validate_layout({"blocks": [{"type": "text", "x": -200, "y": 999, "text": "a"}]})
     assert (blocks[0]["x"], blocks[0]["y"]) == (-63, 53)
+
+
+def test_a_metric_slot_does_not_inherit_another_metrics_steps(tmp_path):
+    scene = ComposedScene(library.Library(tmp_path))
+    def ctx(metric, value):
+        layout = {"blocks": [{"type": "metric", "x": 0, "y": 0, "metric": metric}]}
+        return SceneContext(now=1_700_000_000, options={"layout": layout}, metrics={metric: value})
+    scene.key(ctx("fps", 60))
+    assert scene.key(ctx("cpu_temp", 54))[1] != scene.key(ctx("fps", 60))[1]
