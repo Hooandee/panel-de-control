@@ -434,7 +434,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         return shown switch
         {
             "themes" => themesView.RefreshAsync(),
-            "upscalers" => upscalersView.RefreshAsync(),
+            "upscalers" => upscalersView.RefreshListAsync(),
             _ => Task.CompletedTask,
         };
     }

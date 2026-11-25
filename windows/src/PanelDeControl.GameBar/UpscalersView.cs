@@ -240,7 +240,15 @@ public sealed class UpscalersView : UserControl
 
     private bool Experimental => experimentalToggle.IsOn;
 
-    public async Task RefreshAsync()
+    public Task RefreshAsync() => RefreshAsync(reloadGame: true);
+
+    /// <summary>
+    /// The widget's periodic refresh: keeps the list and a running job current without reloading the open game, which
+    /// would disable its buttons every two seconds.
+    /// </summary>
+    public Task RefreshListAsync() => RefreshAsync(reloadGame: false);
+
+    private async Task RefreshAsync(bool reloadGame)
     {
         if (!Experimental || refreshing || jobRunning)
         {
@@ -257,7 +265,11 @@ public sealed class UpscalersView : UserControl
                 return;
             }
 
-            await LoadOverviewAsync();
+            // An open game page is not redrawn by the periodic refresh: it would lose the scroll and the focus.
+            if (reloadGame || selectedAppId is null)
+            {
+                await LoadOverviewAsync(reloadGame);
+            }
         }
         finally
         {
@@ -648,6 +660,7 @@ public sealed class UpscalersView : UserControl
     private static string InputName(string kind) => kind switch
     {
         "dlss" => "DLSS",
+        "helixsr" => "HLX",
         "fsr31" => "FSR 3.1",
         "fsr2" => "FSR 2",
         _ => "XeSS",
@@ -829,6 +842,7 @@ public sealed class UpscalersView : UserControl
         "fsr" => "FSR",
         "xess" => "XeSS",
         "dlss" => "DLSS",
+        "helixsr" => "HLX",
         _ => family,
     };
 
