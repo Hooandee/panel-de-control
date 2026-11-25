@@ -24,6 +24,10 @@ public enum UpscalersOperation
 
     [EnumMember(Value = "cover")]
     Cover = 5,
+
+    /// <summary>Reads the in-game badge's mode, or sets it when the request carries one.</summary>
+    [EnumMember(Value = "ingame")]
+    InGame = 6,
 }
 
 [DataContract]
@@ -102,11 +106,18 @@ public sealed class UpscalersRequest
     [DataMember(Name = "fg_route", Order = 9, EmitDefaultValue = false)]
     public string? FrameGenRoute { get; private set; }
 
+    /// <summary>The in-game badge mode to set: <c>off</c>, <c>start</c> or <c>always</c>.</summary>
+    [DataMember(Name = "mode", Order = 10, EmitDefaultValue = false)]
+    public string? Mode { get; private set; }
+
     public static UpscalersRequest Overview() => new(UpscalersOperation.Overview);
 
     public static UpscalersRequest Game(string appId) => new(UpscalersOperation.Game, appId: appId);
 
     public static UpscalersRequest Job() => new(UpscalersOperation.Job);
+
+    /// <summary>Asks for the in-game badge's mode; with <paramref name="mode"/> it sets it first.</summary>
+    public static UpscalersRequest InGame(string? mode = null) => new(UpscalersOperation.InGame) { Mode = mode };
 
     public static UpscalersRequest Cover(string appId) => new(UpscalersOperation.Cover, appId: appId);
 
@@ -129,16 +140,19 @@ public sealed class UpscalersRequest
         bool Absent(string? field) => field is null;
         bool Token(string? field) => field is { Length: > 0 and <= MaximumFieldLength } && field.All(IsTokenCharacter);
         bool Optional(string? field) => field is null || Token(field);
-        var noFrameGen = Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute);
+        var noFrameGen = Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && Absent(Mode);
         var appId = AppId is { Length: > 0 and <= MaximumAppIdLength } && AppId.All(character => character is >= '0' and <= '9');
         var valid = Operation switch
         {
             UpscalersOperation.Overview or UpscalersOperation.Job =>
                 Absent(AppId) && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null && noFrameGen,
             UpscalersOperation.Game or UpscalersOperation.Cover => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null && noFrameGen,
-            UpscalersOperation.Install => appId && Token(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness)
+            UpscalersOperation.Install => appId && Token(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && Absent(Mode)
                 && (FrameGenRoute is null || Array.IndexOf(FrameGenRoutes, FrameGenRoute) >= 0),
             UpscalersOperation.Uninstall => appId && Absent(Build) && Absent(Quality) && Absent(Model) && noFrameGen,
+            UpscalersOperation.InGame =>
+                Absent(AppId) && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null
+                && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && (Mode is null || InGameModes.IsValid(Mode)),
             _ => false,
         };
         if (!valid)
@@ -206,6 +220,9 @@ public sealed class UpscalersOverview
     /// <summary>The adapter's own name (<c>NVIDIA GeForce RTX 5090 Laptop GPU</c>); <see cref="Gpu"/> stays the family the rules use.</summary>
     [DataMember(Name = "gpu_name", Order = 6, EmitDefaultValue = false)]
     public string? GpuName { get; set; }
+
+    [DataMember(Name = "ingame", Order = 7, EmitDefaultValue = false)]
+    public string? InGame { get; set; }
 }
 
 [DataContract]
@@ -501,6 +518,9 @@ public sealed class UpscalersResponse
     [DataMember(Name = "cover", Order = 6, EmitDefaultValue = false)]
     public UpscalerCover? Cover { get; set; }
 
+    [DataMember(Name = "ingame", Order = 7, EmitDefaultValue = false)]
+    public string? InGame { get; set; }
+
     public static UpscalersResponse Rejected(string errorCode, UpscalerJobStatus? job = null) =>
         new() { Status = UpscalersResponseStatus.Rejected, ErrorCode = errorCode, Job = job };
 
@@ -511,6 +531,7 @@ public sealed class UpscalersResponse
     {
         var valid = (Status == UpscalersResponseStatus.Ok) == (ErrorCode is null)
             && (Overview is null || Overview.Games is not null && Overview.Games.Select(game => game.AppId).Distinct().Count() == Overview.Games.Length)
+            && (InGame is null || InGameModes.IsValid(InGame))
             && (Cover is null || Cover.Mime is UpscalerCover.Jpeg or UpscalerCover.Png && Cover.Data is { Length: > 0 and <= UpscalersWireCodec.MaximumCoverBytes / 3 * 4 + 4 });
         if (!valid)
         {

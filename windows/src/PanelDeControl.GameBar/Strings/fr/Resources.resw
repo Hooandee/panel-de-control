@@ -492,6 +492,10 @@
   <data name="UpscalersQuality_quality" xml:space="preserve"><value>Qualité</value></data>
   <data name="UpscalersQuality_balanced" xml:space="preserve"><value>Équilibré</value></data>
   <data name="UpscalersQuality_performance" xml:space="preserve"><value>Performance</value></data>
+  <data name="UpscalersInGameLabel" xml:space="preserve"><value>Indication en jeu</value></data>
+  <data name="UpscalersInGame_off" xml:space="preserve"><value>Non</value></data>
+  <data name="UpscalersInGame_start" xml:space="preserve"><value>Au lancement</value></data>
+  <data name="UpscalersInGame_always" xml:space="preserve"><value>Toujours</value></data>
   <data name="UpscalersMegabytes" xml:space="preserve"><value>{0} Mo</value></data>
   <data name="UpscalersRecommended" xml:space="preserve"><value>Recommandée</value></data>
   <data name="UpscalersProgressPrepare" xml:space="preserve"><value>Préparation…</value></data>

@@ -91,6 +91,7 @@ public sealed class UpscalerStateStore
     private readonly Dictionary<string, List<UpscalerAction>> _actions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<UpscalerHistoryItem>> _history = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<string>> _strandedArgs = new(StringComparer.Ordinal);
+    private string? _inGameMode;
 
     /// <param name="path">The state file.</param>
     /// <param name="replace">Moves the finished temporary file over the state file; replaceable so a test can fail it.</param>
@@ -102,6 +103,26 @@ public sealed class UpscalerStateStore
     }
 
     public string FilePath => _path;
+
+    /// <summary>The in-game badge's mode: the stored one, else <see cref="InGameModes.Default"/>.</summary>
+    public string InGameMode
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return InGameModes.Normalize(_inGameMode);
+            }
+        }
+    }
+
+    public void SetInGameMode(string mode)
+    {
+        lock (_lock)
+        {
+            Mutate(() => _inGameMode = mode);
+        }
+    }
 
     public IReadOnlyList<string> InstalledAppIds
     {
@@ -273,6 +294,7 @@ public sealed class UpscalerStateStore
         var actions = _actions.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
         var history = _history.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
         var stranded = _strandedArgs.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
+        var inGameMode = _inGameMode;
         try
         {
             change();
@@ -280,6 +302,7 @@ public sealed class UpscalerStateStore
         }
         catch
         {
+            _inGameMode = inGameMode;
             _installs.Clear();
             foreach (var pair in installs)
             {
@@ -321,6 +344,11 @@ public sealed class UpscalerStateStore
             if (DataValue.Parse(File.ReadAllText(_path, Utf8)) is not DataObject document || document.Get("games") is not DataObject games)
             {
                 return;
+            }
+
+            if (document.Get("settings") is DataObject settings && settings.Get("ingame") is DataString mode && InGameModes.IsValid(mode.Value))
+            {
+                _inGameMode = mode.Value;
             }
 
             foreach (var game in games.Members)
@@ -395,7 +423,13 @@ public sealed class UpscalerStateStore
             games.Add(Member(appId, new DataObject(members)));
         }
 
-        var text = PythonJson.Write(new DataObject(new[] { Member("games", new DataObject(games)) }));
+        var top = new List<KeyValuePair<string, DataValue>> { Member("games", new DataObject(games)) };
+        if (_inGameMode is not null)
+        {
+            top.Add(Member("settings", new DataObject(new[] { Member("ingame", new DataString(_inGameMode)) })));
+        }
+
+        var text = PythonJson.Write(new DataObject(top));
         var directory = Path.GetDirectoryName(_path);
         if (!string.IsNullOrEmpty(directory))
         {

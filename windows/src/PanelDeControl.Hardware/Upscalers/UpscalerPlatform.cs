@@ -139,7 +139,7 @@ public static class RunningImages
     }
 
     [SupportedOSPlatform("windows")]
-    private static string? ImagePath(int processId)
+    internal static string? ImagePath(int processId)
     {
         var handle = OpenProcess(QueryLimitedInformation, false, processId);
         if (handle == IntPtr.Zero)
