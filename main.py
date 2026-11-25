@@ -267,9 +267,10 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "upscalers": (("_support_upscalers_state", None),),
     "ambient": (("_support_ambient_state", None),),
     "accessories": (
-        ("get_accessories_state", (
-            "supported", "present", "busy_by", "bus_port", "strong_supply", "scene", "brightness",
-            "pwm", "power", "night", "game_scene",
+        ("_accessories_report_state", (
+            "supported", "present", "busy_by", "port", "bus_port", "strong_supply", "scene", "options", "showing",
+            "brightness", "pwm", "power", "night", "night_active", "game_scene", "game_options", "alerts",
+            "on_suspend", "suspended", "last_upload", "writes",
         )),
     ),
     "themes": (
@@ -3293,6 +3294,7 @@ class Plugin(AmbientRpc):
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
             "upscalers": await self._upscalers_report(context),
             "ambient": self.ambient_diagnostics(),
+            "accessories": await _safe(self._accessories_report_state()),
             "themes": self._with_theme_display(
                 await _safe(self._offload_theme_call(self._theme_report_diagnostics)), context
             ),
@@ -11802,6 +11804,19 @@ class Plugin(AmbientRpc):
     async def get_accessories_state(self) -> dict:
         return await asyncio.to_thread(self._pixel_runtime().state)
 
+    async def _accessories_report_state(self) -> dict:
+        """The panel's state for logs and reports: no shared scene catalog, and the weather city
+        reduced to whether one is set, since it is where the user lives."""
+        state = await self.get_accessories_state()
+
+        def private(options):
+            if not isinstance(options, dict) or "city" not in options:
+                return options
+            return {**options, "city": bool(options.get("city"))}
+
+        return {key: private(value) if key in ("options", "game_options") else value
+                for key, value in state.items() if key != "catalog"}
+
     async def set_accessory_scene(self, scene_id, options=None) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_scene, str(scene_id), dict(options or {}))
 
@@ -16655,6 +16670,8 @@ journal.trace_calls(
         "commit_theme_install", "rollback_theme_install", "acknowledge_theme_install_rollback",
         "begin_theme_activation", "settle_theme_activation", "acknowledge_theme_activation",
         "save_accessory_drawing", "accessory_event",
+        # Weather options carry the user's city.
+        "set_accessory_scene", "set_accessory_game_scene", "search_accessory_cities",
     }),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

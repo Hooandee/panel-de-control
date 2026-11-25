@@ -24,3 +24,16 @@ def test_session_start_time_is_stable_between_ticks(plugin):  # noqa: F811
     _time.sleep(0.01)
     assert plugin._pixel_context()["game"]["started_at"] == first
     assert isinstance(first, int)
+
+
+def test_reports_keep_the_weather_city_out(plugin, monkeypatch):  # noqa: F811
+    city = {"name": "Sevilla", "lat": 37.39, "lon": -5.98}
+
+    async def state():
+        return {"scene": "weather", "options": {"city": city, "theme": "aurora"}, "game_options": {}, "catalog": [1]}
+
+    monkeypatch.setattr(plugin, "get_accessories_state", state)
+    report = asyncio.run(plugin._accessories_report_state())
+    assert report["options"] == {"city": True, "theme": "aurora"}
+    assert "catalog" not in report
+    assert "Sevilla" not in repr(report)

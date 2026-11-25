@@ -28,7 +28,7 @@ const Swatch: FC<{ id: string; from: string; to: string; selected: boolean; onPi
       onGamepadFocus={() => setFocused(true)}
       onGamepadBlur={() => setFocused(false)}
       aria-label={t(`accessories.theme.${id}`)}
-      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, flex: 1, padding: "6px 0", borderRadius: theme.radius.sm,
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, flex: "1 1 0", minWidth: 0, padding: "6px 0", borderRadius: theme.radius.sm,
         background: focused ? "rgba(255,255,255,0.08)" : "transparent" }}
     >
       <span style={{
@@ -36,7 +36,7 @@ const Swatch: FC<{ id: string; from: string; to: string; selected: boolean; onPi
         boxShadow: selected ? `0 0 0 2px ${theme.color.surfaceRaised}, 0 0 0 4px ${theme.color.accent}, 0 0 12px ${from}88` : `0 0 8px ${from}44`,
         transform: focused ? "scale(1.1)" : "scale(1)", transition: "transform 120ms ease, box-shadow 160ms ease",
       }} />
-      <span style={{ fontSize: 10, fontWeight: 650, color: selected ? theme.color.textPrimary : theme.color.textMuted }}>
+      <span style={{ fontSize: 10, fontWeight: 650, lineHeight: 1.15, textAlign: "center", color: selected ? theme.color.textPrimary : theme.color.textMuted }}>
         {t(`accessories.theme.${id}`)}
       </span>
     </Focusable>

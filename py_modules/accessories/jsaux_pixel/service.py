@@ -389,8 +389,10 @@ class PixelService:
         seen, since = self._playing_seen
         if game_running != seen:
             self._playing_seen = (game_running, now)
-        elif now - since >= _GAME_SETTLE_S:
+        elif now - since >= _GAME_SETTLE_S and self._playing != game_running:
             self._playing = game_running
+            self._log("INFO", "game_started" if game_running else "game_ended",
+                      game_scene=self._game_scene, chosen_in_game=self._chosen_in_game)
         return self._playing
 
     def _sync_scene(self, now: float) -> None:

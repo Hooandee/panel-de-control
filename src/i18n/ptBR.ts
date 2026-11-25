@@ -1925,6 +1925,7 @@ export const ptBR: Record<string, string> = {
   "report.cat.upscalers": "Upscalers",
   "report.cat.themes": "Temas",
   "report.cat.ambient": "Ambiente",
+  "report.cat.accessories": "Acessórios",
   "report.cat.other": "Outro",
   "report.section.describe": "Me diga o que aconteceu (obrigatório)",
   "report.section.describe.feature": "Me diga o que você gostaria (obrigatório)",
