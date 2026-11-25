@@ -14,7 +14,7 @@ interface Props {
   onWatts: (watts: number) => void;
   monitorOnly: boolean;
   steamControlled: boolean;
-  onReactivate: () => void | Promise<void>;
+  onReactivate: () => void | Promise<boolean | void>;
 }
 
 const DISABLED_OPACITY = 0.45;

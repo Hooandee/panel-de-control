@@ -103,6 +103,18 @@ describe("section without control", () => {
     section({ monitorOnly: true, steamControlled: false, onReactivate: vi.fn() });
     expect(screen.getByText("tdp.monitor.notice")).toBeTruthy();
   });
+
+  it("reports a refused re-enable and allows a retry", async () => {
+    const reactivate = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    section({ monitorOnly: true, onReactivate: reactivate });
+    const button = screen.getByText("tdp.monitor.reactivate");
+    fireEvent.click(button);
+    expect((await screen.findByRole("alert")).textContent).toBe("tdp.monitor.reactivateFailed");
+    expect(captured.slider).toBeNull();
+    fireEvent.click(button);
+    await waitFor(() => expect(reactivate).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });
 
 describe("TDP block for custom views", () => {

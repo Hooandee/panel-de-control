@@ -39,7 +39,7 @@ export interface TdpSectionProps {
   // Master switch off: show only the live arc + a notice, hide write controls.
   monitorOnly?: boolean;
   // Flip the master switch back on from the monitor notice.
-  onReactivate?: () => void;
+  onReactivate?: () => void | Promise<boolean | void>;
   // Custom power-preset library (built-in watts resolved from `tdp.presets`).
   presets: PowerPresetState | null;
   refreshPresets: () => void;

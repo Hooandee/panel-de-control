@@ -1717,6 +1717,7 @@ const es: Record<string, string> = {
   // Control de TDP + conflictos con otros gestores
   "tdp.monitor.notice": "Control de TDP desactivado · modo monitoreo",
   "tdp.monitor.reactivate": "Reactivar control de TDP",
+  "tdp.monitor.reactivateFailed": "No se pudo reactivar el control de TDP. Comprueba que ningún otro gestor esté controlando el TDP antes de reintentar.",
   "tdp.steamControl.line": "Steam está controlando el TDP",
   "tdp.steamControl.recover": "Recuperar",
   "tdp.conflict.hide": "No volver a mostrar",
@@ -3694,6 +3695,7 @@ const en: Record<string, string> = {
   // TDP control + conflicts with other managers
   "tdp.monitor.notice": "TDP control off · monitor only",
   "tdp.monitor.reactivate": "Re-enable TDP control",
+  "tdp.monitor.reactivateFailed": "Could not re-enable TDP control. Check that no other power manager is controlling TDP before retrying.",
   "tdp.steamControl.line": "Steam is controlling TDP",
   "tdp.steamControl.recover": "Recover",
   "tdp.conflict.hide": "Don't show again",
