@@ -79,8 +79,9 @@ class _FakePanel:
 def pty_panel():
     master, slave = os.openpty()
     path = os.ttyname(slave)
-    os.close(slave)
+    # Linux hangs up the master once no slave fd is open, which would end the fake panel's reads.
     yield master, path
+    os.close(slave)
     os.close(master)
 
 
@@ -214,10 +215,8 @@ def test_loads_without_termios(without_termios):
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="libc termios layout is Linux's")
 def test_libc_fallback_configures_a_tty(without_termios):
-    import pty
-
     shim = without_termios
-    master, slave = pty.openpty()
+    master, slave = os.openpty()
     try:
         attrs = shim.tcgetattr(slave)
         attrs[0] = shim.IGNPAR
