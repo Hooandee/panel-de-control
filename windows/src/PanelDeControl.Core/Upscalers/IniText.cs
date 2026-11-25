@@ -101,7 +101,7 @@ public static class IniText
     }
 
     /// <summary>Python's <c>str.splitlines(keepends=True)</c> for the breaks an INI can hold.</summary>
-    private static List<string> SplitKeepingEnds(string text)
+    internal static List<string> SplitKeepingEnds(string text)
     {
         var lines = new List<string>();
         var start = 0;

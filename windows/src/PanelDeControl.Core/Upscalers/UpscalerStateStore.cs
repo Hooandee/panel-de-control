@@ -430,6 +430,17 @@ public sealed class UpscalerStateStore
             AddedArgs = Strings(install.Get("added_args")),
             Managed = managed,
             Components = components,
+            GameConfig = install.Get("game_config") is DataArray settings
+                ? settings.Items.OfType<DataObject>().Select(setting => new GameConfigRecord
+                {
+                    File = Text(setting.Get("file")) ?? "",
+                    Tag = Text(setting.Get("tag")) ?? "",
+                    Value = Text(setting.Get("value")) ?? "",
+                    State = Text(setting.Get("state")) ?? "missing",
+                    Before = Text(setting.Get("before")),
+                    Path = Text(setting.Get("path")),
+                }).ToList()
+                : new List<GameConfigRecord>(),
         };
         var at = install.Get("installed_at") is DataNumber number ? number.Real : 0;
         return new StoredUpscaler(installed, at);
@@ -442,7 +453,7 @@ public sealed class UpscalerStateStore
     {
         var install = stored.Install;
         var options = install.Options;
-        return new DataObject(new[]
+        var members = new List<KeyValuePair<string, DataValue>>
         {
             Member("build", new DataString(install.Build)),
             Member("archive", new DataString(install.Archive)),
@@ -469,7 +480,30 @@ public sealed class UpscalerStateStore
             Member("anr", new DataBool(install.Anr)),
             Member("args", new DataArray(install.Args.Select(arg => (DataValue)new DataString(arg)).ToList())),
             Member("added_args", new DataArray(install.AddedArgs.Select(arg => (DataValue)new DataString(arg)).ToList())),
-        });
+        };
+        if (install.GameConfig.Count > 0)
+        {
+            members.Add(Member("game_config", new DataArray(install.GameConfig.Select(setting =>
+            {
+                var entry = new List<KeyValuePair<string, DataValue>>
+                {
+                    Member("file", new DataString(setting.File)),
+                    Member("tag", new DataString(setting.Tag)),
+                    Member("value", new DataString(setting.Value)),
+                    Member("state", new DataString(setting.State)),
+                };
+                if (setting.Before is not null)
+                {
+                    entry.Add(Member("before", new DataString(setting.Before)));
+                }
+                if (setting.Path is not null)
+                {
+                    entry.Add(Member("path", new DataString(setting.Path)));
+                }
+                return (DataValue)new DataObject(entry);
+            }).ToList())));
+        }
+        return new DataObject(members);
     }
 
     private static UpscalerHistoryItem? ReadHistory(DataObject item)

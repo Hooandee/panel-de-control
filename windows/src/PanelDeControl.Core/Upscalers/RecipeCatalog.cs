@@ -247,6 +247,9 @@ public sealed class RecipeCatalog
         Games = games;
     }
 
+    internal static bool AllowsConfiguration(string file, string key, string value) =>
+        AllowedConfiguration.TryGetValue(file, out var keys) && keys.TryGetValue(key, out var values) && values.Contains(value);
+
     public int SchemaVersion => 2;
 
     public int CatalogVersion { get; }

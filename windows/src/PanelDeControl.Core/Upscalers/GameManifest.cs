@@ -17,7 +17,7 @@ public sealed class GameManifest
 
     public List<string> Dirs { get; } = new();
 
-    /// <summary>Recipe configuration files restored key by key; Windows installs never write one yet.</summary>
+    /// <summary>Recipe configuration files restored key by key.</summary>
     public DataValue Configuration { get; set; } = new DataObject(Array.Empty<KeyValuePair<string, DataValue>>());
 
     /// <summary>Files that are Panel's whatever their hash now (a user's mod the game rewrites); removed regardless.</summary>

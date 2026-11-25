@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using PanelDeControl.Core.Data;
 
 namespace PanelDeControl.Core.Upscalers;
 
@@ -24,8 +25,10 @@ public static class GameFiles
     /// <param name="iniText">OptiScaler.ini as Panel writes it; null for the DLL mode, which only swaps FidelityFX DLLs.</param>
     /// <param name="copy">The file copy, replaceable so a test can fail it halfway.</param>
     /// <param name="protect">Leaves Panel's libraries and the saved originals read-only (a recipe's <c>protect_dlls</c>).</param>
+    /// <param name="configuration">Keys Panel set per configuration file, journaled so removal puts back only those.</param>
     public static GameManifest Apply(string target, IReadOnlyList<KeyValuePair<string, string>> sources, string? iniText,
-        Action<string, string>? copy = null, bool protect = false)
+        Action<string, string>? copy = null, bool protect = false,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? configuration = null)
     {
         copy ??= (source, destination) => File.Copy(source, destination, false);
         var meta = Path.Combine(target, GameManifest.Folder);
@@ -36,6 +39,11 @@ public static class GameFiles
         var backup = Path.Combine(meta, "backup");
         Directory.CreateDirectory(meta);
         var manifest = new GameManifest { Incomplete = true, Engine = iniText is null ? "dll" : null };
+        if (configuration is { Count: > 0 })
+        {
+            manifest.Configuration = new DataObject(configuration.Select(file => new KeyValuePair<string, DataValue>(file.Key,
+                new DataObject(file.Value.Select(change => new KeyValuePair<string, DataValue>(change.Key, new DataString(change.Value))).ToList()))).ToList());
+        }
         var journal = Path.Combine(meta, GameManifest.FileName);
         // Every move is journaled before it happens, so an install killed mid-copy leaves a manifest that restores the
         // game's originals instead of mistaking Panel's own files for them on the next attempt.
@@ -168,10 +176,6 @@ public static class GameFiles
         {
             return Array.Empty<string>();
         }
-        if (manifest.HasConfiguration)
-        {
-            throw new UpscalerException("recipe_unsupported", "manifest restores recipe configuration");
-        }
         var record = Path.Combine(meta, PanelInstallRecord.FileName);
         if (File.Exists(record) && !IsLink(record))
         {
@@ -195,6 +199,12 @@ public static class GameFiles
             {
                 Writable(path);
                 File.Delete(path);
+            }
+            else if (manifest.Configuration is DataObject configuration && configuration.Get(pair.Key) is DataObject changes)
+            {
+                AutomaticRecipe.RestoreConfiguration(path, saved, changes.Members
+                    .Where(change => change.Value is DataString)
+                    .ToDictionary(change => change.Key, change => ((DataString)change.Value).Value, StringComparer.Ordinal));
             }
             else if (seeded)
             {
