@@ -475,4 +475,5 @@
   <data name="SkinInstrument" xml:space="preserve"><value>Strumento</value></data>
   <data name="SkinEditorial" xml:space="preserve"><value>Editoriale</value></data>
   <data name="SkinOwnAccent" xml:space="preserve"><value>Questo stile ha il suo colore.</value></data>
+  <data name="ReadOnlyNote" xml:space="preserve"><value>Per ora solo lettura su Windows: questi valori sono mostrati ma non si possono ancora cambiare qui.</value></data>
 </root>

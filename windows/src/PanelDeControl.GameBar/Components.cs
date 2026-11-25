@@ -33,6 +33,12 @@ internal static class Components
 
     public static void MarkSwatch(Button swatch, bool selected) => swatch.BorderThickness = new Thickness(selected ? 2 : 0);
 
+    /// <summary>
+    /// Controls inside a read-only host stay disabled but keep near-full opacity: they show a value, not a fault.
+    /// </summary>
+    public static void MarkReadOnly(FrameworkElement host) =>
+        host.Resources["PdcDisabledOpacity"] = Application.Current.Resources["PdcReadOnlyOpacity"];
+
     public static Style Style(string key) => (Style)Application.Current.Resources[key];
 
     private static Brush Resource(string key) => (Brush)Application.Current.Resources[key];

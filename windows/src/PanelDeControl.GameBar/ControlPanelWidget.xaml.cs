@@ -1634,6 +1634,27 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         return grid;
     }
 
+    // Above the blocks and outside them, so the desktop column balancing never moves it.
+    private static void AddSectionNote(Panel panel, string text)
+    {
+        var note = new TextBlock { Text = text, Style = Components.Style("PdcSectionNoteStyle") };
+        if (panel is not Grid grid)
+        {
+            panel.Children.Insert(0, note);
+            return;
+        }
+
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition());
+        foreach (var column in grid.Children)
+        {
+            Grid.SetRow((FrameworkElement)column, 1);
+        }
+
+        Grid.SetColumnSpan(note, 2);
+        grid.Children.Add(note);
+    }
+
     private void BuildSections()
     {
         EnergyTitle.Text = Localized("BlockEnergyTitle");
@@ -1686,6 +1707,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 target.Children.Add(block);
             }
 
+            if (WindowsPreview.VisibleBlocks(section).Any(block => WindowsPreview.IsReadOnly(section, block)))
+            {
+                AddSectionNote(panel, Localized("ReadOnlyNote"));
+            }
+
             SectionHost.Children.Add(panel);
             var label = new TextBlock
             {
@@ -1721,18 +1747,19 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     // A disabled host disables every control inside it, including ones the readings later re-enable. The outer
     // host stays enabled and focusable so a controller can still move through, and scroll, a section of readings.
-    private static FrameworkElement ReadOnlyBlock(FrameworkElement block) => new Button
+    private static FrameworkElement ReadOnlyBlock(FrameworkElement block)
     {
-        Style = Components.Style("PdcFocusableBlockStyle"),
-        Content = new ContentControl
+        var inert = new ContentControl
         {
             Content = block,
             IsEnabled = false,
             IsTabStop = false,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             VerticalContentAlignment = VerticalAlignment.Stretch,
-        },
-    };
+        };
+        Components.MarkReadOnly(inert);
+        return new Button { Style = Components.Style("PdcFocusableBlockStyle"), Content = inert };
+    }
 
     private static Border CreatePendingBlock(SectionDefinition section, BlockDefinition block)
     {
