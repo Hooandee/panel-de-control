@@ -265,7 +265,7 @@ public sealed class OptiScalerInstaller
             Args = recipe?.Args ?? Array.Empty<string>(),
             Managed = panel.Select(pair => pair.Key).OrderBy(key => key, StringComparer.Ordinal).ToList(),
             Components = assets.Select(asset => new KeyValuePair<string, string>(asset.Id, asset.Sha256)).ToList(),
-            GameConfig = recipe is { GameConfig.Count: > 0 } ? GameConfigFiles.Apply(_profile, recipe.GameConfig, _documents).ToList() : Array.Empty<GameConfigRecord>(),
+            GameConfig = recipe is { GameConfig.Count: > 0 } ? GameConfigFiles.Carry(previous?.GameConfig, GameConfigFiles.Apply(_profile, recipe.GameConfig, _documents)).ToList() : Array.Empty<GameConfigRecord>(),
             Files = manifest.Files.Count,
         };
     }

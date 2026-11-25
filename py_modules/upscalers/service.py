@@ -277,6 +277,7 @@ class UpscalerService:
             "engines": self._engine_summaries(),
             "job": self.job(),
             "helixsr": {"downloaded": self.helix.ready()},
+            "catalog_error": catalog.ERROR,
         }
 
     @staticmethod
@@ -1026,7 +1027,8 @@ class UpscalerService:
             "added_args": [],
         }
         if recipe and recipe.game_config:
-            entry["install"]["game_config"] = game_config.apply(game_config.prefix_user(self.home, installed), recipe.game_config)
+            entry["install"]["game_config"] = game_config.carry(
+                previous.get("game_config"), game_config.apply(game_config.prefix_user(self.home, installed), recipe.game_config))
         # What an earlier install put in the launch options is still there, and still Panel's to take out.
         fresh = entry["install"]
         fresh["added_args"] = [arg for arg in previous.get("added_args", []) if arg in fresh["args"]]
@@ -1225,7 +1227,11 @@ class UpscalerService:
             raise UpscalerError("foreign")
 
         self._update_job(phase="copy")
-        game = self._helix("install", installed.root)
+        try:
+            game = self._helix("install", installed.root)
+        except UpscalerError:
+            self._undo_helix(installed.root, target)
+            raise
         exe_folder = Path(game.get("exe_folder") or target)
         options = _clean_options({**choice, "fg": "off"})
         log = Path(game["log_path"]) if game.get("log_path") else exe_folder / "helixsr.log"
@@ -1367,6 +1373,19 @@ class UpscalerService:
                 generated.unlink()
         shutil.rmtree(_relocated(old_target / games.MANIFEST_DIR, old_target, root), ignore_errors=True)
         return []
+
+    def _undo_helix(self, root: Path, folder: Path) -> None:
+        """A failed install may have swapped DLLs before it failed: the bridge takes them out, else the recorded swaps are undone by hand."""
+        try:
+            self._helix("remove", root)
+            return
+        except UpscalerError:
+            pass
+        try:
+            helixsr.restore_by_hand(folder)
+        except OSError as error:
+            if self.logger:
+                self.logger.warning(f"HelixSR undo after a failed install: {type(error).__name__}")
 
     def _restore_helix_by_hand(self, folder: Path, reason: str) -> None:
         if not helixsr.restore_by_hand(folder):
@@ -1908,7 +1927,7 @@ class UpscalerService:
                     saved.unlink(missing_ok=True)
                 else:
                     kept.append(relative)
-            except Exception:
+            except (OSError, ValueError, UpscalerError, auto_recipes.RecipeError):
                 kept.append(relative)
         for generated in _GENERATED if manifest.get("engine") != "dll" else ():
             try:

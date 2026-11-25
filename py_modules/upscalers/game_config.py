@@ -69,6 +69,19 @@ def apply(user: Path | None, entries) -> list[dict]:
     return records
 
 
+def carry(previous, records: list[dict]) -> list[dict]:
+    """A reinstall that left Panel's earlier edit in place finds it as `already`: the user's original value stays the one to put back."""
+    earlier = {(record.get("file"), record.get("tag")): record for record in previous or ()
+               if isinstance(record, dict) and record.get("state") == "set"}
+    carried = []
+    for record in records:
+        before = earlier.get((record["file"], record["tag"]))
+        if record["state"] == "already" and before and before.get("path") == record.get("path"):
+            record = {**record, "state": "set", "before": before.get("before", "")}
+        carried.append(record)
+    return carried
+
+
 def restore(records) -> None:
     for record in records or ():
         if not isinstance(record, dict) or record.get("state") != "set" or not record.get("path"):

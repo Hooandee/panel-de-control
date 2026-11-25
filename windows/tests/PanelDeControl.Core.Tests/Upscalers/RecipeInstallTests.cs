@@ -143,6 +143,23 @@ public sealed class RecipeInstallTests : IDisposable
         Assert.True(AutomaticRecipe.Installable(Recipes, Recipes.Match("1462040", "optiscaler", "windows", "amd64")!));
     }
 
+    [Theory]
+    [InlineData("{ not json")]
+    [InlineData("{\"name\": \"Broken\"}")]
+    public void ABrokenGameFileIsSkippedAndTheOtherRecipesSurvive(string content)
+    {
+        var files = RecipeFiles().ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        files["games/1462040.json"] = System.Text.Encoding.UTF8.GetBytes(content);
+        var skipped = new List<string>();
+
+        var catalog = RecipeCatalog.Load(files, skipped.Add);
+
+        Assert.Contains("games/1462040.json", Assert.Single(skipped));
+        Assert.DoesNotContain("1462040", catalog.Games.Keys);
+        Assert.Contains("1174180", catalog.Games.Keys);
+        Assert.ThrowsAny<Exception>(() => RecipeCatalog.Load(files));
+    }
+
     [Fact]
     public async Task RedDeadSwitchesToDirectX12AndTheUsersChoiceSurvivesRemoval()
     {
@@ -219,6 +236,23 @@ public sealed class RecipeInstallTests : IDisposable
         await Install(recipe, automatic);
 
         Assert.Contains("REFrameworkConfig_MenuOpen=false", File.ReadAllText(Path.Combine(Target, ReframeworkConfig.FileName)));
+    }
+
+    [Fact]
+    public void AReinstallThatKeptTheEarlierEditStillPutsTheUsersOriginalBack()
+    {
+        var path = Path.Combine(_root, "profile", "Documents", "settings.xml");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "<API>kSettingAPI_Vulkan</API>");
+        var change = new[] { new GameConfigChange("Documents/settings.xml", "API", "kSettingAPI_DX12") };
+        var profile = Path.Combine(_root, "profile");
+        var first = GameConfigFiles.Apply(profile, change);
+
+        var second = GameConfigFiles.Carry(first, GameConfigFiles.Apply(profile, change));
+
+        Assert.Equal("set", second.Single().State);
+        GameConfigFiles.Restore(second);
+        Assert.Equal("<API>kSettingAPI_Vulkan</API>", File.ReadAllText(path));
     }
 
     [Fact]

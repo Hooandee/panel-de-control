@@ -55,6 +55,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly UpscalersView upscalersView = new();
     private readonly ThemesClient steamHomeClient = new();
     private bool steamHomeRefreshInProgress;
+    private bool reloadGameOnRefresh;
     private CancellationTokenSource? cpuDebounce;
     private bool cpuRefreshInProgress;
     private bool cpuWritePending;
@@ -198,6 +199,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (gameBarWidget is null || gameBarWidget.Visible)
         {
             refreshTimer.Start();
+            reloadGameOnRefresh = true;
             await Task.WhenAll(RefreshAsync(), ApplySteamHomeAsync());
         }
     }
@@ -232,6 +234,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (sender.Visible)
         {
             refreshTimer.Start();
+            reloadGameOnRefresh = true;
             await Task.WhenAll(RefreshAsync(), ApplySteamHomeAsync());
         }
         else
@@ -430,11 +433,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private Task RefreshThemesWhenShownAsync()
     {
+        var reloadGame = reloadGameOnRefresh;
+        reloadGameOnRefresh = false;
         var shown = sections.Count > selectedSection ? sections[selectedSection].Definition.Id : null;
         return shown switch
         {
             "themes" => themesView.RefreshAsync(),
-            "upscalers" => upscalersView.RefreshListAsync(),
+            "upscalers" => reloadGame ? upscalersView.RefreshAsync() : upscalersView.RefreshListAsync(),
             _ => Task.CompletedTask,
         };
     }

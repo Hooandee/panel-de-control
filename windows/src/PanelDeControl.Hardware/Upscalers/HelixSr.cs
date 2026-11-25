@@ -74,6 +74,21 @@ public sealed class HelixProcess : IHelixProcess
             throw new TimeoutException("bridge timed out");
         }
 
+        try
+        {
+            await Task.WhenAll(output, errors).WaitAsync(limit.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            Kill(process);
+            if (cancel.IsCancellationRequested)
+            {
+                throw;
+            }
+
+            throw new TimeoutException("bridge timed out");
+        }
+
         return new HelixProcessResult(process.ExitCode, await output.ConfigureAwait(false), await errors.ConfigureAwait(false));
     }
 
@@ -140,6 +155,8 @@ public sealed class HelixSr
     /// <summary>HelixSR as the catalog pins it, in Panel's own folder.</summary>
     public static HelixSr ForCatalog(BuildCatalog catalog, string root, IHelixProcess? process = null) =>
         new(root, Path.GetFileNameWithoutExtension(catalog.Asset(catalog.Archives["helixsr"])!.FileName), process);
+
+    internal Action<string, string>? MoveDirectory { get; set; }
 
     public string ReleasesFolder => releases;
 
@@ -302,7 +319,7 @@ public sealed class HelixSr
     }
 
     /// <summary>Extracts through a staging folder beside the destination and swaps it in only once complete.</summary>
-    private static void Unpack(string archive, string destination, Func<string, string?> map, string digest, string required, string missing)
+    private void Unpack(string archive, string destination, Func<string, string?> map, string digest, string required, string missing)
     {
         var parent = Path.GetDirectoryName(destination)!;
         string? staging = null;
@@ -310,6 +327,17 @@ public sealed class HelixSr
         try
         {
             Directory.CreateDirectory(parent);
+            var keep = Path.Combine(parent, ".replaced-" + Path.GetFileName(destination));
+            if (!Directory.Exists(destination) && Directory.Exists(keep))
+            {
+                Rename(keep, destination);
+            }
+
+            if (Directory.Exists(keep))
+            {
+                DeleteTree(keep);
+            }
+
             staging = Path.Combine(parent, ".unpack-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(staging);
             var root = Path.GetFullPath(staging) + Path.DirectorySeparatorChar;
@@ -343,7 +371,7 @@ public sealed class HelixSr
             File.WriteAllText(Path.Combine(staging, HelixRelease.Complete), digest, new UTF8Encoding(false));
             if (Directory.Exists(destination))
             {
-                saved = Path.Combine(parent, ".replaced-" + Guid.NewGuid().ToString("N"));
+                saved = keep;
                 Rename(destination, saved);
             }
 
@@ -374,7 +402,7 @@ public sealed class HelixSr
                 DeleteTree(staging);
             }
 
-            if (saved is not null)
+            if (saved is not null && Directory.Exists(destination))
             {
                 DeleteTree(saved);
             }
@@ -382,13 +410,13 @@ public sealed class HelixSr
     }
 
     /// <summary>A virus scanner holds a folder it has just seen written for a moment: the rename is retried before it fails.</summary>
-    private static void Rename(string source, string destination)
+    private void Rename(string source, string destination)
     {
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                Directory.Move(source, destination);
+                (MoveDirectory ?? Directory.Move)(source, destination);
                 return;
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException && attempt < RenameAttempts)

@@ -437,6 +437,18 @@ public sealed class UpscalerService : IUpscalersController
 
             if (!IsInstalled(install))
             {
+                if (install.Engine == "helixsr")
+                {
+                    try
+                    {
+                        await RemoveInstallAsync(app.Root, install).ConfigureAwait(false);
+                    }
+                    catch (Exception removal) when (removal is UpscalerException or IOException or UnauthorizedAccessException)
+                    {
+                        log("upscalers.helix", "removal after an unverified install: " + removal.GetType().Name);
+                    }
+                }
+
                 store.ClearInstall(appId);
                 throw new UpscalerException("install_unverified");
             }
@@ -752,6 +764,12 @@ public sealed class UpscalerService : IUpscalersController
         if (previous is not null)
         {
             await RemoveInstallAsync(app.Root, previous).ConfigureAwait(false);
+            store.ClearInstall(app.AppId);
+            if (previous.AddedArgs.Count > 0)
+            {
+                store.SetStrandedArgs(app.AppId, previous.AddedArgs.Union(store.StrandedArgs(app.AppId), StringComparer.Ordinal).ToList());
+            }
+
             GameFiles.RecoverOrphan(target, _ => false);
             analysis = Analyze(app, recipe?.Exe);
             target = analysis.Target ?? throw new UpscalerException("no_exe");
@@ -763,7 +781,17 @@ public sealed class UpscalerService : IUpscalersController
         }
 
         jobs.Stage("install");
-        var game = await runner.InstallAsync(app.Root, CancellationToken.None).ConfigureAwait(false);
+        HelixGame game;
+        try
+        {
+            game = await runner.InstallAsync(app.Root, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (UpscalerException)
+        {
+            await UndoHelixAsync(runner, app.Root, target).ConfigureAwait(false);
+            throw;
+        }
+
         var exeFolder = game.ExeFolder ?? target;
         var log = game.LogPath ?? Path.Combine(exeFolder, "helixsr.log");
         try
@@ -772,14 +800,7 @@ public sealed class UpscalerService : IUpscalersController
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or UpscalerException)
         {
-            try
-            {
-                await runner.RemoveAsync(app.Root, CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (UpscalerException)
-            {
-            }
-
+            await UndoHelixAsync(runner, app.Root, target).ConfigureAwait(false);
             throw exception is UpscalerException known ? known : new UpscalerException("state_save_failed", exception.GetType().Name);
         }
 
@@ -798,6 +819,28 @@ public sealed class UpscalerService : IUpscalersController
             Options = new UpscalerChoice { Quality = choice.Quality, Sharpness = choice.Sharpness, Model = choice.Model },
             Components = new[] { new KeyValuePair<string, string>(archive.Id, runner.Digest ?? archive.Sha256) },
         };
+    }
+
+    /// <summary>A failed install may have swapped DLLs before it failed: the bridge takes them out, else the recorded swaps are undone by hand.</summary>
+    private async Task UndoHelixAsync(HelixSr runner, string root, string folder)
+    {
+        try
+        {
+            await runner.RemoveAsync(root, CancellationToken.None).ConfigureAwait(false);
+            return;
+        }
+        catch (UpscalerException)
+        {
+        }
+
+        try
+        {
+            HelixRestore.ByHand(folder);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            log("upscalers.helix", "undo after a failed install: " + exception.GetType().Name);
+        }
     }
 
     /// <summary>Python first, then HelixSR's release: each is downloaded and unpacked once and kept until the catalog pins another.</summary>
@@ -867,15 +910,17 @@ public sealed class UpscalerService : IUpscalersController
         var bridge = runner is { Ready: true } && root is not null;
         if (!recorded)
         {
-            if (bridge)
+            if (!bridge)
             {
-                try
-                {
-                    await runner!.RemoveAsync(root!, CancellationToken.None).ConfigureAwait(false);
-                }
-                catch (UpscalerException error) when (HelixBridge.NotInstalled(error.Detail))
-                {
-                }
+                throw new UpscalerException("helixsr_missing");
+            }
+
+            try
+            {
+                await runner!.RemoveAsync(root!, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (UpscalerException error) when (HelixBridge.NotInstalled(error.Detail))
+            {
             }
 
             log("upscalers.helix", "record_missing");
