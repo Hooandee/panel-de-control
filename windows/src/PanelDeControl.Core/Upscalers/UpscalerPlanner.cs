@@ -146,6 +146,35 @@ public static class UpscalerPlanner
             Anr = AnrCapable(catalog, build, gpu),
         }).ToList();
 
+    /// <summary>
+    /// Whether a DLL-mode build has a replacement for every FidelityFX library the game ships (Linux's
+    /// <c>supportsDllTargets</c>): the selector only offers those.
+    /// </summary>
+    public static bool SupportsDllTargets(UpscalerBuild build, IReadOnlyList<string> targets)
+    {
+        const string provider = "amd_fidelityfx_upscaler_dx12.dll";
+        const string loader = "amd_fidelityfx_loader_dx12.dll";
+        var files = build.Replace.Keys.ToList();
+        if (targets.Count == 0 || !files.Contains(provider))
+        {
+            return false;
+        }
+        var legacyFiles = new HashSet<string>(files.Concat(build.LegacyReplace.Keys), StringComparer.Ordinal);
+        var entries = targets.Select(path =>
+        {
+            var separator = path.LastIndexOf('/');
+            return (Directory: path.Substring(0, separator + 1), Name: path.Substring(separator + 1).ToLowerInvariant());
+        }).ToList();
+        var providerDirectories = new HashSet<string>(
+            entries.Where(entry => entry.Name is provider or "amd_fidelityfx_dx12.dll").Select(entry => entry.Directory), StringComparer.Ordinal);
+        return entries.All(entry => entry.Name switch
+        {
+            "amd_fidelityfx_dx12.dll" => legacyFiles.Contains(loader) && legacyFiles.Contains("amd_fidelityfx_framegeneration_dx12.dll"),
+            loader => files.Contains(loader) || providerDirectories.Contains(entry.Directory),
+            _ => files.Contains(entry.Name),
+        });
+    }
+
     public static bool AnrCapable(BuildCatalog catalog, UpscalerBuild? build, string gpu) =>
         build is { Engine: "optiscaler", Available: true } && catalog.AnrBuilds.ContainsKey(gpu) && build.Gpus.Contains(gpu)
         && (catalog.Asset(build.Archive)?.Generation ?? 0) >= 10;

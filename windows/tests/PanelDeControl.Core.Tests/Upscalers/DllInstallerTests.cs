@@ -126,3 +126,20 @@ public sealed class DllInstallerTests : IDisposable
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
     }
 }
+
+public sealed class DllTargetSupportTests
+{
+    private static readonly BuildCatalog Catalog = BuildCatalog.Parse(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Data", "Upscalers", "catalog.json")));
+
+    [Theory]
+    [InlineData("fsr-4.1.2-dll", "bin/amd_fidelityfx_dx12.dll", true)]
+    [InlineData("fsr-4.1.2-lite-dll", "bin/amd_fidelityfx_dx12.dll", true)]
+    [InlineData("fsr-4.1.2-lite-dll", "bin/amd_fidelityfx_upscaler_dx12.dll|bin/amd_fidelityfx_loader_dx12.dll", true)]
+    [InlineData("fsr-4.1.2-lite-dll", "bin/amd_fidelityfx_loader_dx12.dll", false)]
+    [InlineData("fsr-4.1.2-dll", "", false)]
+    public void OnlyBuildsThatReplaceEveryLibraryTheGameShipsAreOffered(string build, string targets, bool offered)
+    {
+        var list = targets.Length == 0 ? Array.Empty<string>() : targets.Split('|');
+        Assert.Equal(offered, UpscalerPlanner.SupportsDllTargets(Catalog.Build(build)!, list));
+    }
+}

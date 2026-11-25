@@ -326,6 +326,10 @@ public sealed class UpscalerBuildEntry
     /// <summary>False when the catalog does not list this GPU: still offered, with a warning, as on Linux.</summary>
     [DataMember(Name = "supported", Order = 7, IsRequired = true)]
     public bool Supported { get; set; }
+
+    /// <summary><c>dll</c> for the DLL mode, which swaps the game's own FidelityFX libraries; absent for OptiScaler.</summary>
+    [DataMember(Name = "engine", Order = 8, EmitDefaultValue = false)]
+    public string? Engine { get; set; }
 }
 
 [DataContract]

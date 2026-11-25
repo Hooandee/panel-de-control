@@ -228,7 +228,9 @@ public sealed class UpscalerService : IUpscalersController
 
         var generation = Gpu.Generation;
         var builds = UpscalerPlanner.Describe(data.Catalog, generation, Device ?? "")
-            .Where(build => build.Engine is "optiscaler" or "dll" && build.Available)
+            .Where(build => build.Available && (build.Engine == "optiscaler"
+                || (build.Engine == "dll" && data.Catalog.Build(build.Id) is { } dll
+                    && UpscalerPlanner.SupportsDllTargets(dll, DllInstaller.Targets(analysis, Resolved(app, "dll")?.LegacyFfxSwap ?? true)))))
             .Select(build => new UpscalerBuildEntry
             {
                 Id = build.Id,
@@ -238,6 +240,7 @@ public sealed class UpscalerService : IUpscalersController
                 DownloadBytes = build.DownloadBytes,
                 Models = build.Models.ToArray(),
                 Supported = build.Supported,
+                Engine = build.Engine == "dll" ? "dll" : null,
             })
             .ToArray();
         var stored = store.Install(appId);

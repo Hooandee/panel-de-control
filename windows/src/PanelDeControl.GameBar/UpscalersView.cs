@@ -752,7 +752,8 @@ public sealed class UpscalersView : UserControl
 
         foreach (var build in shown)
         {
-            var name = FamilyName(build.Family) + " " + build.Version + (build.Channel == "beta" ? " " + Localized("UpscalersBeta") : string.Empty);
+            var name = FamilyName(build.Family) + " " + build.Version + (build.Channel == "beta" ? " " + Localized("UpscalersBeta") : string.Empty)
+                + (build.Engine == "dll" ? " · " + Localized("UpscalersDllMode") : string.Empty);
             var note = new List<string>();
             if (build.Id == detail.Preferred)
             {
