@@ -4,6 +4,23 @@ using static PanelDeControl.Core.Upscalers.InstallPaths;
 namespace PanelDeControl.Core.Upscalers;
 
 /// <summary>What Panel left in a game, kept by the caller so it can replace or remove it later.</summary>
+/// <summary>Whether a tracked component is its newest verified release or the catalog's pinned one, and why.</summary>
+public sealed class ComponentOrigin
+{
+    public ComponentOrigin(string source, string? version, string? fallback)
+    {
+        Source = source;
+        Version = version;
+        Fallback = fallback;
+    }
+
+    public string Source { get; }
+
+    public string? Version { get; }
+
+    public string? Fallback { get; }
+}
+
 public sealed class InstalledUpscaler
 {
     public string Build { get; set; } = "";
@@ -39,6 +56,9 @@ public sealed class InstalledUpscaler
 
     /// <summary>Each asset that went in and its hash.</summary>
     public IReadOnlyList<KeyValuePair<string, string>> Components { get; set; } = Array.Empty<KeyValuePair<string, string>>();
+
+    /// <summary>Where a tracked component came from, by asset id: <c>latest</c> with its release tag, or <c>pinned</c> with the reason.</summary>
+    public IReadOnlyDictionary<string, ComponentOrigin> Origins { get; set; } = new Dictionary<string, ComponentOrigin>();
 
     /// <summary>Settings Panel changed in the game's own config under the user's profile, so removal can put them back.</summary>
     public IReadOnlyList<GameConfigRecord> GameConfig { get; set; } = Array.Empty<GameConfigRecord>();
@@ -176,6 +196,19 @@ public sealed class OptiScalerInstaller
         var chosen = new Dictionary<string, UpscalerAsset>(StringComparer.Ordinal);
         var first = Needed(effective, wantsAnr, recipe, automatic);
         var paths = await FetchAsync(first, pinnedOnly, chosen, progress, cancel).ConfigureAwait(false);
+        var releaseAsset = _catalog.Asset(effective.Archive)!;
+        try
+        {
+            OptiScalerSources(paths[releaseAsset.Id], releaseAsset.Generation);
+        }
+        catch (UpscalerException) when (Newer(chosen, releaseAsset.Id))
+        {
+            // A newer OptiScaler laid out differently: the catalog's own release, before the game is touched.
+            Reject(chosen, releaseAsset.Id);
+            pinnedOnly.Add(releaseAsset.Id);
+            paths = await FetchAsync(first, pinnedOnly, chosen, progress, cancel).ConfigureAwait(false);
+            OptiScalerSources(paths[releaseAsset.Id], releaseAsset.Generation);
+        }
         if (wantsAnr)
         {
             try
@@ -185,6 +218,7 @@ public sealed class OptiScalerInstaller
             catch (UpscalerException) when (Newer(chosen, _catalog.AnrFrameGen))
             {
                 // A newer add-on laid out differently: the catalog's own release, before the game is touched.
+                Reject(chosen, _catalog.AnrFrameGen);
                 pinnedOnly.Add(_catalog.AnrFrameGen);
                 paths = await FetchAsync(first, pinnedOnly, chosen, progress, cancel).ConfigureAwait(false);
                 AnrSources(paths[_catalog.AnrFrameGen], "");
@@ -198,6 +232,7 @@ public sealed class OptiScalerInstaller
         {
             foreach (var asset in automatic.Assets())
             {
+                Reject(chosen, asset.Id);
                 pinnedOnly.Add(asset.Id);
             }
             paths = await FetchAsync(first, pinnedOnly, chosen, progress, cancel).ConfigureAwait(false);
@@ -248,11 +283,9 @@ public sealed class OptiScalerInstaller
             paths = await FetchAsync(assets, pinnedOnly, chosen, progress, CancellationToken.None).ConfigureAwait(false);
         }
         var archive = _catalog.Asset(effective.Archive)!;
-        var sources = OptiScalerRelease.Sources(paths[archive.Id], archive.Generation);
-        if (!sources.TryGetValue(GameFiles.IniName, out var iniPath) || !sources.TryGetValue("OptiScaler.dll", out var injector))
-        {
-            throw new UpscalerException("unpack_failed", "release without OptiScaler.dll or OptiScaler.ini");
-        }
+        var sources = OptiScalerSources(paths[archive.Id], archive.Generation);
+        var iniPath = sources[GameFiles.IniName];
+        var injector = sources["OptiScaler.dll"];
         var baseIni = File.ReadAllText(iniPath, new UTF8Encoding(false, false));
         sources.Remove(GameFiles.IniName);
         sources.Remove("OptiScaler.dll");
@@ -384,6 +417,7 @@ public sealed class OptiScalerInstaller
             Args = recipe?.Args ?? Array.Empty<string>(),
             Managed = panel.Select(pair => pair.Key).OrderBy(key => key, StringComparer.Ordinal).ToList(),
             Components = assets.Select(asset => new KeyValuePair<string, string>(asset.Id, chosen.TryGetValue(asset.Id, out var picked) ? picked.Sha256 : asset.Sha256)).ToList(),
+            Origins = Origins(assets, chosen, pinnedOnly),
             GameConfig = recipe is { GameConfig.Count: > 0 } ? GameConfigFiles.Carry(previous?.GameConfig, GameConfigFiles.Apply(_profile, recipe.GameConfig, _documents)).ToList() : Array.Empty<GameConfigRecord>(),
             Files = manifest.Files.Count,
             Mod = mod is { Sources.Count: > 0 } ? new KeyValuePair<string, string>(mod.Filename, mod.Id) : null,
@@ -557,6 +591,43 @@ public sealed class OptiScalerInstaller
             offset += picked.Size;
         }
         return paths;
+    }
+
+    private Dictionary<string, ComponentOrigin> Origins(IEnumerable<UpscalerAsset> assets, IDictionary<string, UpscalerAsset> chosen, ISet<string> pinnedOnly)
+    {
+        var origins = new Dictionary<string, ComponentOrigin>(StringComparer.Ordinal);
+        foreach (var asset in assets)
+        {
+            if (_latest is null || !_latest.Tracked(asset))
+            {
+                continue;
+            }
+
+            var version = chosen.TryGetValue(asset.Id, out var picked) && picked.Sha256 != asset.Sha256 ? _latest.Version(picked) : null;
+            origins[asset.Id] = version is not null
+                ? new ComponentOrigin("latest", version, null)
+                : new ComponentOrigin("pinned", null, pinnedOnly.Contains(asset.Id) ? "layout" : "unresolved");
+        }
+
+        return origins;
+    }
+
+    private static Dictionary<string, string> OptiScalerSources(string unpacked, int generation)
+    {
+        var sources = OptiScalerRelease.Sources(unpacked, generation);
+        if (!sources.ContainsKey(GameFiles.IniName) || !sources.ContainsKey("OptiScaler.dll"))
+        {
+            throw new UpscalerException("unpack_failed", "release without OptiScaler.dll or OptiScaler.ini");
+        }
+        return sources;
+    }
+
+    private void Reject(IDictionary<string, UpscalerAsset> chosen, string id)
+    {
+        if (Newer(chosen, id))
+        {
+            _latest?.Reject(chosen[id].Sha256);
+        }
     }
 
     private bool Newer(IDictionary<string, UpscalerAsset> chosen, string id) =>

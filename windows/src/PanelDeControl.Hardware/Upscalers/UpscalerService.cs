@@ -510,7 +510,14 @@ public sealed partial class UpscalerService : IUpscalersController
             {
                 // Everything is downloaded first, so a cancel or a failed download never leaves the game without HelixSR and without the new build.
                 var assets = UpscalerPlanner.BuildAssets(catalog, plan).Concat(automatic?.Assets() ?? Array.Empty<UpscalerAsset>()).ToList();
-                jobs.Stage("download", assets.GroupBy(asset => asset.Sha256, StringComparer.Ordinal).Sum(group => group.Last().Size));
+                jobs.Stage("resolve");
+                var resolvedFirst = new List<UpscalerAsset>();
+                foreach (var asset in assets)
+                {
+                    resolvedFirst.Add(await LatestAssets.ResolveAsync(latest, asset, false, cancel).ConfigureAwait(false));
+                }
+
+                jobs.Stage("download", resolvedFirst.GroupBy(asset => asset.Sha256, StringComparer.Ordinal).Sum(group => group.Last().Size));
                 foreach (var asset in assets)
                 {
                     await LatestAssets.EnsureAsync(cache, latest, asset, false, null, cancel).ConfigureAwait(false);
@@ -601,6 +608,7 @@ public sealed partial class UpscalerService : IUpscalersController
         var buildId = plan.Id;
         var assets = UpscalerPlanner.BuildAssets(catalog, plan).Concat(automatic?.Assets() ?? Array.Empty<UpscalerAsset>()).ToList();
         var resolved = new List<UpscalerAsset>();
+        jobs.Stage("resolve");
         foreach (var asset in assets)
         {
             resolved.Add(await LatestAssets.ResolveAsync(latest, asset, false, cancel).ConfigureAwait(false));
@@ -1021,6 +1029,7 @@ public sealed partial class UpscalerService : IUpscalersController
         }
 
         var pinned = catalog.Asset(build.Archive)!;
+        jobs.Stage("resolve");
         var newest = await LatestAssets.ResolveAsync(latest, pinned, false, cancel).ConfigureAwait(false);
         if (runner.ReleaseReady && (runner.Digest ?? pinned.Sha256) == newest.Sha256)
         {
@@ -1037,10 +1046,11 @@ public sealed partial class UpscalerService : IUpscalersController
         catch (UpscalerException) when (chosen.Sha256 != pinned.Sha256)
         {
             // A newer release this bridge cannot unpack: the catalog's own, before the game is touched.
+            latest?.Reject(chosen.Sha256);
             Discard(chosen);
             archive = await cache.EnsureAsync(pinned, new Progress<long>(jobs.Progress), cancel).ConfigureAwait(false);
             runner.UnpackRelease(archive, pinned.Sha256);
-            chosen = pinned;
+            return;
         }
 
         Discard(chosen);

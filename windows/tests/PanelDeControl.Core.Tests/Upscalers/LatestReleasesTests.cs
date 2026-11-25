@@ -120,6 +120,90 @@ public sealed class LatestReleasesTests : IDisposable
             pinned["size"]!.GetValue<long>(), new[] { pinned["url"]!.GetValue<string>() }, true, null, 9);
     }
 
+    [Fact]
+    public async Task AResponseBodyThatNeverEndsIsCutAtTheDeadlineAndFallsBackToThePinnedAsset()
+    {
+        var tracks = new Dictionary<string, ReleaseTrack> { [Pinned().Id] = new("acme/tool", @"Tool_\d+\.\d+\.zip", false) };
+        var latest = new LatestReleases(tracks, Path.Combine(_folder, "latest-releases.json"), new HangingBody(), () => DateTimeOffset.FromUnixTimeSeconds(1_000_000),
+            TimeSpan.FromMilliseconds(300));
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var picked = await latest.ResolveAsync(Pinned());
+
+        Assert.Equal(Pinned().Sha256, picked.Sha256);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(8), watch.Elapsed.ToString());
+    }
+
+    [Fact]
+    public async Task OnlyAPlainFileNameIsTrustedFromTheRelease()
+    {
+        var tracks = new Dictionary<string, ReleaseTrack> { [Pinned().Id] = new("acme/tool", @".*\.zip", false) };
+        var owner = "https://github.com/acme/tool/releases/download/v1/";
+        string Entry(string name, char digit, string published) =>
+            "{\"tag_name\":\"v1\",\"published_at\":\"" + published + "\",\"assets\":[{\"name\":" + System.Text.Json.JsonSerializer.Serialize(name)
+            + ",\"size\":10,\"digest\":\"sha256:" + new string(digit, 64) + "\",\"browser_download_url\":\"" + owner + "x.zip\"}]}";
+        var answer = "[" + string.Join(",", Entry("..\\evil.zip", 'a', "2030-01-04"), Entry("sub/evil.zip", 'b', "2030-01-03"), Entry("C:evil.zip", 'c', "2030-01-02"),
+            Entry("ok.zip", 'd', "2030-01-01")) + "]";
+        var latest = new LatestReleases(tracks, Path.Combine(_folder, "latest-releases.json"), new FakeGitHub { Answer = answer }, () => DateTimeOffset.FromUnixTimeSeconds(1_000_000));
+
+        var picked = await latest.ResolveAsync(Pinned());
+
+        Assert.Equal(("ok.zip", new string('d', 64)), (picked.FileName, picked.Sha256));
+        var none = new LatestReleases(tracks, Path.Combine(_folder, "other.json"),
+            new FakeGitHub { Answer = "[" + Entry("..\\evil.zip", 'a', "2030-01-04") + "]" }, () => DateTimeOffset.FromUnixTimeSeconds(1_000_000));
+        Assert.Equal(Pinned().Sha256, (await none.ResolveAsync(Pinned())).Sha256);
+    }
+
+    [Fact]
+    public async Task ARejectedReleaseIsNotOfferedAgain()
+    {
+        var track = Fixture["track"]!.AsObject();
+        var server = new FakeGitHub();
+        var clock = Fixture["base_clock"]!.GetValue<long>();
+        var latest = Releases(track, server, () => DateTimeOffset.FromUnixTimeSeconds(clock));
+        server.Answer = Fixture["cases"]!.AsArray()[0]!["steps"]![0]!["response"]!.ToJsonString();
+        var picked = await latest.ResolveAsync(Pinned());
+        Assert.NotEqual(Pinned().Sha256, picked.Sha256);
+
+        latest.Reject(picked.Sha256);
+
+        Assert.Equal(Pinned().Sha256, (await latest.ResolveAsync(Pinned())).Sha256);
+        Assert.Empty(latest.TakeSuperseded());
+    }
+
+    private sealed class HangingBody : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new Hanging()) });
+
+        private sealed class Hanging : Stream
+        {
+            public override bool CanRead => true;
+
+            public override bool CanSeek => false;
+
+            public override bool CanWrite => false;
+
+            public override long Length => throw new NotSupportedException();
+
+            public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+            public override void Flush()
+            {
+            }
+
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => new TaskCompletionSource<int>().Task;
+
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        }
+    }
+
     private sealed class FakeGitHub : HttpMessageHandler
     {
         public string? Answer { get; set; }

@@ -76,6 +76,17 @@ public sealed class UpscalerDiagnosisComponent
     /// <summary>In groups of four characters, as the Linux report writes it.</summary>
     [DataMember(Name = "sha256", Order = 2, IsRequired = true)]
     public string Sha256 { get; set; } = "";
+
+    /// <summary><c>latest</c> or <c>pinned</c> for a component that follows its repository's releases.</summary>
+    [DataMember(Name = "source", Order = 3, EmitDefaultValue = false)]
+    public string? Source { get; set; }
+
+    [DataMember(Name = "version", Order = 4, EmitDefaultValue = false)]
+    public string? Version { get; set; }
+
+    /// <summary>Why the pinned release went in instead of the newest one.</summary>
+    [DataMember(Name = "fallback", Order = 5, EmitDefaultValue = false)]
+    public string? Fallback { get; set; }
 }
 
 [DataContract]
@@ -164,6 +175,9 @@ public sealed class UpscalerDiagnosisIniChange
     /// <summary>What the file holds now; absent when the key is gone.</summary>
     [DataMember(Name = "now", Order = 3, EmitDefaultValue = false)]
     public string? Now { get; set; }
+
+    [DataMember(Name = "value_omitted", Order = 4, EmitDefaultValue = false)]
+    public bool? ValueOmitted { get; set; }
 }
 
 /// <summary>Keys changed in OptiScaler.ini since Panel wrote it, as Linux's <c>ini_drift</c> says it.</summary>
@@ -189,7 +203,7 @@ public sealed class UpscalerDiagnosisIniDrift
         WrittenAt = drift.WrittenAt,
         ModifiedAt = drift.ModifiedAt,
         Keys = drift.Status is IniDrift.Changed or IniDrift.AsWritten
-            ? drift.Keys.Select(change => new UpscalerDiagnosisIniChange { Key = change.Key, Panel = change.Panel, Now = change.Now }).ToArray()
+            ? drift.Keys.Select(change => new UpscalerDiagnosisIniChange { Key = change.Key, Panel = change.Panel, Now = change.Now, ValueOmitted = change.ValueOmitted ? true : null }).ToArray()
             : null,
     };
 }
@@ -283,6 +297,9 @@ public sealed class UpscalerDiagnosisSolution
 
     [DataMember(Name = "fg_routes", Order = 10, EmitDefaultValue = false)]
     public string[]? FrameGenRoutes { get; set; }
+
+    [DataMember(Name = "blocked_reason", Order = 11, EmitDefaultValue = false)]
+    public string? BlockedReason { get; set; }
 }
 
 [DataContract]
@@ -305,6 +322,10 @@ public sealed class UpscalerDiagnosisRecipe
 
     [DataMember(Name = "required_args", Order = 6, EmitDefaultValue = false)]
     public string[]? RequiredArgs { get; set; }
+
+    /// <summary>Windows cannot satisfy the recipe's dependencies.</summary>
+    [DataMember(Name = "blocked", Order = 7, EmitDefaultValue = false)]
+    public bool? Blocked { get; set; }
 }
 
 [DataContract]
