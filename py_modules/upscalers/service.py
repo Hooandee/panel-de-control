@@ -2394,6 +2394,24 @@ class UpscalerService:
         result["elapsed_ms"] = round((time.monotonic() - started) * 1000)
         return result
 
+    def session_injections(self, appid) -> dict:
+        """Which scalers Panel had configured for the game, as read when its session started."""
+        appid = str(appid)
+        found = dict(self._engine_summaries().get(appid) or {})
+        install = (self.state["games"].get(appid) or {}).get("install")
+        if isinstance(install, dict):
+            options = install.get("options") if isinstance(install.get("options"), dict) else {}
+            found["optiscaler" if install.get("engine", "optiscaler") == "optiscaler" else str(install.get("engine"))[:20]] = {
+                "build": install.get("build"), "proxy": install.get("proxy"), "fg": options.get("fg"),
+                "quality": options.get("quality")}
+        return found
+
+    def session_mako_runtime(self, appid) -> dict:
+        try:
+            return self.mako_runtime(appid)
+        except UpscalerError:
+            return {}
+
     def support_state(self) -> dict:
         mako_status = self.mako.status()
         return {
