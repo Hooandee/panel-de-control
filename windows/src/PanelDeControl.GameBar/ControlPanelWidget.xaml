@@ -28,7 +28,12 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
                         <Grid Width="10" Height="10" VerticalAlignment="Center">
                             <Ellipse x:Name="LiveHalo" Margin="-4" Fill="{StaticResource PdcOkBrush}" Opacity="0.3" />
                             <Ellipse x:Name="LiveDot" Fill="{StaticResource PdcOkBrush}" />
@@ -36,13 +41,15 @@
                         <TextBlock
                             x:Name="DeviceName"
                             x:Uid="DeviceName"
+                            Grid.Column="1"
                             FontFamily="{StaticResource PdcDisplayFontFamily}"
-                            FontSize="26"
+                            FontSize="24"
                             FontWeight="SemiBold"
                             Foreground="{StaticResource PdcTextPrimaryBrush}"
                             TextTrimming="CharacterEllipsis" />
                         <Border
                             x:Name="EarlyBadge"
+                            Grid.Column="2"
                             Padding="8,1,8,2"
                             VerticalAlignment="Center"
                             Background="{StaticResource PdcAccentBrush}"
@@ -53,7 +60,7 @@
                                 FontWeight="SemiBold"
                                 Foreground="{StaticResource PdcOnAccentBrush}" />
                         </Border>
-                    </StackPanel>
+                    </Grid>
                     <StackPanel x:Name="HeaderDetail" Margin="0,8,0,0" Orientation="Horizontal" Spacing="6">
                         <Border Style="{StaticResource PdcPillStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="6">

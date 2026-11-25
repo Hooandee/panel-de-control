@@ -1712,7 +1712,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         SectionTitle.Text = Localized("Nav" + current.ResourceStem);
         SectionDescription.Text = Localized("Nav" + current.ResourceStem + "Desc");
 
-        aurora?.Tint(WithAlpha(Lighten(accent), 0x60), WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x38));
+        aurora?.Tint(WithAlpha(Lighten(accent), 0x80), WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x50));
     }
 
 
