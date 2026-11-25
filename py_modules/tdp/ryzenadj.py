@@ -46,16 +46,24 @@ def _parse_stapm(out: str) -> int | None:
         return None
 
 
-def _parse_snapshot(out: str) -> dict[str, int] | None:
+def _parse_snapshot(out: str, *, milliwatts: bool = False) -> dict[str, int] | None:
     values = {}
     for key, pattern in (("stapm", _STAPM_RE), ("fast", _FAST_RE), ("slow", _SLOW_RE)):
         match = pattern.search(out)
         if not match:
             return None
-        try:
-            value = round(float(match.group(1)))
-        except ValueError:
-            return None
+        token = match.group(1)
+        if milliwatts:
+            if (not re.fullmatch(r"[0-9]{1,7}(?:[.][0-9]{1,3})?", token)
+                    or not out[match.end():].lstrip(" \t").startswith("|")):
+                return None
+            whole, _, fraction = token.partition(".")
+            value = int(whole) * 1000 + int(fraction.ljust(3, "0"))
+        else:
+            try:
+                value = round(float(token))
+            except (ValueError, OverflowError):
+                return None
         if value <= 0:
             return None
         values[key] = value
@@ -115,8 +123,17 @@ class RyzenadjBackend(TDPBackend):
                  safety_lock_path: str | None = None,
                  hold_rail_floors: dict[str, int] | None = None,
                  unreadable_marker_path: str | None = None,
-                 write_temp_limit: bool = True):
+                 write_temp_limit: bool = True,
+                 hard_write_max_mw: int | None = None):
+        if hard_write_max_mw is not None and (
+            hard_write_max_mw <= 0 or not require_readback or not safety_lock_path
+            or readback_fallback or power_only_retry or allow_unverified_hold
+        ):
+            raise ValueError(
+                "capped RyzenAdj control requires strict readback and a recovery journal"
+            )
         self._fallback = fallback
+        self._hard_write_max_mw = hard_write_max_mw
         self._write_limits = fallback.with_cooler(write_max).with_ac_max(write_max_ac)
         self.manual_write_max_ac = self._write_limits.max_ac_w
         self._runner = runner
@@ -135,7 +152,7 @@ class RyzenadjBackend(TDPBackend):
             and all(rail in unverified_hold_restore for rail in ("pl1", "pl2", "pl3"))
             else None
         )
-        self.auto_tdp_supported = not (
+        self.auto_tdp_supported = hard_write_max_mw is None and not (
             self._power_only_retry and not self._require_readback
         )
         self._hold_rail_floors = dict(hold_rail_floors or {})
@@ -143,7 +160,7 @@ class RyzenadjBackend(TDPBackend):
             self._allow_unverified_hold and self._bin
         )
         self.low_battery_hold_strategy = (
-            "primary" if self._require_readback else None
+            "primary" if self._require_readback and hard_write_max_mw is None else None
         )
         self.auto_tdp_safe = self._require_readback or not self._power_only_retry
         self._unreadable_reads = 0
@@ -204,10 +221,10 @@ class RyzenadjBackend(TDPBackend):
             return None
         recovery_pending = self._readback_state == "recovery_pending"
         first_read = self._readback_state == "pending"
-        snapshot = self._read_snapshot(require_zero_exit=True)
+        snapshot = self._read_snapshot(require_zero_exit=True, milliwatts=True)
         if snapshot is None and retry_initial and self._readback_state == "pending":
             time.sleep(0.05)
-            snapshot = self._read_snapshot(require_zero_exit=True)
+            snapshot = self._read_snapshot(require_zero_exit=True, milliwatts=True)
         if snapshot is None and self._readback_fallback and self._readback_state == "pending":
             self._write_without_readback()
             return None
@@ -300,7 +317,8 @@ class RyzenadjBackend(TDPBackend):
         if self.yields_to_next_route:
             return False
         return (
-            self._runtime_lock_payload is not None
+            (self._runtime_lock_payload is not None
+             and not (self.supported and self._runtime_lock_payload.get("state") == "capped_active"))
             or self._readback_state.startswith("circuit_open")
         )
 
@@ -331,6 +349,9 @@ class RyzenadjBackend(TDPBackend):
             detail = self._last_readback_failure or "ryzenadj binary not found"
             return TdpResult(watts, None, False, detail)
         target = self._write_limits.clamp(watts, on_ac=ac)
+        ceiling = self._hard_write_max_mw
+        if ceiling is not None and max(watts, target) * 1000 > ceiling:
+            return TdpResult(watts, None, False, "ryzenadj request exceeds hardware write ceiling")
         if (
             self._readback_state == "recovery_pending"
             and self._is_experimental(target)
@@ -344,17 +365,34 @@ class RyzenadjBackend(TDPBackend):
         baseline = self._required_snapshot() if self._require_readback else None
         if self._require_readback and baseline is None:
             return TdpResult(watts, None, False, self._last_readback_failure)
+        if ceiling is not None and (baseline is None or max(baseline.values()) > ceiling):
+            return TdpResult(
+                watts, None, False, "ryzenadj cannot safely restore baseline within hardware write ceiling",
+            )
+        if ceiling is not None and self._runtime_lock_payload is not None:
+            if self._runtime_lock_payload.get("state") != "capped_active":
+                return TdpResult(watts, None, False, "ryzenadj recovery required before writing")
+            previous_target = self._runtime_lock_payload.get("target")
+            if (baseline is None or type(previous_target) is not int
+                    or any(value != previous_target * 1000 for value in baseline.values())):
+                return TdpResult(watts, None, False, "ryzenadj active limits changed outside Panel; no writes performed")
+            baseline = self._runtime_lock_payload["baseline_mw"]
         lock_payload = {
             "state": "circuit_open_transaction",
             "detail": "ryzenadj transaction pending",
-            "baseline": baseline,
+            "baseline_mw": baseline,
             "target": target,
             "experimental": self._is_experimental(target),
         }
-        if self._require_readback and not self._safety_lock.persist_payload(lock_payload):
+        if ceiling is not None:
+            lock_payload["previous_target"] = (
+                self._runtime_lock_payload["target"]
+                if self._runtime_lock_payload is not None else None
+            )
+        if baseline is not None and not self._safety_lock.persist_payload(lock_payload):
             return TdpResult(
                 watts,
-                baseline["stapm"],
+                round(baseline["stapm"] / 1000),
                 False,
                 "ryzenadj transaction safety lock unavailable; no writes performed",
             )
@@ -393,6 +431,23 @@ class RyzenadjBackend(TDPBackend):
                         f"ryzenadj primary failed ({type(e).__name__})",
                     )
                 return TdpResult(watts, None, False, f"ryzenadj failed: {e}")
+            if ceiling is not None:
+                verified = self._read_snapshot(require_zero_exit=True, milliwatts=True)
+                if primary_exit or verified is None or max(verified.values()) > ceiling:
+                    return self._handle_strict_failure(
+                        watts, baseline, "ryzenadj capped write could not be verified",
+                        open_circuit=True,
+                    )
+                if all(value == target * 1000 for value in verified.values()):
+                    active = {**lock_payload, "state": "capped_active"}
+                    if not self._safety_lock.persist_payload(active):
+                        return self._handle_strict_failure(
+                            watts, baseline, "ryzenadj could not record active capped control",
+                            open_circuit=True,
+                        )
+                    self._runtime_lock_payload = active
+                    return TdpResult(watts, target, True, "")
+                continue
             if self._power_only_retry and primary_exit:
                 return self._recover_gpd(watts, target, primary_exit, baseline)
             strict_snapshot = (
@@ -418,6 +473,11 @@ class RyzenadjBackend(TDPBackend):
                 continue  # re-assert once, then treat as unconfirmed
             if strict_snapshot is None and _matches(applied, target):
                 return self._confirmed_result(watts, applied, target, "")
+        if ceiling is not None:
+            return self._handle_strict_failure(
+                watts, baseline, "ryzenadj capped limits did not match the request",
+                open_circuit=True,
+            )
         if _unreadable(applied):
             if self._require_readback:
                 return TdpResult(
@@ -745,7 +805,7 @@ class RyzenadjBackend(TDPBackend):
                 **(self._runtime_lock_payload or {}),
                 "state": self._readback_state,
                 "detail": f"{detail}; baseline restore {restore}",
-                "baseline": baseline,
+                "baseline_mw": baseline,
             }
             self._runtime_lock_payload = payload
             if not self._safety_lock.persist_payload(payload):
@@ -763,20 +823,20 @@ class RyzenadjBackend(TDPBackend):
         return TdpResult(watts, None, False, self._last_readback_failure)
 
     def _restore_snapshot(self, baseline) -> str:
-        if not isinstance(baseline, dict):
+        rails = ("stapm", "fast", "slow")
+        if (not isinstance(baseline, dict) or set(baseline) != set(rails)
+                or any(type(value) is not int or value <= 0 for value in baseline.values())):
             return "unresolved"
         try:
-            exit_code = self._apply_limits(
-                baseline["stapm"],
-                baseline["fast"],
-                baseline["slow"],
+            exit_code = self._apply_limits_mw(
+                *(baseline[rail] for rail in rails),
                 include_temp=False,
             )
-        except (KeyError, OSError, subprocess.SubprocessError):
+        except (ValueError, OSError, subprocess.SubprocessError):
             return "unresolved"
         if exit_code:
             return "unresolved"
-        restored = self._read_snapshot(require_zero_exit=True)
+        restored = self._read_snapshot(require_zero_exit=True, milliwatts=True)
         return "confirmed" if restored == baseline else "unresolved"
 
     def _apply(self, target: int, *, include_temp: bool = True) -> int:
@@ -788,11 +848,20 @@ class RyzenadjBackend(TDPBackend):
         )
 
     def _apply_limits(self, stapm: int, fast: int, slow: int, *, include_temp: bool) -> int:
+        return self._apply_limits_mw(
+            stapm * 1000, fast * 1000, slow * 1000, include_temp=include_temp,
+        )
+
+    def _apply_limits_mw(self, stapm: int, fast: int, slow: int, *, include_temp: bool) -> int:
+        if self._hard_write_max_mw is not None and any(
+            not 0 < value <= self._hard_write_max_mw for value in (stapm, fast, slow)
+        ):
+            raise ValueError("ryzenadj rail outside hardware write ceiling")
         argv = [
             self._bin,
-            "--stapm-limit", str(stapm * 1000),
-            "--fast-limit", str(fast * 1000),
-            "--slow-limit", str(slow * 1000),
+            "--stapm-limit", str(stapm),
+            "--fast-limit", str(fast),
+            "--slow-limit", str(slow),
         ]
         if include_temp:
             argv.extend(["--tctl-temp", "90"])
@@ -898,6 +967,17 @@ class RyzenadjBackend(TDPBackend):
         self._readback_state = "recovery_pending"
         return True
 
+    @property
+    def has_capped_transaction(self) -> bool:
+        return self._hard_write_max_mw is not None and self._runtime_lock_payload is not None
+
+    def release(self) -> bool:
+        if self._hard_write_max_mw is None or self._runtime_lock_payload is None:
+            return True
+        if self._runtime_lock_payload.get("state") == "circuit_open_restored":
+            return True
+        return self.recover_runtime_transaction()["ok"]
+
     def recover_runtime_transaction(self) -> dict:
         payload = self._runtime_lock_payload
         if (
@@ -934,14 +1014,48 @@ class RyzenadjBackend(TDPBackend):
             return {"ok": True, "detail": "ryzenadj safe-range recovery pending"}
         if (
             not isinstance(payload, dict)
-            or payload.get("state") != "circuit_open_transaction"
+            or not (
+                payload.get("state") == "circuit_open_transaction"
+                or (
+                    self._hard_write_max_mw is not None
+                    and payload.get("state") in ("capped_active", "circuit_open_unresolved")
+                )
+            )
         ):
             return {"ok": False, "detail": "ryzenadj recovery snapshot unavailable"}
-        baseline = payload.get("baseline")
+        baseline = payload.get("baseline_mw")
+        if "baseline_mw" not in payload:
+            legacy = payload.get("baseline")
+            if isinstance(legacy, dict) and all(type(value) is int for value in legacy.values()):
+                baseline = {rail: value * 1000 for rail, value in legacy.items()}
         if not isinstance(baseline, dict) or self._bin is None:
             return {"ok": False, "detail": "ryzenadj recovery snapshot invalid"}
+        already_restored = False
+        if self._hard_write_max_mw is not None:
+            ceiling = self._hard_write_max_mw
+            if set(baseline) != {"stapm", "fast", "slow"} or any(
+                type(value) is not int or not 0 < value <= ceiling for value in baseline.values()
+            ):
+                return {"ok": False, "detail": "ryzenadj recovery snapshot exceeds safe bounds"}
+            targets = [payload.get("target")]
+            if payload.get("state") != "capped_active":
+                targets.append(payload.get("previous_target"))
+            out = self._read_info(require_zero_exit=True)
+            live = _parse_snapshot(out, milliwatts=True) if out is not None else None
+            already_restored = live == baseline
+            if not already_restored and (
+                live is None or not any(
+                    type(target) is int and 0 < target * 1000 <= ceiling
+                    and all(value == target * 1000 for value in live.values())
+                    for target in targets
+                )
+            ):
+                return {
+                    "ok": False,
+                    "detail": "ryzenadj active limits cannot be confirmed; no restore performed",
+                }
         self.supported = True
-        restore = self._restore_snapshot(baseline)
+        restore = "confirmed" if already_restored else self._restore_snapshot(baseline)
         if restore != "confirmed":
             self._readback_state = "circuit_open_unresolved"
             self.supported = False
@@ -986,11 +1100,11 @@ class RyzenadjBackend(TDPBackend):
             self._note_auto_readback(out, exit_ok)
         return _parse_stapm(out)
 
-    def _read_snapshot(self, *, require_zero_exit: bool = False):
+    def _read_snapshot(self, *, require_zero_exit: bool = False, milliwatts: bool = False):
         if not self.supported:
             return None
         out = self._read_info(require_zero_exit=require_zero_exit)
-        return _parse_snapshot(out) if out is not None else None
+        return _parse_snapshot(out, milliwatts=milliwatts) if out is not None else None
 
     def _read_info(self, *, require_zero_exit: bool = False) -> str | None:
         exit_ok, out = self._read_info_result()

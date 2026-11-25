@@ -79,6 +79,7 @@ class DeviceProfile:
     dt_compatible: tuple[str, ...] = field(default_factory=tuple)
     # Keep CPU, GPU, TDP and fan control with the system or another tool.
     monitor_only_power_fans: bool = False
+    capped_ryzenadj_max_w: int | None = None
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -240,9 +241,9 @@ DEVICE_TABLE = (
                   experimental=True),
     DeviceProfile("ayaneo_flip_1s_ds", "AYANEO FLIP 1S DS",
                   "AMD Ryzen AI 9 HX 370", "amd",
-                  0, 0, 0, 0,
+                  4, 15, 25, 25,
                   dmi_matches=(DmiMatch("FLIP 1S DS", "AYANEO"),),
-                  experimental=True, monitor_only_power_fans=True),
+                  experimental=True, monitor_only_power_fans=True, capped_ryzenadj_max_w=25),
     DeviceProfile("aokzoe_a1x", "AOKZOE A1X", "AMD Ryzen AI 9 HX 370", "amd",
                   4, 18, 30, 30, match_names=("AOKZOE A1X",), experimental=True,
                   tdp_presets=(12, 18, 30, 30)),

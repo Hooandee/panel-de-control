@@ -128,8 +128,12 @@ OneXPlayer X2 Mini Pro y unas cuantas más, incluso PC de sobremesa, la Steam Ma
 equipo no está en la lista, Panel mira qué se puede controlar en él y te enseña eso.
 
 En Linux, Panel reconoce la **AYANEO FLIP 1S DS** y muestra las RPM del ventilador
-si el kernel las publica mediante `ayaneo_ec`. Los controles de CPU, GPU, TDP y
-ventilador quedan a cargo del sistema o de las herramientas que ya uses.
+si el kernel las publica mediante `ayaneo_ec`. El control manual de TDP está
+desactivado por defecto. Desactiva los demás gestores de TDP antes de activarlo
+en Ajustes. Panel usa RyzenAdj sin modificar y limita STAPM, PPT rápido y PPT
+lento a 25 W tanto con batería como con cargador. Requiere poder leer los límites
+y restaurar sus valores originales sin superar ese máximo. Los controles de CPU,
+GPU y ventilador quedan a cargo del sistema o de las herramientas que ya uses.
 
 ## 📦 Instalación
 
