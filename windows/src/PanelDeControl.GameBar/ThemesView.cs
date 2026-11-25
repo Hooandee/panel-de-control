@@ -317,7 +317,7 @@ public sealed class ThemesView : UserControl
         card.EarlyAction.Style = Components.Style("PdcActionButtonStyle");
         card.EarlyAction.Margin = new Thickness(0, 12, 0, 0);
         card.EarlyAction.Click += (_, _) => _ = InstallEarlyFromFileAsync(card);
-        card.OptionsButton.Style = Components.Style("PdcDisclosureButtonStyle");
+        card.OptionsButton.Style = Components.Style("PdcInlineDisclosureButtonStyle");
         card.OptionsButton.Margin = new Thickness(0, 8, 0, 0);
         card.OptionsButton.Click += (_, _) =>
         {

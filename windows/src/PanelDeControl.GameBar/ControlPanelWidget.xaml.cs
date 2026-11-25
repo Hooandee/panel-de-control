@@ -116,6 +116,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         BuildAccentSwatches();
         BuildSkinChoices();
+        SectionTabs.GettingFocus += SectionTabs_GettingFocus;
+        foreach (var slider in new[] { TdpSlider, VolumeSlider, BrightnessSlider, CpuMaximumStateSlider })
+        {
+            slider.PreviewKeyDown += Slider_PreviewKeyDown;
+        }
         ApplySkinLayout();
         foreach (var line in new[]
         {
@@ -1771,8 +1776,55 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         return Color.FromArgb(color.A, Mix(color.R), Mix(color.G), Mix(color.B));
     }
 
-    // In the Game Bar bar the section follows the focus, so D-pad or arrows left and right change section without
-    // LB/RB, which compact Game Bar keeps to switch widgets. Pointer focus leaves selection to the click.
+    // Focus that comes into the bar from the header or the content goes to the open section's tab, so leaving the
+    // content never switches section by itself.
+    private void SectionTabs_GettingFocus(UIElement sender, GettingFocusEventArgs args)
+    {
+        if (desktopLayout || sections.Count <= selectedSection || args.FocusState != FocusState.Keyboard ||
+            args.NewFocusedElement is not Button || IsInside(args.OldFocusedElement, SectionTabs))
+        {
+            return;
+        }
+
+        var open = sections[selectedSection].Tab;
+        if (!ReferenceEquals(args.NewFocusedElement, open))
+        {
+            args.TrySetNewFocusedElement(open);
+        }
+    }
+
+    // A horizontal slider takes all four arrows; with arrows as the way around (compact Game Bar has no Tab),
+    // Up and Down must move on instead of writing a new value.
+    private static void Slider_PreviewKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        var direction = args.Key switch
+        {
+            VirtualKey.Up => FocusNavigationDirection.Up,
+            VirtualKey.Down => FocusNavigationDirection.Down,
+            _ => FocusNavigationDirection.None,
+        };
+        if (direction != FocusNavigationDirection.None)
+        {
+            FocusManager.TryMoveFocus(direction);
+            args.Handled = true;
+        }
+    }
+
+    private static bool IsInside(DependencyObject? element, DependencyObject container)
+    {
+        for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (ReferenceEquals(node, container))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Inside the Game Bar bar the section follows the focus, so D-pad or arrows left and right change section
+    // without depending on LB/RB. Pointer focus leaves selection to the click.
     private void SectionTab_GotFocus(object sender, RoutedEventArgs args)
     {
         if (!desktopLayout && sender is Button { Tag: int index, FocusState: FocusState.Keyboard } && index != selectedSection)
@@ -1855,8 +1907,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             TabIndicator.BorderBrush = sectionRim;
             PlaceTabIndicator(animate: true);
             sections[index].Tab.StartBringIntoView();
-            // Down from the header lands on the open section, not on whichever tab sits under the button.
-            RefreshButton.XYFocusDown = sections[index].Tab;
         }
 
         if (desktopLayout)
@@ -2045,6 +2095,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             ChargerBand.Data = null;
             BoostArc.Data = null;
             TdpMarker.Visibility = Visibility.Collapsed;
+            LinearHeroMarker.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -2059,9 +2110,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (tdpPresentation.AppliedWatts == tdpPresentation.SelectedWatts)
         {
             TdpMarker.Visibility = Visibility.Collapsed;
+            LinearHeroMarker.Visibility = Visibility.Collapsed;
             return;
         }
 
+        LinearHeroMarker.Margin = new Thickness(Math.Max(0, (FractionOf(tdpPresentation.SelectedWatts) * LinearHero.ActualWidth) - 1.5), 0, 0, 0);
+        LinearHeroMarker.Visibility = Visibility.Visible;
         var point = PowerArc.PointAt(FractionOf(tdpPresentation.SelectedWatts), ArcCenterX, ArcCenterY, ArcRadius);
         Canvas.SetLeft(TdpMarker, point.X - (TdpMarker.Width / 2));
         Canvas.SetTop(TdpMarker, point.Y - (TdpMarker.Height / 2));
@@ -2173,23 +2227,28 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private static void ShowReading(TextBlock target, TelemetryReading? reading, Color color)
     {
-        if (reading?.Status == ReadingStatus.Available && reading.Value.HasValue)
+        var available = reading?.Status == ReadingStatus.Available && reading.Value.HasValue;
+        StyleReading(target, available, "PdcValueMediumStyle");
+        if (available)
         {
-            target.Style = Components.Style("PdcValueMediumStyle");
             target.Foreground = new SolidColorBrush(color);
-            return;
         }
-
-        target.Style = Components.Style("PdcValueFallbackStyle");
-        target.ClearValue(TextBlock.ForegroundProperty);
+        else
+        {
+            target.ClearValue(TextBlock.ForegroundProperty);
+        }
     }
+
+    // A status text (no sensor, unsupported device) takes the fallback style, which fits where a short number goes.
+    private static void StyleReading(TextBlock target, bool available, string valueStyle) =>
+        target.Style = Components.Style(available ? valueStyle : "PdcValueFallbackStyle");
 
     private static void ApplyFan(TextBlock target, HardwareSnapshot snapshot, string id)
     {
         var reading = FindReading(snapshot, id);
         var available = reading?.Status == ReadingStatus.Available && reading.Value.HasValue;
         target.Text = Format(snapshot, id, "0", "RPM");
-        target.Style = Components.Style(available ? "PdcValueLargeStyle" : "PdcValueFallbackStyle");
+        StyleReading(target, available, "PdcValueLargeStyle");
     }
 
     private static void ApplyTemperature(TextBlock target, HardwareSnapshot snapshot, string id)
@@ -2197,7 +2256,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var reading = FindReading(snapshot, id);
         var celsius = reading?.Status == ReadingStatus.Available ? reading.Value : null;
         target.Text = Format(snapshot, id, "0", "°C");
-        target.Style = Components.Style(celsius.HasValue ? "PdcValueHugeStyle" : "PdcValueFallbackStyle");
+        StyleReading(target, celsius.HasValue, "PdcValueHugeStyle");
         if (celsius >= 70)
         {
             target.Foreground = ResourceBrush(celsius >= 85 ? "PdcDangerBrush" : "PdcWarnBrush");

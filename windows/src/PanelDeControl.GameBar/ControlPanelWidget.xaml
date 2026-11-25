@@ -234,6 +234,7 @@
                     <Grid x:Name="LinearHero" Height="22" Margin="2,0,2,4" VerticalAlignment="Bottom" Visibility="Collapsed" SizeChanged="LinearHero_SizeChanged">
                         <Rectangle Height="2" Fill="{StaticResource PdcTrackBrush}" />
                         <Rectangle x:Name="LinearHeroFill" Width="0" Height="4" HorizontalAlignment="Left" Fill="{StaticResource PdcAccentBrush}" />
+                        <Rectangle x:Name="LinearHeroMarker" Width="3" Height="16" HorizontalAlignment="Left" Fill="{StaticResource PdcTextPrimaryBrush}" Visibility="Collapsed" />
                     </Grid>
                 </Grid>
                 <TextBlock
