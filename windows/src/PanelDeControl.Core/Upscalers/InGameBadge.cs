@@ -193,6 +193,14 @@ public sealed class InGameBadgePolicy
     private DateTimeOffset windowEnds;
     private string? windowRun;
 
+    /// <summary>False once nothing the logs say could still make the badge show for this run, so they need not be read.</summary>
+    public bool CanShow(DateTimeOffset now, string mode, string run) => mode switch
+    {
+        InGameModes.Always => true,
+        InGameModes.Start => !started.Contains(run) || (windowRun == run && now < windowEnds),
+        _ => false,
+    };
+
     /// <param name="run">The game in front (its app id and the process it runs as), or null when none is.</param>
     public bool Visible(DateTimeOffset now, string mode, string? run, bool hasContent)
     {

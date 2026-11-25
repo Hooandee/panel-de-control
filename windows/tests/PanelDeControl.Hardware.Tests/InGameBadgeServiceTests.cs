@@ -157,6 +157,112 @@ public sealed class InGameBadgeServiceTests : IDisposable
         Assert.True(new InGameFactsReader(_ => true, "anr").Read(stored, Data.Catalog.Build("fsr-3.1"), Start)!.Active);
     }
 
+    [Fact]
+    public void StopsReadingTheLogsOnceTheStartWindowIsOver()
+    {
+        Log("[12:00:00.000] Creating new FSR 4.0.2 upscaler\n");
+        var reader = new CountingReader();
+        var service = new InGameBadgeService(
+            store, Data, () => new Dictionary<string, string> { ["100"] = game }, overlay, () => front, reader, () => now, new InGameText("en"));
+        InFront(Path.Combine(game, "Game.exe"));
+
+        service.Tick();
+        now = Start.AddSeconds(3);
+        service.Tick();
+        Assert.NotNull(overlay.Last);
+        var reads = reader.Reads;
+
+        now = Start.AddSeconds(7);
+        service.Tick();
+        now = Start.AddSeconds(9);
+        service.Tick();
+        now = Start.AddSeconds(30);
+        service.Tick();
+        Assert.Null(overlay.Last);
+        Assert.Equal(reads, reader.Reads);
+
+        store.SetInGameMode(InGameModes.Always);
+        now = Start.AddSeconds(40);
+        service.Tick();
+        Assert.NotNull(overlay.Last);
+        Assert.Equal(reads + 1, reader.Reads);
+    }
+
+    [Fact]
+    public void ModeOffNeverCallsTheReader()
+    {
+        var reader = new CountingReader();
+        var service = new InGameBadgeService(
+            store, Data, () => new Dictionary<string, string> { ["100"] = game }, overlay, () => front, reader, () => now, new InGameText("en"));
+        InFront(Path.Combine(game, "Game.exe"));
+        store.SetInGameMode(InGameModes.Off);
+        service.Tick();
+        Assert.Equal(0, reader.Reads);
+    }
+
+    [Fact]
+    public void HelixLogReadsAreCachedBySizeAndTime()
+    {
+        var log = Path.Combine(game, "HLX_FSR.log");
+        var active = "HLX-FSR-4 own runtime active: x, output 2560x1440, max render 1280x720\n";
+        File.WriteAllText(log, active);
+        var stamp = File.GetLastWriteTimeUtc(log);
+        var stored = new StoredUpscaler(new InstalledUpscaler { Build = "fsr-4.1.2-beta", Engine = "helixsr", Target = game, Log = log }, 0);
+        var reader = new InGameFactsReader(_ => true, "anr");
+        Assert.True(reader.Read(stored, null, Start)!.Active);
+
+        File.WriteAllText(log, new string('x', active.Length));
+        File.SetLastWriteTimeUtc(log, stamp);
+        Assert.True(reader.Read(stored, null, Start)!.Active);
+
+        File.SetLastWriteTimeUtc(log, stamp.AddSeconds(5));
+        Assert.False(reader.Read(stored, null, Start)!.Active);
+    }
+
+    [Fact]
+    public void OverlayRetriesAfterABackoffAndLogsEachKindOnce()
+    {
+        var backoff = new OverlayBackoff();
+        Assert.True(backoff.CanStart(Start));
+        Assert.True(backoff.Failed(Start, "create"));
+        Assert.False(backoff.CanStart(Start.AddSeconds(10)));
+        Assert.True(backoff.CanStart(Start.AddSeconds(31)));
+        Assert.False(backoff.Failed(Start.AddSeconds(31), "create"));
+        Assert.True(backoff.Failed(Start.AddSeconds(62), "thread"));
+        Assert.False(backoff.Failed(Start.AddSeconds(93), "thread"));
+        Assert.False(backoff.CanStart(Start.AddHours(1)));
+    }
+
+    [Fact]
+    public void BadgeIsRaisedOnlyWhenTheGameWindowIsAboveIt()
+    {
+        var badge = new IntPtr(1);
+        var game = new IntPtr(2);
+        var other = new IntPtr(3);
+        var chain = new Dictionary<IntPtr, IntPtr> { [badge] = other, [other] = game, [game] = IntPtr.Zero };
+        Assert.True(OverlayZOrder.GameIsAbove(badge, game, window => chain[window]));
+
+        var clear = new Dictionary<IntPtr, IntPtr> { [badge] = other, [other] = IntPtr.Zero };
+        Assert.False(OverlayZOrder.GameIsAbove(badge, game, window => clear[window]));
+        Assert.False(OverlayZOrder.GameIsAbove(badge, IntPtr.Zero, window => clear[window]));
+    }
+
+    private sealed class CountingReader : InGameFactsReader
+    {
+        public CountingReader()
+            : base(_ => true, "anr")
+        {
+        }
+
+        public int Reads { get; private set; }
+
+        public override InGameFacts? Read(StoredUpscaler stored, UpscalerBuild? build, DateTimeOffset now, double startedAt = 0)
+        {
+            Reads++;
+            return base.Read(stored, build, now, startedAt);
+        }
+    }
+
     private sealed class Overlay : IInGameOverlay
     {
         public OverlayFrame? Last { get; private set; }

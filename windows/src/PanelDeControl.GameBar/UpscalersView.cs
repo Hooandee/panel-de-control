@@ -80,6 +80,8 @@ public sealed class UpscalersView : UserControl
     private string? selectedModel;
     private string selectedQuality = DefaultQuality;
     private string inGameMode = InGameModes.Default;
+    private string? pendingInGameMode;
+    private int inGameRequest;
     private bool advancedOpen;
     private bool refreshing;
     private bool loadingGame;
@@ -352,7 +354,11 @@ public sealed class UpscalersView : UserControl
             ? overview.GpuName!
             : overview.Gpu == "unknown" ? Localized("UpscalersGpuUnknown") : overview.Gpu;
         gpuText.Text = string.Format(Localized("UpscalersGpu"), gpu);
-        inGameMode = InGameModes.Normalize(overview.InGame);
+        if (pendingInGameMode is null)
+        {
+            inGameMode = InGameModes.Normalize(overview.InGame);
+        }
+
         UpdateInGameChips();
         statusText.Text = !overview.SteamFound
             ? Localized("UpscalersNoSteam")
@@ -898,19 +904,33 @@ public sealed class UpscalersView : UserControl
             return;
         }
 
+        var request = ++inGameRequest;
+        pendingInGameMode = mode;
+        UpdateInGameChips();
         var response = await client.InGameAsync(mode);
+        if (request != inGameRequest)
+        {
+            return;
+        }
+
+        pendingInGameMode = null;
         if (response.Status == UpscalersResponseStatus.Ok)
         {
             inGameMode = InGameModes.Normalize(response.InGame);
-            UpdateInGameChips();
         }
+        else
+        {
+            statusText.Text = ErrorMessage(response.ErrorCode);
+        }
+
+        UpdateInGameChips();
     }
 
     private void UpdateInGameChips()
     {
         foreach (var chip in inGameRow.Children.OfType<Button>())
         {
-            var active = Equals(chip.Tag, inGameMode);
+            var active = Equals(chip.Tag, pendingInGameMode ?? inGameMode);
             chip.Background = active ? AccentFill() : new SolidColorBrush(Colors.Transparent);
             chip.FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal;
         }

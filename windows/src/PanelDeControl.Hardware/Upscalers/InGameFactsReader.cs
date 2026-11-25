@@ -3,11 +3,12 @@ using PanelDeControl.Core.Upscalers;
 namespace PanelDeControl.Hardware.Upscalers;
 
 /// <summary>Reads what an installed game's logs say right now; the OptiScaler log is parsed again only after it changed.</summary>
-public sealed class InGameFactsReader
+public class InGameFactsReader
 {
     private readonly Func<InstalledUpscaler, bool> isInstalled;
     private readonly string anrProvider;
     private (string Key, OptiScalerLogReport Report)? cached;
+    private (string Key, HelixLogFacts Facts)? helixCached;
 
     public InGameFactsReader(Func<InstalledUpscaler, bool> isInstalled, string anrProvider)
     {
@@ -17,7 +18,7 @@ public sealed class InGameFactsReader
 
     /// <summary>Null when the install is gone: nothing to say.</summary>
     /// <param name="startedAt">When the running game started (Unix seconds): a log from an earlier session says nothing about this one.</param>
-    public InGameFacts? Read(StoredUpscaler stored, UpscalerBuild? build, DateTimeOffset now, double startedAt = 0)
+    public virtual InGameFacts? Read(StoredUpscaler stored, UpscalerBuild? build, DateTimeOffset now, double startedAt = 0)
     {
         var install = stored.Install;
         var since = Math.Max(stored.InstalledAt, startedAt);
@@ -37,7 +38,7 @@ public sealed class InGameFactsReader
 
         if (install.Engine == "helixsr")
         {
-            var facts = HelixLog.ReadInstall(install, since);
+            var facts = HelixFacts(install, since);
             return new InGameFacts
             {
                 Label = label,
@@ -88,6 +89,45 @@ public sealed class InGameFactsReader
             FrameGenRoute = route,
             Generating = generating,
         };
+    }
+
+    private HelixLogFacts HelixFacts(InstalledUpscaler install, double since)
+    {
+        var storage = Path.Combine(install.Target, HelixLog.Storage);
+        var key = string.Join(
+            "|",
+            Stamp(install.Log),
+            Stamp(string.IsNullOrEmpty(install.Log) ? string.Empty : Path.Combine(Path.GetDirectoryName(install.Log) ?? string.Empty, HelixLog.FileName)),
+            Stamp(install.HelixFile),
+            Stamp(Path.Combine(storage, HelixLog.StorageProvider)),
+            Stamp(Path.Combine(storage, HelixLog.FileName)),
+            since);
+        if (helixCached is { } hit && hit.Key == key)
+        {
+            return hit.Facts;
+        }
+
+        var facts = HelixLog.ReadInstall(install, since);
+        helixCached = (key, facts);
+        return facts;
+    }
+
+    private static string Stamp(string path)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return string.Empty;
+            }
+
+            var info = new FileInfo(path);
+            return info.Exists ? $"{info.FullName}:{info.Length}:{info.LastWriteTimeUtc.Ticks}" : "-";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return "?";
+        }
     }
 
     private bool? AnrGenerating(string target, DateTime nowUtc)

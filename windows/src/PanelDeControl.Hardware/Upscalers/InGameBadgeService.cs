@@ -120,6 +120,12 @@ public sealed class InGameBadgeService
 
         var time = now();
         var run = appId + ":" + current.ProcessId.ToString(CultureInfo.InvariantCulture);
+        if (!policy.CanShow(time, mode, run))
+        {
+            overlay.Present(null);
+            return;
+        }
+
         if (factsFor != run || time - factsAt >= FactsInterval)
         {
             facts = reader.Read(stored, data.Catalog.Build(stored.Install.Build), time, StartedAt(current.ProcessId));

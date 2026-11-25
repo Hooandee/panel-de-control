@@ -66,8 +66,9 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
     private Thread? thread;
     private IntPtr window;
     private OverlayFrame? pending;
-    private volatile bool broken;
-    private bool reported;
+    private volatile bool disposed;
+    private readonly OverlayBackoff backoff = new();
+    private IntPtr gameWindow;
 
     private string layoutKey = string.Empty;
     private IntPtr font;
@@ -86,7 +87,7 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
     {
         lock (gate)
         {
-            if (broken || (frame is null && window == IntPtr.Zero))
+            if (disposed || (frame is null && window == IntPtr.Zero))
             {
                 return;
             }
@@ -94,6 +95,11 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
             pending = frame;
             if (window == IntPtr.Zero)
             {
+                if (!backoff.CanStart(DateTimeOffset.UtcNow))
+                {
+                    return;
+                }
+
                 Start();
                 if (window == IntPtr.Zero)
                 {
@@ -111,7 +117,7 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
         lock (gate)
         {
             handle = window;
-            broken = true;
+            disposed = true;
         }
 
         if (handle != IntPtr.Zero)
@@ -123,28 +129,32 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
 
     private void Start()
     {
-        ready.Reset();
-        thread = new Thread(Run) { IsBackground = true, Name = "PanelDeControl.InGameBadge" };
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
+        if (thread is not { IsAlive: true })
+        {
+            ready.Reset();
+            thread = new Thread(Run) { IsBackground = true, Name = "PanelDeControl.InGameBadge" };
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+        }
+
         if (!ready.Wait(TimeSpan.FromSeconds(3)) || window == IntPtr.Zero)
         {
-            Fail("badge window not created");
+            Fail("create", "badge window not created");
         }
     }
 
-    private void Fail(string detail)
+    private void Fail(string kind, string detail)
     {
-        broken = true;
-        if (!reported)
+        if (backoff.Failed(DateTimeOffset.UtcNow, kind))
         {
-            reported = true;
             CompanionLog.Write("upscalers.ingame", detail);
         }
     }
 
     private void Run()
     {
+        string? failure = null;
+        string? detail = null;
         try
         {
             SetThreadDpiAwarenessContext(PerMonitorAwareV2);
@@ -163,6 +173,8 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
                 ClassName, string.Empty, WsPopup, 0, 0, 1, 1, IntPtr.Zero, IntPtr.Zero, instance, IntPtr.Zero);
             if (handle == IntPtr.Zero)
             {
+                failure = "create";
+                detail = "badge window creation failed";
                 ready.Set();
                 return;
             }
@@ -184,16 +196,27 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
         }
         catch (Exception exception)
         {
-            Fail(exception.ToString());
+            failure = "thread";
+            detail = exception.ToString();
             ready.Set();
         }
         finally
         {
             window = IntPtr.Zero;
-            broken = true;
             if (font != IntPtr.Zero)
             {
                 DeleteObject(font);
+                font = IntPtr.Zero;
+            }
+
+            shown = false;
+            alpha = 0;
+            fadeFrom = 0;
+            fadeTo = 0;
+            layoutKey = string.Empty;
+            if (!disposed)
+            {
+                Fail(failure ?? "ended", detail ?? "badge thread ended");
             }
         }
     }
@@ -246,10 +269,12 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
             return;
         }
 
-        var key = Key(frame);
+        gameWindow = frame.GameWindow;
+        var place = Place(frame.GameWindow);
+        var key = Key(frame, place);
         if (key != layoutKey)
         {
-            Layout(handle, frame);
+            Layout(handle, frame, place);
             layoutKey = key;
         }
 
@@ -264,8 +289,8 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
         FadeTo(handle, Opacity);
     }
 
-    private static string Key(OverlayFrame frame) =>
-        frame.GameWindow + "|" + string.Join("\n", frame.Lines.Select(line => string.Join("\t", line.Spans.Select(span => span.Tone + span.Text))));
+    private static string Key(OverlayFrame frame, Placement place) =>
+        frame.GameWindow + "|" + place.Monitor + "|" + place.Dpi + "|" + place.Bounds.Left + "," + place.Bounds.Top + "," + place.Bounds.Right + "|" + string.Join("\n", frame.Lines.Select(line => string.Join("\t", line.Spans.Select(span => span.Tone + span.Text))));
 
     private void FadeTo(IntPtr handle, double target)
     {
@@ -289,7 +314,7 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
     {
         if (timer == TopmostTimer)
         {
-            if (shown)
+            if (shown && NeedsRaise(handle))
             {
                 SetWindowPos(handle, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
             }
@@ -316,9 +341,15 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
         }
     }
 
-    private void Layout(IntPtr handle, OverlayFrame frame)
+    private bool NeedsRaise(IntPtr handle) =>
+        (GetWindowLong(handle, -20) & WsExTopmost) == 0
+        || OverlayZOrder.GameIsAbove(handle, gameWindow, window => GetWindow(window, 3));
+
+    private readonly record struct Placement(IntPtr Monitor, Rect Bounds, uint Dpi);
+
+    private static Placement Place(IntPtr gameWindow)
     {
-        var monitor = MonitorFromWindow(frame.GameWindow, 2);
+        var monitor = MonitorFromWindow(gameWindow, 2);
         var info = new MonitorInfo { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
         if (!GetMonitorInfo(monitor, ref info))
         {
@@ -337,7 +368,13 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
         {
         }
 
-        var scale = dpi / 96.0;
+        return new Placement(monitor, info.Monitor, dpi);
+    }
+
+    private void Layout(IntPtr handle, OverlayFrame frame, Placement place)
+    {
+        var info = new MonitorInfo { Monitor = place.Bounds };
+        var scale = place.Dpi / 96.0;
         int Px(double value) => (int)Math.Round(value * scale);
         if (font != IntPtr.Zero)
         {
@@ -600,6 +637,12 @@ public sealed class InGameOverlayWindow : IInGameOverlay, IDisposable
 
     [DllImport("user32.dll", EntryPoint = "DrawTextW", CharSet = CharSet.Unicode)]
     private static extern int DrawText(IntPtr dc, string text, int count, ref Rect rect, uint format);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern int GetWindowLong(IntPtr window, int index);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr window, uint command);
 
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromWindow(IntPtr window, uint flags);
