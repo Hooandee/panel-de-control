@@ -778,7 +778,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 {
                     Content = $"{hertz} Hz",
                     Tag = hertz,
-                    Style = (Style)Application.Current.Resources["PdcSegmentButtonStyle"],
+                    Style = Components.Style("PdcSegmentButtonStyle"),
                 };
                 Grid.SetColumn(chip, RefreshRateChips.ColumnDefinitions.Count - 1);
                 AutomationProperties.SetName(chip, string.Format(Localized("RefreshRateAutomation"), hertz));
@@ -1381,7 +1381,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             {
                 Content = Localized("Skin" + skin),
                 Tag = skin,
-                Style = (Style)Application.Current.Resources["PdcSegmentButtonStyle"],
+                Style = Components.Style("PdcSegmentButtonStyle"),
             };
             Components.MarkChoice(choice, skin == Skins.Current);
             choice.Click += SkinChoice_Click;
@@ -1741,13 +1741,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         text.Children.Add(new TextBlock
         {
             Text = Localized(block.ResourceStem + "Title"),
-            Style = (Style)Application.Current.Resources["PdcTitleStyle"],
+            Style = Components.Style("PdcTitleStyle"),
         });
         text.Children.Add(new TextBlock
         {
             Text = Localized(block.ResourceStem + "Desc"),
             Margin = new Thickness(0, 3, 0, 0),
-            Style = (Style)Application.Current.Resources["PdcMutedStyle"],
+            Style = Components.Style("PdcMutedStyle"),
         });
         text.Children.Add(new TextBlock
         {
@@ -1760,7 +1760,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         layout.Children.Add(text);
         return new Border
         {
-            Style = (Style)Application.Current.Resources["PdcCardStyle"],
+            Style = Components.Style("PdcCardStyle"),
             Child = layout,
         };
     }

@@ -44,19 +44,19 @@ public sealed class ThemesView : UserControl
     public ThemesView()
     {
         language = UiLanguage();
-        connectionTitle.Style = Resource<Style>("PdcTitleStyle");
-        connectionDetail.Style = Resource<Style>("PdcMutedStyle");
+        connectionTitle.Style = Components.Style("PdcTitleStyle");
+        connectionDetail.Style = Components.Style("PdcMutedStyle");
         connectionDetail.Margin = new Thickness(0, 4, 0, 0);
         connectionDetail.TextWrapping = TextWrapping.WrapWholeWords;
-        connectionAction.Style = Resource<Style>("PdcActionButtonStyle");
+        connectionAction.Style = Components.Style("PdcActionButtonStyle");
         connectionAction.Margin = new Thickness(0, 12, 0, 0);
         connectionAction.Click += ConnectionAction_Click;
         connectionCard = new Border
         {
-            Style = Resource<Style>("PdcCardStyle"),
+            Style = Components.Style("PdcCardStyle"),
             Child = new StackPanel { Children = { connectionTitle, connectionDetail, connectionAction } },
         };
-        emptyText.Style = Resource<Style>("PdcMutedStyle");
+        emptyText.Style = Components.Style("PdcMutedStyle");
         emptyText.TextWrapping = TextWrapping.WrapWholeWords;
         root.Children.Add(connectionCard);
         root.Children.Add(themeList);
@@ -217,7 +217,7 @@ public sealed class ThemesView : UserControl
         var cover = new Border
         {
             Margin = new Thickness(0, 0, 0, 14),
-            Style = Resource<Style>("PdcMediaFrameStyle"),
+            Style = Components.Style("PdcMediaFrameStyle"),
             Child = image,
         };
         image.ImageFailed += (_, _) => cover.Visibility = Visibility.Collapsed;
@@ -235,24 +235,24 @@ public sealed class ThemesView : UserControl
 
     private void BuildRemoval(ThemeCard card)
     {
-        card.RemoveButton.Style = Resource<Style>("PdcLinkButtonStyle");
+        card.RemoveButton.Style = Components.Style("PdcLinkButtonStyle");
         card.RemoveButton.Margin = new Thickness(0, 6, 0, 0);
         card.RemoveButton.Click += (_, _) => SetRemovalConfirmation(card, true);
 
-        card.RemoveTitle.Style = Resource<Style>("PdcTitleStyle");
+        card.RemoveTitle.Style = Components.Style("PdcTitleStyle");
         card.RemoveTitle.TextWrapping = TextWrapping.WrapWholeWords;
-        card.RemoveDescription.Style = Resource<Style>("PdcMutedStyle");
+        card.RemoveDescription.Style = Components.Style("PdcMutedStyle");
         card.RemoveDescription.TextWrapping = TextWrapping.WrapWholeWords;
         card.RemoveDescription.Margin = new Thickness(0, 4, 0, 0);
-        card.RemoveConfirmButton.Style = Resource<Style>("PdcDangerButtonStyle");
+        card.RemoveConfirmButton.Style = Components.Style("PdcDangerButtonStyle");
         card.RemoveConfirmButton.Click += (_, _) => _ = RemoveAsync(card);
-        card.RemoveCancelButton.Style = Resource<Style>("PdcActionButtonStyle");
+        card.RemoveCancelButton.Style = Components.Style("PdcActionButtonStyle");
         card.RemoveCancelButton.Click += (_, _) => SetRemovalConfirmation(card, false);
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
         buttons.Children.Add(card.RemoveConfirmButton);
         buttons.Children.Add(card.RemoveCancelButton);
-        card.RemoveConfirm.Style = Resource<Style>("PdcInsetPanelStyle");
+        card.RemoveConfirm.Style = Components.Style("PdcInsetPanelStyle");
         card.RemoveConfirm.Margin = new Thickness(0, 10, 0, 0);
         card.RemoveConfirm.Child = new StackPanel { Children = { card.RemoveTitle, card.RemoveDescription, buttons } };
     }
@@ -300,24 +300,24 @@ public sealed class ThemesView : UserControl
     private ThemeCard BuildCard(ThemeEntry theme)
     {
         var card = new ThemeCard(theme.Name);
-        card.Title.Style = Resource<Style>("PdcTitleStyle");
-        card.Description.Style = Resource<Style>("PdcMutedStyle");
+        card.Title.Style = Components.Style("PdcTitleStyle");
+        card.Description.Style = Components.Style("PdcMutedStyle");
         card.Description.TextWrapping = TextWrapping.WrapWholeWords;
         card.Description.MaxLines = 3;
         card.Description.TextTrimming = TextTrimming.WordEllipsis;
         card.Description.Margin = new Thickness(0, 4, 0, 0);
-        card.State.Style = Resource<Style>("PdcCaptionStyle");
+        card.State.Style = Components.Style("PdcCaptionStyle");
         card.State.Margin = new Thickness(0, 10, 0, 0);
         card.State.TextWrapping = TextWrapping.WrapWholeWords;
-        card.Toggle.Style = Resource<Style>("PdcToggleStyle");
+        card.Toggle.Style = Components.Style("PdcToggleStyle");
         card.Toggle.Toggled += (_, _) => _ = ToggleThemeAsync(card);
-        card.Action.Style = Resource<Style>("PdcPrimaryButtonStyle");
+        card.Action.Style = Components.Style("PdcPrimaryButtonStyle");
         card.Action.Margin = new Thickness(0, 12, 0, 0);
         card.Action.Click += (_, _) => _ = InstallAsync(card);
-        card.EarlyAction.Style = Resource<Style>("PdcActionButtonStyle");
+        card.EarlyAction.Style = Components.Style("PdcActionButtonStyle");
         card.EarlyAction.Margin = new Thickness(0, 12, 0, 0);
         card.EarlyAction.Click += (_, _) => _ = InstallEarlyFromFileAsync(card);
-        card.OptionsButton.Style = Resource<Style>("PdcDisclosureButtonStyle");
+        card.OptionsButton.Style = Components.Style("PdcDisclosureButtonStyle");
         card.OptionsButton.Margin = new Thickness(0, 8, 0, 0);
         card.OptionsButton.Click += (_, _) =>
         {
@@ -362,7 +362,7 @@ public sealed class ThemesView : UserControl
             card.Options.Children.Add(BuildOption(card, option));
         }
 
-        card.Root.Style = Resource<Style>("PdcCardStyle");
+        card.Root.Style = Components.Style("PdcCardStyle");
         var content = new StackPanel
         {
             Children = { header, card.Description, card.State, card.Action, card.EarlyAction, card.OptionsButton, card.Options, card.RemoveButton, card.RemoveConfirm },
@@ -379,7 +379,7 @@ public sealed class ThemesView : UserControl
     private static FrameworkElement KeyboardsHeading() => new TextBlock
     {
         Text = Localized("ThemesKeyboardsHeading").ToUpperInvariant(),
-        Style = Resource<Style>("PdcCaptionStyle"),
+        Style = Components.Style("PdcCaptionStyle"),
         CharacterSpacing = 60,
         Margin = new Thickness(0, 12, 0, 0),
     };
@@ -391,7 +391,7 @@ public sealed class ThemesView : UserControl
         heading.Children.Add(new TextBlock
         {
             Text = Localized(key).ToUpperInvariant(),
-            Style = Resource<Style>("PdcCaptionStyle"),
+            Style = Components.Style("PdcCaptionStyle"),
             CharacterSpacing = 60,
         });
         var description = Strings.GetString(key + "_Desc");
@@ -400,7 +400,7 @@ public sealed class ThemesView : UserControl
             heading.Children.Add(new TextBlock
             {
                 Text = description,
-                Style = Resource<Style>("PdcMutedStyle"),
+                Style = Components.Style("PdcMutedStyle"),
                 TextWrapping = TextWrapping.WrapWholeWords,
             });
         }
@@ -418,12 +418,12 @@ public sealed class ThemesView : UserControl
                 return new TextBlock
                 {
                     Text = label.ToUpperInvariant(),
-                    Style = Resource<Style>("PdcCaptionStyle"),
+                    Style = Components.Style("PdcCaptionStyle"),
                     Margin = new Thickness(0, 6, 0, -6),
                     CharacterSpacing = 60,
                 };
             case "checkbox":
-                var toggle = new ToggleSwitch { Style = Resource<Style>("PdcToggleStyle"), Tag = option.Name };
+                var toggle = new ToggleSwitch { Style = Components.Style("PdcToggleStyle"), Tag = option.Name };
                 AutomationProperties.SetName(toggle, label);
                 toggle.Toggled += (_, _) =>
                 {
@@ -435,7 +435,7 @@ public sealed class ThemesView : UserControl
                 var toggleRow = new Grid { ColumnSpacing = 12 };
                 toggleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 toggleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                var toggleLabel = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, Style = Resource<Style>("PdcBodyStyle") };
+                var toggleLabel = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, Style = Components.Style("PdcBodyStyle") };
                 Grid.SetColumn(toggle, 1);
                 toggleRow.Children.Add(toggleLabel);
                 toggleRow.Children.Add(toggle);
@@ -445,7 +445,7 @@ public sealed class ThemesView : UserControl
                 foreach (var value in option.Values)
                 {
                     segments.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                    var chip = new Button { Content = ValueLabel(value), Tag = value.Value, Style = Resource<Style>("PdcSegmentButtonStyle") };
+                    var chip = new Button { Content = ValueLabel(value), Tag = value.Value, Style = Components.Style("PdcSegmentButtonStyle") };
                     AutomationProperties.SetName(chip, $"{label}: {ValueLabel(value)}");
                     chip.Click += (_, _) => _ = SetOptionAsync(card, option.Name, value.Value);
                     Grid.SetColumn(chip, segments.ColumnDefinitions.Count - 1);
@@ -456,7 +456,7 @@ public sealed class ThemesView : UserControl
                 return new StackPanel
                 {
                     Spacing = 6,
-                    Children = { new TextBlock { Text = label, Style = Resource<Style>("PdcBodyStyle") }, new Border { Style = Resource<Style>("PdcInsetStyle"), Child = segments } },
+                    Children = { new TextBlock { Text = label, Style = Components.Style("PdcBodyStyle") }, new Border { Style = Components.Style("PdcInsetStyle"), Child = segments } },
                 };
             default:
                 var combo = new ComboBox { Header = label, HorizontalAlignment = HorizontalAlignment.Stretch, Tag = option.Name };

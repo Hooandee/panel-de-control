@@ -825,7 +825,7 @@ class DesignSystemTests(unittest.TestCase):
             used |= set(re.findall(r'Components\.(?:Brush|Style)\("(Pdc\w+)"\)', code))
         self.assertEqual(set(), used - defined)
 
-    # Design-system rules (kb design-system/windows.md): every visual piece is a catalog style; screens assign it and
+    # Design-system rules: every visual piece is a style of Theme/PdcComponents.xaml; screens assign it and
     # only add layout glue. Colours that carry meaning (a reading, a state) are the one thing a screen may set.
     VISUAL = {"Background", "BorderBrush", "BorderThickness", "CornerRadius", "Padding", "FontSize", "FontWeight",
               "Foreground", "FontFamily", "Fill", "Stroke", "Opacity", "CharacterSpacing"}
