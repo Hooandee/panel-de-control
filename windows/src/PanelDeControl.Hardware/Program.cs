@@ -108,7 +108,8 @@ public static class Program
                 () => upscalerIdentity.Read().Profile?.Key,
                 launchOptions: new SteamLaunchOptions(steamDevTools),
                 vcRuntime: new VcRuntimeProbe().InstalledVersion,
-                helix: HelixSr.ForCatalog(upscalerData.Catalog, UpscalerPaths.Root));
+                helix: HelixSr.ForCatalog(upscalerData.Catalog, UpscalerPaths.Root),
+                latest: new LatestReleases(upscalerData.Catalog.Tracks, Path.Combine(UpscalerPaths.Root, "latest-releases.json")));
             // The first overview adopts what Panel left in games before a reinstall, so the in-game badge knows them
             // without waiting for the widget, as Linux loads its overview when the plugin starts.
             _ = Task.Run(() =>

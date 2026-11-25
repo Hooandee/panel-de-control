@@ -77,6 +77,7 @@ public static class UpscalersReportSection
                 ["changed_files"] = manifest.Present ? Names(manifest.Changed) : null,
                 ["missing_files"] = manifest.Present ? Names(manifest.Missing) : null,
             },
+            ["ini"] = install.Engine == "optiscaler" ? Ini(install) : null,
             ["last_error"] = lastError,
             ["log"] = new JsonObject
             {
@@ -98,6 +99,47 @@ public static class UpscalersReportSection
                 ["texture_failure"] = report?.TextureFailure,
                 ["errors"] = report?.Errors,
             },
+        };
+    }
+
+    /// <summary>OptiScaler.ini as it stands, against what Panel last wrote and the keys the user edited by hand.</summary>
+    private static JsonObject Ini(InstalledUpscaler install)
+    {
+        var text = IniDiagnostics.ReadText(install.Target);
+        var drift = IniDiagnostics.Drift(install, text, IniDiagnostics.ModifiedAt(install.Target));
+        var values = new JsonObject();
+        foreach (var pair in IniDiagnostics.Values(text))
+        {
+            values[pair.Key] = pair.Value;
+        }
+
+        var changed = new JsonObject();
+        foreach (var change in drift.Keys)
+        {
+            changed[change.Key] = new JsonObject { ["panel"] = change.Panel, ["now"] = change.Now };
+        }
+
+        var advanced = new JsonArray();
+        foreach (var pair in install.Edited.Take(IniDiagnostics.MaximumAdvanced))
+        {
+            var request = IniDiagnostics.Request(text, pair.Key, pair.Value);
+            advanced.Add(request.Value is null
+                ? new JsonObject { ["key"] = request.Key, ["value_omitted"] = true }
+                : new JsonObject { ["key"] = request.Key, ["value"] = request.Value });
+        }
+
+        return new JsonObject
+        {
+            ["missing"] = text is null ? true : null,
+            ["values"] = values,
+            ["drift"] = new JsonObject
+            {
+                ["status"] = drift.Status,
+                ["written_at"] = drift.WrittenAt,
+                ["modified_at"] = drift.ModifiedAt,
+                ["keys"] = changed,
+            },
+            ["advanced"] = advanced,
         };
     }
 

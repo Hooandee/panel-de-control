@@ -19,7 +19,7 @@
     "install_upscaler": {
       "windows": "partial",
       "op": "install",
-      "note": "optiscaler (with sharpness, FG route, ANR, recipe game_files packages, ReShade.ini configuration and game_config settings), dll and helixsr (HLX FSR 4 through HelixSR's own bridge run with python.org's embeddable Python Panel downloads; no latest-release lookup); a game folder moved to another library still removes and reinstalls cleanly (the stored folders are mapped to the current one); the files a user brings (a mod and recipe user_files) go in with the next OptiScaler install"
+      "note": "optiscaler (with sharpness, FG route, ANR, recipe game_files packages, ReShade.ini configuration and game_config settings), dll and helixsr (HLX FSR 4 through HelixSR's own bridge run with python.org's embeddable Python Panel downloads); a tracked asset (OptiScaler, the recipe's and ANR packages, HelixSR) goes in at its newest published release verified by the SHA-256 digest GitHub publishes, from the same 6 hour cache as Linux, and falls back to the catalog's pinned asset when the lookup or that download fails or the add-on or recipe package of the new release is laid out differently; the DLL mode has no tracked asset; a game folder moved to another library still removes and reinstalls cleanly (the stored folders are mapped to the current one); the files a user brings (a mod and recipe user_files) go in with the next OptiScaler install"
     },
     "uninstall_upscaler": {
       "windows": "done",
@@ -35,10 +35,13 @@
       "note": "stops downloads and the checks before the game folder is touched; files already being applied finish, and a HelixSR bridge run is not interrupted"
     },
     "get_upscalers_compat": {
-      "windows": "pending"
+      "windows": "partial",
+      "op": "compat",
+      "note": "the input kinds each game ships and the preferred build, at most 100 appids per request (the 2 KiB request limit; the caller sends the rest in further requests, where Linux takes 400 at once), games Panel does not find installed left out, and complete false when the 3 second scan budget ran out; native and unavailable do not exist on Windows"
     },
     "get_upscalers_selector_installs": {
-      "windows": "pending"
+      "windows": "not_applicable",
+      "note": "Linux asks which Steam rows of the game selector have an appmanifest in a library; on Windows overview already lists every installed Steam game from its appmanifest with its real appid, so a second inventory would add nothing"
     },
     "search_upscaler_games": {
       "windows": "not_applicable",
@@ -63,7 +66,9 @@
       "note": "result and the log facts Windows reads (observed upscaler, provider, fallback); DLL mode has no log and answers not_run"
     },
     "diagnose_upscaler": {
-      "windows": "pending"
+      "windows": "partial",
+      "op": "diagnose",
+      "note": "install, manifest, log verdict and facts, OptiScaler.ini values with ini_drift against the last write Panel recorded and the user's edited keys, image settings, the plan for the installed build, recipe, mod, loaders found beside the exe and the Steam lookup; no Proton prefix, crash, launcher, live Steam ownership or launch option facts, no Mako profile and no stored solution (Windows keeps none)"
     },
     "get_upscaler_live": {
       "windows": "pending",
@@ -80,7 +85,7 @@
     "configure_upscaler": {
       "windows": "done",
       "op": "configure",
-      "note": "no ini_written snapshot for reports yet"
+      "note": "the INI Panel wrote is recorded for the report (ini_written), as every install, set_ini and image setting write does"
     },
     "get_upscaler_ini": {
       "windows": "done",
