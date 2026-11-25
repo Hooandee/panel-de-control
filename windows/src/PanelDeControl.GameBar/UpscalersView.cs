@@ -22,7 +22,7 @@ namespace PanelDeControl.GameBar;
 /// Escaladores on Windows, experimental: installed Steam games, one view per game with the build and quality to
 /// install, and the real outcome of the companion's install or removal job.
 /// </summary>
-public sealed class UpscalersView : UserControl
+public sealed partial class UpscalersView : UserControl
 {
     private static readonly ResourceLoader Strings = ResourceLoader.GetForViewIndependentUse();
     private static readonly string[] Qualities = { "native", "quality", "balanced", "performance" };
@@ -209,6 +209,8 @@ public sealed class UpscalersView : UserControl
             advancedPanel.Children.Add(line);
         }
 
+        advancedPanel.Children.Add(BuildIniEditor());
+
         gamePanel.Children.Add(backButton);
         gamePanel.Children.Add(identity);
         gamePanel.Children.Add(statusCard);
@@ -218,6 +220,7 @@ public sealed class UpscalersView : UserControl
         gamePanel.Children.Add(actionButton);
         gamePanel.Children.Add(progressPanel);
         gamePanel.Children.Add(resultText);
+        gamePanel.Children.Add(BuildSettingsPanel());
         gamePanel.Children.Add(advancedButton);
         gamePanel.Children.Add(advancedPanel);
 
@@ -534,6 +537,7 @@ public sealed class UpscalersView : UserControl
         detail = null;
         loadingGame = false;
         ShowResult(string.Empty, true);
+        ResetSettings();
         RenderView();
     }
 
@@ -541,6 +545,10 @@ public sealed class UpscalersView : UserControl
     {
         advancedOpen = !advancedOpen;
         RenderAdvanced();
+        if (advancedOpen)
+        {
+            _ = LoadIniAsync();
+        }
     }
 
     private async Task LoadGameAsync()
@@ -588,6 +596,10 @@ public sealed class UpscalersView : UserControl
         }
 
         RenderView();
+        if (detail is not null)
+        {
+            await LoadSettingsAsync(appId, generation);
+        }
     }
 
     private void RenderView()
@@ -615,7 +627,7 @@ public sealed class UpscalersView : UserControl
         var choosing = detail is not null && detail.Install is null;
         var choice = choosing ? Visibility.Visible : Visibility.Collapsed;
         pickerPanel.Visibility = choice;
-        qualityPanel.Visibility = choice;
+        qualityPanel.Visibility = choosing || OptiScalerInstalled ? Visibility.Visible : Visibility.Collapsed;
         RenderBuilds();
         RenderAdvanced();
         UpdateActionState();
@@ -960,6 +972,7 @@ public sealed class UpscalersView : UserControl
         actionButton.Visibility = detail is not null ? Visibility.Visible : Visibility.Collapsed;
         hintText.Text = !jobRunning && reason is not null ? ErrorMessage(reason) : string.Empty;
         actionButton.IsEnabled = detail is not null && !jobRunning && !loadingGame && reason is null;
+        RenderSettings();
     }
 
     private async void ActionButton_Click(object sender, RoutedEventArgs args)
@@ -1202,7 +1215,7 @@ public sealed class UpscalersView : UserControl
 
     private static string ErrorMessage(string? code)
     {
-        var key = code switch
+        var key = SettingsErrorKey(code) ?? code switch
         {
             "running" => "UpscalersErrRunning",
             "updating" => "UpscalersErrUpdating",

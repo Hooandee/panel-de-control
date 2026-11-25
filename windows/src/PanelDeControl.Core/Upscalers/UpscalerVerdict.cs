@@ -14,6 +14,7 @@ public sealed class UpscalerVerdict
     /// <summary>Null for engines without an OptiScaler log (DLL mode).</summary>
     public static UpscalerVerdict? Read(InstalledUpscaler install, double installedAt)
     {
+        installedAt = Math.Max(installedAt, install.VerificationSince ?? 0);
         if (install.Engine == "helixsr" && !string.IsNullOrEmpty(install.Target))
         {
             var facts = HelixLog.ReadInstall(install, installedAt);

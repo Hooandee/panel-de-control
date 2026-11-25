@@ -222,6 +222,57 @@ public sealed class UpscalerStateTests : IDisposable
         Assert.NotEqual(first.Id, jobs.Begin("uninstall", "2").Id);
     }
 
+    [Fact]
+    public void HandEditsImageOverridesAndTheReceiptSurviveARestart()
+    {
+        var store = new UpscalerStateStore(StatePath);
+        var install = Sample("fsr-3.1", Path.Combine(_root, "Game"));
+        install.Edited = new[] { new KeyValuePair<string, string>("Menu.Scale", "1.5"), new KeyValuePair<string, string>("Log.LogLevel", "3") };
+        install.ImageOverrides = new[] { new KeyValuePair<string, string>("CAS.Enabled", "true"), new KeyValuePair<string, string>("Sharpness.Sharpness", "0.25") };
+        install.VerificationSince = 1700000123.25;
+        store.SetInstall("1245620", install, 1700000000);
+        var receipt = new ImageSettingsReceipt
+        {
+            Target = Path.Combine(_root, "Game", "OptiScaler.ini"),
+            Original = new[] { new KeyValuePair<string, string>("CAS.Enabled", "auto"), new KeyValuePair<string, string>("Sharpness.Sharpness", "0.60") }.ToList(),
+            Applied = new[] { new KeyValuePair<string, string>("CAS.Enabled", "true"), new KeyValuePair<string, string>("Sharpness.Sharpness", "0.25") }.ToList(),
+        };
+        store.SetImageReceipt("1245620", receipt);
+
+        var reopened = new UpscalerStateStore(StatePath);
+
+        var stored = reopened.Install("1245620")!.Install;
+        Assert.Equal(install.Edited, stored.Edited);
+        Assert.Equal(install.ImageOverrides, stored.ImageOverrides);
+        Assert.Equal(1700000123.25, stored.VerificationSince);
+        var back = reopened.ImageReceipt("1245620")!;
+        Assert.Equal(receipt.Target, back.Target);
+        Assert.Equal(receipt.Original, back.Original);
+        Assert.Equal(receipt.Applied, back.Applied);
+        var text = File.ReadAllText(StatePath);
+        foreach (var field in new[] { "\"edited\"", "\"image_overrides\"", "\"verification_since\"", "\"image_settings\"", "\"original\"", "\"applied\"" })
+        {
+            Assert.Contains(field, text);
+        }
+
+        reopened.SetImageReceipt("1245620", null);
+        Assert.Null(new UpscalerStateStore(StatePath).ImageReceipt("1245620"));
+    }
+
+    [Fact]
+    public void AnInstallWithoutSettingsWritesNoSettingsFields()
+    {
+        var store = new UpscalerStateStore(StatePath);
+        store.SetInstall("1", Sample("fsr-3.1", _root), 1);
+
+        var text = File.ReadAllText(StatePath);
+
+        foreach (var field in new[] { "\"edited\"", "\"image_overrides\"", "\"verification_since\"", "\"image_settings\"" })
+        {
+            Assert.DoesNotContain(field, text);
+        }
+    }
+
     private static InstalledUpscaler Sample(string build, string target) => new()
     {
         Build = build,

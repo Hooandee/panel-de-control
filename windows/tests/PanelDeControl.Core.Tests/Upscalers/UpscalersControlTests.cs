@@ -42,6 +42,72 @@ public sealed class UpscalersControlTests
     }
 
     [Fact]
+    public void SettingsRequestsRoundTripThroughTheWire()
+    {
+        static UpscalersRequest Back(UpscalersRequest request) => UpscalersWireCodec.DeserializeRequest(UpscalersWireCodec.SerializeRequest(request));
+
+        var configure = Back(UpscalersRequest.Configure("1245620", "balanced", "soft", true, "anr", "lite", true));
+        Assert.Equal(UpscalersOperation.Configure, configure.Operation);
+        Assert.Equal(("balanced", "soft", true, "anr", "lite"), (configure.Quality, configure.Sharpness, configure.FrameGen, configure.FrameGenRoute, configure.Model));
+        Assert.True(configure.ExperimentalEnabled);
+        Assert.Null(Back(UpscalersRequest.Configure("1", null, null, false, null, null, true)).FrameGen);
+
+        Assert.Equal(UpscalersOperation.Ini, Back(UpscalersRequest.Ini("1245620")).Operation);
+
+        var setIni = Back(UpscalersRequest.SetIni("1245620", "Menu.Scale", "1.5", true));
+        Assert.Equal((UpscalersOperation.SetIni, "Menu.Scale", "1.5"), (setIni.Operation, setIni.Key, setIni.Value));
+        Assert.Equal("Scale", Back(UpscalersRequest.SetIni("1", "Scale", "1.5", true)).Key);
+
+        Assert.Equal(UpscalersOperation.Image, Back(UpscalersRequest.Image("1245620")).Operation);
+
+        var image = Back(UpscalersRequest.SetImage("1245620", true, 0.25, "off", true));
+        Assert.Equal((true, 0.25, "off"), (image.SharpnessEnabled, image.SharpnessValue, image.Int8));
+        Assert.Equal("on", Back(UpscalersRequest.SetImage("1", null, null, "on", true)).Int8);
+        var off = Back(UpscalersRequest.SetImage("1", false, 0, null, true));
+        Assert.Equal((false, 0.0), (off.SharpnessEnabled, off.SharpnessValue));
+
+        var restore = Back(UpscalersRequest.RestoreImage("1245620", true));
+        Assert.Equal((UpscalersOperation.RestoreImage, true), (restore.Operation, restore.ExperimentalEnabled));
+    }
+
+    [Theory]
+    [InlineData("{\"operation\":\"set_ini\",\"appid\":\"1\",\"value\":\"1\"}")]
+    [InlineData("{\"operation\":\"set_ini\",\"appid\":\"1\",\"key\":\"Menu.Scale\"}")]
+    [InlineData("{\"operation\":\"set_ini\",\"appid\":\"1\",\"key\":\"Menu.Scale\",\"value\":\"a\\nb\"}")]
+    [InlineData("{\"operation\":\"set_ini\",\"appid\":\"1\",\"key\":\"Menu.Scale\",\"value\":\"1\",\"quality\":\"balanced\"}")]
+    [InlineData("{\"operation\":\"set_image\",\"appid\":\"1\"}")]
+    [InlineData("{\"operation\":\"set_image\",\"appid\":\"1\",\"sharpness_enabled\":true}")]
+    [InlineData("{\"operation\":\"set_image\",\"appid\":\"1\",\"sharpness_value\":0.5}")]
+    [InlineData("{\"operation\":\"set_image\",\"appid\":\"1\",\"int8\":\"max\"}")]
+    [InlineData("{\"operation\":\"set_image\",\"appid\":\"1\",\"int8\":\"on\",\"key\":\"A.B\"}")]
+    [InlineData("{\"operation\":\"configure\",\"appid\":\"1\",\"build\":\"fsr-3.1\"}")]
+    [InlineData("{\"operation\":\"configure\",\"appid\":\"1\",\"key\":\"A.B\"}")]
+    [InlineData("{\"operation\":\"configure\",\"appid\":\"1\",\"fg_route\":\"elsewhere\"}")]
+    [InlineData("{\"operation\":\"ini\"}")]
+    [InlineData("{\"operation\":\"ini\",\"appid\":\"1\",\"experimental\":true}")]
+    [InlineData("{\"operation\":\"image\",\"appid\":\"1\",\"int8\":\"on\"}")]
+    [InlineData("{\"operation\":\"restore_image\",\"appid\":\"1\",\"sharpness_enabled\":true}")]
+    [InlineData("{\"operation\":\"install\",\"appid\":\"1\",\"build\":\"fsr-3.1\",\"key\":\"A.B\"}")]
+    public void InvalidSettingsRequestsAreRefused(string payload)
+    {
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.DeserializeRequest(payload));
+    }
+
+    [Fact]
+    public void InvalidSettingsRequestsAreRefusedBeforeTheyAreSent()
+    {
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.SetIni("1", "", "1", true)));
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.SetIni("1", "Menu.Scale", "", true)));
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.SetIni("1", "Menu.Scale", new string('9', UpscalerSettings.MaximumIniValueLength + 1), true)));
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.SetImage("1", true, null, null, true)));
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.SetImage("1", null, 0.5, null, true)));
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.SetImage("1", null, null, "max", true)));
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.SetImage("1", null, null, null, true)));
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.Configure("1", "a b", null, false, null, null, true)));
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.Configure("1", null, null, true, "elsewhere", null, true)));
+    }
+
+    [Fact]
     public void FieldsAreCappedInLength()
     {
         var longBuild = new string('a', UpscalersRequest.MaximumFieldLength + 1);
