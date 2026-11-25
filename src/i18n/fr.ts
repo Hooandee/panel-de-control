@@ -320,6 +320,7 @@ export const fr: Record<string, string> = {
   "up.section.model": "Modèle",
   "up.model.full": "Complet",
   "up.model.lite": "Léger",
+  "up.model.lossy": "Lossy (pas identique à AMD)",
   "up.model.help": "Le léger sollicite moins le GPU ; le complet garde un peu plus de détails fins",
   "up.launcher.heroic": "Jeu Heroic : Panel enregistre les réglages dans Heroic",
   "up.launcher.lutris": "Jeu Lutris : Panel enregistre les réglages dans Lutris",
