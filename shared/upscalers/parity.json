@@ -115,10 +115,14 @@
       "note": "as above"
     },
     "adopt_foreign_upscaler": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "adopt_foreign",
+      "note": "moves the foreign items to <state dir>/foreign/<appid>/<time> with a copy of the record inside; refuses links; no ownership step on Windows"
     },
     "restore_foreign_upscaler": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "restore_foreign",
+      "note": "the backup record is recovered from its folder when Panel's state was wiped"
     },
     "get_upscaler_mod_candidates": {
       "windows": "pending"

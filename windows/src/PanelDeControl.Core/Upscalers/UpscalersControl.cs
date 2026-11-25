@@ -58,6 +58,14 @@ public enum UpscalersOperation
     /// <summary>Stops the running install or uninstall before it touches the game folder.</summary>
     [EnumMember(Value = "cancel")]
     Cancel = 15,
+
+    /// <summary>Moves another tool's OptiScaler files out of the game folder, keeping them restorable.</summary>
+    [EnumMember(Value = "adopt_foreign")]
+    AdoptForeign = 16,
+
+    /// <summary>Puts back what <see cref="AdoptForeign"/> moved aside.</summary>
+    [EnumMember(Value = "restore_foreign")]
+    RestoreForeign = 17,
 }
 
 [DataContract]
@@ -214,6 +222,12 @@ public sealed class UpscalersRequest
 
     public static UpscalersRequest Cancel(bool experimental) => new(UpscalersOperation.Cancel, experimental: experimental);
 
+    public static UpscalersRequest AdoptForeign(string appId, bool experimental) =>
+        new(UpscalersOperation.AdoptForeign, appId, experimental: experimental);
+
+    public static UpscalersRequest RestoreForeign(string appId, bool experimental) =>
+        new(UpscalersOperation.RestoreForeign, appId, experimental: experimental);
+
     public bool ExperimentalEnabled => Experimental == true;
 
     internal void Validate()
@@ -234,7 +248,7 @@ public sealed class UpscalersRequest
             UpscalersOperation.Configure => appId && Absent(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && noSettings
                 && (FrameGenRoute is null || Array.IndexOf(FrameGenRoutes, FrameGenRoute) >= 0),
             UpscalersOperation.Ini or UpscalersOperation.Image or UpscalersOperation.Verify => appId && Experimental is null && noChoice,
-            UpscalersOperation.RestoreImage => appId && noChoice,
+            UpscalersOperation.RestoreImage or UpscalersOperation.AdoptForeign or UpscalersOperation.RestoreForeign => appId && noChoice,
             UpscalersOperation.SetExe => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
                 && Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8)
                 && (Exe is null || Printable(Exe, MaximumExeLength)),
@@ -553,6 +567,18 @@ public sealed class UpscalerGameDetail
 
     [DataMember(Name = "install", Order = 10, EmitDefaultValue = false)]
     public UpscalerInstallEntry? Install { get; set; }
+
+    /// <summary>Another tool's files Panel moved aside and can put back.</summary>
+    [DataMember(Name = "foreign_backup", Order = 21, EmitDefaultValue = false)]
+    public UpscalerForeignBackup? ForeignBackup { get; set; }
+}
+
+[DataContract]
+public sealed class UpscalerForeignBackup
+{
+    /// <summary>Unix seconds of the move.</summary>
+    [DataMember(Name = "at", Order = 1, IsRequired = true)]
+    public long At { get; set; }
 }
 
 public static class UpscalerJobStates
@@ -801,6 +827,18 @@ public sealed class UpscalersResponse
     [DataMember(Name = "verify", Order = 12, EmitDefaultValue = false)]
     public UpscalerVerification? Verify { get; set; }
 
+    /// <summary>What <see cref="UpscalersOperation.AdoptForeign"/> moved aside, by name.</summary>
+    [DataMember(Name = "moved", Order = 13, EmitDefaultValue = false)]
+    public string[]? Moved { get; set; }
+
+    /// <summary>What <see cref="UpscalersOperation.RestoreForeign"/> put back, by name.</summary>
+    [DataMember(Name = "restored", Order = 14, EmitDefaultValue = false)]
+    public string[]? Restored { get; set; }
+
+    /// <summary>Items whose place in the game folder is taken again: they stay in the backup.</summary>
+    [DataMember(Name = "kept", Order = 15, EmitDefaultValue = false)]
+    public string[]? Kept { get; set; }
+
     public static UpscalersResponse Rejected(string errorCode, UpscalerJobStatus? job = null) =>
         new() { Status = UpscalersResponseStatus.Rejected, ErrorCode = errorCode, Job = job };
 
@@ -810,6 +848,8 @@ public sealed class UpscalersResponse
     internal void Validate()
     {
         var valid = (Status == UpscalersResponseStatus.Ok) == (ErrorCode is null)
+            && (Moved is null || Moved.All(ForeignBackup.IsPlainName)) && (Restored is null || Restored.All(ForeignBackup.IsPlainName))
+            && (Kept is null || Kept.All(ForeignBackup.IsPlainName))
             && (Overview is null || Overview.Games is not null && Overview.Games.Select(game => game.AppId).Distinct().Count() == Overview.Games.Length)
             && (Cover is null || Cover.Mime is UpscalerCover.Jpeg or UpscalerCover.Png && Cover.Data is { Length: > 0 and <= UpscalersWireCodec.MaximumCoverBytes / 3 * 4 + 4 });
         if (!valid)

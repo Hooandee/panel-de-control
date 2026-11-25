@@ -241,6 +241,29 @@ public sealed class UpscalerStateTests : IDisposable
     }
 
     [Fact]
+    public void AForeignBackupSurvivesARestartUnderTheLinuxKeyAndRollsBackAFailedWrite()
+    {
+        var store = new UpscalerStateStore(StatePath);
+        var backup = new ForeignBackup { Dir = Path.Combine(_root, "foreign", "1", "5"), Target = Path.Combine(_root, "Game"), Items = { "OptiScaler.ini" }, Swaps = { "dxgi.dll" }, At = 1700000000.5 };
+        store.SetForeignBackup("1245620", backup);
+        backup.Items.Add("changed after saving");
+
+        var reopened = new UpscalerStateStore(StatePath).ForeignBackupOf("1245620")!;
+
+        Assert.Equal((backup.Dir, backup.Target, 1700000000.5), (reopened.Dir, reopened.Target, reopened.At));
+        Assert.Equal(new[] { "OptiScaler.ini" }, reopened.Items);
+        Assert.Equal(new[] { "dxgi.dll" }, reopened.Swaps);
+        Assert.Null(new UpscalerStateStore(StatePath).ForeignBackupOf("1"));
+        Assert.Contains("\"foreign_backup\"", File.ReadAllText(StatePath));
+        new UpscalerStateStore(StatePath).SetForeignBackup("1245620", null);
+        Assert.Null(new UpscalerStateStore(StatePath).ForeignBackupOf("1245620"));
+
+        var failing = new UpscalerStateStore(StatePath, (_, _) => throw new IOException("disk"));
+        Assert.Throws<IOException>(() => failing.SetForeignBackup("9", backup));
+        Assert.Null(failing.ForeignBackupOf("9"));
+    }
+
+    [Fact]
     public void HandEditsImageOverridesAndTheReceiptSurviveARestart()
     {
         var store = new UpscalerStateStore(StatePath);

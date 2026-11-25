@@ -579,6 +579,14 @@
   <data name="UpscalersExeAuto" xml:space="preserve"><value>Automatisch erkennen</value></data>
   <data name="UpscalersErrInvalidExe" xml:space="preserve"><value>Diese Programmdatei liegt nicht im Spielordner.</value></data>
   <data name="UpscalersErrCancelled" xml:space="preserve"><value>Abgebrochen. Das Spiel blieb unverändert.</value></data>
+  <data name="UpscalersAdoptForeign" xml:space="preserve"><value>Das des anderen Tools beiseitelegen</value></data>
+  <data name="UpscalersRestoreForeign" xml:space="preserve"><value>Das vorherige wiederherstellen</value></data>
+  <data name="UpscalersAdoptedForeign" xml:space="preserve"><value>Beiseitegelegt. Jetzt kannst du eines von Panel aktivieren</value></data>
+  <data name="UpscalersRestoredForeign" xml:space="preserve"><value>Wie vorher wiederhergestellt</value></data>
+  <data name="UpscalersForeignKept" xml:space="preserve"><value>Bleiben aufbewahrt</value></data>
+  <data name="UpscalersErrForeignHelix" xml:space="preserve"><value>HelixSR von einem anderen Tool: entferne es mit seinem Installer.</value></data>
+  <data name="UpscalersErrNoForeign" xml:space="preserve"><value>Von einem anderen Tool ist nichts mehr da.</value></data>
+  <data name="UpscalersErrStillPatched" xml:space="preserve"><value>Entferne zuerst den Upscaler von Panel.</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>DLL-Modus</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>Im DLL-Modus wird die Qualität im Spiel geändert.</value></data>

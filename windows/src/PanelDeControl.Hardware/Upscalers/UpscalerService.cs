@@ -124,7 +124,7 @@ public sealed partial class UpscalerService : IUpscalersController
                 case UpscalersOperation.Verify:
                     return await Task.Run(() => Verify(request.AppId!), cancellationToken).ConfigureAwait(false);
                 case UpscalersOperation.Configure or UpscalersOperation.SetIni or UpscalersOperation.SetImage or UpscalersOperation.RestoreImage
-                    or UpscalersOperation.SetExe or UpscalersOperation.Cancel:
+                    or UpscalersOperation.SetExe or UpscalersOperation.Cancel or UpscalersOperation.AdoptForeign or UpscalersOperation.RestoreForeign:
                     if (!request.ExperimentalEnabled)
                     {
                         return UpscalersResponse.Rejected("experimental_required", jobs.Snapshot());
@@ -137,6 +137,8 @@ public sealed partial class UpscalerService : IUpscalersController
                         UpscalersOperation.SetImage => SetImage(request),
                         UpscalersOperation.SetExe => SetExe(request.AppId!, request.Exe),
                         UpscalersOperation.Cancel => Cancel(),
+                        UpscalersOperation.AdoptForeign => AdoptForeign(request.AppId!),
+                        UpscalersOperation.RestoreForeign => RestoreForeign(request.AppId!),
                         _ => RestoreImage(request.AppId!),
                     }, cancellationToken).ConfigureAwait(false);
                 default:
@@ -342,6 +344,7 @@ public sealed partial class UpscalerService : IUpscalersController
                 : summary.State == UpscalerGameStates.PanelUnknown
                     ? new UpscalerInstallEntry { Proxy = "", Status = UpscalerGameStates.Installed }
                     : null,
+            ForeignBackup = ForeignBackupReport(app, analysis.Target),
         };
     }
 
@@ -1284,9 +1287,10 @@ public sealed partial class UpscalerService : IUpscalersController
 
     private UpscalersResponse Ok(UpscalersOverview? overview = null, UpscalerGameDetail? game = null, UpscalerJobStatus? job = null, UpscalerCover? cover = null,
         UpscalerOptions? options = null, UpscalerIniSection[]? ini = null, UpscalerImageSettings? image = null, UpscalerIniEdit? iniEdit = null,
-        UpscalerVerification? verify = null) =>
+        UpscalerVerification? verify = null, string[]? moved = null, string[]? restored = null, string[]? kept = null) =>
         new()
         {
+            Moved = moved, Restored = restored, Kept = kept,
             Status = UpscalersResponseStatus.Ok, Overview = overview, Game = game, Job = job ?? jobs.Snapshot(), Cover = cover,
             Options = options, Ini = ini, Image = image, IniEdit = iniEdit, Verify = verify,
         };

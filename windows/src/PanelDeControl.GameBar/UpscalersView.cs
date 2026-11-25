@@ -217,6 +217,7 @@ public sealed partial class UpscalersView : UserControl
         gamePanel.Children.Add(identity);
         gamePanel.Children.Add(statusCard);
         gamePanel.Children.Add(BuildVerifyButton());
+        gamePanel.Children.Add(BuildForeignButtons());
         gamePanel.Children.Add(pickerPanel);
         gamePanel.Children.Add(qualityPanel);
         gamePanel.Children.Add(hintText);

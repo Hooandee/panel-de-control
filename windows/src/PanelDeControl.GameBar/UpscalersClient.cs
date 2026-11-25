@@ -35,6 +35,10 @@ public sealed class UpscalersClient
     public Task<UpscalersResponse> SetIniAsync(string appId, string key, string value, bool experimental) =>
         SendAsync(UpscalersRequest.SetIni(appId, key, value, experimental));
 
+    public Task<UpscalersResponse> AdoptForeignAsync(string appId, bool experimental) => SendAsync(UpscalersRequest.AdoptForeign(appId, experimental));
+
+    public Task<UpscalersResponse> RestoreForeignAsync(string appId, bool experimental) => SendAsync(UpscalersRequest.RestoreForeign(appId, experimental));
+
     public Task<UpscalersResponse> VerifyAsync(string appId) => SendAsync(UpscalersRequest.Verify(appId));
 
     public Task<UpscalersResponse> CancelAsync(bool experimental) => SendAsync(UpscalersRequest.Cancel(experimental));
