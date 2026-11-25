@@ -569,6 +569,26 @@ public sealed partial class UpscalerServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AReadOnlyIniIsRewrittenAndStaysReadOnly()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        File.SetAttributes(IniPath(game), File.GetAttributes(IniPath(game)) | FileAttributes.ReadOnly);
+        try
+        {
+            var response = await Send(Service(), UpscalersRequest.Configure("100", "performance", null, false, null, null, true));
+
+            Assert.Equal(UpscalersResponseStatus.Ok, response.Status);
+            Assert.Equal("2.00", IniValue(game, "QualityOverrides.QualityRatioQuality"));
+            Assert.True((File.GetAttributes(IniPath(game)) & FileAttributes.ReadOnly) != 0);
+        }
+        finally
+        {
+            File.SetAttributes(IniPath(game), File.GetAttributes(IniPath(game)) & ~FileAttributes.ReadOnly);
+        }
+    }
+
+    [Fact]
     public async Task ConfigureWithOnlyFrameGenOffTouchesNothingElse()
     {
         var game = AddGame("100", "Plain");

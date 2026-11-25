@@ -584,9 +584,14 @@ public sealed partial class UpscalersView : UserControl
             selectedModel = installed?.Build == selectedBuild && installed?.Model is { } model && models.Contains(model)
                 ? model
                 : selectedModel is not null && models.Contains(selectedModel) ? selectedModel : models.FirstOrDefault();
-            if (installed?.Quality is { } quality && Qualities.Contains(quality))
+            if (installed is not null)
             {
-                selectedQuality = quality;
+                // A quality outside the chips (or none) stays as installed: no chip is lit and none is sent.
+                selectedQuality = installed.Quality is { } quality && Qualities.Contains(quality) ? quality : string.Empty;
+            }
+            else if (selectedQuality.Length == 0)
+            {
+                selectedQuality = DefaultQuality;
             }
         }
         else
@@ -971,7 +976,7 @@ public sealed partial class UpscalersView : UserControl
 
         actionButton.Visibility = detail is not null ? Visibility.Visible : Visibility.Collapsed;
         hintText.Text = !jobRunning && reason is not null ? ErrorMessage(reason) : string.Empty;
-        actionButton.IsEnabled = detail is not null && !jobRunning && !loadingGame && reason is null;
+        actionButton.IsEnabled = detail is not null && !jobRunning && !loadingGame && !settingsBusy && reason is null;
         RenderSettings();
     }
 

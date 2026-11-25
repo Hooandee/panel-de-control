@@ -248,7 +248,7 @@ public static class ImageSettings
     /// <summary>The receipt after writing <paramref name="changes"/>: a key's original is only taken when Panel's last value is gone.</summary>
     public static ImageSettingsReceipt Receipt(ImageSettingsReceipt? previous, string target, string text, IReadOnlyList<KeyValuePair<string, string>> changes)
     {
-        var receipt = previous is not null && previous.Target == target ? previous.Copy() : new ImageSettingsReceipt { Target = target };
+        var receipt = previous is not null && string.Equals(previous.Target, target, StringComparison.OrdinalIgnoreCase) ? previous.Copy() : new ImageSettingsReceipt { Target = target };
         var current = Values(text);
         foreach (var change in changes)
         {

@@ -75,12 +75,20 @@ public sealed partial class UpscalerService
 
             ResolvedRecipe? recipe = null;
             FrameGenPlan? frameGen = null;
+            if (optiScaler && build is null && choice.FrameGen)
+            {
+                throw new UpscalerException("unknown_build");
+            }
+
             if (optiScaler && build is not null)
             {
                 recipe = Resolved(app, "optiscaler");
                 var automatic = AutomaticRecipe.Plan(data.Recipes, Recipe(app));
+                var analysis = Analyze(app, recipe?.Exe);
+                var inputs = analysis.Inputs.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+                var effective = UpscalerPlanner.ForGame(catalog, build, inputs, Gpu.Generation, recipe?.Dependencies ?? Array.Empty<string>());
                 frameGen = new OptiScalerInstaller(catalog, cache, Gpu.Generation)
-                    .RequestedFrameGen(Analyze(app, recipe?.Exe), recipe, build, choice, automatic is not null);
+                    .RequestedFrameGen(analysis, recipe, effective, choice, automatic is not null);
             }
 
             if (choice.FrameGen && choice.FrameGenRoute == "anr" && !install.Anr)
@@ -225,6 +233,7 @@ public sealed partial class UpscalerService
                 var receipt = ImageSettings.Receipt(previous is not null && SamePath(previous.Target, target.Path) ? previous : null, target.Path, target.Text, changes);
                 receipt.Target = target.Path;
                 var stored = target.Owned ? store.Install(appId) : null;
+                var previousOverrides = stored?.Install.ImageOverrides.ToList();
                 if (stored is not null)
                 {
                     stored.Install.ImageOverrides = receipt.Applied.ToList();
@@ -238,9 +247,14 @@ public sealed partial class UpscalerService
                 }
                 catch
                 {
-                    if (ReadIni(Path.GetDirectoryName(target.Path)!, target.Root, strict: false) == target.Text)
+                    if (Unchanged(Path.GetDirectoryName(target.Path)!, target.Root, target.Text))
                     {
-                        store.SetImageReceipt(appId, previous, stored is null ? null : store.Install(appId) is { } now ? WithImage(now, previous) : null);
+                        if (stored is not null)
+                        {
+                            stored.Install.ImageOverrides = previousOverrides!;
+                        }
+
+                        store.SetImageReceipt(appId, previous, stored);
                     }
 
                     throw;
@@ -471,7 +485,24 @@ public sealed partial class UpscalerService
                 throw new UpscalerException(changed);
             }
 
-            File.Replace(temporary, path, null);
+            var attributes = File.GetAttributes(path);
+            var readOnly = (attributes & FileAttributes.ReadOnly) != 0;
+            if (readOnly)
+            {
+                File.SetAttributes(path, attributes & ~FileAttributes.ReadOnly);
+            }
+
+            try
+            {
+                File.Replace(temporary, path, null);
+            }
+            finally
+            {
+                if (readOnly)
+                {
+                    File.SetAttributes(path, File.GetAttributes(path) | FileAttributes.ReadOnly);
+                }
+            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -542,10 +573,16 @@ public sealed partial class UpscalerService
         }
     }
 
-    private static StoredUpscaler WithImage(StoredUpscaler stored, ImageSettingsReceipt? receipt)
+    private static bool Unchanged(string folder, string root, string text)
     {
-        stored.Install.ImageOverrides = receipt?.Applied.ToList() ?? new List<KeyValuePair<string, string>>();
-        return stored;
+        try
+        {
+            return ReadIni(folder, root, strict: false) == text;
+        }
+        catch (UpscalerException)
+        {
+            return false;
+        }
     }
 
     private static UpscalerChoice Copy(UpscalerChoice choice, bool frameGen) => new()

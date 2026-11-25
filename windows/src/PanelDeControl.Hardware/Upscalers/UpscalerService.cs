@@ -385,7 +385,12 @@ public sealed partial class UpscalerService : IUpscalersController
 
         // Everything that can refuse the request runs before the job starts: a job is only ever left by Finish or Fail.
         GameGuards.EnsureCanInstall(app, runningImages());
-        var job = jobs.Begin("install", appId);
+        UpscalerJobStatus job;
+        lock (settingsLock)
+        {
+            job = jobs.Begin("install", appId);
+        }
+
 
         var choice = new UpscalerChoice
         {
@@ -408,7 +413,12 @@ public sealed partial class UpscalerService : IUpscalersController
             GameGuards.EnsureClosed(app, runningImages());
         }
 
-        var job = jobs.Begin("uninstall", appId);
+        UpscalerJobStatus job;
+        lock (settingsLock)
+        {
+            job = jobs.Begin("uninstall", appId);
+        }
+
         _ = start(() => RunUninstallAsync(appId, stored));
         return Ok(job: job);
     }
@@ -443,10 +453,13 @@ public sealed partial class UpscalerService : IUpscalersController
             try
             {
                 var installedAt = clock();
-                store.SetInstall(appId, install, installedAt);
                 if (install.Engine == "optiscaler")
                 {
-                    store.SetImageReceipt(appId, install.ImageReceipt);
+                    store.SetImageReceipt(appId, install.ImageReceipt, new StoredUpscaler(install, installedAt));
+                }
+                else
+                {
+                    store.SetInstall(appId, install, installedAt);
                 }
 
                 WriteRecord(install, installedAt);

@@ -34,7 +34,10 @@ public sealed partial class UpscalersView
     private readonly Button iniSaveButton = new();
     private UpscalerImageSettings? image;
     private UpscalerIniSection[]? iniSchema;
-    private string selectedRoute = "optiscaler";
+    // Null keeps the planner's own route, as Linux does until the user picks one.
+    private string? selectedRoute;
+    private (bool On, double Value)? loadedSharpness;
+    private string? loadedInt8;
     private bool frameGenOn;
     private bool settingsBusy;
 
@@ -116,7 +119,7 @@ public sealed partial class UpscalersView
     {
         var installed = detail?.Install;
         frameGenOn = installed?.FrameGen == true;
-        selectedRoute = installed?.FrameGenRoute ?? "optiscaler";
+        selectedRoute = installed?.FrameGenRoute;
         image = null;
         iniSchema = null;
         RenderSettings();
@@ -126,19 +129,27 @@ public sealed partial class UpscalersView
             return;
         }
 
-        image = response.Status == UpscalersResponseStatus.Ok ? response.Image : null;
-        if (image?.Sharpness is { } sharpness)
-        {
-            sharpnessToggle.IsOn = sharpness.Enabled == true;
-            sharpnessSlider.Value = Math.Round((sharpness.Value ?? 0) * 100);
-        }
-
-        int8Box.SelectedItem = image?.Int8;
+        ShowImage(response.Status == UpscalersResponseStatus.Ok ? response.Image : null);
         RenderSettings();
         if (advancedOpen)
         {
             await LoadIniAsync();
         }
+    }
+
+    private void ShowImage(UpscalerImageSettings? settings)
+    {
+        image = settings;
+        loadedSharpness = null;
+        if (settings?.Sharpness is { } sharpness)
+        {
+            sharpnessToggle.IsOn = sharpness.Enabled == true;
+            sharpnessSlider.Value = Math.Round((sharpness.Value ?? 0) * 100);
+            loadedSharpness = (sharpnessToggle.IsOn, sharpnessSlider.Value);
+        }
+
+        int8Box.SelectedItem = settings?.Int8;
+        loadedInt8 = int8Box.SelectedItem as string;
     }
 
     private async Task LoadIniAsync()
@@ -166,6 +177,7 @@ public sealed partial class UpscalersView
         image = null;
         iniSchema = null;
         settingsBusy = false;
+        UpdateActionState();
         RenderSettings();
     }
 
@@ -185,6 +197,8 @@ public sealed partial class UpscalersView
 
         foreach (var chip in routeRow.Children.OfType<Button>())
         {
+            // ANR's files only go in with an install, so its route is offered only where they are.
+            chip.Visibility = Equals(chip.Tag, "anr") && install?.Anr != true ? Visibility.Collapsed : Visibility.Visible;
             var active = Equals(chip.Tag, selectedRoute);
             chip.Background = active ? AccentFill() : Resource<Brush>("PdcLayerBrush");
             chip.FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal;
@@ -202,12 +216,18 @@ public sealed partial class UpscalersView
         imageRestoreButton.IsEnabled = idle;
         iniPanel.Visibility = OptiScalerInstalled && iniSchema is not null ? Visibility.Visible : Visibility.Collapsed;
         iniSaveButton.IsEnabled = idle;
+        if (settingsBusy)
+        {
+            actionButton.IsEnabled = false;
+        }
     }
+
+    private string? ChosenQuality(UpscalerInstallEntry install) => selectedQuality.Length == 0 ? install.Quality : selectedQuality;
 
     private bool Changed(UpscalerInstallEntry install) =>
         install.Engine == "optiscaler"
-            ? selectedQuality != install.Quality || frameGenOn != (install.FrameGen == true) || (frameGenOn && selectedRoute != install.FrameGenRoute)
-            : selectedQuality != install.Quality;
+            ? ChosenQuality(install) != install.Quality || frameGenOn != (install.FrameGen == true) || (frameGenOn && selectedRoute != install.FrameGenRoute)
+            : ChosenQuality(install) != install.Quality;
 
     private void RenderIniHint()
     {
@@ -243,9 +263,10 @@ public sealed partial class UpscalersView
 
         settingsBusy = true;
         RenderSettings();
-        var response = await client.ConfigureAsync(appId, selectedQuality, install.Sharpness,
+        var response = await client.ConfigureAsync(appId, ChosenQuality(install), install.Sharpness,
             install.Engine == "optiscaler" && frameGenOn, frameGenOn ? selectedRoute : install.FrameGenRoute, install.Model, Experimental);
         settingsBusy = false;
+        UpdateActionState();
         if (appId != selectedAppId)
         {
             return;
@@ -254,6 +275,7 @@ public sealed partial class UpscalersView
         if (response.Status == UpscalersResponseStatus.Ok && response.Options is { } options)
         {
             install.Quality = options.Quality;
+            selectedQuality = options.Quality is { } saved && Qualities.Contains(saved) ? saved : string.Empty;
             install.FrameGen = options.FrameGen == "on" ? true : null;
             install.FrameGenRoute = options.FrameGenRoute;
             ShowResult(Localized(options.Live == false ? "UpscalersAppliedNextLaunch" : "UpscalersApplied"), true);
@@ -275,10 +297,18 @@ public sealed partial class UpscalersView
 
         settingsBusy = true;
         RenderSettings();
-        var sharpness = image.Sharpness is not null;
+        var sharpness = image.Sharpness is not null && loadedSharpness != (sharpnessToggle.IsOn, sharpnessSlider.Value);
         var value = Math.Round(sharpnessSlider.Value) / 100.0;
-        var response = await client.SetImageAsync(appId, sharpness ? sharpnessToggle.IsOn : null, sharpness ? value : null,
-            image.Int8 is not null ? int8Box.SelectedItem as string : null, Experimental);
+        var int8 = image.Int8 is not null && int8Box.SelectedItem is string chosen && chosen != loadedInt8 ? chosen : null;
+        if (!sharpness && int8 is null)
+        {
+            settingsBusy = false;
+        UpdateActionState();
+            RenderSettings();
+            return;
+        }
+
+        var response = await client.SetImageAsync(appId, sharpness ? sharpnessToggle.IsOn : null, sharpness ? value : null, int8, Experimental);
         await FinishImageAsync(appId, response);
     }
 
@@ -297,6 +327,7 @@ public sealed partial class UpscalersView
     private Task FinishImageAsync(string appId, UpscalersResponse response)
     {
         settingsBusy = false;
+        UpdateActionState();
         if (appId != selectedAppId)
         {
             return Task.CompletedTask;
@@ -304,14 +335,7 @@ public sealed partial class UpscalersView
 
         if (response.Status == UpscalersResponseStatus.Ok && response.Image is { } updated)
         {
-            image = updated;
-            if (updated.Sharpness is { } sharpness)
-            {
-                sharpnessToggle.IsOn = sharpness.Enabled == true;
-                sharpnessSlider.Value = Math.Round((sharpness.Value ?? 0) * 100);
-            }
-
-            int8Box.SelectedItem = updated.Int8;
+            ShowImage(updated);
             iniSchema = null;
             ShowResult(Localized("UpscalersApplied"), true);
         }
@@ -337,6 +361,7 @@ public sealed partial class UpscalersView
         RenderSettings();
         var response = await client.SetIniAsync(appId, key, value, Experimental);
         settingsBusy = false;
+        UpdateActionState();
         if (appId != selectedAppId)
         {
             return;
