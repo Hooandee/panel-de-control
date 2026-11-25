@@ -370,3 +370,11 @@ it("keeps discouraged OptiFG selectable and warns only after selection", async (
   fireEvent.click(screen.getByRole("button", { name: "up.deactivate" }));
   await waitFor(() => expect(apply).toHaveBeenCalledWith("off", null));
 });
+it("says why Lossless is unavailable on ARM64 without a native layer", async () => {
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false, arm: true, unavailable: "lsfg_arm_no_layer", lossless: true, dll: "/lossless/Lossless.dll" });
+  render(<FrameGenRow appid="1868140" liveAppid={1868140} isNonSteam={false} gameRunning={false} routes={{}} inputs={{ fsrfg: [] }} optiscaler={{ fg: "off", route: "game" }} installedRoute={null} gpu="amd" onOptiscaler={vi.fn()} />);
+  const select = await screen.findByRole("combobox", { name: "up.fg.title" });
+  fireEvent.change(select, { target: { value: "lsfg" } });
+  expect(await screen.findByText("up.lsfg.armNoLayer")).toBeTruthy();
+  expect(api.installLsfg).not.toHaveBeenCalled();
+});

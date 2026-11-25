@@ -2026,7 +2026,7 @@ class UpscalerService:
             current = status.get("version") or (mako.VERSION if engine == "mako" else mako.VERSION5 if engine == "mako5" else catalog.LSFG_ARCHIVE.removeprefix("lsfg-vk-"))
             current = current.removeprefix("lsfg-vk-")
             result = {"state": "current", "version": current}
-            if engine == "lsfg" and status.get("foreign") or engine != "lsfg" and not status.get("supported"):
+            if engine == "lsfg" and (status.get("foreign") or status.get("arm")) or engine != "lsfg" and not status.get("supported"):
                 return {**result, "state": "unmanaged"}
             try:
                 cached = self._engine_checks.get(engine)
@@ -2069,6 +2069,11 @@ class UpscalerService:
     def lsfg_install(self) -> dict:
         if self.lsfg.status()["installed"]:
             return self.lsfg.status()
+        if self.lsfg.arm:
+            try:
+                return self.lsfg.install_native()
+            except lsfg.LsfgError as error:
+                raise UpscalerError(error.code) from None
         asset = catalog.ASSETS[catalog.LSFG_ARCHIVE]
         try:
             unpacked = self.cache.ensure(asset, lambda _done: None, lambda: False)

@@ -18,12 +18,19 @@ import shlex
 import tomllib
 from pathlib import Path
 
+import device_tree
 from . import games, ownership
 from .assets import sha256
 from .lsfg_logs import RuntimeLog
 
 LOSSLESS_APPID = "993090"
 DLL_NAME = "lsfg-vk.dll"
+# ARM64 has no downloadable build: Panel only drives a native v1 layer the user already installed.
+NATIVE_DLL_NAME = "Lossless.dll"
+NATIVE_LAYER_FILES = (
+    "lib/liblsfg-vk.so",
+    "share/vulkan/implicit_layer.d/VkLayer_LS_frame_generation.json",
+)
 LAYER_FILES = (
     "lib/liblsfg-vk-layer.so",
     "lib/liblsfg-vk-layer.x86.so",
@@ -45,6 +52,7 @@ PLACEHOLDER = "pdc-none"
 PAUSED_LIMIT = 50
 # Gamescope's own WSI layer and lsfg-vk fight over the swapchain inside a gamescope session.
 LAUNCH_ENV = {"ENABLE_GAMESCOPE_WSI": "0"}
+NATIVE_LAUNCH_ENV = {**LAUNCH_ENV, "DXVK_HDR": "0"}
 
 
 class LsfgError(Exception):
@@ -53,9 +61,9 @@ class LsfgError(Exception):
         self.code = code
 
 
-def find_dll(home: str) -> Path | None:
+def find_dll(home: str, name: str = DLL_NAME) -> Path | None:
     for library in games.library_paths(home):
-        candidate = library / "steamapps/common/Lossless Scaling" / DLL_NAME
+        candidate = library / "steamapps/common/Lossless Scaling" / name
         if candidate.is_file():
             return candidate
     return None
@@ -66,7 +74,8 @@ def lossless_installed(home: str) -> bool:
 
 
 class Lsfg:
-    def __init__(self, home: str, state_dir: Path):
+    def __init__(self, home: str, state_dir: Path, arm: bool | None = None):
+        self.arm = device_tree.is_arm() if arm is None else arm
         self._lock = threading.RLock()
         self.home = Path(home)
         self.local = self.home / ".local"
@@ -103,13 +112,18 @@ class Lsfg:
         finally:
             tmp.unlink(missing_ok=True)
 
+    def native_layer(self) -> bool:
+        return all((self.local / f).is_file() for f in NATIVE_LAYER_FILES)
+
     def _ours(self) -> bool:
+        if self.arm:
+            return bool(self._manifest().get("native")) and self.native_layer()
         files = self._manifest()["files"]
         return bool(files) and all((self.local / f).is_file() for f in files)
 
     def _foreign(self) -> bool:
         """Another tool's layer or config: Panel reads it but never writes over it."""
-        layer = (self.local / LAYER_FILES[2]).exists() and not self._manifest()["files"]
+        layer = not self.arm and (self.local / LAYER_FILES[2]).exists() and not self._manifest()["files"]
         try:
             config = self.config_path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -119,8 +133,10 @@ class Lsfg:
     def status(self) -> dict:
         with self._lock:
             self._watch_log()
-            dll = find_dll(str(self.home))
+            dll = find_dll(str(self.home), NATIVE_DLL_NAME if self.arm else DLL_NAME)
             return {
+                "arm": self.arm,
+                "unavailable": "lsfg_arm_no_layer" if self.arm and not self.native_layer() else None,
                 "installed": self._ours(),
                 "version": self._manifest().get("version") if self._ours() else None,
                 "foreign": self._foreign(),
@@ -131,7 +147,7 @@ class Lsfg:
             }
 
     def _watch_log(self):
-        if self._closed or self._foreign():
+        if self._closed or self.arm or self._foreign():
             return
         try:
             config = tomllib.loads(self.config_path.read_text())
@@ -182,6 +198,8 @@ class Lsfg:
         self._safe_path(self.manifest_path, self.manifest_path.parent)
         if self._foreign():
             raise LsfgError("lsfg_foreign")
+        if self.arm:
+            return
         for relative in LAYER_FILES:
             target = self.local / relative
             if target.exists():
@@ -191,7 +209,26 @@ class Lsfg:
             elif relative in data["files"]:
                 raise LsfgError("lsfg_conflict")
 
+    def install_native(self) -> dict:
+        """ARM64: adopt the user's own v1 layer without touching it; only Panel's config is written."""
+        with self._lock:
+            if not self.arm or not self.native_layer():
+                raise LsfgError("lsfg_arm_no_layer")
+            data = self._manifest()
+            self._check_owned(data)
+            preserve_config = bool(data.get("native")) and self.config_path.is_file()
+            data.update(native=True, version="native-v1")
+            try:
+                self._save(data)
+                if not preserve_config:
+                    self._write_config(data)
+            except OSError as error:
+                raise LsfgError("lsfg_write_failed") from error
+            return self.status()
+
     def install(self, unpacked: Path, version: str, before_commit=None) -> dict:
+        if self.arm:
+            raise LsfgError("lsfg_arm_no_layer")
         with self._lock:
             data = self._manifest()
             self._check_owned(data)
@@ -251,7 +288,7 @@ class Lsfg:
     def uninstall(self) -> dict:
         with self._lock:
             data = self._manifest()
-            if not data["files"]:
+            if not data["files"] and not data.get("native"):
                 return self.status()
             kept = data.get("foreign_backup")
             for relative, digest in data["files"].items():
@@ -273,7 +310,7 @@ class Lsfg:
             backup = self.manifest_path.parent / "lsfg-foreign"
             backup.mkdir(parents=True, exist_ok=True)
             moved = []
-            for path in [*(self.local / f for f in LAYER_FILES), self.config_path]:
+            for path in [*(() if self.arm else (self.local / f for f in LAYER_FILES)), self.config_path]:
                 if path.is_file():
                     relative = path.relative_to(self.home).as_posix()
                     (backup / relative).parent.mkdir(parents=True, exist_ok=True)
@@ -345,13 +382,21 @@ class Lsfg:
             data["paused"] = paused[-PAUSED_LIMIT:]
             self._save(data)
             self._write_config(data)
-            env = {**LAUNCH_ENV, "LSFGVK_PROFILE": profile_name(appid),
-                   "LSFGVK_CONFIG": shlex.quote(str(self.config_path))} if appid in data["profiles"] else {}
+            if appid not in data["profiles"]:
+                env = {}
+            elif self.arm:
+                env = {**NATIVE_LAUNCH_ENV, "LSFG_PROCESS": profile_name(appid),
+                       "LSFG_CONFIG": shlex.quote(str(self.config_path))}
+            else:
+                env = {**LAUNCH_ENV, "LSFGVK_PROFILE": profile_name(appid),
+                       "LSFGVK_CONFIG": shlex.quote(str(self.config_path))}
             return {"env": env, "profile": data["profiles"].get(appid)}
 
     def _write_config(self, data: dict) -> None:
         if self._foreign():
             raise LsfgError("lsfg_foreign")
+        if self.arm:
+            return self._write_native_config(data)
         dll = find_dll(str(self.home))
         lines = [MARKER, "version = 2", "", "[global]", "allow_fp16 = true"]
         if not self._closed and self.runtime_log.prepare():
@@ -376,6 +421,26 @@ class Lsfg:
         try:
             os.replace(tmp, self.config_path)
             self._watch_log()
+        finally:
+            tmp.unlink(missing_ok=True)
+
+
+    def _write_native_config(self, data: dict) -> None:
+        dll = find_dll(str(self.home), NATIVE_DLL_NAME)
+        lines = [MARKER, "version = 1", "", "[global]"]
+        if dll:
+            lines.append(f"dll = {_toml(str(dll))}")
+        lines.append("no_fp16 = false")
+        for appid, profile in sorted(data["profiles"].items()):
+            lines += [
+                "", f"# {profile['name']}", "[[game]]", "exe = " + _toml(profile_name(appid)),
+                f"multiplier = {profile['multiplier']}",
+                f"flow_scale = {profile['flow_scale']}",
+                f"performance_mode = {'true' if profile['performance'] else 'false'}",
+            ]
+        tmp = self._stage_bytes(self.config_path, ("\n".join(lines) + "\n").encode())
+        try:
+            os.replace(tmp, self.config_path)
         finally:
             tmp.unlink(missing_ok=True)
 
