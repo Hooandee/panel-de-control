@@ -163,6 +163,17 @@
       "note": "Official release, unmodified (HelixSR Freeware License). Only HLX FSR 4 (prebuilt, from AMD's MIT FSR SDK) is offered: HLX DLSS needs NVIDIA's DLSS DLL taken apart for AMD, which NVIDIA's licence forbids."
     },
     {
+      "id": "python-3.14.8-embed-amd64",
+      "filename": "python-3.14.8-embed-amd64.zip",
+      "sha256": "a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310",
+      "size": 12601679,
+      "urls": [
+        "https://www.python.org/ftp/python/3.14.8/python-3.14.8-embed-amd64.zip"
+      ],
+      "archive": false,
+      "note": "python.org's embeddable package, the one HelixSR's own Windows setup pins. Windows has no Python, and HelixSR's bridge needs one; unpacked as it is into Panel's own folder."
+    },
+    {
       "id": "optipatcher-0.42",
       "filename": "OptiPatcher.asi",
       "sha256": "2a6e033aeda72d63281889480b2380da830530cf6e1e448e2056d451ade75f1b",
@@ -706,7 +717,12 @@
       ],
       "image": 3,
       "cost": 2,
-      "archive": "helixsr-3.2.0"
+      "archive": "helixsr-3.2.0",
+      "platform_assets": {
+        "windows": [
+          "python-3.14.8-embed-amd64"
+        ]
+      }
     }
   ]
 }

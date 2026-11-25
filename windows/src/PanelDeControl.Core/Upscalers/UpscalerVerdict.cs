@@ -11,9 +11,14 @@ public sealed class UpscalerVerdict
 
     public string? Fallback { get; private set; }
 
-    /// <summary>Null for engines without an OptiScaler log (DLL mode, HelixSR).</summary>
+    /// <summary>Null for engines without an OptiScaler log (DLL mode).</summary>
     public static UpscalerVerdict? Read(InstalledUpscaler install, double installedAt)
     {
+        if (install.Engine == "helixsr" && !string.IsNullOrEmpty(install.Target))
+        {
+            var facts = HelixLog.ReadInstall(install, installedAt);
+            return new UpscalerVerdict { Verdict = HelixLog.Verdict(facts), Observed = facts.Upscaler };
+        }
         if (install.Engine != "optiscaler" || string.IsNullOrEmpty(install.Target))
         {
             return null;

@@ -43,6 +43,18 @@ public sealed class InstalledUpscaler
     public IReadOnlyList<GameConfigRecord> GameConfig { get; set; } = Array.Empty<GameConfigRecord>();
 
     public int Files { get; set; }
+
+    /// <summary>HelixSR's route inside its bridge; only the FSR drop-in exists.</summary>
+    public string Way { get; set; } = "";
+
+    /// <summary>Where HelixSR's bridge put its DLLs and record, which can differ from <see cref="Target"/>.</summary>
+    public string ExeFolder { get; set; } = "";
+
+    /// <summary>HelixSR's own log.</summary>
+    public string Log { get; set; } = "";
+
+    /// <summary>HelixSR's install record, the file whose presence says HelixSR is still in the game.</summary>
+    public string HelixFile { get; set; } = "";
 }
 
 public sealed class OptiScalerInstallRequest

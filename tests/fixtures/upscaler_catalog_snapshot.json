@@ -102,6 +102,53 @@ null
 }
 ],
 [
+"python-3.14.8-embed-amd64",
+{
+"Asset": [
+[
+"id",
+"python-3.14.8-embed-amd64"
+],
+[
+"filename",
+"python-3.14.8-embed-amd64.zip"
+],
+[
+"sha256",
+"a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310"
+],
+[
+"size",
+{
+"int": 12601679
+}
+],
+[
+"urls",
+{
+"tuple": [
+"https://www.python.org/ftp/python/3.14.8/python-3.14.8-embed-amd64.zip"
+]
+}
+],
+[
+"archive",
+false
+],
+[
+"member",
+null
+],
+[
+"generation",
+{
+"int": 9
+}
+]
+]
+}
+],
+[
 "optipatcher-0.42",
 {
 "Asset": [
@@ -1126,6 +1173,12 @@ true
 {
 "dict": []
 }
+],
+[
+"platform_assets",
+{
+"dict": []
+}
 ]
 ]
 }
@@ -1245,6 +1298,12 @@ true
 "fsr-4.1.2-dll-framegeneration"
 ]
 ]
+}
+],
+[
+"platform_assets",
+{
+"dict": []
 }
 ]
 ]
@@ -1366,6 +1425,12 @@ true
 ]
 ]
 }
+],
+[
+"platform_assets",
+{
+"dict": []
+}
 ]
 ]
 }
@@ -1475,6 +1540,12 @@ true
 ],
 [
 "legacy_replace",
+{
+"dict": []
+}
+],
+[
+"platform_assets",
 {
 "dict": []
 }
@@ -1600,6 +1671,12 @@ true
 ]
 ]
 }
+],
+[
+"platform_assets",
+{
+"dict": []
+}
 ]
 ]
 }
@@ -1712,6 +1789,12 @@ true
 "fsr-4.1.2-dll-framegeneration"
 ]
 ]
+}
+],
+[
+"platform_assets",
+{
+"dict": []
 }
 ]
 ]
@@ -1859,6 +1942,12 @@ true
 {
 "dict": []
 }
+],
+[
+"platform_assets",
+{
+"dict": []
+}
 ]
 ]
 }
@@ -1984,6 +2073,12 @@ true
 {
 "dict": []
 }
+],
+[
+"platform_assets",
+{
+"dict": []
+}
 ]
 ]
 }
@@ -2106,6 +2201,12 @@ true
 {
 "dict": []
 }
+],
+[
+"platform_assets",
+{
+"dict": []
+}
 ]
 ]
 }
@@ -2224,6 +2325,12 @@ true
 ],
 [
 "legacy_replace",
+{
+"dict": []
+}
+],
+[
+"platform_assets",
 {
 "dict": []
 }
@@ -2351,6 +2458,12 @@ true
 {
 "dict": []
 }
+],
+[
+"platform_assets",
+{
+"dict": []
+}
 ]
 ]
 }
@@ -2467,6 +2580,12 @@ true
 {
 "dict": []
 }
+],
+[
+"platform_assets",
+{
+"dict": []
+}
 ]
 ]
 }
@@ -2562,6 +2681,12 @@ true
 ],
 [
 "legacy_replace",
+{
+"dict": []
+}
+],
+[
+"platform_assets",
 {
 "dict": []
 }
@@ -2665,6 +2790,21 @@ true
 "legacy_replace",
 {
 "dict": []
+}
+],
+[
+"platform_assets",
+{
+"dict": [
+[
+"windows",
+{
+"tuple": [
+"python-3.14.8-embed-amd64"
+]
+}
+]
+]
 }
 ]
 ]

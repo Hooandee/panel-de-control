@@ -518,6 +518,12 @@
   <data name="UpscalersErrNoExe" xml:space="preserve"><value>Eseguibile del gioco non trovato.</value></data>
   <data name="UpscalersErrNoBuilds" xml:space="preserve"><value>Nessuna versione disponibile per la tua GPU.</value></data>
   <data name="UpscalersErrCompanion" xml:space="preserve"><value>Impossibile contattare il servizio di Panel de Control.</value></data>
+  <data name="UpscalersProgressPython" xml:space="preserve"><value>Preparazione di Python per HelixSR…</value></data>
+  <data name="UpscalersProgressUnpack" xml:space="preserve"><value>Preparazione di HelixSR…</value></data>
+  <data name="UpscalersHelixPick" xml:space="preserve"><value>Nel gioco, scegli AMD FSR. La qualità si sceglie nel suo menu.</value></data>
+  <data name="UpscalersErrHelixNoFsr" xml:space="preserve"><value>Questo gioco non ha FSR 3.1, quindi HLX FSR 4 non ha niente da sostituire.</value></data>
+  <data name="UpscalersErrHelixFailed" xml:space="preserve"><value>HelixSR non è riuscito a finire.</value></data>
+  <data name="UpscalersErrHelixMissing" xml:space="preserve"><value>HelixSR non è scaricato.</value></data>
   <data name="UpscalersErrGeneric" xml:space="preserve"><value>Impossibile completare l'operazione.</value></data>
   <data name="NavUpscalers" xml:space="preserve">
     <value>Upscaler</value>

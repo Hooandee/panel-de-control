@@ -378,6 +378,23 @@
           },
           "default": []
         },
+        "platform_assets": {
+          "description": "Asset ids a build needs on one platform only (a runtime that platform lacks), by platform name. Other platforms ignore them.",
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "windows"
+            ]
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/id"
+            },
+            "minItems": 1
+          },
+          "default": {}
+        },
         "injector": {
           "$ref": "#/$defs/id"
         },

@@ -55,6 +55,7 @@ public static class UpscalersReportSection
         var manifest = ManifestCheck.Verify(install.Target);
         var log = OptiScalerLogFacts.Read(install.Target);
         var report = install.Engine == "optiscaler" ? OptiScalerLog.Read(install.Target, UpscalerVerdict.Since(stored.InstalledAt)) : null;
+        var helixFacts = install.Engine == "helixsr" ? HelixLog.ReadInstall(install, stored.InstalledAt) : null;
         var provider = report is null ? null : OptiScalerLog.ProviderObservationOf(report);
         var fallback = report is null ? null : OptiScalerLog.FallbackOf(install.Engine, install.Build, report);
         var lastError = store.Actions(appId).LastOrDefault(action => action.Error is not null)?.Error;
@@ -82,10 +83,10 @@ public static class UpscalersReportSection
                 ["present"] = log.Present,
                 ["modified"] = log.Modified is { } modified ? modified.ToString("O", CultureInfo.InvariantCulture) : null,
                 ["upscaler_created"] = log.UpscalerCreated,
-                ["verdict"] = report is null ? null : OptiScalerLog.Verdict(report),
-                ["stale"] = report?.Stale,
+                ["verdict"] = report is not null ? OptiScalerLog.Verdict(report) : helixFacts is not null ? HelixLog.Verdict(helixFacts) : null,
+                ["stale"] = report?.Stale ?? helixFacts?.Stale,
                 ["version"] = report?.Version,
-                ["upscaler"] = report?.Upscaler,
+                ["upscaler"] = report?.Upscaler ?? helixFacts?.Upscaler,
                 ["input"] = report?.Input,
                 ["fg"] = report?.FrameGeneration,
                 ["fg_state"] = report?.FrameGenerationState,

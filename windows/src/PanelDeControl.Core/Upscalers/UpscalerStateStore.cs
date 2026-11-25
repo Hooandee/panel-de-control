@@ -486,6 +486,10 @@ public sealed class UpscalerStateStore
             Anr = install.Get("anr") is DataBool { Value: true },
             Args = Strings(install.Get("args")),
             AddedArgs = Strings(install.Get("added_args")),
+            Way = Text(install.Get("way")) ?? "",
+            ExeFolder = Text(install.Get("exe_folder")) ?? "",
+            Log = Text(install.Get("log")) ?? "",
+            HelixFile = Text(install.Get("helix_file")) ?? "",
             Managed = managed,
             Components = components,
             GameConfig = install.Get("game_config") is DataArray settings
@@ -542,6 +546,13 @@ public sealed class UpscalerStateStore
             Member("args", new DataArray(install.Args.Select(arg => (DataValue)new DataString(arg)).ToList())),
             Member("added_args", new DataArray(install.AddedArgs.Select(arg => (DataValue)new DataString(arg)).ToList())),
         };
+        if (install.Engine == "helixsr")
+        {
+            members.Add(Member("way", new DataString(install.Way)));
+            members.Add(Member("exe_folder", new DataString(install.ExeFolder)));
+            members.Add(Member("log", new DataString(install.Log)));
+            members.Add(Member("helix_file", new DataString(install.HelixFile)));
+        }
         if (install.GameConfig.Count > 0)
         {
             members.Add(Member("game_config", new DataArray(install.GameConfig.Select(setting =>

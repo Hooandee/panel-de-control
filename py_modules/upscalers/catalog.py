@@ -90,6 +90,8 @@ class Build:
     engine: str = "optiscaler"
     way: str = ""
     legacy_replace: dict[str, str] = field(default_factory=dict)
+    # Assets one platform needs on top (Windows has no Python for HelixSR's bridge); Linux never reads them.
+    platform_assets: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def _check(condition: bool, reason: str) -> None:
@@ -124,12 +126,14 @@ def _asset(item) -> Asset:
 def _build(item) -> Build:
     item = _fields(item, ("id", "family", "version", "engine", "gpus", "image", "cost", "archive"),
                    ("way", "channel", "available", "extra_dir", "assets", "injector", "replace", "legacy_replace",
-                    "ini", "models", "note"))
+                    "ini", "models", "note", "platform_assets"))
     _check(type(item["image"]) is int and type(item["cost"]) is int and type(item.get("available", True)) is bool, "invalid_build")
     _check(all(isinstance(item.get(key, ""), str) for key in ("channel", "extra_dir", "way"))
            and isinstance(item.get("injector", ""), str), "invalid_build")
     models = item.get("models", [])
     _check(isinstance(models, list), "invalid_models")
+    platform_assets = item.get("platform_assets", {})
+    _check(isinstance(platform_assets, dict), "invalid_mapping")
     return Build(
         _text(item["id"]), _text(item["family"]), _text(item["version"]), _strings(item["gpus"]), item["image"], item["cost"],
         assets=_strings(item.get("assets", [])), replace=_mapping(item.get("replace", {})), ini=_mapping(item.get("ini", {})),
@@ -137,6 +141,7 @@ def _build(item) -> Build:
         channel=item.get("channel", "stable"), extra_dir=item.get("extra_dir", ""),
         models=tuple((_text(model["id"]), _mapping(model["ini"])) for model in (_fields(m, ("id", "ini")) for m in models)),
         engine=_text(item["engine"]), way=item.get("way", ""), legacy_replace=_mapping(item.get("legacy_replace", {})),
+        platform_assets={str(name): _strings(ids) for name, ids in platform_assets.items()},
     )
 
 
@@ -160,7 +165,8 @@ def _parse(raw: dict) -> dict:
     _check(len(assets) == len(raw["assets"]) and len(builds) == len(raw["builds"]), "duplicate_id")
     for build in builds.values():
         referenced = (*build.assets, *build.replace.values(), *build.legacy_replace.values(), build.archive,
-                      *((build.injector,) if build.injector else ()))
+                      *((build.injector,) if build.injector else ()),
+                      *(asset_id for ids in build.platform_assets.values() for asset_id in ids))
         _check(all(asset_id in assets for asset_id in referenced), "missing_asset")
     _check(set(archives.values()) <= assets.keys(), "missing_asset")
     preferred = _mapping(raw["preferred"])

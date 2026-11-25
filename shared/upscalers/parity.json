@@ -19,7 +19,7 @@
     "install_upscaler": {
       "windows": "partial",
       "op": "install",
-      "note": "optiscaler (with sharpness, FG route, ANR, recipe game_files packages, ReShade.ini configuration and game_config settings) and dll; helixsr and user-supplied recipe files pending"
+      "note": "optiscaler (with sharpness, FG route, ANR, recipe game_files packages, ReShade.ini configuration and game_config settings), dll and helixsr (HLX FSR 4 through HelixSR's own bridge run with python.org's embeddable Python Panel downloads; no latest-release lookup, no game folder relocation); user-supplied recipe files pending"
     },
     "uninstall_upscaler": {
       "windows": "done",

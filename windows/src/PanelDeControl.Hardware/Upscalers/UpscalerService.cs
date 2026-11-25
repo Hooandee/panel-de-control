@@ -41,6 +41,7 @@ public sealed class UpscalerService : IUpscalersController
     private readonly ISteamLaunchOptions? launchOptions;
     private int retrying;
     private readonly Func<string?> vcRuntime;
+    private readonly HelixSr? helix;
     private readonly Dictionary<string, (double Until, UpscalerCover? Cover)> covers = new(StringComparer.Ordinal);
     private readonly object coverLock = new();
 
@@ -59,7 +60,8 @@ public sealed class UpscalerService : IUpscalersController
         Func<Func<Task>, Task>? start = null,
         Func<byte[], int, ScaledCover?>? scaleCover = null,
         ISteamLaunchOptions? launchOptions = null,
-        Func<string?>? vcRuntime = null)
+        Func<string?>? vcRuntime = null,
+        HelixSr? helix = null)
     {
         this.data = data;
         this.store = store;
@@ -75,6 +77,7 @@ public sealed class UpscalerService : IUpscalersController
         this.scaleCover = scaleCover ?? CoverImages.Scale;
         this.launchOptions = launchOptions;
         this.vcRuntime = vcRuntime ?? (() => null);
+        this.helix = helix;
         gpu = new Lazy<GpuFamilyResult>(() => this.readGpu());
         device = new Lazy<string?>(() => this.readDevice());
     }
@@ -249,6 +252,7 @@ public sealed class UpscalerService : IUpscalersController
         var generation = Gpu.Generation;
         var builds = UpscalerPlanner.Describe(data.Catalog, generation, Device ?? "")
             .Where(build => build.Available && (build.Engine == "optiscaler"
+                || (build.Engine == "helixsr" && OffersHelix(analysis))
                 || (build.Engine == "dll" && data.Catalog.Build(build.Id) is { } dll
                     && UpscalerPlanner.SupportsDllTargets(dll, DllInstaller.Targets(analysis, Resolved(app, "dll")?.LegacyFfxSwap ?? true)))))
             .Select(build => new UpscalerBuildEntry
@@ -257,10 +261,10 @@ public sealed class UpscalerService : IUpscalersController
                 Family = build.Family,
                 Version = build.Version,
                 Channel = build.Channel,
-                DownloadBytes = build.DownloadBytes,
+                DownloadBytes = build.DownloadBytes + PlatformBytes(build.Id),
                 Models = build.Models.ToArray(),
                 Supported = build.Supported,
-                Engine = build.Engine == "dll" ? "dll" : null,
+                Engine = build.Engine is "dll" or "helixsr" ? build.Engine : null,
             })
             .ToArray();
         var stored = store.Install(appId);
@@ -328,7 +332,7 @@ public sealed class UpscalerService : IUpscalersController
             throw new UpscalerException("unknown_build");
         }
 
-        if (build.Engine is not ("optiscaler" or "dll"))
+        if (build.Engine is not ("optiscaler" or "dll") && !(build.Engine == "helixsr" && helix is not null))
         {
             throw new UpscalerException("engine_unsupported");
         }
@@ -357,6 +361,10 @@ public sealed class UpscalerService : IUpscalersController
         var recipe = Recipe(app);
         var automatic = build.Engine == "optiscaler" ? AutomaticRecipe.Plan(data.Recipes, recipe) : null;
         var resolved = Resolved(app, build.Engine);
+        if (build.Engine == "helixsr" && !OffersHelix(Scan(app, recipe)))
+        {
+            throw new UpscalerException("helixsr_no_fsr");
+        }
 
         // Everything that can refuse the request runs before the job starts: a job is only ever left by Finish or Fail.
         GameGuards.EnsureCanInstall(app, runningImages());
@@ -397,39 +405,23 @@ public sealed class UpscalerService : IUpscalersController
             jobs.Stage("prepare");
             var catalog = data.Catalog;
             var plan = catalog.Build(buildId)!;
-            var assets = UpscalerPlanner.BuildAssets(catalog, plan).Concat(automatic?.Assets() ?? Array.Empty<UpscalerAsset>()).ToList();
-            var total = assets.GroupBy(asset => asset.Sha256, StringComparer.Ordinal).Sum(group => group.Last().Size);
-            var pending = assets.Any(asset => !cache.Ready(asset));
-            jobs.Stage(pending ? "download" : "install", total);
-            var progress = new Progress<long>(done =>
-            {
-                jobs.Progress(done);
-                if (done >= total)
-                {
-                    jobs.Stage("install");
-                }
-            });
             var previous = store.Install(appId);
-            var install = plan.Engine == "dll"
-                ? await new DllInstaller(catalog, cache).InstallAsync(
-                    buildId,
-                    app.Root,
-                    () => Analyze(app, recipe?.Exe),
-                    recipe?.LegacyFfxSwap ?? true,
-                    previous?.Install,
-                    false,
-                    progress,
-                    CancellationToken.None,
-                    folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder))).ConfigureAwait(false)
-                : await new OptiScalerInstaller(catalog, cache, Gpu.Generation).InstallAsync(
-                    () => Analyze(app, recipe?.Exe),
-                    recipe,
-                    new OptiScalerInstallRequest { Build = buildId, Choice = choice },
-                    previous?.Install,
-                    folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder)),
-                    progress,
-                    CancellationToken.None,
-                    automatic).ConfigureAwait(false);
+            if (previous?.Install.Engine == "helixsr" && plan.Engine != "helixsr")
+            {
+                // HelixSR comes out before the switch; the arguments Panel added stay recorded so the new install or a later removal takes them out.
+                await RemoveInstallAsync(app.Root, previous.Install).ConfigureAwait(false);
+                if (previous.Install.AddedArgs.Count > 0)
+                {
+                    store.SetStrandedArgs(appId, previous.Install.AddedArgs.Union(store.StrandedArgs(appId), StringComparer.Ordinal).ToList());
+                }
+
+                store.ClearInstall(appId);
+                previous = null;
+            }
+
+            var install = plan.Engine == "helixsr"
+                ? await InstallHelixAsync(app, plan, choice, recipe, previous?.Install).ConfigureAwait(false)
+                : await InstallOptiScalerAsync(app, plan, choice, recipe, automatic, previous?.Install).ConfigureAwait(false);
             install.AddedArgs = previous?.Install.AddedArgs ?? Array.Empty<string>();
             try
             {
@@ -439,11 +431,11 @@ public sealed class UpscalerService : IUpscalersController
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                OptiScalerInstaller.Uninstall(install);
+                await RemoveInstallAsync(app.Root, install).ConfigureAwait(false);
                 throw new UpscalerException("state_save_failed", exception.GetType().Name);
             }
 
-            if (!ManifestCheck.Presence(install.Target).Installed)
+            if (!IsInstalled(install))
             {
                 store.ClearInstall(appId);
                 throw new UpscalerException("install_unverified");
@@ -470,14 +462,52 @@ public sealed class UpscalerService : IUpscalersController
         }
     }
 
+    private async Task<InstalledUpscaler> InstallOptiScalerAsync(SteamApp app, UpscalerBuild plan, UpscalerChoice choice, ResolvedRecipe? recipe, AutomaticRecipe? automatic, InstalledUpscaler? previous)
+    {
+        var catalog = data.Catalog;
+        var buildId = plan.Id;
+        var assets = UpscalerPlanner.BuildAssets(catalog, plan).Concat(automatic?.Assets() ?? Array.Empty<UpscalerAsset>()).ToList();
+        var total = assets.GroupBy(asset => asset.Sha256, StringComparer.Ordinal).Sum(group => group.Last().Size);
+        var pending = assets.Any(asset => !cache.Ready(asset));
+        jobs.Stage(pending ? "download" : "install", total);
+        var progress = new Progress<long>(done =>
+        {
+            jobs.Progress(done);
+            if (done >= total)
+            {
+                jobs.Stage("install");
+            }
+        });
+        return plan.Engine == "dll"
+            ? await new DllInstaller(catalog, cache).InstallAsync(
+                buildId,
+                app.Root,
+                () => Analyze(app, recipe?.Exe),
+                recipe?.LegacyFfxSwap ?? true,
+                previous,
+                false,
+                progress,
+                CancellationToken.None,
+                folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder))).ConfigureAwait(false)
+            : await new OptiScalerInstaller(catalog, cache, Gpu.Generation).InstallAsync(
+                () => Analyze(app, recipe?.Exe),
+                recipe,
+                new OptiScalerInstallRequest { Build = buildId, Choice = choice },
+                previous,
+                folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder)),
+                progress,
+                CancellationToken.None,
+                automatic).ConfigureAwait(false);
+    }
+
     private async Task RunUninstallAsync(string appId, StoredUpscaler stored)
     {
         Record(appId, "uninstall", "started", stored.Install.Build, null);
         try
         {
             jobs.Stage("restore");
-            var kept = OptiScalerInstaller.Uninstall(stored.Install);
-            if (ManifestCheck.Presence(stored.Install.Target).Present)
+            var kept = await RemoveInstallAsync(steam.Find(appId)?.Root, stored.Install).ConfigureAwait(false);
+            if (stored.Install.Engine == "helixsr" ? HelixSr.HasMarker(stored.Install.Target) : ManifestCheck.Presence(stored.Install.Target).Present)
             {
                 throw new UpscalerException("files_kept", kept.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
             }
@@ -689,6 +719,223 @@ public sealed class UpscalerService : IUpscalersController
         }
     }
 
+    private bool OffersHelix(GameAnalysis analysis) => helix is not null && analysis.Inputs.Any(input => input.Key == "fsr31");
+
+    private long PlatformBytes(string buildId) =>
+        data.Catalog.Build(buildId) is { Available: true } build
+            ? build.AssetsFor(Platform).Select(id => data.Catalog.Asset(id)!).GroupBy(asset => asset.Sha256, StringComparer.Ordinal).Sum(group => group.Last().Size)
+            : 0;
+
+    /// <summary>HelixSR's record and marker are what say it is in the game; every other engine has its manifest.</summary>
+    private static bool IsInstalled(InstalledUpscaler install) =>
+        install.Engine == "helixsr"
+            ? HelixSr.HasMarker(install.Target) && install.HelixFile.Length > 0 && File.Exists(install.HelixFile)
+            : ManifestCheck.Presence(install.Target).Installed;
+
+    private async Task<InstalledUpscaler> InstallHelixAsync(SteamApp app, UpscalerBuild build, UpscalerChoice choice, ResolvedRecipe? recipe, InstalledUpscaler? previous)
+    {
+        var runner = helix ?? throw new UpscalerException("engine_unsupported");
+        var analysis = Analyze(app, recipe?.Exe);
+        var target = analysis.Target ?? throw new UpscalerException("no_exe");
+        if (analysis.AntiCheat)
+        {
+            throw new UpscalerException("anti_cheat");
+        }
+
+        if (!OffersHelix(analysis))
+        {
+            throw new UpscalerException("helixsr_no_fsr");
+        }
+
+        await EnsureHelixAsync(runner, build).ConfigureAwait(false);
+        GameFiles.RecoverOrphan(target, folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder)));
+        if (previous is not null)
+        {
+            await RemoveInstallAsync(app.Root, previous).ConfigureAwait(false);
+            GameFiles.RecoverOrphan(target, _ => false);
+            analysis = Analyze(app, recipe?.Exe);
+            target = analysis.Target ?? throw new UpscalerException("no_exe");
+        }
+
+        if (analysis.Foreign)
+        {
+            throw new UpscalerException("foreign");
+        }
+
+        jobs.Stage("install");
+        var game = await runner.InstallAsync(app.Root, CancellationToken.None).ConfigureAwait(false);
+        var exeFolder = game.ExeFolder ?? target;
+        var log = game.LogPath ?? Path.Combine(exeFolder, "helixsr.log");
+        try
+        {
+            HelixSr.WriteMarker(target, build.Way, runner.ReleaseName);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or UpscalerException)
+        {
+            try
+            {
+                await runner.RemoveAsync(app.Root, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (UpscalerException)
+            {
+            }
+
+            throw exception is UpscalerException known ? known : new UpscalerException("state_save_failed", exception.GetType().Name);
+        }
+
+        var archive = data.Catalog.Asset(build.Archive)!;
+        return new InstalledUpscaler
+        {
+            Build = build.Id,
+            Archive = build.Archive,
+            Engine = "helixsr",
+            Way = build.Way,
+            Target = target,
+            Exe = analysis.Exe,
+            ExeFolder = exeFolder,
+            Log = log,
+            HelixFile = Path.Combine(Path.GetDirectoryName(log) ?? exeFolder, HelixRestore.Record),
+            Options = new UpscalerChoice { Quality = choice.Quality, Sharpness = choice.Sharpness, Model = choice.Model },
+            Components = new[] { new KeyValuePair<string, string>(archive.Id, runner.Digest ?? archive.Sha256) },
+        };
+    }
+
+    /// <summary>Python first, then HelixSR's release: each is downloaded and unpacked once and kept until the catalog pins another.</summary>
+    private async Task EnsureHelixAsync(HelixSr runner, UpscalerBuild build)
+    {
+        var catalog = data.Catalog;
+        foreach (var python in build.AssetsFor(Platform).Select(id => catalog.Asset(id)!))
+        {
+            if (runner.PythonIs(python.Sha256))
+            {
+                continue;
+            }
+
+            jobs.Stage(HelixSr.PythonStage, python.Size);
+            var file = await cache.EnsureAsync(python, new Progress<long>(jobs.Progress), CancellationToken.None).ConfigureAwait(false);
+            runner.UnpackPython(file, python.Sha256);
+            Discard(python);
+        }
+
+        var pinned = catalog.Asset(build.Archive)!;
+        if (runner.ReleaseReady && (runner.Digest ?? pinned.Sha256) == pinned.Sha256)
+        {
+            return;
+        }
+
+        jobs.Stage("download", pinned.Size);
+        var archive = await cache.EnsureAsync(pinned, new Progress<long>(jobs.Progress), CancellationToken.None).ConfigureAwait(false);
+        jobs.Stage(HelixSr.UnpackStage);
+        runner.UnpackRelease(archive, pinned.Sha256);
+        Discard(pinned);
+    }
+
+    /// <summary>The downloaded archive is only a means to the unpacked folder; its copy in the cache goes.</summary>
+    private void Discard(UpscalerAsset asset)
+    {
+        try
+        {
+            var folder = Path.GetDirectoryName(cache.FilePath(asset));
+            if (folder is not null && Directory.Exists(folder))
+            {
+                Directory.Delete(folder, true);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            log("upscalers.cache", exception.GetType().Name);
+        }
+    }
+
+    private async Task<IReadOnlyList<string>> RemoveInstallAsync(string? root, InstalledUpscaler install)
+    {
+        if (install.Engine != "helixsr")
+        {
+            return OptiScalerInstaller.Uninstall(install);
+        }
+
+        await RemoveHelixAsync(root, install).ConfigureAwait(false);
+        return Array.Empty<string>();
+    }
+
+    /// <summary>The bridge decides; when its DLL is already gone, or HelixSR cannot run, the recorded swaps are undone by hand.</summary>
+    private async Task RemoveHelixAsync(string? root, InstalledUpscaler install)
+    {
+        var runner = helix;
+        var record = install.HelixFile;
+        var recorded = record.Length > 0 && File.Exists(record);
+        var bridge = runner is { Ready: true } && root is not null;
+        if (!recorded)
+        {
+            if (bridge)
+            {
+                try
+                {
+                    await runner!.RemoveAsync(root!, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (UpscalerException error) when (HelixBridge.NotInstalled(error.Detail))
+                {
+                }
+            }
+
+            log("upscalers.helix", "record_missing");
+        }
+        else if (bridge)
+        {
+            try
+            {
+                await runner!.RemoveAsync(root!, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (UpscalerException error) when (HelixBridge.NotInstalled(error.Detail))
+            {
+                RestoreHelixByHand(Path.GetDirectoryName(record)!, "bridge_not_installed");
+            }
+        }
+        else
+        {
+            RestoreHelixByHand(Path.GetDirectoryName(record)!, "release_missing");
+        }
+
+        GameConfigFiles.Restore(install.GameConfig);
+        foreach (var generated in new[] { install.Log, install.Log.Length > 0 ? Path.Combine(Path.GetDirectoryName(install.Log) ?? "", HelixLog.FileName) : "" })
+        {
+            DeleteFile(generated);
+        }
+
+        var meta = Path.Combine(install.Target, GameManifest.Folder);
+        if (Directory.Exists(meta) && (File.GetAttributes(meta) & FileAttributes.ReparsePoint) == 0)
+        {
+            Directory.Delete(meta, true);
+        }
+    }
+
+    private void RestoreHelixByHand(string folder, string reason)
+    {
+        if (!HelixRestore.ByHand(folder))
+        {
+            log("upscalers.helix", "removal by hand left a HelixSR DLL with no backup (" + reason + ")");
+            throw new UpscalerException(HelixBridge.FailedCode, "HelixSR's DLL has no backup of the game's file");
+        }
+
+        log("upscalers.helix", "taken out without its bridge (" + reason + ")");
+    }
+
+    private static void DeleteFile(string path)
+    {
+        if (path.Length == 0 || !File.Exists(path))
+        {
+            return;
+        }
+
+        var attributes = File.GetAttributes(path);
+        if ((attributes & FileAttributes.ReadOnly) != 0)
+        {
+            File.SetAttributes(path, attributes & ~FileAttributes.ReadOnly);
+        }
+
+        File.Delete(path);
+    }
+
     /// <summary>
     /// A game whose Panel state was lost (the package was reinstalled) but whose folder still holds a complete Panel
     /// manifest: adopted from the record beside it, or reported as Panel's with an unknown build. Null when nothing is there.
@@ -725,7 +972,7 @@ public sealed class UpscalerService : IUpscalersController
     /// <summary>Where a complete Panel manifest sits in this game: OptiScaler beside the exe, the DLL mode at the root.</summary>
     private static string? PanelFolder(SteamApp app, GameAnalysis analysis)
     {
-        if (analysis.Target is { } target && ManifestOf(target) is not null)
+        if (analysis.Target is { } target && (ManifestOf(target) is not null || HelixSr.HasMarker(target)))
         {
             return target;
         }
@@ -740,7 +987,8 @@ public sealed class UpscalerService : IUpscalersController
             return null;
         }
 
-        return new StoredUpscaler(new InstalledUpscaler { Target = target, Engine = GameFiles.ReadManifest(target)?.Engine ?? "optiscaler" }, 0);
+        var engine = HelixSr.HasMarker(target) ? "helixsr" : GameFiles.ReadManifest(target)?.Engine ?? "optiscaler";
+        return new StoredUpscaler(new InstalledUpscaler { Target = target, Engine = engine }, 0);
     }
 
     private static UpscalerGameSummary WithState(UpscalerGameSummary row, string state)
@@ -760,7 +1008,7 @@ public sealed class UpscalerService : IUpscalersController
         };
         if (store.Install(app.AppId) is { } stored)
         {
-            row.State = ManifestCheck.Presence(stored.Install.Target).Installed ? UpscalerGameStates.Installed : UpscalerGameStates.Missing;
+            row.State = IsInstalled(stored.Install) ? UpscalerGameStates.Installed : UpscalerGameStates.Missing;
             row.Build = stored.Install.Build;
             row.Version = data.Catalog.Build(stored.Install.Build)?.Version;
             row.Label = UpscalerLabel.Badge(data.Catalog.Build(stored.Install.Build), stored.Install.Options.Model);
@@ -786,7 +1034,7 @@ public sealed class UpscalerService : IUpscalersController
             Quality = install.Options.Quality,
             Model = install.Options.Model,
             InstalledAt = (long)stored.InstalledAt,
-            Status = ManifestCheck.Presence(install.Target).Installed ? UpscalerGameStates.Installed : UpscalerGameStates.Missing,
+            Status = IsInstalled(install) ? UpscalerGameStates.Installed : UpscalerGameStates.Missing,
             Label = UpscalerLabel.Badge(data.Catalog.Build(install.Build), install.Options.Model),
             AddedArgs = install.AddedArgs.Count > 0 ? install.AddedArgs.ToArray() : null,
             MissingArgs = install.Args.Except(install.AddedArgs, StringComparer.Ordinal).ToArray() is { Length: > 0 } missing ? missing : null,

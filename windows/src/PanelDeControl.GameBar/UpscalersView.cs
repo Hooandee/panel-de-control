@@ -857,6 +857,8 @@ public sealed class UpscalersView : UserControl
         UpdateActionState();
     }
 
+    private bool IsHelix(string build) => detail?.Builds.FirstOrDefault(entry => entry.Id == build)?.Engine == "helixsr";
+
     private bool IsDll(string build) => detail?.Builds.FirstOrDefault(entry => entry.Id == build)?.Engine == "dll";
 
     private string DllLabel(string build, string label) => IsDll(build) ? label + " · " + Localized("UpscalersDllMode") : label;
@@ -881,8 +883,9 @@ public sealed class UpscalersView : UserControl
 
         // In the DLL mode the game's own menu sets the quality, as on Linux.
         var dllChosen = selectedBuild is not null && IsDll(selectedBuild);
-        qualityHost.Visibility = dllChosen ? Visibility.Collapsed : Visibility.Visible;
-        qualityLabel.Text = Localized(dllChosen ? "UpscalersDllNoOptions" : "UpscalersQualityLabel");
+        var helixChosen = selectedBuild is not null && IsHelix(selectedBuild);
+        qualityHost.Visibility = dllChosen || helixChosen ? Visibility.Collapsed : Visibility.Visible;
+        qualityLabel.Text = Localized(helixChosen ? "UpscalersHelixPick" : dllChosen ? "UpscalersDllNoOptions" : "UpscalersQualityLabel");
         foreach (var chip in qualityRow.Children.OfType<Button>())
         {
             var active = Equals(chip.Tag, selectedQuality);
@@ -1153,6 +1156,8 @@ public sealed class UpscalersView : UserControl
             "download" when total > 0 => string.Format(Localized("UpscalersProgressDownload"), Megabytes(done), Megabytes(total)),
             "download" => Localized("UpscalersProgressDownloadStart"),
             "install" => Localized("UpscalersProgressInstall"),
+            "python" => Localized("UpscalersProgressPython"),
+            "unpack" => Localized("UpscalersProgressUnpack"),
             "restore" => Localized("UpscalersProgressRestore"),
             _ => Localized("UpscalersProgressPrepare"),
         };
@@ -1196,6 +1201,9 @@ public sealed class UpscalersView : UserControl
             "experimental_required" => "UpscalersErrExperimentalRequired",
             "download_failed" or "hash_mismatch" or "size_mismatch" or "unpack_failed" or "unsafe_archive" => "UpscalersErrDownload",
             "no_space" => "UpscalersErrNoSpace",
+            "helixsr_no_fsr" => "UpscalersErrHelixNoFsr",
+            "helixsr_failed" => "UpscalersErrHelixFailed",
+            "helixsr_missing" => "UpscalersErrHelixMissing",
             "install_unverified" => "UpscalersErrInstallUnverified",
             "files_kept" => "UpscalersErrFilesKept",
             "no_exe" => "UpscalersErrNoExe",

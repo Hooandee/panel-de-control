@@ -49,6 +49,7 @@ public sealed class DataParityTests
                 ["channel"] = build.Channel, ["extra_dir"] = build.ExtraDir,
                 ["models"] = new JsonArray(build.Models.Select(model => (JsonNode)new JsonArray(model.Id, Map(model.Ini))).ToArray()),
                 ["engine"] = build.Engine, ["way"] = build.Way, ["legacy_replace"] = Map(build.LegacyReplace),
+                ["platform_assets"] = new JsonObject(build.PlatformAssets.Select(pair => new KeyValuePair<string, JsonNode?>(pair.Key, List(pair.Value)))),
             }).ToArray()),
         };
         AssertSame(expected, actual);

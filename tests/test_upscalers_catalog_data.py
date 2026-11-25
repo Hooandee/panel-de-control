@@ -86,3 +86,12 @@ def test_duplicate_key_rejected(tmp_path):
     path.write_text('{"schema_version": 1, "schema_version": 1}', encoding="utf-8")
     with pytest.raises(catalog.CatalogError, match="duplicate_key"):
         catalog._read(path)
+
+def test_linux_ignores_platform_assets():
+    build = catalog.BUILDS["hlx-fsr4"]
+    python = catalog.ASSETS["python-3.14.8-embed-amd64"]
+    assert build.platform_assets == {"windows": ("python-3.14.8-embed-amd64",)}
+    assert catalog.build_assets(build) == [catalog.ASSETS[build.archive]]
+    entry = next(item for item in catalog.describe("rdna4") if item["id"] == "hlx-fsr4")
+    assert entry["download_bytes"] == catalog.ASSETS[build.archive].size
+    assert python not in catalog.build_assets(build)

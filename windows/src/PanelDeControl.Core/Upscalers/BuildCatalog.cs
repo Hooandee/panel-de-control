@@ -88,6 +88,12 @@ public sealed class UpscalerBuild
     public string Way { get; internal set; } = "";
 
     public IReadOnlyDictionary<string, string> LegacyReplace { get; internal set; } = new Dictionary<string, string>();
+
+    /// <summary>Asset ids a platform needs on top of the build (Windows has no Python for HelixSR's bridge), by platform name.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> PlatformAssets { get; internal set; } = new Dictionary<string, IReadOnlyList<string>>();
+
+    public IReadOnlyList<string> AssetsFor(string platform) =>
+        PlatformAssets.TryGetValue(platform, out var ids) ? ids : Array.Empty<string>();
 }
 
 /// <summary>
@@ -164,6 +170,7 @@ public sealed class BuildCatalog
         foreach (var build in builds)
         {
             var referenced = build.Assets.Concat(build.Replace.Values).Concat(build.LegacyReplace.Values).Append(build.Archive)
+                .Concat(build.PlatformAssets.Values.SelectMany(ids => ids))
                 .Concat(build.Injector is { Length: > 0 } injector ? new[] { injector } : Array.Empty<string>());
             Check(referenced.All(assetIds.Contains), "missing_asset");
         }
@@ -249,7 +256,7 @@ public sealed class BuildCatalog
     private static UpscalerBuild ReadBuild(DataValue value)
     {
         var item = Fields(value, new[] { "id", "family", "version", "engine", "gpus", "image", "cost", "archive" },
-            new[] { "way", "channel", "available", "extra_dir", "assets", "injector", "replace", "legacy_replace", "ini", "models", "note" });
+            new[] { "way", "channel", "available", "extra_dir", "assets", "injector", "replace", "legacy_replace", "ini", "models", "note", "platform_assets" });
         Check(item.Get("image") is DataNumber { Integer: not null } && item.Get("cost") is DataNumber { Integer: not null }
               && (item.Get("available") is null || item.Get("available") is DataBool), "invalid_build");
         Check(new[] { "channel", "extra_dir", "way", "injector" }.All(key => item.Get(key) is null or DataString), "invalid_build");
@@ -279,6 +286,10 @@ public sealed class BuildCatalog
         build.Engine = Text(item.Get("engine")!);
         build.Way = (item.Get("way") as DataString)?.Value ?? "";
         build.LegacyReplace = Mapping(item.Get("legacy_replace") ?? new DataObject(Array.Empty<KeyValuePair<string, DataValue>>()));
+        var platformAssets = item.Get("platform_assets") ?? new DataObject(Array.Empty<KeyValuePair<string, DataValue>>());
+        Check(platformAssets is DataObject, "invalid_mapping");
+        build.PlatformAssets = ((DataObject)platformAssets).Members
+            .ToDictionary(member => member.Key, member => Strings(member.Value), StringComparer.Ordinal);
         return build;
     }
 

@@ -88,6 +88,18 @@
     "generation": 9
    },
    {
+    "id": "python-3.14.8-embed-amd64",
+    "filename": "python-3.14.8-embed-amd64.zip",
+    "sha256": "a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310",
+    "size": 12601679,
+    "urls": [
+     "https://www.python.org/ftp/python/3.14.8/python-3.14.8-embed-amd64.zip"
+    ],
+    "archive": false,
+    "member": null,
+    "generation": 9
+   },
+   {
     "id": "optipatcher-0.42",
     "filename": "OptiPatcher.asi",
     "sha256": "2a6e033aeda72d63281889480b2380da830530cf6e1e448e2056d451ade75f1b",
@@ -344,7 +356,8 @@
     "models": [],
     "engine": "dll",
     "way": "fsr",
-    "legacy_replace": {}
+    "legacy_replace": {},
+    "platform_assets": {}
    },
    {
     "id": "fsr-4.1.2-lite-dll",
@@ -376,7 +389,8 @@
     "legacy_replace": {
      "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
      "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
-    }
+    },
+    "platform_assets": {}
    },
    {
     "id": "fsr-4.1.2-lite-igpu-dll",
@@ -408,7 +422,8 @@
     "legacy_replace": {
      "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
      "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
-    }
+    },
+    "platform_assets": {}
    },
    {
     "id": "fsr-4.1.1-dll",
@@ -436,7 +451,8 @@
     "models": [],
     "engine": "dll",
     "way": "fsr",
-    "legacy_replace": {}
+    "legacy_replace": {},
+    "platform_assets": {}
    },
    {
     "id": "fsr-4.1.1-lite-dll",
@@ -470,7 +486,8 @@
     "legacy_replace": {
      "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
      "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
-    }
+    },
+    "platform_assets": {}
    },
    {
     "id": "fsr-4.0.2c-dll",
@@ -499,7 +516,8 @@
     "legacy_replace": {
      "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
      "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
-    }
+    },
+    "platform_assets": {}
    },
    {
     "id": "fsr-4.1.2-beta",
@@ -544,7 +562,8 @@
     ],
     "engine": "optiscaler",
     "way": "",
-    "legacy_replace": {}
+    "legacy_replace": {},
+    "platform_assets": {}
    },
    {
     "id": "fsr-4.1.1-rdna2",
@@ -576,7 +595,8 @@
     "models": [],
     "engine": "optiscaler",
     "way": "",
-    "legacy_replace": {}
+    "legacy_replace": {},
+    "platform_assets": {}
    },
    {
     "id": "fsr-4.1.1",
@@ -608,7 +628,8 @@
     "models": [],
     "engine": "optiscaler",
     "way": "",
-    "legacy_replace": {}
+    "legacy_replace": {},
+    "platform_assets": {}
    },
    {
     "id": "fsr-4.0.2c",
@@ -639,7 +660,8 @@
     "models": [],
     "engine": "optiscaler",
     "way": "",
-    "legacy_replace": {}
+    "legacy_replace": {},
+    "platform_assets": {}
    },
    {
     "id": "fsr-3.1",
@@ -673,7 +695,8 @@
     "models": [],
     "engine": "optiscaler",
     "way": "",
-    "legacy_replace": {}
+    "legacy_replace": {},
+    "platform_assets": {}
    },
    {
     "id": "xess",
@@ -705,7 +728,8 @@
     "models": [],
     "engine": "optiscaler",
     "way": "",
-    "legacy_replace": {}
+    "legacy_replace": {},
+    "platform_assets": {}
    },
    {
     "id": "proton-fsr4",
@@ -728,7 +752,8 @@
     "models": [],
     "engine": "proton",
     "way": "",
-    "legacy_replace": {}
+    "legacy_replace": {},
+    "platform_assets": {}
    },
    {
     "id": "hlx-fsr4",
@@ -754,7 +779,12 @@
     "models": [],
     "engine": "helixsr",
     "way": "fsr",
-    "legacy_replace": {}
+    "legacy_replace": {},
+    "platform_assets": {
+     "windows": [
+      "python-3.14.8-embed-amd64"
+     ]
+    }
    }
   ]
  },
@@ -11447,6 +11477,43 @@
    ],
    "value": {},
    "error": "invalid_models"
+  },
+  {
+   "id": "platform-assets-not-mapping",
+   "op": "set",
+   "path": [
+    "builds",
+    13,
+    "platform_assets"
+   ],
+   "value": [],
+   "error": "invalid_mapping"
+  },
+  {
+   "id": "platform-assets-not-list",
+   "op": "set",
+   "path": [
+    "builds",
+    13,
+    "platform_assets",
+    "windows"
+   ],
+   "value": "python",
+   "error": "invalid_list"
+  },
+  {
+   "id": "platform-assets-missing-asset",
+   "op": "set",
+   "path": [
+    "builds",
+    13,
+    "platform_assets",
+    "windows"
+   ],
+   "value": [
+    "no-such-asset"
+   ],
+   "error": "missing_asset"
   },
   {
    "id": "build-missing-asset",

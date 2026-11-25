@@ -9,7 +9,7 @@ using Xunit;
 
 namespace PanelDeControl.Hardware.Tests;
 
-public sealed class UpscalerServiceTests : IDisposable
+public sealed partial class UpscalerServiceTests : IDisposable
 {
     private static readonly UpscalerData Data = UpscalerData.LoadEmbedded();
     private readonly string root = Path.Combine(Path.GetTempPath(), "pdc-upscaler-service-" + Guid.NewGuid().ToString("N"));
@@ -290,7 +290,7 @@ public sealed class UpscalerServiceTests : IDisposable
         Assert.Null(detail.Install);
         Assert.Contains(detail.Builds, build => build.Id == "fsr-3.1");
         Assert.Contains(detail.Builds, build => build.Id.EndsWith("-dll", StringComparison.Ordinal));
-        Assert.DoesNotContain(detail.Builds, build => build.Id == "hlx-fsr4");
+        Assert.Contains(detail.Builds, build => build.Id == "hlx-fsr4" && build.Engine == "helixsr");
         Assert.Equal(detail.Preferred, Data.Catalog.Preferred["rdna35"]);
     }
 
@@ -354,7 +354,6 @@ public sealed class UpscalerServiceTests : IDisposable
     [InlineData("nope", null, null, "unknown_build")]
     [InlineData("fsr-3.1", "ultra-fast", null, "invalid_quality")]
     [InlineData("fsr-3.1", null, "no-such-model", "invalid_model")]
-    [InlineData("hlx-fsr4", null, null, "engine_unsupported")]
     public async Task BadChoicesAreRefusedBeforeAnyJob(string build, string? quality, string? model, string code)
     {
         AddGame("100", "Plain");
@@ -796,7 +795,7 @@ public sealed class UpscalerServiceTests : IDisposable
     }
 
     private UpscalerService Service(Action<UpscalerStateStore>? seed = null, Action? prepare = null, GpuFamilyResult? gpu = null, Func<byte[], int, ScaledCover?>? scaleCover = null,
-        ISteamLaunchOptions? launchOptions = null)
+        ISteamLaunchOptions? launchOptions = null, HelixSr? helix = null, bool noHelix = false)
     {
         var store = new UpscalerStateStore(StatePath);
         seed?.Invoke(store);
@@ -818,7 +817,8 @@ public sealed class UpscalerServiceTests : IDisposable
                 return Task.CompletedTask;
             },
             scaleCover,
-            launchOptions);
+            launchOptions,
+            helix: noHelix ? null : helix ?? NewHelix(new FakeHelixBridge()));
     }
 
     private async Task RunDeferredAsync()

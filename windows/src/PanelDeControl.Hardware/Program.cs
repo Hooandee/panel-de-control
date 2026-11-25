@@ -107,7 +107,8 @@ public static class Program
                 () => GpuFamilyReader.Read(upscalerData.GpuRules),
                 () => upscalerIdentity.Read().Profile?.Key,
                 launchOptions: new SteamLaunchOptions(steamDevTools),
-                vcRuntime: new VcRuntimeProbe().InstalledVersion);
+                vcRuntime: new VcRuntimeProbe().InstalledVersion,
+                helix: HelixSr.ForCatalog(upscalerData.Catalog, UpscalerPaths.Root));
             _ = Task.Run(() => upscalerService.Gpu);
             var upscalersServer = new UpscalersPipeServer(
                 UpscalersPipeServer.PackagedPipeName,
