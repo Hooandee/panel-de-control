@@ -18,7 +18,7 @@ vi.mock("../components/FocusableCard", () => ({ FocusableCard: ({ children }: an
 vi.mock("../components/GameCover", () => ({ GameCover: () => null }));
 vi.mock("../upscalers/BulkPanel", () => ({ BulkPanel: ({ onChanged }: { onChanged: () => void }) => <button onClick={onChanged}>Refresh</button> }));
 vi.mock("../upscalers/overlays", () => ({
-  IN_GAME_MODES: [], reportedAppids: vi.fn(() => []), publishOverview: vi.fn(), readInGameMode: () => "start", setUpscalersSectionOpen: vi.fn(), writeInGameMode: vi.fn(), readCoverBadges: () => true, writeCoverBadges: vi.fn(),
+  IN_GAME_MODES: [], reportedAppids: vi.fn(() => []), publishOverview: vi.fn(), readInGameMode: () => "start", setUpscalersSectionOpen: vi.fn(), writeInGameMode: vi.fn(), readCoverBadges: () => true, writeCoverBadges: vi.fn(), coverScan: () => null,
 }));
 vi.mock("../upscalers/pageMemory", () => ({ showGame: vi.fn(), takeHeldPage: () => null }));
 vi.mock("../upscalers/GameView", () => ({
