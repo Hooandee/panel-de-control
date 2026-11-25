@@ -449,6 +449,67 @@ public sealed class UpscalerServiceTests : IDisposable
         Assert.Equal(UpscalerJobStates.Done, service.Job!.State);
         Assert.Equal("-dx12", steam.Value);
         Assert.Contains(new UpscalerStateStore(StatePath).Actions("100"), action => action.Error == "launch_args_kept");
+        Assert.Equal(new[] { "-dx12" }, new UpscalerStateStore(StatePath).StrandedArgs("100"));
+
+        // Steam comes back: the next look at a game takes them out.
+        steam.Available = true;
+        var later = Service(launchOptions: steam);
+        await later.HandleAsync(UpscalersRequest.Game("100"), CancellationToken.None);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (new UpscalerStateStore(StatePath).StrandedArgs("100").Count > 0 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
+
+        Assert.Equal("", steam.Value);
+        Assert.Empty(new UpscalerStateStore(StatePath).StrandedArgs("100"));
+    }
+
+    [Fact]
+    public async Task ARefusedRequestNeverLeavesAJobRunning()
+    {
+        AddGame("100", "Plain");
+        var service = Service(prepare: PrepareCache, gpu: new GpuFamilyResult("nvidia", "name"));
+
+        var refused = await service.HandleAsync(UpscalersRequest.Install("100", "fsr-4.1.2-beta", null, null, true, frameGen: true, frameGenRoute: "anr"), CancellationToken.None);
+        var next = await service.HandleAsync(UpscalersRequest.Install("100", "fsr-3.1", null, null, true), CancellationToken.None);
+        await RunDeferredAsync();
+
+        Assert.Equal("anr_build", refused.ErrorCode);
+        Assert.Equal(UpscalersResponseStatus.Ok, next.Status);
+        Assert.Equal(UpscalerJobStates.Done, service.Job!.State);
+    }
+
+    [Fact]
+    public async Task ADllInstallWhoseStateWasLostIsStillPanelsAndComesOut()
+    {
+        var game = AddGame("100", "Plain");
+        var before = Snapshot(game);
+        var service = Service(prepare: PrepareDllCache);
+        await service.HandleAsync(UpscalersRequest.Install("100", "fsr-4.1.2-dll", null, null, true), CancellationToken.None);
+        await RunDeferredAsync();
+        Assert.Equal(UpscalerJobStates.Done, service.Job!.State);
+        File.Delete(StatePath);
+
+        var fresh = Service();
+        var detail = (await fresh.HandleAsync(UpscalersRequest.Game("100"), CancellationToken.None)).Game!;
+        Assert.Equal("fsr-4.1.2-dll", detail.Install!.Build);
+        await fresh.HandleAsync(UpscalersRequest.Uninstall("100", true), CancellationToken.None);
+        await RunDeferredAsync();
+
+        Assert.Equal(UpscalerJobStates.Done, fresh.Job!.State);
+        Assert.Equal(before, Snapshot(game));
+    }
+
+    private void PrepareDllCache()
+    {
+        var cache = new AssetCache(Path.Combine(root, "cache"), "tar", new NoNetwork(), _ => long.MaxValue, new[] { TimeSpan.Zero });
+        foreach (var asset in UpscalerPlanner.BuildAssets(Data.Catalog, Data.Catalog.Build("fsr-4.1.2-dll")!))
+        {
+            var path = asset.Member is null ? cache.FilePath(asset) : cache.MemberPath(asset);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, asset.Id);
+        }
     }
 
     [Fact]

@@ -48,10 +48,10 @@ public sealed class SteamLaunchOptions : ISteamLaunchOptions
             + " try { registration && registration.unregister && registration.unregister(); } catch (e) {}"
             + " resolve(value); };"
             + "try { registration = window.SteamClient.Apps.RegisterForAppDetails(" + id + ","
-            + " details => finish({ ok: true, launch: (details && details.strLaunchOptions) || '' }));"
+            + " details => { if (details && typeof details.strLaunchOptions === 'string') finish({ ok: true, launch: details.strLaunchOptions }); });"
             + " if (done && registration && registration.unregister) registration.unregister(); } catch (e) {}"
             + "setTimeout(() => { try { const details = window.appDetailsStore && window.appDetailsStore.GetAppDetails(" + id + ");"
-            + " finish(details ? { ok: true, launch: details.strLaunchOptions || '' } : { ok: false, reason: 'unreadable' }); }"
+            + " finish(details && typeof details.strLaunchOptions === 'string' ? { ok: true, launch: details.strLaunchOptions } : { ok: false, reason: 'unreadable' }); }"
             + " catch (e) { finish({ ok: false, reason: 'unreadable' }); } }, 1200); })";
     }
 

@@ -90,6 +90,7 @@ public sealed class UpscalerStateStore
     private readonly Dictionary<string, StoredUpscaler> _installs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<UpscalerAction>> _actions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<UpscalerHistoryItem>> _history = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<string>> _strandedArgs = new(StringComparer.Ordinal);
 
     /// <param name="path">The state file.</param>
     /// <param name="replace">Moves the finished temporary file over the state file; replaceable so a test can fail it.</param>
@@ -113,11 +114,50 @@ public sealed class UpscalerStateStore
         }
     }
 
+    /// <summary>A copy: changing it never changes what the store holds until <see cref="SetInstall"/> saves it.</summary>
     public StoredUpscaler? Install(string appId)
     {
         lock (_lock)
         {
-            return _installs.TryGetValue(appId, out var stored) ? stored : null;
+            return _installs.TryGetValue(appId, out var stored) ? Copy(stored) : null;
+        }
+    }
+
+    /// <summary>Launch arguments Panel added and could not take out of Steam yet (Steam closed or without its debugging port).</summary>
+    public IReadOnlyList<string> StrandedArgs(string appId)
+    {
+        lock (_lock)
+        {
+            return _strandedArgs.TryGetValue(appId, out var list) ? list.ToList() : new List<string>();
+        }
+    }
+
+    public IReadOnlyList<string> AppsWithStrandedArgs
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _strandedArgs.Keys.ToList();
+            }
+        }
+    }
+
+    public void SetStrandedArgs(string appId, IReadOnlyList<string> args)
+    {
+        lock (_lock)
+        {
+            Mutate(() =>
+            {
+                if (args.Count == 0)
+                {
+                    _strandedArgs.Remove(appId);
+                }
+                else
+                {
+                    _strandedArgs[appId] = args.Distinct(StringComparer.Ordinal).ToList();
+                }
+            });
         }
     }
 
@@ -193,7 +233,7 @@ public sealed class UpscalerStateStore
     {
         lock (_lock)
         {
-            Mutate(() => _installs[appId] = new StoredUpscaler(install, installedAt));
+            Mutate(() => _installs[appId] = Copy(new StoredUpscaler(install, installedAt)));
         }
     }
 
@@ -232,6 +272,7 @@ public sealed class UpscalerStateStore
         var installs = new Dictionary<string, StoredUpscaler>(_installs, StringComparer.Ordinal);
         var actions = _actions.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
         var history = _history.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
+        var stranded = _strandedArgs.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
         try
         {
             change();
@@ -255,6 +296,12 @@ public sealed class UpscalerStateStore
             foreach (var pair in history)
             {
                 _history[pair.Key] = pair.Value;
+            }
+
+            _strandedArgs.Clear();
+            foreach (var pair in stranded)
+            {
+                _strandedArgs[pair.Key] = pair.Value;
             }
 
             throw;
@@ -288,6 +335,11 @@ public sealed class UpscalerStateStore
                     _installs[game.Key] = stored;
                 }
 
+                if (entry.Get("stranded_args") is DataArray strandedArgs && Strings(strandedArgs) is { Count: > 0 } args)
+                {
+                    _strandedArgs[game.Key] = args.ToList();
+                }
+
                 if (entry.Get("history") is DataArray past)
                 {
                     var items = past.Items.OfType<DataObject>().Select(ReadHistory).Where(item => item is not null).Cast<UpscalerHistoryItem>().ToList();
@@ -313,18 +365,24 @@ public sealed class UpscalerStateStore
             _installs.Clear();
             _actions.Clear();
             _history.Clear();
+            _strandedArgs.Clear();
         }
     }
 
     private void Save()
     {
         var games = new List<KeyValuePair<string, DataValue>>();
-        foreach (var appId in _installs.Keys.Concat(_actions.Keys).Concat(_history.Keys).Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
+        foreach (var appId in _installs.Keys.Concat(_actions.Keys).Concat(_history.Keys).Concat(_strandedArgs.Keys).Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
         {
             var members = new List<KeyValuePair<string, DataValue>>();
             if (_installs.TryGetValue(appId, out var stored))
             {
                 members.Add(Member("install", WriteInstall(stored)));
+            }
+
+            if (_strandedArgs.TryGetValue(appId, out var strandedArgs) && strandedArgs.Count > 0)
+            {
+                members.Add(Member("stranded_args", new DataArray(strandedArgs.Select(arg => (DataValue)new DataString(arg)).ToList())));
             }
 
             if (_history.TryGetValue(appId, out var past) && past.Count > 0)
@@ -445,6 +503,9 @@ public sealed class UpscalerStateStore
         var at = install.Get("installed_at") is DataNumber number ? number.Real : 0;
         return new StoredUpscaler(installed, at);
     }
+
+    private static StoredUpscaler Copy(StoredUpscaler stored) =>
+        ReadInstall((DataObject)WriteInstall(stored)) ?? stored;
 
     private static IReadOnlyList<string> Strings(DataValue? value) =>
         value is DataArray list ? list.Items.OfType<DataString>().Select(item => item.Value).ToList() : new List<string>();

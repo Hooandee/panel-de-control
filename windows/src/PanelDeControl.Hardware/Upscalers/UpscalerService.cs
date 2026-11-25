@@ -39,6 +39,7 @@ public sealed class UpscalerService : IUpscalersController
     private readonly Func<Func<Task>, Task> start;
     private readonly Func<byte[], int, ScaledCover?> scaleCover;
     private readonly ISteamLaunchOptions? launchOptions;
+    private int retrying;
     private readonly Func<string?> vcRuntime;
     private readonly Dictionary<string, (double Until, UpscalerCover? Cover)> covers = new(StringComparer.Ordinal);
     private readonly object coverLock = new();
@@ -202,6 +203,25 @@ public sealed class UpscalerService : IUpscalersController
     public UpscalerGameDetail Game(string appId)
     {
         var app = steam.Find(appId) ?? throw new UpscalerException("not_installed");
+        if (launchOptions is not null && store.AppsWithStrandedArgs.Count > 0 && Interlocked.CompareExchange(ref retrying, 1, 0) == 0)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await RetryStrandedArgsAsync().ConfigureAwait(false);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    log("upscalers.launch", exception.GetType().Name);
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref retrying, 0);
+                }
+            });
+        }
+
         IReadOnlyList<string>? images = null;
         try
         {
@@ -323,12 +343,6 @@ public sealed class UpscalerService : IUpscalersController
             throw new UpscalerException("invalid_model");
         }
 
-        var app = steam.Find(appId) ?? throw new UpscalerException("not_installed");
-        var recipe = Recipe(app);
-        var automatic = build.Engine == "optiscaler" ? AutomaticRecipe.Plan(data.Recipes, recipe) : null;
-
-        GameGuards.EnsureCanInstall(app, runningImages());
-        var job = jobs.Begin("install", appId);
         if (request.Sharpness is not null && !data.Catalog.Sharpness.ContainsKey(request.Sharpness))
         {
             throw new UpscalerException("invalid_sharpness");
@@ -339,6 +353,15 @@ public sealed class UpscalerService : IUpscalersController
             throw new UpscalerException("anr_build");
         }
 
+        var app = steam.Find(appId) ?? throw new UpscalerException("not_installed");
+        var recipe = Recipe(app);
+        var automatic = build.Engine == "optiscaler" ? AutomaticRecipe.Plan(data.Recipes, recipe) : null;
+        var resolved = Resolved(app, build.Engine);
+
+        // Everything that can refuse the request runs before the job starts: a job is only ever left by Finish or Fail.
+        GameGuards.EnsureCanInstall(app, runningImages());
+        var job = jobs.Begin("install", appId);
+
         var choice = new UpscalerChoice
         {
             Quality = request.Quality,
@@ -347,7 +370,7 @@ public sealed class UpscalerService : IUpscalersController
             FrameGen = request.FrameGen == true,
             FrameGenRoute = request.FrameGenRoute,
         };
-        _ = start(() => RunInstallAsync(app, build.Id, choice, Resolved(app, build.Engine), automatic));
+        _ = start(() => RunInstallAsync(app, build.Id, choice, resolved, automatic));
         return Ok(job: job);
     }
 
@@ -458,9 +481,16 @@ public sealed class UpscalerService : IUpscalersController
                 throw new UpscalerException("files_kept", kept.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
             }
 
-            if (stored.Install.AddedArgs.Count > 0 && !await RevertLaunchArgsAsync(appId, stored.Install.AddedArgs).ConfigureAwait(false))
+            var added = stored.Install.AddedArgs.Union(store.StrandedArgs(appId), StringComparer.Ordinal).ToList();
+            if (added.Count > 0 && !await RevertLaunchArgsAsync(appId, added).ConfigureAwait(false))
             {
+                // Kept apart from the install so a later look at the game, or the next install, still takes them out.
+                store.SetStrandedArgs(appId, added);
                 Record(appId, "launch", "error", stored.Install.Build, "launch_args_kept");
+            }
+            else if (added.Count > 0)
+            {
+                store.SetStrandedArgs(appId, Array.Empty<string>());
             }
 
             store.ClearInstall(appId);
@@ -479,6 +509,12 @@ public sealed class UpscalerService : IUpscalersController
     /// </summary>
     private async Task ApplyLaunchArgsAsync(string appId, InstalledUpscaler install)
     {
+        var stranded = store.StrandedArgs(appId);
+        if (stranded.Count > 0)
+        {
+            install.AddedArgs = install.AddedArgs.Union(stranded, StringComparer.Ordinal).ToList();
+        }
+
         if ((install.Args.Count == 0 && install.AddedArgs.Count == 0) || launchOptions is null || !long.TryParse(appId, out var id))
         {
             return;
@@ -509,16 +545,39 @@ public sealed class UpscalerService : IUpscalersController
             var written = await launchOptions.WriteAsync(id, plan.Value, false, CancellationToken.None).ConfigureAwait(false);
             if (written.Outcome != SteamLaunchOptionsOutcome.Written)
             {
+                // Unconfirmed may still have reached Steam: the union stays recorded so removal can take it out.
                 log("upscalers.launch", $"{appId} write {written.Outcome} {written.Reason}");
-                install.AddedArgs = before;
-                store.SetInstall(appId, install, installedAt);
                 return;
             }
         }
 
         install.AddedArgs = plan.Added;
         store.SetInstall(appId, install, installedAt);
+        if (stranded.Count > 0)
+        {
+            store.SetStrandedArgs(appId, Array.Empty<string>());
+        }
+
         WriteRecord(install, installedAt);
+    }
+
+    /// <summary>Takes out arguments a removal left in Steam, once Steam can be reached again.</summary>
+    private async Task RetryStrandedArgsAsync()
+    {
+        foreach (var appId in store.AppsWithStrandedArgs)
+        {
+            if (store.Install(appId) is not null || jobs.Snapshot()?.State == UpscalerJobStates.Running)
+            {
+                continue;
+            }
+
+            var stranded = store.StrandedArgs(appId);
+            if (await RevertLaunchArgsAsync(appId, stranded).ConfigureAwait(false))
+            {
+                store.SetStrandedArgs(appId, Array.Empty<string>());
+                log("upscalers.launch", $"{appId} stranded args removed");
+            }
+        }
     }
 
     private async Task<bool> RevertLaunchArgsAsync(string appId, IReadOnlyList<string> added)
@@ -635,8 +694,8 @@ public sealed class UpscalerService : IUpscalersController
     /// </summary>
     private string? Recover(SteamApp app, GameAnalysis analysis)
     {
-        var target = analysis.Target;
-        if (target is null || store.Install(app.AppId) is not null || ManifestOf(target) is null
+        var target = PanelFolder(app, analysis);
+        if (target is null || store.Install(app.AppId) is not null
             || store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, target)))
         {
             return null;
@@ -662,14 +721,25 @@ public sealed class UpscalerService : IUpscalersController
     private static GameManifest? ManifestOf(string target) =>
         GameFiles.ReadManifest(target) is { Incomplete: false } manifest && manifest.Engine != "dll" ? manifest : null;
 
+    /// <summary>Where a complete Panel manifest sits in this game: OptiScaler beside the exe, the DLL mode at the root.</summary>
+    private static string? PanelFolder(SteamApp app, GameAnalysis analysis)
+    {
+        if (analysis.Target is { } target && ManifestOf(target) is not null)
+        {
+            return target;
+        }
+
+        return GameFiles.ReadManifest(app.Root) is { Incomplete: false, Engine: "dll" } ? app.Root : null;
+    }
+
     private StoredUpscaler? FromManifest(SteamApp? app)
     {
-        if (app is null || Scan(app, null).Target is not { } target || ManifestOf(target) is null)
+        if (app is null || PanelFolder(app, Scan(app, null)) is not { } target)
         {
             return null;
         }
 
-        return new StoredUpscaler(new InstalledUpscaler { Target = target }, 0);
+        return new StoredUpscaler(new InstalledUpscaler { Target = target, Engine = GameFiles.ReadManifest(target)?.Engine ?? "optiscaler" }, 0);
     }
 
     private static UpscalerGameSummary WithState(UpscalerGameSummary row, string state)
