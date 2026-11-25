@@ -59,7 +59,7 @@
     <CornerRadius x:Key="PdcRadiusInset">14</CornerRadius>
     <CornerRadius x:Key="PdcRadiusChip">12</CornerRadius>
     <CornerRadius x:Key="PdcRadiusBar">20</CornerRadius>
-    <CornerRadius x:Key="PdcRadiusRound">999</CornerRadius>
+    <CornerRadius x:Key="PdcRadiusRound">9</CornerRadius>
     <CornerRadius x:Key="PdcRadiusToggle">15</CornerRadius>
     <CornerRadius x:Key="PdcRadiusKnob">11</CornerRadius>
     <CornerRadius x:Key="PdcRadiusThumb">13</CornerRadius>

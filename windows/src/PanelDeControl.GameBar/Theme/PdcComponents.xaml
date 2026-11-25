@@ -45,7 +45,8 @@
         <Setter Property="BorderBrush" Value="{ThemeResource PdcCardRimBrush}" />
         <Setter Property="BorderThickness" Value="{ThemeResource PdcRimThickness}" />
         <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusRound}" />
-        <Setter Property="Padding" Value="10,3,10,4" />
+        <Setter Property="Padding" Value="10,4,10,5" />
+        <Setter Property="MinHeight" Value="26" />
     </Style>
     <Style x:Key="PdcIconTileStyle" TargetType="Border">
         <Setter Property="Width" Value="34" />
