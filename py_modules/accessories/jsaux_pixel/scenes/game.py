@@ -59,7 +59,7 @@ class SessionScene(Scene):
                 for i in range(56):
                     canvas.px(4 + i, 47, mix(theme.start, theme.end, i / 55) if i < round(56 * hour_progress) else theme.dim)
             else:
-                _centered(canvas, 18, "--:--", fonts.big(14), theme.soft)
+                _centered(canvas, 14, "0:00", fonts.big(18), theme.dim)
                 _centered(canvas, 38, words(ctx.options).idle, fonts.TINY, theme.soft)
             return canvas
 
