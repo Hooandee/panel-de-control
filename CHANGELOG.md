@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.96.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.95.1...panel-de-control-v0.96.0) (2026-11-25)
+
+
+### Features
+
+* **accessories:** control the JSAUX PIXEL faceplate on the Steam Machine ([#1506](https://github.com/Hooandee/panel-de-control/issues/1506)) ([c41174e](https://github.com/Hooandee/panel-de-control/commit/c41174e688e2b1db98cc199630378226530012bb))
+
 ## [0.95.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.95.0...panel-de-control-v0.95.1) (2026-11-24)
 
 
