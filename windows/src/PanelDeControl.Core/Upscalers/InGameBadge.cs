@@ -136,11 +136,6 @@ public static class InGameContent
                 ? new BadgeSpan(text.Fallback(fallback), BadgeTone.Warn)
                 : new BadgeSpan(ObservedProvider(facts) ?? facts.Label, BadgeTone.Normal),
         };
-        if (facts.RenderHeight is { } render && facts.OutputHeight is { } output)
-        {
-            first.Add(new BadgeSpan(string.Format(CultureInfo.InvariantCulture, "{0}p → {1}p", render, output), BadgeTone.Muted));
-        }
-
         lines.Add(new BadgeLine(first));
         if (facts.FrameGen)
         {

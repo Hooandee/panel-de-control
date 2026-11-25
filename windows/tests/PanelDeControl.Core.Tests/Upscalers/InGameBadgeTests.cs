@@ -72,15 +72,14 @@ public sealed class InGameBadgeTests : IDisposable
     }
 
     [Fact]
-    public void FirstLineIsTheBuildLabelWithTheResolution()
+    public void FirstLineIsTheBuildLabelWithoutAResolutionPanelCannotFollowLive()
     {
         var lines = InGameContent.Lines(
             new InGameFacts { Label = "FSR 4.0.2", Active = true, RenderHeight = 720, OutputHeight = 1440 },
             new InGameText("en-US"));
 
-        var line = Assert.Single(lines);
-        Assert.Equal(("FSR 4.0.2", BadgeTone.Normal), (line.Spans[0].Text, line.Spans[0].Tone));
-        Assert.Equal(("720p → 1440p", BadgeTone.Muted), (line.Spans[1].Text, line.Spans[1].Tone));
+        var span = Assert.Single(Assert.Single(lines).Spans);
+        Assert.Equal(("FSR 4.0.2", BadgeTone.Normal), (span.Text, span.Tone));
     }
 
     [Fact]

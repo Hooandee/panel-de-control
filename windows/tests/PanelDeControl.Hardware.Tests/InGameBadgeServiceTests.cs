@@ -55,7 +55,7 @@ public sealed class InGameBadgeServiceTests : IDisposable
         var frame = Assert.IsType<OverlayFrame>(overlay.Last);
         Assert.Equal(new IntPtr(77), frame.GameWindow);
         Assert.Equal(
-            new[] { UpscalerLabel.Badge(Data.Catalog.Build("fsr-4.1.2-beta"), null)!, "720p → 1440p" },
+            new[] { UpscalerLabel.Badge(Data.Catalog.Build("fsr-4.1.2-beta"), null)! },
             frame.Lines[0].Spans.Select(span => span.Text));
 
         now = Start.AddSeconds(9.5);
