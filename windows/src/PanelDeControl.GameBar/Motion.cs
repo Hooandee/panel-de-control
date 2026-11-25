@@ -40,9 +40,17 @@ internal static class Motion
     public static void Glide(FrameworkElement indicator, TranslateTransform transform, double x, double width, bool animate)
     {
         // A finished storyboard holds its end values over local ones, so it is stopped before placing directly
-        // and the end values are written locally once it completes.
-        glide?.Stop();
-        glide = null;
+        // and the end values are written locally once it completes. Stopping one mid-way snaps back to where it
+        // started, so the spot it had reached is kept locally first and the next glide continues from there.
+        if (glide is not null)
+        {
+            var reachedX = transform.X;
+            var reachedWidth = indicator.Width;
+            glide.Stop();
+            transform.X = reachedX;
+            indicator.Width = reachedWidth;
+            glide = null;
+        }
         if (!animate || !Enabled || indicator.Width is not > 0)
         {
             transform.X = x;
