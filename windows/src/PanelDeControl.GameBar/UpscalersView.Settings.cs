@@ -390,6 +390,10 @@ public sealed partial class UpscalersView
         "fg_route_unavailable" => "UpscalersErrFgRoute",
         "ini_changed" or "image_settings_changed" => "UpscalersErrIniChanged",
         "invalid_exe" => "UpscalersErrInvalidExe",
+        "foreign_helix" => "UpscalersErrForeignHelix",
+        "no_foreign" => "UpscalersErrNoForeign",
+        "still_patched" => "UpscalersErrStillPatched",
+        "foreign_backup_pending" => "UpscalersErrForeignBackupPending",
         "cancelled" => "UpscalersErrCancelled",
         _ => null,
     };

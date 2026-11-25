@@ -340,7 +340,7 @@ public static class HelixRestore
         return true;
     }
 
-    internal static IReadOnlyList<(string Current, string Original)> RecordedSwaps(string folder)
+    public static IReadOnlyList<(string Current, string Original)> RecordedSwaps(string folder)
     {
         var swaps = new List<(string, string)>();
         try

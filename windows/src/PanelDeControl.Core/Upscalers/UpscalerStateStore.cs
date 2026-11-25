@@ -94,6 +94,7 @@ public sealed class UpscalerStateStore
     private string? _inGameMode;
     private readonly Dictionary<string, ImageSettingsReceipt> _imageReceipts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _exes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ForeignBackup> _foreignBackups = new(StringComparer.Ordinal);
 
     /// <param name="path">The state file.</param>
     /// <param name="replace">Moves the finished temporary file over the state file; replaceable so a test can fail it.</param>
@@ -168,6 +169,33 @@ public sealed class UpscalerStateStore
                 else
                 {
                     _exes[appId] = exe!;
+                }
+            });
+        }
+    }
+
+    /// <summary>Another tool's files Panel moved aside for this game; a copy.</summary>
+    public ForeignBackup? ForeignBackupOf(string appId)
+    {
+        lock (_lock)
+        {
+            return _foreignBackups.TryGetValue(appId, out var backup) ? backup.Copy() : null;
+        }
+    }
+
+    public void SetForeignBackup(string appId, ForeignBackup? backup)
+    {
+        lock (_lock)
+        {
+            Mutate(() =>
+            {
+                if (backup is null)
+                {
+                    _foreignBackups.Remove(appId);
+                }
+                else
+                {
+                    _foreignBackups[appId] = backup.Copy();
                 }
             });
         }
@@ -359,6 +387,7 @@ public sealed class UpscalerStateStore
         var inGameMode = _inGameMode;
         var receipts = new Dictionary<string, ImageSettingsReceipt>(_imageReceipts, StringComparer.Ordinal);
         var exes = new Dictionary<string, string>(_exes, StringComparer.Ordinal);
+        var foreign = _foreignBackups.ToDictionary(pair => pair.Key, pair => pair.Value.Copy(), StringComparer.Ordinal);
         try
         {
             change();
@@ -401,6 +430,12 @@ public sealed class UpscalerStateStore
             foreach (var pair in exes)
             {
                 _exes[pair.Key] = pair.Value;
+            }
+
+            _foreignBackups.Clear();
+            foreach (var pair in foreign)
+            {
+                _foreignBackups[pair.Key] = pair.Value;
             }
 
             throw;
@@ -449,6 +484,11 @@ public sealed class UpscalerStateStore
                     _exes[game.Key] = chosen.Value;
                 }
 
+                if (ForeignBackup.FromData(entry.Get("foreign_backup")) is { } foreignBackup)
+                {
+                    _foreignBackups[game.Key] = foreignBackup;
+                }
+
                 if (ReadReceipt(entry.Get("image_settings")) is { } receipt)
                 {
                     _imageReceipts[game.Key] = receipt;
@@ -482,13 +522,14 @@ public sealed class UpscalerStateStore
             _strandedArgs.Clear();
             _imageReceipts.Clear();
             _exes.Clear();
+            _foreignBackups.Clear();
         }
     }
 
     private void Save()
     {
         var games = new List<KeyValuePair<string, DataValue>>();
-        foreach (var appId in _installs.Keys.Concat(_actions.Keys).Concat(_history.Keys).Concat(_strandedArgs.Keys).Concat(_imageReceipts.Keys).Concat(_exes.Keys).Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
+        foreach (var appId in _installs.Keys.Concat(_actions.Keys).Concat(_history.Keys).Concat(_strandedArgs.Keys).Concat(_imageReceipts.Keys).Concat(_exes.Keys).Concat(_foreignBackups.Keys).Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
         {
             var members = new List<KeyValuePair<string, DataValue>>();
             if (_installs.TryGetValue(appId, out var stored))
@@ -499,6 +540,11 @@ public sealed class UpscalerStateStore
             if (_exes.TryGetValue(appId, out var chosenExe))
             {
                 members.Add(Member("exe", new DataString(chosenExe)));
+            }
+
+            if (_foreignBackups.TryGetValue(appId, out var savedBackup))
+            {
+                members.Add(Member("foreign_backup", savedBackup.ToData()));
             }
 
             if (_strandedArgs.TryGetValue(appId, out var strandedArgs) && strandedArgs.Count > 0)

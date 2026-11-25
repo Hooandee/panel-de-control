@@ -583,6 +583,15 @@
   <data name="UpscalersExeAuto" xml:space="preserve"><value>Rilevalo da solo</value></data>
   <data name="UpscalersErrInvalidExe" xml:space="preserve"><value>Questo eseguibile non è nella cartella del gioco.</value></data>
   <data name="UpscalersErrCancelled" xml:space="preserve"><value>Annullato. Il gioco è rimasto com'era.</value></data>
+  <data name="UpscalersAdoptForeign" xml:space="preserve"><value>Metti da parte quello di un altro strumento</value></data>
+  <data name="UpscalersRestoreForeign" xml:space="preserve"><value>Ripristina quello di prima</value></data>
+  <data name="UpscalersAdoptedForeign" xml:space="preserve"><value>Messo da parte. Ora puoi attivarne uno di Panel</value></data>
+  <data name="UpscalersRestoredForeign" xml:space="preserve"><value>Ripristinato com'era</value></data>
+  <data name="UpscalersForeignKept" xml:space="preserve"><value>Restano da parte</value></data>
+  <data name="UpscalersErrForeignHelix" xml:space="preserve"><value>HelixSR di un altro strumento: rimuovilo con il suo installer.</value></data>
+  <data name="UpscalersErrNoForeign" xml:space="preserve"><value>Non resta nulla di un altro strumento da mettere da parte.</value></data>
+  <data name="UpscalersErrStillPatched" xml:space="preserve"><value>Rimuovi prima l'upscaler di Panel.</value></data>
+  <data name="UpscalersErrForeignBackupPending" xml:space="preserve"><value>Ripristina prima ciò che Panel ha messo da parte dell'altro strumento.</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>Modalità DLL</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>In modalità DLL, modifica la qualità nel gioco.</value></data>

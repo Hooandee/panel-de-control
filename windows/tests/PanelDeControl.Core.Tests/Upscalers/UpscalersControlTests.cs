@@ -76,7 +76,29 @@ public sealed class UpscalersControlTests
         var cancel = Back(UpscalersRequest.Cancel(true));
         Assert.Equal((UpscalersOperation.Cancel, null, true), (cancel.Operation, cancel.AppId, cancel.ExperimentalEnabled));
         Assert.Equal(new[] { 13, 14, 15 }, new[] { UpscalersOperation.SetExe, UpscalersOperation.Verify, UpscalersOperation.Cancel }.Select(op => (int)op));
+
+        var adopt = Back(UpscalersRequest.AdoptForeign("1245620", true));
+        Assert.Equal((UpscalersOperation.AdoptForeign, "1245620", true), (adopt.Operation, adopt.AppId, adopt.ExperimentalEnabled));
+        Assert.Equal(UpscalersOperation.RestoreForeign, Back(UpscalersRequest.RestoreForeign("1245620", true)).Operation);
+        Assert.Equal(new[] { 16, 17 }, new[] { UpscalersOperation.AdoptForeign, UpscalersOperation.RestoreForeign }.Select(op => (int)op));
     }
+
+    [Fact]
+    public void ForeignAnswersAndTheBackupMarkerRoundTrip()
+    {
+        var moved = Roundtrip(new UpscalersResponse { Status = UpscalersResponseStatus.Ok, Moved = new[] { "OptiScaler.ini", "dxgi.dll" } });
+        Assert.Equal(new[] { "OptiScaler.ini", "dxgi.dll" }, moved.Moved);
+        Assert.Null(moved.Restored);
+        var restored = Roundtrip(new UpscalersResponse { Status = UpscalersResponseStatus.Ok, Restored = new[] { "OptiScaler.ini" }, Kept = new[] { "dxgi.dll" } });
+        Assert.Equal(new[] { "OptiScaler.ini" }, restored.Restored);
+        Assert.Equal(new[] { "dxgi.dll" }, restored.Kept);
+        var game = Roundtrip(new UpscalersResponse { Status = UpscalersResponseStatus.Ok, Game = new UpscalerGameDetail { ForeignBackup = new UpscalerForeignBackup { At = 1700000000 } } });
+        Assert.Equal(1700000000, game.Game!.ForeignBackup!.At);
+        Assert.Throws<InvalidDataException>(() => UpscalersWireCodec.SerializeResponse(new UpscalersResponse { Status = UpscalersResponseStatus.Ok, Moved = new[] { "a/b" } }));
+    }
+
+    private static UpscalersResponse Roundtrip(UpscalersResponse response) =>
+        UpscalersWireCodec.DeserializeResponse(UpscalersWireCodec.SerializeResponse(response));
 
     [Theory]
     [InlineData("{\"operation\":\"set_ini\",\"appid\":\"1\",\"value\":\"1\"}")]
@@ -104,6 +126,10 @@ public sealed class UpscalersControlTests
     [InlineData("{\"operation\":\"verify\",\"appid\":\"1\",\"experimental\":true}")]
     [InlineData("{\"operation\":\"verify\",\"appid\":\"1\",\"exe\":\"Game.exe\"}")]
     [InlineData("{\"operation\":\"cancel\",\"appid\":\"1\"}")]
+    [InlineData("{\"operation\":\"adopt_foreign\"}")]
+    [InlineData("{\"operation\":\"adopt_foreign\",\"appid\":\"1\",\"exe\":\"Game.exe\"}")]
+    [InlineData("{\"operation\":\"restore_foreign\",\"appid\":\"1\",\"key\":\"A.B\"}")]
+    [InlineData("{\"operation\":\"restore_foreign\",\"appid\":\"1\",\"build\":\"fsr-3.1\"}")]
     [InlineData("{\"operation\":\"cancel\",\"experimental\":true,\"build\":\"fsr-3.1\"}")]
     public void InvalidSettingsRequestsAreRefused(string payload)
     {

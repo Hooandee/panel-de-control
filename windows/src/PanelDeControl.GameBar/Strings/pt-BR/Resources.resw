@@ -583,6 +583,15 @@
   <data name="UpscalersExeAuto" xml:space="preserve"><value>Detectar sozinho</value></data>
   <data name="UpscalersErrInvalidExe" xml:space="preserve"><value>Esse executável não está dentro da pasta do jogo.</value></data>
   <data name="UpscalersErrCancelled" xml:space="preserve"><value>Cancelado. O jogo ficou como estava.</value></data>
+  <data name="UpscalersAdoptForeign" xml:space="preserve"><value>Deixar de lado o de outra ferramenta</value></data>
+  <data name="UpscalersRestoreForeign" xml:space="preserve"><value>Restaurar o anterior</value></data>
+  <data name="UpscalersAdoptedForeign" xml:space="preserve"><value>Deixado de lado. Agora você pode ativar um do Panel</value></data>
+  <data name="UpscalersRestoredForeign" xml:space="preserve"><value>Restaurado como estava</value></data>
+  <data name="UpscalersForeignKept" xml:space="preserve"><value>Ficam guardados</value></data>
+  <data name="UpscalersErrForeignHelix" xml:space="preserve"><value>HelixSR de outra ferramenta: remova-o com o instalador dele.</value></data>
+  <data name="UpscalersErrNoForeign" xml:space="preserve"><value>Não sobrou nada de outra ferramenta para deixar de lado.</value></data>
+  <data name="UpscalersErrStillPatched" xml:space="preserve"><value>Remova antes o upscaler do Panel.</value></data>
+  <data name="UpscalersErrForeignBackupPending" xml:space="preserve"><value>Restaure antes o que o Panel guardou da outra ferramenta.</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>Modo DLL</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>No modo DLL, altere a qualidade no jogo.</value></data>

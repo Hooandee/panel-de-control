@@ -10,6 +10,8 @@ namespace PanelDeControl.GameBar;
 public sealed partial class UpscalersView
 {
     private readonly Button verifyButton = new();
+    private readonly Button adoptButton = new();
+    private readonly Button restoreForeignButton = new();
     private readonly Button cancelButton = new();
     private readonly StackPanel exePanel = new() { Spacing = 6 };
     private readonly TextBox exeBox = new();
@@ -21,6 +23,13 @@ public sealed partial class UpscalersView
     {
         Prepare(verifyButton, "UpscalersVerify", VerifyButton_Click);
         return verifyButton;
+    }
+
+    private UIElement BuildForeignButtons()
+    {
+        Prepare(adoptButton, "UpscalersAdoptForeign", (_, _) => Foreign(true));
+        Prepare(restoreForeignButton, "UpscalersRestoreForeign", (_, _) => Foreign(false));
+        return new StackPanel { Spacing = 6, Children = { adoptButton, restoreForeignButton } };
     }
 
     private UIElement BuildCancelButton()
@@ -46,6 +55,11 @@ public sealed partial class UpscalersView
         var idle = !gameBusy && !settingsBusy && !jobRunning && !loadingGame;
         verifyButton.Visibility = detail?.Install is { Build.Length: > 0 } ? Visibility.Visible : Visibility.Collapsed;
         verifyButton.IsEnabled = idle;
+        var foreign = detail is not null && detail.Install is null && (detail.Foreign is not null || detail.Game.State == UpscalerGameStates.Foreign);
+        adoptButton.Visibility = foreign && detail!.Foreign?.Engine != "helixsr" ? Visibility.Visible : Visibility.Collapsed;
+        adoptButton.IsEnabled = idle;
+        restoreForeignButton.Visibility = detail is { Install: null, ForeignBackup: not null } ? Visibility.Visible : Visibility.Collapsed;
+        restoreForeignButton.IsEnabled = idle;
         cancelButton.Visibility = jobRunning ? Visibility.Visible : Visibility.Collapsed;
         cancelButton.IsEnabled = jobRunning;
         exePanel.Visibility = detail is not null ? Visibility.Visible : Visibility.Collapsed;
@@ -102,6 +116,36 @@ public sealed partial class UpscalersView
         if (response.Status != UpscalersResponseStatus.Ok)
         {
             ShowResult(ErrorMessage(response.ErrorCode ?? "upscalers_response_unavailable"), false);
+        }
+    }
+
+    /// <summary>Sets another tool's upscaler aside (kept, restorable) or puts it back, then reloads the game.</summary>
+    private async void Foreign(bool adopt)
+    {
+        if (selectedAppId is not { } appId || gameBusy)
+        {
+            return;
+        }
+
+        gameBusy = true;
+        UpdateActionState();
+        var response = adopt ? await client.AdoptForeignAsync(appId, Experimental) : await client.RestoreForeignAsync(appId, Experimental);
+        gameBusy = false;
+        if (appId != selectedAppId)
+        {
+            return;
+        }
+
+        if (response.Status == UpscalersResponseStatus.Ok)
+        {
+            await LoadGameAsync();
+            var kept = response.Kept is { Length: > 0 } ? " · " + Localized("UpscalersForeignKept") + ": " + string.Join(", ", response.Kept) : string.Empty;
+            ShowResult(Localized(adopt ? "UpscalersAdoptedForeign" : "UpscalersRestoredForeign") + kept, response.Kept is not { Length: > 0 });
+        }
+        else
+        {
+            ShowResult(ErrorMessage(response.ErrorCode ?? "upscalers_response_unavailable"), false);
+            UpdateActionState();
         }
     }
 
