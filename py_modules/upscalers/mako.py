@@ -558,6 +558,7 @@ class Mako:
             empty['rejections']['state_unavailable'] = 1
             return empty
         states = []
+        ended = []
         for path in paths:
             data = _json(path)
             updated = data.get('updated_unix_ms')
@@ -574,9 +575,19 @@ class Mako:
                 reason = 'process_identity'
             if reason:
                 empty['rejections'][reason] = empty['rejections'].get(reason, 0) + 1
+                if reason in ('writer_unlocked', 'process_identity'):
+                    ended.append(data)
                 continue
             states.append(data)
         if not states:
+            if ended:
+                last = max(ended, key=lambda value: value['updated_unix_ms'])
+                active = last.get('frame_generation_active')
+                empty['last_run'] = {
+                    'role': last['role'],
+                    'ended_s_ago': max(0, int(time.time() - last['updated_unix_ms'] / 1000)),
+                    'active': active if type(active) is bool else None,
+                    'error': bool(last.get('error'))}
             return empty
         data = max(states, key=lambda value: value['updated_unix_ms'])
         fields = {'multiplier', 'target_fps', 'adaptive_max_multiplier', 'flow_scale', 'performance_mode',
