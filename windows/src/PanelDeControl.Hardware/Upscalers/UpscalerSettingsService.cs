@@ -112,15 +112,23 @@ public sealed partial class UpscalerService
 
             var before = ReadIni(install.Target, app.Root, strict: false);
             WriteIni(install.Target, app.Root, before, IniText.Apply(before, UpscalerSettings.ConfigureOverrides(catalog, install, choice, frameGen, before)));
+            WroteIni(install, app.Root);
             if (recipe?.ReframeworkUpscaler == true)
             {
-                RewriteReframework(install.Target, choice.Quality);
+                try
+                {
+                    RewriteReframework(install.Target, choice.Quality);
+                }
+                catch (Exception)
+                {
+                    SaveIniWritten(appId, stored, app.Root);
+                    throw;
+                }
             }
 
             var modelChanged = !SameMapping(UpscalerPlanner.ModelOverrides(build, choice.Model), UpscalerPlanner.ModelOverrides(build, current.Model));
             install.Options = Copy(choice, frameGen: choice.FrameGen);
             install.FrameGenRoute = frameGen?.Route;
-            WroteIni(install, app.Root);
             var now = clock();
             if (modelChanged)
             {

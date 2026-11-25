@@ -53,6 +53,26 @@ public sealed class AssetCache
         return Path.Combine(Unpacked(asset), member.Replace('/', Path.DirectorySeparatorChar));
     }
 
+    /// <summary>Removes one cached download by its digest; nothing else.</summary>
+    public void Drop(string sha256)
+    {
+        if (sha256.Length != 64 || !sha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+        {
+            return;
+        }
+        try
+        {
+            var folder = Path.Combine(Root, sha256);
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, true);
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
     public bool Ready(UpscalerAsset asset)
     {
         if (asset.Archive)

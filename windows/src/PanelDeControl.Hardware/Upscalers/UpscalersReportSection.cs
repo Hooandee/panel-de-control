@@ -116,7 +116,9 @@ public static class UpscalersReportSection
         var changed = new JsonObject();
         foreach (var change in drift.Keys)
         {
-            changed[change.Key] = new JsonObject { ["panel"] = change.Panel, ["now"] = change.Now };
+            changed[change.Key] = change.ValueOmitted
+                ? new JsonObject { ["value_omitted"] = true }
+                : new JsonObject { ["panel"] = change.Panel, ["now"] = change.Now };
         }
 
         var advanced = new JsonArray();

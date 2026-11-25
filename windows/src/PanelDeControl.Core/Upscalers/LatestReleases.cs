@@ -32,6 +32,7 @@ public sealed class LatestReleases
     public static readonly TimeSpan Fresh = TimeSpan.FromHours(6);
     public static readonly TimeSpan Retry = TimeSpan.FromMinutes(10);
     private const int Limit = 8 * 1024 * 1024;
+    private readonly TimeSpan _deadline;
     private const long MaxSize = 1024L * 1024 * 1024;
     private const string UserAgent = "panel-de-control-upscalers";
 
@@ -41,9 +42,13 @@ public sealed class LatestReleases
     private readonly Func<DateTimeOffset> _clock;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Dictionary<string, Known>? _memory;
+    private readonly HashSet<string> _rejected = new(StringComparer.Ordinal);
+    private readonly List<string> _superseded = new();
 
-    public LatestReleases(IReadOnlyDictionary<string, ReleaseTrack> tracks, string cacheFile, HttpMessageHandler? handler = null, Func<DateTimeOffset>? clock = null)
+    public LatestReleases(IReadOnlyDictionary<string, ReleaseTrack> tracks, string cacheFile, HttpMessageHandler? handler = null, Func<DateTimeOffset>? clock = null,
+        TimeSpan? deadline = null)
     {
+        _deadline = deadline ?? TimeSpan.FromSeconds(15);
         _tracks = tracks;
         _cacheFile = cacheFile;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
@@ -56,6 +61,34 @@ public sealed class LatestReleases
     public static string ApiUrl(string repo) => "https://api.github.com/repos/" + repo + "/releases?per_page=10";
 
     public bool Tracked(UpscalerAsset asset) => _tracks.ContainsKey(asset.Id);
+
+    /// <summary>A release that failed to download or to unpack is not tried again until Panel restarts.</summary>
+    public void Reject(string sha256)
+    {
+        lock (_rejected)
+        {
+            _rejected.Add(sha256);
+        }
+    }
+
+    private bool Rejected(string sha256)
+    {
+        lock (_rejected)
+        {
+            return _rejected.Contains(sha256);
+        }
+    }
+
+    /// <summary>The releases a newer one has replaced since the last call, never a catalog's pinned one; their cached copies can go.</summary>
+    public IReadOnlyList<string> TakeSuperseded()
+    {
+        lock (_rejected)
+        {
+            var taken = _superseded.ToList();
+            _superseded.Clear();
+            return taken;
+        }
+    }
 
     /// <summary>The build's archive at its newest verified version, or the catalog's pinned archive.</summary>
     public async Task<UpscalerAsset> ResolveArchiveAsync(BuildCatalog catalog, string buildId, CancellationToken cancel = default)
@@ -89,18 +122,25 @@ public sealed class LatestReleases
                     known.Failed = 0;
                     if (found is not null)
                     {
+                        if (known.Release is { } old && old.Sha256 != found.Sha256 && old.Sha256 != pinned.Sha256)
+                        {
+                            lock (_rejected)
+                            {
+                                _superseded.Add(old.Sha256);
+                            }
+                        }
                         known.Release = found;
                     }
                 }
                 catch (Exception error) when (!cancel.IsCancellationRequested
-                    && error is HttpRequestException or IOException or DataFormatException or InvalidOperationException or TaskCanceledException)
+                    && error is HttpRequestException or IOException or DataFormatException or InvalidOperationException or OperationCanceledException)
                 {
                     known.Failed = now;
                 }
                 Save(memory);
             }
             var candidate = known.Release;
-            if (candidate is null || candidate.Sha256 == pinned.Sha256)
+            if (candidate is null || candidate.Sha256 == pinned.Sha256 || Rejected(candidate.Sha256))
             {
                 return pinned;
             }
@@ -149,7 +189,7 @@ public sealed class LatestReleases
                 var name = Text(asset.Get("name"));
                 var url = Text(asset.Get("browser_download_url"));
                 if (!(asset.Get("size") is DataNumber { Integer: { } size } && size > 0 && size <= MaxSize)
-                    || !pattern.IsMatch(name) || !url.StartsWith(owner, StringComparison.Ordinal) || !IsDigest(Text(asset.Get("digest"))))
+                    || !IsPlainName(name) || !pattern.IsMatch(name) || !url.StartsWith(owner, StringComparison.Ordinal) || !IsDigest(Text(asset.Get("digest"))))
                 {
                     continue;
                 }
@@ -166,6 +206,10 @@ public sealed class LatestReleases
         }
         return best;
     }
+
+    private static bool IsPlainName(string name) =>
+        name.Length > 0 && name != "." && name != ".." && name.IndexOfAny(new[] { '\\', '/', ':' }) < 0 && name.IndexOf("..", StringComparison.Ordinal) < 0
+        && name.All(c => c >= ' ');
 
     private static bool IsDigest(string digest) =>
         digest.Length == 71 && digest.StartsWith("sha256:", StringComparison.Ordinal) && digest.Skip(7).All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
@@ -184,19 +228,22 @@ public sealed class LatestReleases
 
     private static double Seconds(DateTimeOffset moment) => moment.ToUnixTimeMilliseconds() / 1000.0;
 
-    private async Task<DataValue> FetchAsync(string url, CancellationToken cancel)
+    private async Task<DataValue> FetchAsync(string url, CancellationToken outer)
     {
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(outer);
+        bounded.CancelAfter(_deadline);
+        var cancel = bounded.Token;
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             throw new HttpRequestException("HTTP " + (int)response.StatusCode);
         }
-        using var source = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var source = await Bounded(response.Content.ReadAsStreamAsync(), cancel).ConfigureAwait(false);
         using var buffer = new MemoryStream();
         var chunk = new byte[64 * 1024];
         int read;
-        while ((read = await source.ReadAsync(chunk, 0, chunk.Length, cancel).ConfigureAwait(false)) > 0)
+        while ((read = await Bounded(source.ReadAsync(chunk, 0, chunk.Length, cancel), cancel).ConfigureAwait(false)) > 0)
         {
             buffer.Write(chunk, 0, read);
             if (buffer.Length > Limit)
@@ -205,6 +252,20 @@ public sealed class LatestReleases
             }
         }
         return DataValue.Parse(buffer.ToArray());
+    }
+
+    private static async Task<T> Bounded<T>(Task<T> task, CancellationToken cancel)
+    {
+        var gone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using (cancel.Register(() => gone.TrySetResult(true)))
+        {
+            if (await Task.WhenAny(task, gone.Task).ConfigureAwait(false) != task)
+            {
+                _ = task.ContinueWith(finished => finished.Exception, TaskContinuationOptions.OnlyOnFaulted);
+                throw new OperationCanceledException(cancel);
+            }
+        }
+        return await task.ConfigureAwait(false);
     }
 
     private Dictionary<string, Known> Load()
@@ -295,7 +356,7 @@ public sealed class LatestReleases
             };
             if (entry.Get("release") is DataObject release
                 && release.Get("size") is DataNumber { Integer: { } size }
-                && Text(release.Get("filename")) is { Length: > 0 } fileName && Text(release.Get("url")) is { Length: > 0 } url
+                && Text(release.Get("filename")) is { Length: > 0 } fileName && IsPlainName(fileName) && Text(release.Get("url")) is { Length: > 0 } url
                 && Text(release.Get("sha256")) is { Length: 64 } sha256)
             {
                 known.Release = new Release(Text(release.Get("published")), Text(release.Get("tag")), fileName, url, sha256, (long)size);
@@ -358,10 +419,22 @@ public static class LatestAssets
         var chosen = await ResolveAsync(latest, pinned, pinnedOnly, cancel).ConfigureAwait(false);
         try
         {
-            return (await cache.EnsureAsync(chosen, progress, cancel).ConfigureAwait(false), chosen);
+            var path = await cache.EnsureAsync(chosen, progress, cancel).ConfigureAwait(false);
+            if (latest is not null && chosen.Sha256 != pinned.Sha256)
+            {
+                foreach (var old in latest.TakeSuperseded())
+                {
+                    if (old != chosen.Sha256 && old != pinned.Sha256)
+                    {
+                        cache.Drop(old);
+                    }
+                }
+            }
+            return (path, chosen);
         }
         catch (AssetException error) when (chosen.Sha256 != pinned.Sha256 && error.Code is not ("cancelled" or "no_space"))
         {
+            latest?.Reject(chosen.Sha256);
             return (await cache.EnsureAsync(pinned, progress, cancel).ConfigureAwait(false), pinned);
         }
     }

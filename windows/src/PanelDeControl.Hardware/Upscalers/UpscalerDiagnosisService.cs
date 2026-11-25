@@ -21,6 +21,12 @@ public sealed partial class UpscalerService
         @"VulkanSpoofing|freely downloadable|GitHub :|Nexus  :|paid for these|MULTIPLAYER|-{10}",
         RegexOptions.CultureInvariant);
 
+    private static readonly Regex UserHome = new(
+        @"(?:[A-Za-z]:)?[\\/](?:home|users)[\\/][^\\/\r\n:<>""']{1,64}",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static readonly Regex ComponentTag = new(@"^[A-Za-z0-9][A-Za-z0-9_.+-]{0,63}\z", RegexOptions.CultureInvariant);
+
     private static readonly string[] LoaderFiles =
     {
         "dxgi.dll", "d3d11.dll", "d3d12.dll", "dinput8.dll", "version.dll", "winmm.dll", "winhttp.dll", "dbghelp.dll", "nvngx.dll",
@@ -84,6 +90,7 @@ public sealed partial class UpscalerService
             report.Foreign = analysis.Foreign && analysis.ForeignIdentity is { } identity
                 ? new UpscalerForeignSummary { Engine = identity.Engine, Variant = identity.Variant, ManifestError = identity.ManifestError }
                 : null;
+            var blocked = Automatic(recipe) is (null, true);
             report.Recipe = recipe is null
                 ? null
                 : new UpscalerDiagnosisRecipe
@@ -92,6 +99,7 @@ public sealed partial class UpscalerService
                     Status = recipe.Status,
                     Revision = recipe.Revision,
                     Installable = AutomaticRecipe.Installable(data.Recipes, recipe),
+                    Blocked = blocked ? true : null,
                     Dependencies = recipe.Dependencies.Count > 0 ? recipe.Dependencies.Take(16).ToArray() : null,
                     RequiredArgs = recipe.Args.Count > 0 ? recipe.Args.Take(16).ToArray() : null,
                 };
@@ -131,7 +139,18 @@ public sealed partial class UpscalerService
             InstalledAt = (long)stored.InstalledAt,
             VerificationSince = install.VerificationSince is { } since ? (long)since : null,
             Options = UpscalerOptions.From(options),
-            Components = install.Components.Take(32).Select(pair => new UpscalerDiagnosisComponent { Id = pair.Key, Sha256 = Grouped(pair.Value) }).ToArray(),
+            Components = install.Components.Take(32).Select(pair =>
+            {
+                install.Origins.TryGetValue(pair.Key, out var origin);
+                return new UpscalerDiagnosisComponent
+                {
+                    Id = pair.Key,
+                    Sha256 = Grouped(pair.Value),
+                    Source = origin?.Source,
+                    Version = origin?.Version is { } tag && ComponentTag.IsMatch(tag) ? tag : null,
+                    Fallback = origin?.Fallback,
+                };
+            }).ToArray(),
             Args = install.Args.Count > 0 ? install.Args.Take(16).ToArray() : null,
             AddedArgs = install.AddedArgs.Count > 0 ? install.AddedArgs.Take(16).ToArray() : null,
             Anr = install.Anr ? true : null,
@@ -232,6 +251,7 @@ public sealed partial class UpscalerService
                 .Split('\n')
                 .Select(line => line.TrimEnd('\r'))
                 .Where(line => Noteworthy.IsMatch(line) && !SkippedLine.IsMatch(line))
+                .Select(line => UserHome.Replace(line, "~"))
                 .Select(line => line.Length > UpscalerDiagnosis.ExcerptLine ? line.Substring(0, UpscalerDiagnosis.ExcerptLine) : line)
                 .TakeLast(LogExcerptLines)
                 .ToArray();
@@ -245,7 +265,7 @@ public sealed partial class UpscalerService
     private UpscalerDiagnosisSolution? CurrentSolution(SteamApp app, GameAnalysis analysis, UpscalerBuild build)
     {
         var resolved = Resolved(app, "optiscaler");
-        var automatic = AutomaticRecipe.Plan(data.Recipes, Recipe(app));
+        var (automatic, blocked) = Automatic(Recipe(app));
         var inputs = analysis.Inputs.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         var effective = UpscalerPlanner.ForGame(data.Catalog, build, inputs, Gpu.Generation, resolved?.Dependencies ?? Array.Empty<string>());
         var generation = data.Catalog.Asset(effective.Archive)?.Generation ?? 9;
@@ -279,7 +299,21 @@ public sealed partial class UpscalerService
             Dependencies = plan.Dependencies.Count > 0 ? plan.Dependencies.Take(16).ToArray() : null,
             FrameGenRoute = plan.FrameGenPlan?.Route,
             FrameGenRoutes = plan.OfferedFrameGenPlan is { } offered ? offered.Routes.Select(pair => pair.Key).ToArray() : null,
+            BlockedReason = blocked ? "recipe_unresolved" : null,
         };
+    }
+
+    /// <summary>The recipe's automatic plan; a recipe Windows cannot satisfy is blocked, not an error.</summary>
+    private (AutomaticRecipe? Plan, bool Blocked) Automatic(GameRecipe? recipe)
+    {
+        try
+        {
+            return (AutomaticRecipe.Plan(data.Recipes, recipe), false);
+        }
+        catch (UpscalerException exception) when (exception.Code == "recipe_unsupported")
+        {
+            return (null, true);
+        }
     }
 
     /// <summary>What sits around the executable that loads code into the game, with whose it is.</summary>
@@ -389,7 +423,7 @@ public sealed partial class UpscalerService
             {
                 AppId = appId,
                 Inputs = analysis.Inputs.Select(input => input.Key).ToArray(),
-                Preferred = UpscalerPlanner.PreferredBuild(data.Catalog, Gpu.Generation, recipe?.RecommendedBuild),
+                Preferred = UpscalerPlanner.PreferredBuild(data.Catalog, Gpu.Generation, Automatic(recipe).Plan?.Recipe.RecommendedBuild),
             });
         }
 

@@ -593,6 +593,7 @@ public sealed class UpscalerStateStore
 
         var options = install.Get("options") as DataObject;
         var components = new List<KeyValuePair<string, string>>();
+        var origins = new Dictionary<string, ComponentOrigin>(StringComparer.Ordinal);
         if (install.Get("components") is DataArray list)
         {
             foreach (var item in list.Items.OfType<DataObject>())
@@ -600,6 +601,10 @@ public sealed class UpscalerStateStore
                 if (Text(item.Get("id")) is { Length: > 0 } id && Text(item.Get("sha256")) is { Length: > 0 } digest)
                 {
                     components.Add(new KeyValuePair<string, string>(id, digest));
+                    if (Text(item.Get("source")) is { Length: > 0 } source)
+                    {
+                        origins[id] = new ComponentOrigin(source, Text(item.Get("version")), Text(item.Get("fallback")));
+                    }
                 }
             }
         }
@@ -636,6 +641,7 @@ public sealed class UpscalerStateStore
             HelixFile = Text(install.Get("helix_file")) ?? "",
             Managed = managed,
             Components = components,
+            Origins = origins,
             GameConfig = install.Get("game_config") is DataArray settings
                 ? settings.Items.OfType<DataObject>().Select(setting => new GameConfigRecord
                 {
@@ -685,11 +691,7 @@ public sealed class UpscalerStateStore
                 Member("fg_route", Optional(options.FrameGenRoute)),
                 Member("model", Optional(options.Model)),
             })),
-            Member("components", new DataArray(install.Components.Select(pair => (DataValue)new DataObject(new[]
-            {
-                Member("id", new DataString(pair.Key)),
-                Member("sha256", new DataString(pair.Value)),
-            })).ToList())),
+            Member("components", new DataArray(install.Components.Select(pair => (DataValue)new DataObject(ComponentMembers(pair, install.Origins))).ToList())),
             Member("managed", new DataArray(install.Managed.Select(key => (DataValue)new DataString(key)).ToList())),
             Member("dll_targets", new DataArray(install.DllTargets.Select(path => (DataValue)new DataString(path)).ToList())),
             Member("anr", new DataBool(install.Anr)),
@@ -801,6 +803,26 @@ public sealed class UpscalerStateStore
     });
 
     private static KeyValuePair<string, DataValue> Member(string key, DataValue value) => new(key, value);
+
+    private static List<KeyValuePair<string, DataValue>> ComponentMembers(KeyValuePair<string, string> component, IReadOnlyDictionary<string, ComponentOrigin> origins)
+    {
+        var members = new List<KeyValuePair<string, DataValue>> { Member("id", new DataString(component.Key)), Member("sha256", new DataString(component.Value)) };
+        if (origins.TryGetValue(component.Key, out var origin))
+        {
+            members.Add(Member("source", new DataString(origin.Source)));
+            if (origin.Version is not null)
+            {
+                members.Add(Member("version", new DataString(origin.Version)));
+            }
+
+            if (origin.Fallback is not null)
+            {
+                members.Add(Member("fallback", new DataString(origin.Fallback)));
+            }
+        }
+
+        return members;
+    }
 
     private static List<KeyValuePair<string, string>> Pairs(DataValue? value) =>
         value is DataObject mapping

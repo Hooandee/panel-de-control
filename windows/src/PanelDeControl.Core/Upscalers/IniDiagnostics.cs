@@ -19,12 +19,16 @@ public sealed class IniWritten
 
 public sealed class IniChange
 {
-    public IniChange(string key, string panel, string? now)
+    public IniChange(string key, string panel, string? now, bool valueOmitted = false)
     {
         Key = key;
         Panel = panel;
         Now = now;
+        ValueOmitted = valueOmitted;
     }
+
+    /// <summary>The key is one the user edited and its values are free-form: neither is shown.</summary>
+    public bool ValueOmitted { get; }
 
     public string Key { get; }
 
@@ -187,9 +191,23 @@ public static class IniDiagnostics
         }
 
         var now = Values(text, install.Edited.Select(pair => pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        var reported = new HashSet<string>(Keys, StringComparer.Ordinal);
         var changed = written.Values
             .Where(pair => !now.TryGetValue(pair.Key, out var current) || current != pair.Value)
-            .Select(pair => new IniChange(pair.Key, pair.Value, now.TryGetValue(pair.Key, out var current) ? current : null))
+            .Select(pair =>
+            {
+                now.TryGetValue(pair.Key, out var current);
+                if (reported.Contains(pair.Key))
+                {
+                    return new IniChange(pair.Key, pair.Value, current);
+                }
+
+                var panel = Request(text, pair.Key, pair.Value).Value;
+                var shown = current is null ? null : Request(text, pair.Key, current).Value;
+                return panel is null || (current is not null && shown is null)
+                    ? new IniChange(Truncate(pair.Key, 120), "", null, true)
+                    : new IniChange(Truncate(pair.Key, 120), panel, shown);
+            })
             .ToList();
         return new IniDrift(changed.Count > 0 ? IniDrift.Changed : IniDrift.AsWritten, written.At, modifiedAt, changed.Take(MaximumDriftKeys).ToList());
     }
