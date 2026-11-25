@@ -5,13 +5,17 @@ import type { AccessorySceneMeta } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import type { Block } from "./ComposerEditor";
+import { Chip, ChipRow } from "./EditorShell";
 import { MyCreations } from "./MyCreations";
 import { DecodedFrames } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
 import { loadPreview, setGalleryCategory, useSceneDraft } from "./useAccessories";
-import { tileStyle, OnPanelDot } from "./tiles";
+import { OnPanelDot, TileRows, tileStyle } from "./tiles";
 
 const TILE_PITCH = 1.75;
+const CATEGORIES_PER_ROW = 3;
+const chunk = <T,>(list: T[], size: number): T[][] =>
+  Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, i * size + size));
 
 const SceneTile: FC<{ scene: AccessorySceneMeta; selected: boolean; onPanel: boolean; onPick: () => void }> = ({ scene, selected, onPanel, onPick }) => {
   const { t } = useI18n();
@@ -31,22 +35,6 @@ const SceneTile: FC<{ scene: AccessorySceneMeta; selected: boolean; onPanel: boo
         <span style={{ fontSize: theme.font.caption, fontWeight: 650, color: selected || focused ? theme.color.textPrimary : theme.color.textMuted,
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t(scene.labelKey)}</span>
       </div>
-    </Focusable>
-  );
-};
-
-const CategoryChip: FC<{ label: string; selected: boolean; onPick: () => void }> = ({ label, selected, onPick }) => {
-  const [focused, setFocused] = useState(false);
-  return (
-    <Focusable onActivate={onPick} onClick={onPick} onGamepadFocus={() => setFocused(true)}
-      onGamepadBlur={() => setFocused(false)}
-      style={{ flex: "0 0 auto", textAlign: "center", padding: "7px 12px", borderRadius: 999, fontSize: theme.font.caption, fontWeight: 700,
-        background: selected ? theme.color.selectedFill : "rgba(255,255,255,0.06)",
-        color: selected ? theme.color.onAccent : theme.color.textPrimary,
-        boxShadow: focused ? `0 0 0 2px ${theme.color.surface}, 0 0 0 4px ${theme.color.accent}` : "none",
-        transform: focused ? "scale(1.05)" : "scale(1)", transition: "transform 120ms ease, box-shadow 120ms ease",
-        whiteSpace: "nowrap" }}>
-      {label}
     </Focusable>
   );
 };
@@ -71,9 +59,15 @@ export const SceneGallery: FC<{
   const shown = catalog.filter((scene) => scene.category === active);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-      <Focusable flow-children="row" style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", padding: "4px 2px" }}>
-        {categories.map((id) => (
-          <CategoryChip key={id} label={t(`accessories.category.${id}`)} selected={id === active} onPick={() => setCategory(id)} />
+      {/* Equal rows of three: a scrolling strip hid the last categories at the menu's edge. */}
+      <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+        {chunk(categories, CATEGORIES_PER_ROW).map((row) => (
+          <ChipRow key={row[0]}>
+            {row.map((id) => (
+              <Chip key={id} label={t(`accessories.category.${id}`)} active={id === active} onPick={() => setCategory(id)} />
+            ))}
+            {row.length < CATEGORIES_PER_ROW && <div style={{ flex: CATEGORIES_PER_ROW - row.length }} />}
+          </ChipRow>
         ))}
       </Focusable>
       {active === "custom" ? (
@@ -82,12 +76,12 @@ export const SceneGallery: FC<{
           onPick={(id) => onPick("custom", { drawing: id })}
           onSend={onSend} />
       ) : (
-        <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.space.sm }}>
+        <TileRows>
           {shown.map((scene) => (
             <SceneTile key={scene.id} scene={scene} selected={scene.id === selectedScene} onPanel={scene.id === panelScene}
               onPick={() => onPick(scene.id)} />
           ))}
-        </Focusable>
+        </TileRows>
       )}
       {children}
     </div>

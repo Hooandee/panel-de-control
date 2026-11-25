@@ -14,7 +14,7 @@ import { importImage } from "./imageImport";
 import { decodeFrames, DecodedFrames } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
 import { forgetPreviews } from "./useAccessories";
-import { OnPanelDot, tileStyle } from "./tiles";
+import { OnPanelDot, TileRows, tileStyle } from "./tiles";
 
 const TILE_PITCH = 1.75;
 
@@ -123,7 +123,7 @@ export const MyCreations: FC<{
   };
 
   return (
-    <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.space.sm }}>
+    <TileRows>
       <Tile selected={false} label={t("accessories.draw.new")} onChoose={() => openEditor({ kind: "draw", draft: { name: "", frames: [], fps: 8 }, onSent: sent })}>
         <ActionArt icon={<LuPencil size={30} />} />
       </Tile>
@@ -141,6 +141,6 @@ export const MyCreations: FC<{
           <PixelPreview decoded={thumbFrames(drawing.thumb)} pitch={TILE_PITCH} animate={false} />
         </Tile>
       ))}
-    </Focusable>
+    </TileRows>
   );
 };

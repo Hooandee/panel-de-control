@@ -58,6 +58,7 @@ import { startSteamPerformanceOwnership } from "./steam/performanceOwnership";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startAccessoryArtWatcher } from "./accessories/gameArt";
 import { startAccessorySteamEvents } from "./accessories/steamEvents";
+import { closeAccessoryEditor } from "./accessories/editorRoute";
 import { startCollectionsHeal } from "./steam/healCollections";
 import { resumePendingInstalls } from "./upscalers/pendingInstall";
 import { startEcoAmbient } from "./system/ecoAmbient";
@@ -348,6 +349,7 @@ export default definePlugin(() => {
       stopGameWatcher();
       stopAccessoryArtWatcher();
       stopAccessorySteamEvents();
+      closeAccessoryEditor();
       stopFrontendErrorReporting();
       setStaleBackendSink(null);
       setUiEventSink(null);

@@ -7,10 +7,11 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@decky/ui", () => ({
-  DialogButton: ({ children, onClick, style }: any) => <button style={style} onClick={onClick}>{children}</button>,
+  DialogButton: ({ children, onClick, style, "aria-label": label }: any) => <button style={style} aria-label={label} onClick={onClick}>{children}</button>,
   Focusable: ({ children, onClick, style, "aria-label": label }: any) => <div style={style} aria-label={label} onClick={onClick}>{children}</div>,
   TextField: ({ value, onChange }: any) => <input value={value} onChange={onChange} />,
   GamepadButton: { DIR_LEFT: 11, DIR_RIGHT: 12, DIR_UP: 9, DIR_DOWN: 10, BUMPER_LEFT: 5, BUMPER_RIGHT: 6 },
+  NavEntryPositionPreferences: { MAINTAIN_X: 2 },
 }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock("./PixelPreview", () => ({ PixelPreview: () => <div data-testid="stage" /> }));

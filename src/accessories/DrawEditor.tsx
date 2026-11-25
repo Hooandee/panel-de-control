@@ -1,16 +1,20 @@
-import { DialogButton, Focusable, GamepadButton, GamepadEvent, TextField } from "@decky/ui";
-import { FC, useCallback, useEffect, useRef, useState } from "react";
-import { LuCopy, LuEraser, LuFlipHorizontal2, LuLayers, LuPaintBucket, LuPencil, LuPlus, LuSend, LuTrash2 } from "react-icons/lu";
+import { Focusable, GamepadButton, GamepadEvent, NavEntryPositionPreferences, TextField } from "@decky/ui";
+import { FC, useEffect, useRef, useState } from "react";
+import {
+  LuChevronLeft, LuChevronRight, LuCopy, LuEraser, LuFlipHorizontal2, LuLayers, LuPaintBucket, LuPencil, LuPlus, LuSend, LuTrash2,
+} from "react-icons/lu";
 
 import { saveAccessoryDrawing } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { blankFrame, DRAW_PALETTE, encodeFrame, fill, getPixel, paint, Rgb } from "./drawing";
+import { useEditorControls } from "./editorControls";
+import { Chip, ChipRow, EditorShell, IconButton, InspectorGroup } from "./EditorShell";
 import { PANEL_H, PANEL_W } from "./pixelFrames";
 
-const DEFAULT_PITCH = 7;
 const MAX_FRAMES = 48;
 const SPEEDS = [4, 8, 12];
+const SWATCHES_PER_ROW = 4;
 type Tool = "pencil" | "eraser" | "fill";
 
 export interface DrawingDraft {
@@ -20,40 +24,40 @@ export interface DrawingDraft {
   fps: number;
 }
 
-function drawCanvas(ctx: CanvasRenderingContext2D, frame: Uint8Array, onion: Uint8Array | null, cursor: [number, number] | null, PITCH: number) {
-  ctx.fillStyle = "#0a090b";
-  ctx.fillRect(0, 0, PANEL_W * PITCH, PANEL_H * PITCH);
+export const DIRECTIONS: Record<number, [number, number]> = {
+  [GamepadButton.DIR_LEFT]: [-1, 0], [GamepadButton.DIR_RIGHT]: [1, 0],
+  [GamepadButton.DIR_UP]: [0, -1], [GamepadButton.DIR_DOWN]: [0, 1],
+};
+
+const sameColour = (a: Rgb, b: Rgb) => a.every((v, k) => v === b[k]);
+
+function drawCanvas(ctx: CanvasRenderingContext2D, frame: Uint8Array, onion: Uint8Array | null, cursor: [number, number] | null, pitch: number) {
+  ctx.fillStyle = theme.pixel.face;
+  ctx.fillRect(0, 0, PANEL_W * pitch, PANEL_H * pitch);
+  const gap = pitch >= 6 ? 1 : 0;
   for (let y = 0; y < PANEL_H; y += 1) {
     for (let x = 0; x < PANEL_W; x += 1) {
       const [r, g, b] = getPixel(frame, x, y);
-      let colour = "rgb(30,26,30)";
+      let colour: string = theme.pixel.offLed;
       if (r + g + b > 0) colour = `rgb(${r},${g},${b})`;
       else if (onion) {
         const [or, og, ob] = getPixel(onion, x, y);
         if (or + og + ob > 0) colour = `rgba(${or},${og},${ob},0.28)`;
       }
       ctx.fillStyle = colour;
-      ctx.fillRect(x * PITCH + 1, y * PITCH + 1, PITCH - 2, PITCH - 2);
+      ctx.fillRect(x * pitch + gap, y * pitch + gap, pitch - 2 * gap, pitch - 2 * gap);
     }
   }
   if (cursor) {
-    ctx.strokeStyle = "#ffffff";
+    ctx.strokeStyle = theme.pixel.cursor;
     ctx.lineWidth = 2;
-    ctx.strokeRect(cursor[0] * PITCH, cursor[1] * PITCH, PITCH, PITCH);
+    ctx.strokeRect(cursor[0] * pitch, cursor[1] * pitch, pitch, pitch);
   }
 }
 
-const ToolButton: FC<{ active: boolean; label: string; onPick: () => void; children: React.ReactNode }> = ({ active, label, onPick, children }) => (
-  <DialogButton onClick={onPick} aria-label={label}
-    style={{ minWidth: 0, flex: 1, padding: "8px 0", display: "flex", justifyContent: "center",
-      background: active ? theme.color.accent : undefined, color: active ? theme.color.onAccent : undefined }}>
-    {children}
-  </DialogButton>
-);
-
-export const DrawBody: FC<{ pitch?: number; onDirty?: () => void; initial: DrawingDraft; onSent: (id: string) => void; closeModal?: () => void }> = ({ initial, onSent, closeModal, onDirty, pitch = DEFAULT_PITCH }) => {
+export const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void }> = ({ initial, onSent }) => {
   const { t } = useI18n();
-  const PITCH = pitch;
+  const { close, leave, markDirty } = useEditorControls();
   const [saveFailed, setSaveFailed] = useState(false);
   const [frames, setFrames] = useState<Uint8Array[]>(() => initial.frames.length ? initial.frames.map((f) => new Uint8Array(f)) : [blankFrame()]);
   const [index, setIndex] = useState(0);
@@ -66,85 +70,92 @@ export const DrawBody: FC<{ pitch?: number; onDirty?: () => void; initial: Drawi
   const [cursor, setCursor] = useState<[number, number]>([32, 27]);
   const [busy, setBusy] = useState(false);
   const [canvasFocused, setCanvasFocused] = useState(false);
+  // While painting the canvas owns the d-pad; B or pushing past an edge hands it back to the editor.
+  const [painting, setPainting] = useState(false);
   const [, redraw] = useState(0);
   const canvas = useRef<HTMLCanvasElement>(null);
   const drawingId = useRef(initial.id);
   const dragging = useRef(false);
 
   const frame = frames[index];
-  const repaint = useCallback(() => {
-    const ctx = canvas.current?.getContext("2d");
-    if (ctx) drawCanvas(ctx, frame, onion && index > 0 ? frames[index - 1] : null, canvasFocused ? cursor : null, PITCH);
-  }, [frame, frames, index, onion, cursor, canvasFocused, PITCH]);
-  useEffect(repaint, [repaint]);
+  // Cheap enough to run every render, and the canvas may have just been resized to fit.
+  const repaint = () => {
+    const element = canvas.current;
+    const ctx = element?.getContext("2d");
+    if (element && ctx) drawCanvas(ctx, frame, onion && index > 0 ? frames[index - 1] : null, painting ? cursor : null, element.width / PANEL_W);
+  };
+  useEffect(repaint);
 
+  const dirty = () => {
+    markDirty();
+    setSaveFailed(false);
+  };
   const apply = (x: number, y: number, chosen: Tool = tool) => {
-    onDirty?.();
+    dirty();
     if (chosen === "fill") fill(frame, x, y, colour);
     else paint(frame, x, y, chosen === "eraser" ? [0, 0, 0] : colour, mirror);
     redraw((n) => n + 1);
-    repaint();
   };
 
   const onDirection = (event: GamepadEvent) => {
-    const step: Record<number, [number, number]> = {
-      [GamepadButton.DIR_LEFT]: [-1, 0], [GamepadButton.DIR_RIGHT]: [1, 0],
-      [GamepadButton.DIR_UP]: [0, -1], [GamepadButton.DIR_DOWN]: [0, 1],
-    };
-    const move = step[event.detail.button];
+    const move = DIRECTIONS[event.detail.button];
     if (!move) return;
-    const next: [number, number] = [cursor[0] + move[0], cursor[1] + move[1]];
-    if (next[0] < 0 || next[0] >= PANEL_W) return;
-    if (next[1] < 0 || next[1] >= PANEL_H) return;
     event.preventDefault();
     event.stopPropagation();
-    setCursor(next);
+    const next: [number, number] = [cursor[0] + move[0], cursor[1] + move[1]];
+    if (next[0] < 0 || next[0] >= PANEL_W || next[1] < 0 || next[1] >= PANEL_H) setPainting(false);
+    else setCursor(next);
+  };
+  const stopPainting = (event: GamepadEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setPainting(false);
   };
 
   const onButton = (event: GamepadEvent) => {
     const button = event.detail.button;
-    if (button === GamepadButton.BUMPER_LEFT || button === GamepadButton.BUMPER_RIGHT) {
-      const at = DRAW_PALETTE.findIndex((c) => c.every((v, k) => v === colour[k]));
-      const delta = button === GamepadButton.BUMPER_LEFT ? -1 : 1;
-      setColour(DRAW_PALETTE[(at + delta + DRAW_PALETTE.length) % DRAW_PALETTE.length]);
-      event.preventDefault();
-    }
+    if (button !== GamepadButton.BUMPER_LEFT && button !== GamepadButton.BUMPER_RIGHT) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const at = DRAW_PALETTE.findIndex((c) => sameColour(c, colour));
+    const delta = button === GamepadButton.BUMPER_LEFT ? -1 : 1;
+    setColour(DRAW_PALETTE[(at + delta + DRAW_PALETTE.length) % DRAW_PALETTE.length]);
   };
 
   const cellFrom = (e: React.PointerEvent<HTMLCanvasElement>): [number, number] => {
     const rect = e.currentTarget.getBoundingClientRect();
-    return [Math.floor((e.clientX - rect.left) / (rect.width / PANEL_W)), Math.floor((e.clientY - rect.top) / (rect.height / PANEL_H))];
+    const x = Math.floor((e.clientX - rect.left) / (rect.width / PANEL_W));
+    const y = Math.floor((e.clientY - rect.top) / (rect.height / PANEL_H));
+    return [Math.max(0, Math.min(PANEL_W - 1, x)), Math.max(0, Math.min(PANEL_H - 1, y))];
   };
 
   const addFrame = (copy: boolean) => {
     if (frames.length >= MAX_FRAMES) return;
-    onDirty?.();
+    dirty();
     const next = copy ? new Uint8Array(frame) : blankFrame();
-    const list = [...frames.slice(0, index + 1), next, ...frames.slice(index + 1)];
-    setFrames(list);
+    setFrames([...frames.slice(0, index + 1), next, ...frames.slice(index + 1)]);
     setIndex(index + 1);
   };
   const removeFrame = () => {
-    onDirty?.();
+    dirty();
     if (frames.length === 1) {
       frame.fill(0);
       redraw((n) => n + 1);
-      repaint();
       return;
     }
-    const list = frames.filter((_, i) => i !== index);
-    setFrames(list);
+    setFrames(frames.filter((_, i) => i !== index));
     setIndex(Math.max(0, index - 1));
   };
 
   const send = async () => {
+    if (busy) return;
     setBusy(true);
     try {
-      const result = await saveAccessoryDrawing({ id: drawingId.current, name, frames: frames.map(encodeFrame), fps });
+      const result = await saveAccessoryDrawing({ id: drawingId.current, name: name.trim() || t("accessories.draw.untitled"), frames: frames.map(encodeFrame), fps });
       if (result?.ok && result.id) {
         drawingId.current = result.id;
         onSent(result.id);
-        closeModal?.();
+        close();
       } else {
         setSaveFailed(true);
       }
@@ -155,75 +166,98 @@ export const DrawBody: FC<{ pitch?: number; onDirty?: () => void; initial: Drawi
     }
   };
 
-  return (
-    <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.lg, padding: theme.space.sm }}>
-      <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-        <Focusable onGamepadDirection={onDirection} onButtonDown={onButton} onOKButton={() => apply(cursor[0], cursor[1])}
-          onSecondaryButton={() => apply(cursor[0], cursor[1], "eraser")} onOptionsButton={() => apply(cursor[0], cursor[1], "fill")}
-          onOKActionDescription={t(`accessories.draw.tool.${tool}`)} onSecondaryActionDescription={t("accessories.draw.tool.eraser")}
-          onOptionsActionDescription={t("accessories.draw.tool.fill")}
-          onMenuButton={() => void send()} onMenuActionDescription={t("accessories.draw.send")}
-          onGamepadFocus={() => setCanvasFocused(true)} onGamepadBlur={() => setCanvasFocused(false)}
-          style={{ borderRadius: theme.radius.md, overflow: "hidden", transition: "box-shadow 120ms ease",
-            boxShadow: canvasFocused ? `0 0 0 3px ${theme.color.accent}, 0 12px 40px rgba(0,0,0,0.5)` : `0 0 0 1px ${theme.color.outline}, 0 12px 40px rgba(0,0,0,0.5)` }}>
-          <canvas ref={canvas} width={PANEL_W * PITCH} height={PANEL_H * PITCH} style={{ display: "block", touchAction: "none" }}
-            onPointerDown={(e) => { setCanvasFocused(true); dragging.current = true; const [x, y] = cellFrom(e); setCursor([x, y]); apply(x, y); }}
-            onPointerMove={(e) => { if (!dragging.current || tool === "fill") return; const [x, y] = cellFrom(e); setCursor([x, y]); apply(x, y); }}
-            onPointerUp={() => { dragging.current = false; }} onPointerLeave={() => { dragging.current = false; }} />
-        </Focusable>
-        <Focusable flow-children="row" style={{ display: "flex", gap: 6, alignItems: "center", overflowX: "auto", maxWidth: PANEL_W * PITCH }}>
-          {frames.map((_, i) => (
-            <DialogButton key={i} onClick={() => setIndex(i)}
-              style={{ minWidth: 34, width: 34, padding: "6px 0", background: i === index ? theme.color.accent : undefined,
-                color: i === index ? theme.color.onAccent : undefined }}>
-              {i + 1}
-            </DialogButton>
-          ))}
-          <DialogButton onClick={() => addFrame(false)} aria-label={t("accessories.draw.frame.add")} style={{ minWidth: 34, width: 34, padding: "6px 0" }}><LuPlus /></DialogButton>
-          <DialogButton onClick={() => addFrame(true)} aria-label={t("accessories.draw.frame.copy")} style={{ minWidth: 34, width: 34, padding: "6px 0" }}><LuCopy /></DialogButton>
-          <DialogButton onClick={removeFrame} aria-label={t("accessories.draw.frame.delete")} style={{ minWidth: 34, width: 34, padding: "6px 0" }}><LuTrash2 /></DialogButton>
-        </Focusable>
-      </Focusable>
-      <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, width: 220 }}>
-        <TextField value={name} onChange={(e) => { onDirty?.(); setName(e.target.value.slice(0, 40)); }} />
-        <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
-          {DRAW_PALETTE.map((rgb) => {
-            const selected = rgb.every((v, k) => v === colour[k]);
-            return (
-              <Focusable key={rgb.join(",")} onActivate={() => setColour(rgb)} onClick={() => setColour(rgb)}
-                style={{ height: 30, borderRadius: 8, background: `rgb(${rgb.join(",")})`,
-                  boxShadow: selected ? `0 0 0 2px ${theme.color.surface}, 0 0 0 4px ${theme.color.accent}` : `inset 0 0 0 1px rgba(255,255,255,0.12)` }}>
-                <span />
-              </Focusable>
-            );
-          })}
-        </Focusable>
-        <Focusable flow-children="row" style={{ display: "flex", gap: 6 }}>
-          <ToolButton active={tool === "pencil"} label={t("accessories.draw.tool.pencil")} onPick={() => setTool("pencil")}><LuPencil /></ToolButton>
-          <ToolButton active={tool === "eraser"} label={t("accessories.draw.tool.eraser")} onPick={() => setTool("eraser")}><LuEraser /></ToolButton>
-          <ToolButton active={tool === "fill"} label={t("accessories.draw.tool.fill")} onPick={() => setTool("fill")}><LuPaintBucket /></ToolButton>
-        </Focusable>
-        <Focusable flow-children="row" style={{ display: "flex", gap: 6 }}>
-          <ToolButton active={mirror} label={t("accessories.draw.mirror")} onPick={() => setMirror(!mirror)}><LuFlipHorizontal2 /></ToolButton>
-          <ToolButton active={onion} label={t("accessories.draw.onion")} onPick={() => setOnion(!onion)}><LuLayers /></ToolButton>
-        </Focusable>
-        {frames.length > 1 && (
-          <Focusable flow-children="row" style={{ display: "flex", gap: 6 }}>
-            {SPEEDS.map((value) => (
-              <ToolButton key={value} active={fps === value} label={`${value} fps`} onPick={() => setFps(value)}>
-                <span style={{ fontSize: 12, fontWeight: 700 }}>{t(`accessories.draw.speed.${value}`)}</span>
-              </ToolButton>
-            ))}
-          </Focusable>
-        )}
-        <div style={{ flex: 1 }} />
-        <DialogButton onClick={() => void send()} disabled={busy}
-          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: theme.color.accent, color: theme.color.onAccent, fontWeight: 700 }}>
-          <LuSend /> {t("accessories.draw.send")}
-        </DialogButton>
-        {saveFailed && <span style={{ fontSize: 11, color: theme.color.warn }}>{t("accessories.draw.saveFailed")}</span>}
-        <span style={{ fontSize: 11, color: theme.color.textMuted, lineHeight: 1.4 }}>{t("accessories.draw.hint")}</span>
-      </Focusable>
+  const stage = (pitch: number) => (
+    // Steam hands every d-pad press to a Focusable that has a direction handler, so the canvas
+    // only takes them while painting.
+    <Focusable onGamepadDirection={painting ? onDirection : undefined} onButtonDown={painting ? onButton : undefined}
+      onOKButton={() => { if (painting) apply(cursor[0], cursor[1]); else setPainting(true); }}
+      onSecondaryButton={() => apply(cursor[0], cursor[1], "eraser")} onOptionsButton={() => apply(cursor[0], cursor[1], "fill")}
+      onCancelButton={painting ? stopPainting : undefined}
+      onOKActionDescription={painting ? t(`accessories.draw.tool.${tool}`) : t("accessories.draw.start")}
+      onCancelActionDescription={painting ? t("accessories.draw.stop") : undefined}
+      onSecondaryActionDescription={t("accessories.draw.tool.eraser")} onOptionsActionDescription={t("accessories.draw.tool.fill")}
+      onMenuButton={() => void send()} onMenuActionDescription={t("accessories.draw.send")}
+      onGamepadFocus={() => { setCanvasFocused(true); setPainting(true); }}
+      onGamepadBlur={() => { setCanvasFocused(false); setPainting(false); }} noFocusRing
+      style={{ borderRadius: theme.radius.md, overflow: "hidden", flex: "0 0 auto", transition: "box-shadow 120ms ease",
+        boxShadow: `0 0 0 ${canvasFocused ? 3 : 1}px ${painting ? theme.color.accent : canvasFocused ? theme.color.textPrimary : theme.color.outline}, ${theme.pixel.shadow}` }}>
+      <canvas ref={canvas} width={PANEL_W * pitch} height={PANEL_H * pitch} style={{ display: "block", touchAction: "none" }}
+        onPointerDown={(e) => { dragging.current = true; const [x, y] = cellFrom(e); setCursor([x, y]); apply(x, y); }}
+        onPointerMove={(e) => { if (!dragging.current || tool === "fill") return; const [x, y] = cellFrom(e); setCursor([x, y]); apply(x, y); }}
+        onPointerUp={() => { dragging.current = false; }} onPointerLeave={() => { dragging.current = false; }} />
     </Focusable>
+  );
+
+  const timeline = (
+    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+      <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.xs, justifyContent: "center" }}>
+        <IconButton label={t("accessories.draw.frame.prev")} onPress={() => setIndex(Math.max(0, index - 1))} disabled={index === 0}><LuChevronLeft /></IconButton>
+        <span style={{ minWidth: 130, textAlign: "center", fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
+          {t("accessories.draw.frame.of", { n: index + 1, total: frames.length })}
+        </span>
+        <IconButton label={t("accessories.draw.frame.next")} onPress={() => setIndex(Math.min(frames.length - 1, index + 1))} disabled={index === frames.length - 1}><LuChevronRight /></IconButton>
+        <span style={{ width: theme.space.md }} />
+        <IconButton label={t("accessories.draw.frame.add")} onPress={() => addFrame(false)} disabled={frames.length >= MAX_FRAMES}><LuPlus /></IconButton>
+        <IconButton label={t("accessories.draw.frame.copy")} onPress={() => addFrame(true)} disabled={frames.length >= MAX_FRAMES}><LuCopy /></IconButton>
+        <IconButton label={t("accessories.draw.frame.delete")} onPress={removeFrame}><LuTrash2 /></IconButton>
+      </Focusable>
+      <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, textAlign: "center" }}>{t("accessories.draw.hint")}</span>
+    </div>
+  );
+
+  const swatchRows: Rgb[][] = [];
+  for (let i = 0; i < DRAW_PALETTE.length; i += SWATCHES_PER_ROW) swatchRows.push(DRAW_PALETTE.slice(i, i + SWATCHES_PER_ROW));
+
+  const inspector = (
+    <>
+      <InspectorGroup label={t("accessories.editor.name")}>
+        <TextField value={name} onChange={(e) => { dirty(); setName(e.target.value.slice(0, 40)); }} />
+      </InspectorGroup>
+      <InspectorGroup label={t("accessories.editor.tool")}>
+        <ChipRow>
+          <Chip active={tool === "pencil"} label={t("accessories.draw.tool.pencil")} icon={<LuPencil />} onPick={() => setTool("pencil")} />
+          <Chip active={tool === "eraser"} label={t("accessories.draw.tool.eraser")} icon={<LuEraser />} onPick={() => setTool("eraser")} />
+          <Chip active={tool === "fill"} label={t("accessories.draw.tool.fill")} icon={<LuPaintBucket />} onPick={() => setTool("fill")} />
+        </ChipRow>
+        <ChipRow>
+          <Chip active={mirror} label={t("accessories.draw.mirror")} icon={<LuFlipHorizontal2 />} onPick={() => setMirror(!mirror)} />
+          <Chip active={onion} label={t("accessories.draw.onion")} icon={<LuLayers />} onPick={() => setOnion(!onion)} />
+        </ChipRow>
+      </InspectorGroup>
+      <InspectorGroup label={t("accessories.editor.colour")}>
+        <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+          {swatchRows.map((row) => (
+            <Focusable key={row[0].join(",")} flow-children="row" navEntryPreferPosition={NavEntryPositionPreferences.MAINTAIN_X} style={{ display: "flex", gap: theme.space.xs }}>
+              {row.map((rgb) => {
+                const selected = sameColour(rgb, colour);
+                return (
+                  <Focusable key={rgb.join(",")} onActivate={() => setColour(rgb)} onClick={() => setColour(rgb)}
+                    aria-label={`rgb(${rgb.join(",")})`}
+                    style={{ flex: 1, height: 28, borderRadius: theme.radius.sm, background: `rgb(${rgb.join(",")})`,
+                      boxShadow: selected ? `0 0 0 2px ${theme.color.surface}, 0 0 0 4px ${theme.color.accent}` : `inset 0 0 0 1px ${theme.color.outline}` }}>
+                    <span />
+                  </Focusable>
+                );
+              })}
+            </Focusable>
+          ))}
+        </Focusable>
+      </InspectorGroup>
+      {frames.length > 1 && (
+        <InspectorGroup label={t("accessories.editor.speed")}>
+          <ChipRow>
+            {SPEEDS.map((value) => (
+              <Chip key={value} active={fps === value} label={t(`accessories.draw.speed.${value}`)} onPick={() => { dirty(); setFps(value); }} />
+            ))}
+          </ChipRow>
+        </InspectorGroup>
+      )}
+    </>
+  );
+
+  return (
+    <EditorShell icon={<LuPencil size={22} />} title={t("accessories.editor.draw")} stage={stage} stageFooter={timeline}
+      inspector={inspector} primaryLabel={t("accessories.draw.send")} primaryIcon={<LuSend />} primaryBusy={busy}
+      onPrimary={() => void send()} onClose={leave} notice={saveFailed ? t("accessories.draw.saveFailed") : null} />
   );
 };

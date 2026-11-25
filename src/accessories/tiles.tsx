@@ -1,4 +1,5 @@
-import { FC } from "react";
+import { Focusable, NavEntryPositionPreferences } from "@decky/ui";
+import { Children, FC, ReactNode } from "react";
 
 import { theme } from "../theme";
 
@@ -22,3 +23,20 @@ export const tileStyle = (focused: boolean, selected: boolean) => ({
   transition: "box-shadow 120ms ease, transform 120ms ease, background 160ms ease",
 });
 
+
+/** Two tiles a row, each row its own focus group: Steam's "grid" flow sent down from the first
+ *  column into the second when the tiles had different heights. */
+export const TileRows: FC<{ children: ReactNode }> = ({ children }) => {
+  const items = Children.toArray(children);
+  const rows: ReactNode[][] = [];
+  for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2));
+  return (
+    <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+      {rows.map((row, r) => (
+        <Focusable key={r} flow-children="row" navEntryPreferPosition={NavEntryPositionPreferences.MAINTAIN_X} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.space.sm }}>
+          {row}
+        </Focusable>
+      ))}
+    </Focusable>
+  );
+};
