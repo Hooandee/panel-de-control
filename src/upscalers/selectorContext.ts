@@ -11,6 +11,7 @@ interface SelectorSnapshot {
   steam_rows: number;
   shortcut_rows: number;
   filtered: number;
+  unchecked_shortcuts: number;
   unavailable?: Record<string, number>;
   no_metadata: number;
   not_game: number;
@@ -41,7 +42,7 @@ export function publishSelectorFailure() {
 }
 
 export function publishSelectorContext(selection: Selection, listed: GameEntry[], complete: boolean | null,
-  compatibility: SelectorSnapshot["compatibility"], filtered: number, rejected?: Record<string, number>,
+  compatibility: SelectorSnapshot["compatibility"], filtered: number, unchecked_shortcuts: number, rejected?: Record<string, number>,
   unavailable?: Record<string, number>) {
   const visible = new Set(listed.map((game) => game.liveAppid));
   const disagrees = (app: SelectorSteamMetadata) => !app.collection || app.local !== "true";
@@ -54,7 +55,7 @@ export function publishSelectorContext(selection: Selection, listed: GameEntry[]
   const counts = {
     observed_at: Math.floor(Date.now() / 1000), complete, compatibility,
     recovered: selection.steam.filter((app) => app.manifest && disagrees(app)).length,
-    steam_rows: listed.length - shortcut_rows, shortcut_rows, filtered,
+    steam_rows: listed.length - shortcut_rows, shortcut_rows, filtered, unchecked_shortcuts,
     no_metadata: selection.no_metadata, not_game: selection.not_game, unreadable: selection.unreadable,
     ...(rejected ? { manifest_rejected: rejected } : {}),
     ...(unavailable && Object.keys(unavailable).length ? { unavailable } : {}),

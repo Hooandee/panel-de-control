@@ -92,6 +92,32 @@ it("lists an installed store game Panel cannot act on with its reason, without o
   expect(readSelectorContext().selector).toMatchObject({ filtered: 0, unavailable: { unifideck_no_exe: 1 } });
 });
 
+it("keeps a game with a previous install openable when its store entry became unactionable", async () => {
+  const api = await import("../api");
+  vi.mocked(api.getUpscalersOverview).mockResolvedValueOnce({ builds: [], installs: { "1": { build: "x", status: "active" } }, job: null, preferred: "fsr" } as never);
+  vi.mocked(api.getUpscalersCompat).mockResolvedValueOnce({
+    "1": { inputs: [], native: false, unavailable: "unifideck_missing" }, "2": { inputs: [], native: true },
+  } as never);
+  await act(async () => { render(<EscaladoresSection />); });
+  expect(screen.getByText("up.list.unavailable.unifideck_missing")).toBeTruthy();
+  await act(async () => { openUpscalersFor(1); });
+  expect(screen.getByTestId("page").textContent).toBe("1:1");
+});
+
+it("keeps the filtered count to checked rows and reports unchecked shortcuts apart", async () => {
+  const api = await import("../api");
+  games.push({ installed: false, liveAppid: 3, instanceKey: "3", name: "Shortcut", coverUrls: [], lastPlayed: 0, isNonSteam: true });
+  vi.mocked(api.getUpscalersCompat).mockImplementation((ids) => ids.includes("3")
+    ? new Promise(() => undefined) as never : Promise.resolve({}));
+  try {
+    await act(async () => { render(<EscaladoresSection />); });
+    expect(readSelectorContext().selector).toMatchObject({ filtered: 0, unchecked_shortcuts: 1 });
+  } finally {
+    games.pop();
+    vi.mocked(api.getUpscalersCompat).mockImplementation(async () => ({}));
+  }
+});
+
 it("holds shortcuts back until it knows whether a game is behind them", async () => {
   const api = await import("../api");
   games.push({ installed: false, liveAppid: 3, instanceKey: "3", name: "Shortcut", coverUrls: [], lastPlayed: 0, isNonSteam: true });

@@ -397,6 +397,7 @@ export const CoverBadges: FC = () => {
       for (const node of Array.from(doc.querySelectorAll(`.${BADGE_CLASS}`))) {
         if (node.parentElement) clearBadge(node.parentElement);
       }
+      lastScan = null;
     };
   }, [map]);
   return null;

@@ -142,6 +142,7 @@ class UpscalerService:
         self.gpu = gpu
         self.device = device
         self.logger = logger
+        self._unactionable_logged: dict = {}
         self.proc = proc
         self.drm = drm
         self.search = identify.store_search
@@ -358,8 +359,10 @@ class UpscalerService:
             result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, automatic)}
         if self.logger:
             reasons = Counter(row["unavailable"] for row in result.values() if row.get("unavailable"))
-            if reasons:
-                self.logger.info("Selector shortcuts not actionable: %s", dict(reasons))
+            if dict(reasons) != self._unactionable_logged:
+                self._unactionable_logged = dict(reasons)
+                if reasons:
+                    self.logger.info("Selector shortcuts not actionable: %s", dict(reasons))
         return result
 
     def _locate(self, appid: str, lookup: Counter | None = None) -> games.Installed | None:
