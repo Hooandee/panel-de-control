@@ -40,7 +40,6 @@ internal static class Motion
         }
     }
 
-    /// <summary>Slides a selection indicator under the chosen item with a soft overshoot.</summary>
     public static void Glide(FrameworkElement indicator, TranslateTransform transform, double x, double width, bool animate)
     {
         if (!animate || !Enabled || indicator.Width is not > 0)
@@ -64,7 +63,6 @@ internal static class Motion
         storyboard.Begin();
     }
 
-    /// <summary>Next time the element becomes visible it fades in sliding from the side it is coming from.</summary>
     public static void PrepareEntrance(UIElement element, int direction)
     {
         if (!Enabled)
@@ -105,7 +103,6 @@ internal static class Motion
         }
     }
 
-    /// <summary>Endless slow opacity breathing, used for live indicators and glows.</summary>
     public static void Breathe(UIElement element, float low, float high, TimeSpan period)
     {
         if (!Enabled)
@@ -130,7 +127,6 @@ internal static class Motion
         }
     }
 
-    /// <summary>A short bump that acknowledges a value change.</summary>
     public static void Pop(FrameworkElement element)
     {
         if (!Enabled || element.ActualWidth <= 0)
@@ -147,7 +143,6 @@ internal static class Motion
         visual.StartAnimation("Scale", pop);
     }
 
-    /// <summary>One full turn, for the refresh icon.</summary>
     public static void Spin(FrameworkElement element)
     {
         if (!Enabled)
@@ -176,10 +171,8 @@ internal static class Motion
         storyboard.Begin();
     }
 
-    /// <summary>
-    /// Slow drifting light behind the whole widget, tinted with the current section. It is what the glass
-    /// surfaces refract, so they read as glass without a per-frame blur.
-    /// </summary>
+    // Light drifting behind the glass surfaces: they read as glass without a backdrop blur, which would be
+    // recomputed every frame over moving content and take GPU from the game.
     public sealed class Aurora
     {
         private const float BlobSize = 560;

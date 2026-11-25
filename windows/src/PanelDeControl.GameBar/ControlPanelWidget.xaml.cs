@@ -1273,7 +1273,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private void LinearHero_SizeChanged(object sender, SizeChangedEventArgs args) =>
         LinearHeroFill.Width = Math.Max(0, heroFraction * args.NewSize.Width);
 
-    // Scale marks just outside the arc, one every tenth of the range (Instrument skin).
     private static PathGeometry CreateArcTicksGeometry()
     {
         var geometry = new PathGeometry();
@@ -1300,7 +1299,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             CreateHeroGlow();
             CreateAurora();
             Motion.Breathe(HeroGlowHost, 0.6f, 1f, TimeSpan.FromSeconds(4.5));
-            // Specular lip along the inner edge of the arc track.
             PowerArcShine.Data = CreateArcSegmentGeometry(0.02, 0.98, ArcRadius - 3.5);
             PowerArcShine.Visibility = Visibility.Visible;
         }
@@ -1682,7 +1680,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var layout = new Grid { ColumnSpacing = 14 };
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        // Tile and glyph carry the colour of the section (data); the rest is the catalog tile.
         layout.Children.Add(new Border
         {
             Style = Components.Style("PdcIconTileStyle"),
@@ -2124,8 +2121,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
-    // A number takes the value style in the colour of what it measures; a status text (no sensor, unsupported
-    // device) takes the fallback style, which fits where a short number goes.
     private static void ShowReading(TextBlock target, TelemetryReading? reading, Color color)
     {
         if (reading?.Status == ReadingStatus.Available && reading.Value.HasValue)
@@ -2395,7 +2390,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         "ToggleSwitchFillOnPressed",
     };
 
-    // Brushes in Theme/PdcGlass.xaml that carry the accent at their own opacity.
+    // Brushes of the Glass skin that carry the user's accent at their own opacity.
     private static readonly string[] AccentDerivedBrushes =
     {
         "PdcAccentSoftBrush",
