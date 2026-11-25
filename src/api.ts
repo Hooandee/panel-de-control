@@ -1441,6 +1441,7 @@ export interface PixelFrames {
 }
 export const getAccessoriesState = callable<[], AccessoriesState>("get_accessories_state");
 export const setAccessoryScene = callable<[sceneId: string, options: Record<string, unknown>], AccessoriesState>("set_accessory_scene");
+export const setAccessoryLanguage = callable<[language: string], AccessoriesState>("set_accessory_language");
 export const setAccessoryBrightness = callable<[percent: number], AccessoriesState>("set_accessory_brightness");
 export const setAccessoryPower = callable<[on: boolean], AccessoriesState>("set_accessory_power");
 export const previewAccessoryScene = callable<[sceneId: string, options: Record<string, unknown>], PixelFrames>("preview_accessory_scene");

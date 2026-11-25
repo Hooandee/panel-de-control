@@ -248,6 +248,7 @@ const es: Strings = {
   "accessories.compose.arrange": "Orden",
   "accessories.draw.start": "Pintar",
   "accessories.draw.stop": "Dejar de pintar",
+  "accessories.loadFailed": "No se pudo leer el estado de la pantalla. Reintentando…",
 };
 
 const en: Strings = {
@@ -497,6 +498,7 @@ const en: Strings = {
   "accessories.compose.arrange": "Arrange",
   "accessories.draw.start": "Paint",
   "accessories.draw.stop": "Stop painting",
+  "accessories.loadFailed": "Couldn't read the display's state. Retrying…",
 };
 
 const it: Strings = {
@@ -746,6 +748,7 @@ const it: Strings = {
   "accessories.compose.arrange": "Disposizione",
   "accessories.draw.start": "Dipingi",
   "accessories.draw.stop": "Smetti di dipingere",
+  "accessories.loadFailed": "Impossibile leggere lo stato dello schermo. Nuovo tentativo…",
 };
 
 const de: Strings = {
@@ -995,6 +998,7 @@ const de: Strings = {
   "accessories.compose.arrange": "Anordnen",
   "accessories.draw.start": "Malen",
   "accessories.draw.stop": "Malen beenden",
+  "accessories.loadFailed": "Status des Displays nicht lesbar. Neuer Versuch…",
 };
 
 const ptBR: Strings = {
@@ -1244,6 +1248,7 @@ const ptBR: Strings = {
   "accessories.compose.arrange": "Organizar",
   "accessories.draw.start": "Pintar",
   "accessories.draw.stop": "Parar de pintar",
+  "accessories.loadFailed": "Não foi possível ler o estado da tela. Tentando de novo…",
 };
 
 const fr: Strings = {
@@ -1493,6 +1498,7 @@ const fr: Strings = {
   "accessories.compose.arrange": "Disposition",
   "accessories.draw.start": "Peindre",
   "accessories.draw.stop": "Arrêter de peindre",
+  "accessories.loadFailed": "Impossible de lire l'état de l'écran. Nouvel essai…",
 };
 
 export const ACCESSORIES_STRINGS = { es, en, it, de, "pt-BR": ptBR, fr } as const;

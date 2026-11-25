@@ -18,7 +18,14 @@ const CityBody: FC<{ onPick: (city: WeatherCity) => void; closeModal?: () => voi
   const [locating, setLocating] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const request = useRef(0);
-  const pick = (city: WeatherCity) => { onPick(city); closeModal?.(); };
+  const open = useRef(true);
+  useEffect(() => () => { open.current = false; }, []);
+  const pick = (city: WeatherCity) => {
+    // A lookup that answers after the dialog was closed must not change the scene.
+    if (!open.current) return;
+    onPick(city);
+    closeModal?.();
+  };
   const locate = () => {
     if (locating) return;
     setLocating(true);
@@ -32,7 +39,9 @@ const CityBody: FC<{ onPick: (city: WeatherCity) => void; closeModal?: () => voi
   useEffect(() => {
     const text = query.trim();
     if (text.length < 2) {
+      request.current += 1;
       setCities([]);
+      setSearching(false);
       return undefined;
     }
     const id = ++request.current;
@@ -49,7 +58,7 @@ const CityBody: FC<{ onPick: (city: WeatherCity) => void; closeModal?: () => voi
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm }}>
       <div style={{ fontSize: 20, fontWeight: 700, color: theme.color.textPrimary }}>{t("accessories.city.title")}</div>
-      <DialogButton onClick={locate} onOKButton={locate}
+      <DialogButton onClick={locate}
         style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.sm, fontWeight: 700 }}>
         <LuLocateFixed size={16} color={theme.color.accent} />
         {locating ? t("accessories.city.locating") : t("accessories.city.locate")}

@@ -51,8 +51,8 @@ const Segmented: FC<{ values: string[]; current: string; labelPrefix: string; on
         const selected = current === value;
         const choose = () => onPick(value);
         return (
-          <DialogButton key={value} onClick={choose} onOKButton={choose}
-            style={{ flex: 1, minWidth: 0, padding: "8px 0", fontWeight: 700,
+          <DialogButton key={value} onClick={choose}
+            style={{ flex: 1, minWidth: 0, padding: "8px 4px", fontWeight: 700, whiteSpace: "normal", lineHeight: 1.2,
               background: selected ? theme.color.accent : "rgba(255,255,255,0.06)",
               color: selected ? theme.color.onAccent : theme.color.textPrimary }}>
             {t(`${labelPrefix}.${value}`)}
@@ -66,13 +66,14 @@ const Segmented: FC<{ values: string[]; current: string; labelPrefix: string; on
 const SpeedrunControls: FC<{ paused: boolean; onChanged?: () => void }> = ({ paused, onChanged }) => {
   const { t } = useI18n();
   const send = (action: string) => void accessoryEvent("speedrun", { action }).then(() => onChanged?.()).catch(() => undefined);
-  const button = { flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontWeight: 700 } as const;
+  const button = { flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontWeight: 700,
+    padding: "8px 4px", whiteSpace: "normal", lineHeight: 1.2 } as const;
   return (
     <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.xs }}>
-      <DialogButton style={button} onClick={() => send("reset")} onOKButton={() => send("reset")}>
+      <DialogButton style={button} onClick={() => send("reset")}>
         <LuRotateCcw /> {t("accessories.speedrun.reset")}
       </DialogButton>
-      <DialogButton style={button} onClick={() => send(paused ? "resume" : "pause")} onOKButton={() => send(paused ? "resume" : "pause")}>
+      <DialogButton style={button} onClick={() => send(paused ? "resume" : "pause")}>
         {paused ? <LuPlay /> : <LuPause />} {t(paused ? "accessories.speedrun.resume" : "accessories.speedrun.pause")}
       </DialogButton>
     </Focusable>

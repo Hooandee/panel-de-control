@@ -4,6 +4,7 @@ import { PORTRAIT_W, sendGameInfo } from "./gameInfo";
 import { coverCrop, PANEL_H, PANEL_W } from "./pixelFrames";
 
 const POLL_MS = 3000;
+const ART_ATTEMPTS = 5;
 // The library hero carries no title, so it only stands for the game with its logo on top, as
 // Steam's own library shows it; without a logo, the header has the name painted in.
 const HERO = "library_hero.jpg";
@@ -91,10 +92,20 @@ export function startAccessoryArtWatcher(): () => void {
   let alive = true;
   let sent: string | null = null;
   let informed: string | null = null;
-  const missing = new Set<string>();
+  // Art Steam hasn't cached yet is asked for again a few times before giving up for the session.
+  const misses = new Map<string, number>();
   let supported: boolean | null = null;
+  let busy = false;
   const tick = async () => {
-    if (!alive) return;
+    if (!alive || busy) return;
+    busy = true;
+    try {
+      await step();
+    } finally {
+      busy = false;
+    }
+  };
+  const step = async () => {
     if (supported === null) {
       try {
         supported = (await getAccessoriesState()).supported;
@@ -104,18 +115,24 @@ export function startAccessoryArtWatcher(): () => void {
     }
     if (!supported) return;
     const game = readRunningGame();
-    if (!game || !Number.isFinite(game.liveAppid)) return;
+    if (!game || !Number.isFinite(game.liveAppid)) {
+      // A relaunch of the same game is a new session: its info and art are sent again.
+      sent = null;
+      informed = null;
+      misses.clear();
+      return;
+    }
     if (game.appid !== informed) {
       informed = game.appid;
       const portrait = await panelPixels(game.liveAppid, PORTRAIT_FILES, PORTRAIT_W);
       if (!alive) return;
       if (!(await sendGameInfo(game.appid, game.liveAppid, portrait))) informed = null;
     }
-    if (game.appid === sent || missing.has(game.appid)) return;
+    if (game.appid === sent || (misses.get(game.appid) ?? 0) >= ART_ATTEMPTS) return;
     const rgb = await panelPixels(game.liveAppid);
     if (!alive) return;
     if (!rgb) {
-      missing.add(game.appid);
+      misses.set(game.appid, (misses.get(game.appid) ?? 0) + 1);
       return;
     }
     try {

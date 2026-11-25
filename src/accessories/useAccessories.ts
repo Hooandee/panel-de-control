@@ -50,15 +50,26 @@ export function usePreviewEpoch(): number {
   return previewEpoch;
 }
 
+const BRIGHTNESS_SETTLE_MS = 250;
+
 export function useAccessories() {
   const [state, setState] = useState<AccessoriesState | null>(null);
   const [failed, setFailed] = useState(false);
   const alive = useRef(true);
+  // Every write bumps the generation: a poll or an older write that answers afterwards would
+  // otherwise put back the state from before the user's last change.
+  const generation = useRef(0);
+  const writing = useRef(0);
+  const brightnessTimer = useRef<number | undefined>(undefined);
 
   const refresh = useCallback(async () => {
+    const started = generation.current;
     try {
       const next = await getAccessoriesState();
-      if (alive.current && next) setState(next);
+      if (alive.current && next && writing.current === 0 && generation.current === started) {
+        setState(next);
+        setFailed(false);
+      }
     } catch {
       if (alive.current) setFailed(true);
     }
@@ -71,19 +82,35 @@ export function useAccessories() {
     return () => {
       alive.current = false;
       window.clearInterval(timer);
+      window.clearTimeout(brightnessTimer.current);
     };
   }, [refresh]);
 
   const apply = useCallback(async (call: () => Promise<AccessoriesState>, optimistic?: Partial<AccessoriesState>) => {
+    const mine = ++generation.current;
     if (optimistic) setState((prev) => (prev ? { ...prev, ...optimistic } : prev));
+    writing.current += 1;
+    let ok = false;
     try {
       const next = await call();
-      if (alive.current && next && next.ok !== false) setState(next);
-      return next?.ok !== false;
+      ok = next?.ok !== false;
+      if (alive.current && ok && next && generation.current === mine) setState(next);
     } catch {
-      return false;
+      ok = false;
+    } finally {
+      writing.current -= 1;
     }
-  }, []);
+    if (!ok && generation.current === mine) void refresh();
+    return ok;
+  }, [refresh]);
+
+  const setBrightness = useCallback((percent: number) => {
+    setState((prev) => (prev ? { ...prev, brightness: percent } : prev));
+    generation.current += 1;
+    window.clearTimeout(brightnessTimer.current);
+    brightnessTimer.current = window.setTimeout(() => void apply(() => setAccessoryBrightness(percent), { brightness: percent }),
+      BRIGHTNESS_SETTLE_MS);
+  }, [apply]);
 
   return {
     state,
@@ -91,7 +118,7 @@ export function useAccessories() {
     refresh,
     chooseScene: (sceneId: string, options: Record<string, unknown> = {}) =>
       apply(() => setAccessoryScene(sceneId, options), { scene: sceneId, options }),
-    setBrightness: (percent: number) => apply(() => setAccessoryBrightness(percent), { brightness: percent }),
+    setBrightness,
     setPower: (on: boolean) => apply(() => setAccessoryPower(on), { power: on }),
     setNight: (night: NightSchedule) => apply(() => setAccessoryNight(night), { night }),
     setAlerts: (achievements: boolean) => apply(() => setAccessoryAlerts({ achievements }), { alerts: { achievements } }),

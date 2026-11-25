@@ -7,8 +7,8 @@ import { DecodedFrames } from "../accessories/pixelFrames";
 import { SceneGallery } from "../accessories/SceneGallery";
 import { SceneOptions } from "../accessories/SceneOptions";
 import type { Block } from "../accessories/ComposerEditor";
-import { loadPreview, setSceneDraft, useAccessories, usePreviewEpoch, useSceneDraft } from "../accessories/useAccessories";
-import { pauseJsauxApp } from "../api";
+import { forgetPreviews, loadPreview, setSceneDraft, useAccessories, usePreviewEpoch, useSceneDraft } from "../accessories/useAccessories";
+import { pauseJsauxApp, setAccessoryLanguage } from "../api";
 import { FocusReturningDropdown } from "../components/FocusReturningDropdown";
 import { Loading } from "../components/Loading";
 import { ValueBar } from "../components/ValueBar";
@@ -110,9 +110,10 @@ const Hero: FC<{
       <span style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
         {onPanel && !power ? t("accessories.power.off") : title}
       </span>
-      {sceneId && canShow && (
-        <DialogButton onClick={show} onOKButton={show}
-          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontWeight: 750,
+      {/* Stays mounted while the panel is briefly away: an unmounted focused button strands the gamepad. */}
+      {sceneId && (
+        <DialogButton onClick={show} aria-disabled={!canShow}
+          style={{ opacity: canShow ? 1 : 0.5, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontWeight: 750,
             background: onPanel ? "rgba(255,255,255,0.06)" : theme.color.accent, color: onPanel ? theme.color.textMuted : theme.color.onAccent }}>
           {onPanel ? <LuCheck /> : <LuSend />}
           {onPanel ? t("accessories.show.done") : sending ? t("accessories.show.sending") : t("accessories.show")}
@@ -154,12 +155,24 @@ interface Draft {
 
 const sameOptions = (a: Record<string, unknown>, b: Record<string, unknown>) => JSON.stringify(a) === JSON.stringify(b);
 
+let languageSent: string | null = null;
+
 export const AccesoriosSection: FC = () => {
-  const { t } = useI18n();
-  const { state, chooseScene, setBrightness, setPower, setNight, setGameScene, setAlerts, setOnSuspend, refresh } = useAccessories();
+  const { t, lang } = useI18n();
+  const { state, failed, chooseScene, setBrightness, setPower, setNight, setGameScene, setAlerts, setOnSuspend, refresh } = useAccessories();
+  // The words drawn on the panel (dates, "playing") follow Panel's language.
+  useEffect(() => {
+    if (languageSent === lang) return;
+    languageSent = lang;
+    void setAccessoryLanguage(lang).then(() => forgetPreviews()).catch(() => { languageSent = null; });
+  }, [lang]);
   const { draft } = useSceneDraft();
   const setDraft = setSceneDraft;
-  if (!state) return <PanelSectionRow><Loading /></PanelSectionRow>;
+  if (!state) {
+    return failed
+      ? <PanelSectionRow><span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("accessories.loadFailed")}</span></PanelSectionRow>
+      : <PanelSectionRow><Loading /></PanelSectionRow>;
+  }
   const status: Status = state.present ? "connected" : state.busy_by ? "busy" : "searching";
   const current: Draft | null = draft ?? (state.scene ? { id: state.scene, options: state.options } : null);
   const meta = state.catalog.find((scene) => scene.id === current?.id);
@@ -178,7 +191,9 @@ export const AccesoriosSection: FC = () => {
     const [id, layout] = value.split("|");
     void setGameScene(id, layout ? { layout } : {});
   };
-  const preview = (id: string, options: Record<string, unknown> = {}) => setDraft({ id, options });
+  // Picking the tile of the scene already on the panel keeps its settings (city, theme, 12 h).
+  const preview = (id: string, options: Record<string, unknown> = {}) =>
+    setDraft({ id, options: id === state.scene && Object.keys(options).length === 0 ? state.options : options });
   const show = async () => {
     if (!current) return;
     if (await chooseScene(current.id, current.options)) setDraft(null);
@@ -212,7 +227,8 @@ export const AccesoriosSection: FC = () => {
           </SceneGallery>
         </div>
       </PanelSectionRow>
-      {state.present && (
+      {/* Settings stay while the panel reconnects: they apply when it is back. */}
+      {state.supported && (
         <>
           <PanelSectionRow>
             <ValueBar icon={<LuSun size={16} color={theme.color.brightness} />} label={t("accessories.brightness")}

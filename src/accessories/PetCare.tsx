@@ -35,10 +35,12 @@ const NeedBar: FC<{ need: keyof PetNeeds; value: number }> = ({ need, value }) =
   );
 };
 
+// onClick only, never `disabled`: Steam keeps a Focusable's gamepad handlers from when it
+// registered and drops focus from a control that turns disabled under it.
 const ActionButton: FC<{ icon: ReactNode; label: string; onPress: () => void; busy: boolean }> = ({ icon, label, onPress, busy }) => (
-  <DialogButton onClick={onPress} onOKButton={onPress} disabled={busy}
+  <DialogButton onClick={onPress} aria-disabled={busy}
     style={{ flex: 1, minWidth: 0, padding: "8px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-      fontSize: 11, fontWeight: 700 }}>
+      fontSize: 11, fontWeight: 700, opacity: busy ? 0.6 : 1 }}>
     <span style={{ display: "flex", fontSize: 18 }}>{icon}</span>
     {label}
   </DialogButton>
@@ -51,18 +53,27 @@ export const PetCare: FC = () => {
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState<string | null>(null);
   const renameTimer = useRef<number | undefined>(undefined);
+  const pendingName = useRef<string | null>(null);
+  const busyRef = useRef(false);
 
   useEffect(() => {
     let live = true;
     const load = () => void getAccessoryPet().then((next) => { if (live && next) setPet(next); }).catch(() => undefined);
     load();
     const timer = window.setInterval(load, POLL_MS);
-    return () => { live = false; window.clearInterval(timer); window.clearTimeout(renameTimer.current); };
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+      window.clearTimeout(renameTimer.current);
+      // Closing the menu right after typing still keeps the new name.
+      if (pendingName.current !== null) void renameAccessoryPet(pendingName.current).catch(() => undefined);
+    };
   }, []);
 
   if (!pet) return null;
   const act = (kind: PetAction) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     void accessoryPetAction(kind)
       .then((result) => {
@@ -73,12 +84,14 @@ export const PetCare: FC = () => {
         }
       })
       .catch(() => undefined)
-      .finally(() => setBusy(false));
+      .finally(() => { busyRef.current = false; setBusy(false); });
   };
   const rename = (value: string) => {
     setName(value);
+    pendingName.current = value;
     window.clearTimeout(renameTimer.current);
     renameTimer.current = window.setTimeout(() => {
+      pendingName.current = null;
       void renameAccessoryPet(value).then((next) => { if (next) setPet(next); }).catch(() => undefined);
     }, RENAME_DELAY_MS);
   };
@@ -110,9 +123,8 @@ export const PetCare: FC = () => {
         <ActionButton icon={<LuApple />} label={t("accessories.pet.action.feed")} busy={busy} onPress={() => act("feed")} />
         <ActionButton icon={<LuGamepad2 />} label={t("accessories.pet.action.play")} busy={busy} onPress={() => act("play")} />
         <ActionButton icon={<LuHeart />} label={t("accessories.pet.action.pet")} busy={busy} onPress={() => act("pet")} />
-        {pet.asleep
-          ? <ActionButton icon={<LuSun />} label={t("accessories.pet.action.wake")} busy={busy} onPress={() => act("wake")} />
-          : <ActionButton icon={<LuMoon />} label={t("accessories.pet.action.sleep")} busy={busy} onPress={() => act("sleep")} />}
+        <ActionButton icon={pet.asleep ? <LuSun /> : <LuMoon />} label={t(pet.asleep ? "accessories.pet.action.wake" : "accessories.pet.action.sleep")}
+          busy={busy} onPress={() => act(pet.asleep ? "wake" : "sleep")} />
       </Focusable>
       {reaction && (
         <span style={{ fontSize: theme.font.caption, color: theme.color.textPrimary, textAlign: "center", fontWeight: 650 }}>

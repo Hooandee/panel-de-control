@@ -19,6 +19,20 @@ import { OnPanelDot, TileRows, tileStyle } from "./tiles";
 
 const TILE_PITCH = 1.75;
 
+// The section re-renders on every state poll: decoding the same thumbnail each time made every
+// tile repaint, so decoded thumbnails are kept by their content.
+const thumbCache = new Map<string, DecodedFrames>();
+const THUMB_CACHE = 64;
+function cachedThumb(thumb: string): DecodedFrames {
+  let frames = thumbCache.get(thumb);
+  if (!frames) {
+    frames = thumbFrames(thumb);
+    if (thumbCache.size >= THUMB_CACHE) thumbCache.delete(thumbCache.keys().next().value as string);
+    thumbCache.set(thumb, frames);
+  }
+  return frames;
+}
+
 function thumbFrames(thumb: string): DecodedFrames {
   const rgb = decodeFrame(thumb);
   const palette: number[][] = [];
@@ -142,7 +156,7 @@ export const MyCreations: FC<{
         <Tile key={drawing.id} selected={drawing.id === selectedDrawing} onPanel={drawing.id === panelDrawing}
           label={drawing.name || t("accessories.draw.untitled")}
           onChoose={() => onPick(drawing.id)} onEdit={() => void edit(drawing)} onDelete={() => remove(drawing)}>
-          <PixelPreview decoded={thumbFrames(drawing.thumb)} pitch={TILE_PITCH} animate={false} />
+          <PixelPreview decoded={cachedThumb(drawing.thumb)} pitch={TILE_PITCH} animate={false} />
         </Tile>
       ))}
     </TileRows>

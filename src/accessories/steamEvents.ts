@@ -58,13 +58,18 @@ function appName(appid: number): string {
   }
 }
 
+const REGISTER_ATTEMPTS = 10;
+const REGISTER_RETRY_MS = 3000;
+
 /** Forwards achievements, suspend and the local download progress to the panel; only on the Steam Machine. */
 export function startAccessorySteamEvents(): () => void {
   const registrations: { unregister(): void }[] = [];
   let alive = true;
   let lastDownload = "";
+  let retry: ReturnType<typeof setTimeout> | undefined;
 
-  void getAccessoriesState().then((state) => {
+  // The backend may still be starting when the plugin loads: ask again until it answers.
+  const register = (attempt: number) => void getAccessoriesState().then((state) => {
     if (!alive || !state?.supported) return;
     try {
       registrations.push(SteamClient.GameSessions.RegisterForAchievementNotification((notification: unknown) => {
@@ -103,10 +108,14 @@ export function startAccessorySteamEvents(): () => void {
         void accessoryEvent("download", data ?? {}).catch(() => undefined);
       }));
     } catch { /* not available on this client */ }
-  }).catch(() => undefined);
+  }).catch(() => {
+    if (alive && attempt < REGISTER_ATTEMPTS) retry = setTimeout(() => register(attempt + 1), REGISTER_RETRY_MS);
+  });
+  register(1);
 
   return () => {
     alive = false;
+    clearTimeout(retry);
     registrations.forEach((registration) => {
       try {
         registration.unregister();
