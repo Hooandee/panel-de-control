@@ -343,6 +343,21 @@ it("does not show spatial-only Mako as active frame generation", async () => {
   expect(api.setMakoGame).not.toHaveBeenCalled();
 });
 
+it("removes only frame generation and leaves the stored spatial scaling in the profile", async () => {
+  const both = { enabled: true, scaling_enabled: true, scaling_factor: 1.5, scaling_sharpness: 0.8, mode: "fixed", multiplier: 2, target_fps: 120, max_multiplier: 3, flow: "balanced", performance: true };
+  let stored: any = both;
+  api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false, profiles: {} });
+  api.getMakoStatus.mockImplementation(async () => ({ supported: true, installed: true, dll: true, profiles: { "1": stored } }));
+  api.setMakoGame.mockImplementation(async (_appid: string, config: any) => { stored = config === null ? null : { ...stored, ...config }; return { env: { MAKO_CONFIG: "x" }, wrappers: ["w"], profile: stored }; });
+  api.managedLaunch.mockResolvedValue({ ok: true, preserved: { env: [], wrappers: [] } });
+  render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("button", { name: "up.deactivate" }));
+  await waitFor(() => expect(api.setMakoGame).toHaveBeenCalledWith("1", { enabled: false }));
+  expect(api.setMakoGame).not.toHaveBeenCalledWith("1", null);
+  await waitFor(() => expect((screen.getByRole("combobox", { name: "up.fg.title" }) as HTMLSelectElement).value).toBe("off"));
+  expect(stored.scaling_enabled).toBe(true);
+});
+
 it("keeps discouraged OptiFG selectable and warns only after selection", async () => {
   api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false, lossless: false, dll: null });
   const apply = vi.fn(async () => {});
