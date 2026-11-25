@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using PanelDeControl.Core.Data;
@@ -166,20 +167,127 @@ public static class UserFiles
 
     internal static string Fold(string text) => text.ToLowerInvariant();
 
-    /// <summary>A symbolic link or junction; a OneDrive placeholder is a plain file that downloads when read.</summary>
+    /// <summary>Only a symbolic link, junction or mount point; OneDrive placeholders and other reparse points are plain files that download when read.</summary>
     public static bool IsLink(string path)
     {
         try
         {
-            var attributes = File.GetAttributes(path);
-            return (attributes & FileAttributes.ReparsePoint) != 0
-                && (attributes & (FileAttributes.Offline | (FileAttributes)0x00040000 | (FileAttributes)0x00400000)) == 0;
+            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0)
+            {
+                return false;
+            }
+
+            return ReparseTag(path) is not { } tag || tag == SymbolicLinkTag || tag == MountPointTag;
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return false;
         }
     }
+
+    /// <summary>Whether the path, or any folder above it, is a link, a network path or a mapped network drive.</summary>
+    public static bool NotPlain(string full) => NotPlain(full, root => new DriveInfo(root).DriveType);
+
+    public static bool NotPlain(string full, Func<string, DriveType> driveKind)
+    {
+        var root = Path.GetPathRoot(full) ?? "";
+        if (root.Length != 3 || !char.IsLetter(root[0]) || root[1] != ':' || full.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        try
+        {
+            if (driveKind(root) == DriveType.Network)
+            {
+                return true;
+            }
+        }
+        catch (Exception error) when (error is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            return true;
+        }
+
+        for (var current = full; !string.IsNullOrEmpty(current) && current.Length > 3; current = Path.GetDirectoryName(current)!)
+        {
+            if (IsLink(current))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The same caps for everything read from an archive's full listing, before anything is extracted.</summary>
+    public static void EnforceLimits(ArchiveListing listing)
+    {
+        if (listing.Entries.Count > UserMods.MaximumFiles)
+        {
+            throw new UserSourceException("too_many_files");
+        }
+
+        if (listing.Entries.Any(entry => entry.Size > MaximumMember) || listing.Entries.Sum(entry => entry.Size) > UserMods.MaximumTotal)
+        {
+            throw new UserSourceException("too_large");
+        }
+    }
+
+    private const uint SymbolicLinkTag = 0xA000000C;
+    private const uint MountPointTag = 0xA0000003;
+
+    private static uint? ReparseTag(string path)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return null;
+        }
+
+        try
+        {
+            var handle = FindFirstFileW(path, out var data);
+            if (handle == new IntPtr(-1))
+            {
+                return null;
+            }
+
+            FindClose(handle);
+            return data.Reserved0;
+        }
+        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct FindData
+    {
+        public uint Attributes;
+        public uint CreatedLow;
+        public uint CreatedHigh;
+        public uint AccessedLow;
+        public uint AccessedHigh;
+        public uint WrittenLow;
+        public uint WrittenHigh;
+        public uint SizeHigh;
+        public uint SizeLow;
+        public uint Reserved0;
+        public uint Reserved1;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string FileName;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)]
+        public string AlternateFileName;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr FindFirstFileW(string fileName, out FindData data);
+
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool FindClose(IntPtr handle);
 }
 
 public sealed class UserFileStatus
@@ -263,14 +371,14 @@ public sealed class UserFileStore
         var name = Path.GetFileName(path);
         try
         {
-            var located = Readable(dependency, path);
+            var (located, sizes) = Readable(dependency, path);
             var scratch = Path.Combine(_root, ".inspect-" + Guid.NewGuid().ToString("N"));
             try
             {
                 var dlls = located.Where(pair => pair.Key.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)).ToList();
                 if (dlls.Count > 0)
                 {
-                    Extract(path, dlls, scratch);
+                    Extract(path, dlls, sizes, scratch);
                 }
 
                 return new UserFileInspection(true, null, Version(dependency, path, scratch), name);
@@ -290,14 +398,16 @@ public sealed class UserFileStore
         }
     }
 
-    public UserFileStatus Adopt(RecipeDependency dependency, string path)
+    /// <summary>Reads and extracts the file into a staging folder; nothing of the stored copy changes until <see cref="Commit"/>.</summary>
+    public PreparedUserFile Prepare(RecipeDependency dependency, string path)
     {
         Directory.CreateDirectory(_root);
+        SweepStale(_root);
         var staging = Path.Combine(_root, "." + dependency.Id + "-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var located = Readable(dependency, path);
-            Extract(path, located, Path.Combine(staging, "files"));
+            var (located, sizes) = Readable(dependency, path);
+            Extract(path, located, sizes, Path.Combine(staging, "files"));
             var version = Version(dependency, path, Path.Combine(staging, "files"));
             File.WriteAllText(Path.Combine(staging, "meta.json"), PythonJson.Write(new DataObject(new[]
             {
@@ -305,18 +415,47 @@ public sealed class UserFileStore
                 new KeyValuePair<string, DataValue>("version", version is null ? DataNull.Instance : new DataString(version)),
                 new KeyValuePair<string, DataValue>("at", new DataNumber(null, _clock())),
             })), Utf8);
-            Swap(staging, Folder(dependency));
+            return new PreparedUserFile(dependency, staging);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
         {
+            DeleteQuietly(staging);
             throw new UserSourceException("unreadable");
+        }
+        catch
+        {
+            DeleteQuietly(staging);
+            throw;
+        }
+    }
+
+    public UserFileStatus Commit(PreparedUserFile prepared)
+    {
+        try
+        {
+            Swap(prepared.Staging, Folder(prepared.Dependency));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new UserSourceException("unreadable");
+        }
+
+        return Status(prepared.Dependency);
+    }
+
+    public void Discard(PreparedUserFile prepared) => DeleteQuietly(prepared.Staging);
+
+    public UserFileStatus Adopt(RecipeDependency dependency, string path)
+    {
+        var prepared = Prepare(dependency, path);
+        try
+        {
+            return Commit(prepared);
         }
         finally
         {
-            DeleteQuietly(staging);
+            Discard(prepared);
         }
-
-        return Status(dependency);
     }
 
     public UserFileStatus Remove(RecipeDependency dependency)
@@ -325,7 +464,7 @@ public sealed class UserFileStore
         return Status(dependency);
     }
 
-    private IReadOnlyList<KeyValuePair<string, string>> Readable(RecipeDependency dependency, string path)
+    private (IReadOnlyList<KeyValuePair<string, string>> Located, IReadOnlyDictionary<string, long> Sizes) Readable(RecipeDependency dependency, string path)
     {
         var info = new FileInfo(path);
         var extension = Path.GetExtension(path).ToLowerInvariant();
@@ -339,10 +478,22 @@ public sealed class UserFileStore
             throw new UserSourceException("too_large");
         }
 
-        return UserFiles.Locate(dependency, info.Name, () => _archive.List(path, null).Entries.Select(entry => entry.Name).ToList());
+        var sizes = new Dictionary<string, long>(StringComparer.Ordinal);
+        var located = UserFiles.Locate(dependency, info.Name, () =>
+        {
+            var listing = _archive.List(path, null);
+            UserFiles.EnforceLimits(listing);
+            foreach (var entry in listing.Entries)
+            {
+                sizes[entry.Name] = entry.Size;
+            }
+
+            return listing.Entries.Select(entry => entry.Name).ToList();
+        });
+        return (located, sizes);
     }
 
-    private void Extract(string path, IReadOnlyList<KeyValuePair<string, string>> located, string destination)
+    private void Extract(string path, IReadOnlyList<KeyValuePair<string, string>> located, IReadOnlyDictionary<string, long> sizes, string destination)
     {
         Directory.CreateDirectory(destination);
         if (path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
@@ -351,8 +502,7 @@ public sealed class UserFileStore
             return;
         }
 
-        var listing = _archive.List(path, null).Entries.ToDictionary(entry => entry.Name, entry => entry.Size, StringComparer.Ordinal);
-        if (located.Any(pair => listing.TryGetValue(pair.Value, out var size) && size > UserFiles.MaximumMember))
+        if (located.Any(pair => sizes.TryGetValue(pair.Value, out var size) && size > UserFiles.MaximumMember))
         {
             throw new UserSourceException("too_large");
         }
@@ -386,20 +536,88 @@ public sealed class UserFileStore
         return UserFiles.FilenameVersion(Path.GetFileName(path));
     }
 
+    private static readonly object SwapLock = new();
+    private static readonly Regex StagingName = new(@"^\..+-[0-9a-f]{32}$", RegexOptions.CultureInvariant);
+    private static readonly Regex OldName = new(@"^(.+)\.old-[0-9a-f]{32}$", RegexOptions.CultureInvariant);
+    private static readonly TimeSpan StaleAfter = TimeSpan.FromHours(2);
+
     internal static void Swap(string staging, string destination)
     {
-        string? trash = null;
-        if (Directory.Exists(destination))
+        lock (SwapLock)
         {
-            trash = destination + ".old-" + Guid.NewGuid().ToString("N");
-            Directory.Move(destination, trash);
-        }
+            string? trash = null;
+            if (Directory.Exists(destination))
+            {
+                trash = destination + ".old-" + Guid.NewGuid().ToString("N");
+                Directory.Move(destination, trash);
+            }
 
-        Directory.Move(staging, destination);
-        if (trash is not null)
-        {
-            DeleteQuietly(trash);
+            try
+            {
+                Directory.Move(staging, destination);
+            }
+            catch
+            {
+                if (trash is not null)
+                {
+                    try
+                    {
+                        Directory.Move(trash, destination);
+                    }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                    {
+                    }
+                }
+
+                throw;
+            }
+
+            if (trash is not null)
+            {
+                DeleteQuietly(trash);
+            }
         }
+    }
+
+    /// <summary>What a crash left behind: a copy set aside mid-swap (put back when nothing replaced it) and abandoned staging folders.</summary>
+    internal static void SweepStale(string root)
+    {
+        lock (SwapLock)
+        {
+            try
+            {
+                foreach (var entry in Directory.EnumerateDirectories(root).ToList())
+                {
+                    var name = Path.GetFileName(entry);
+                    var old = OldName.Match(name);
+                    if (old.Success)
+                    {
+                        var original = Path.Combine(root, old.Groups[1].Value);
+                        if (Directory.Exists(original))
+                        {
+                            DeleteQuietly(entry);
+                        }
+                        else
+                        {
+                            Directory.Move(entry, original);
+                        }
+                    }
+                    else if (StagingName.IsMatch(name) && DateTime.UtcNow - Newest(entry) > StaleAfter)
+                    {
+                        DeleteQuietly(entry);
+                    }
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    private static DateTime Newest(string folder)
+    {
+        var info = new DirectoryInfo(folder);
+        return info.CreationTimeUtc > info.LastWriteTimeUtc ? info.CreationTimeUtc : info.LastWriteTimeUtc;
     }
 
     public static void DeleteQuietly(string folder)
@@ -420,6 +638,19 @@ public sealed class UserFileStore
         {
         }
     }
+}
+
+public sealed class PreparedUserFile
+{
+    internal PreparedUserFile(RecipeDependency dependency, string staging)
+    {
+        Dependency = dependency;
+        Staging = staging;
+    }
+
+    internal RecipeDependency Dependency { get; }
+
+    public string Staging { get; }
 }
 
 public sealed class UserFileInspection

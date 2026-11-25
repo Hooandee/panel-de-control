@@ -142,7 +142,7 @@ public sealed partial class UpscalersView
             return;
         }
 
-        if (response.ErrorCode is "mod_password" or "mod_password_wrong")
+        if (response.ErrorCode is "mod_password" or "mod_password_wrong" or "mod_password_invalid")
         {
             passwordBox.Visibility = Visibility.Visible;
         }

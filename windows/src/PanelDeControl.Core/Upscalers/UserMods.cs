@@ -70,7 +70,7 @@ public static class UserMods
 
     private static readonly string[] Partial = { ".crdownload", ".part", ".download", ".tmp" };
 
-    private static readonly string[] Reserved = { "con", "prn", "aux", "nul" };
+    private static readonly string[] Reserved = { "con", "prn", "aux", "nul", "conin$", "conout$" };
 
     /// <summary>The members split like <c>PurePosixPath(member.replace("\\", "/")).parts</c>.</summary>
     internal static string[] Parts(string member)
@@ -123,6 +123,11 @@ public static class UserMods
         for (var index = 0; index < members.Count; index++)
         {
             var destination = string.Join("/", paths[index]);
+            if (paths[index].Length > 0 && UserFiles.Fold(paths[index][0]) == UserFiles.Fold(GameManifest.Folder))
+            {
+                throw new UserSourceException("conflict");
+            }
+
             if (!seen.Add(UserFiles.Fold(destination)))
             {
                 throw new UserSourceException("ambiguous_files");
@@ -173,10 +178,12 @@ public static class UserMods
     public static bool InvalidOnWindows(string member) =>
         Parts(member).Any(part => part != "/" && (part.EndsWith(".", StringComparison.Ordinal) || part.EndsWith(" ", StringComparison.Ordinal)
             || part.IndexOfAny(new[] { '<', '>', '"', '|', '?', '*' }) >= 0 || part.Any(char.IsControl)
-            || Reserved.Contains(UserFiles.Fold(part.Split('.')[0])) || IsNumberedDevice(UserFiles.Fold(part.Split('.')[0]))));
+            || IsDevice(UserFiles.Fold(part.Split('.')[0].TrimEnd(' ')))));
 
-    private static bool IsNumberedDevice(string stem) =>
-        stem.Length == 4 && (stem.StartsWith("com", StringComparison.Ordinal) || stem.StartsWith("lpt", StringComparison.Ordinal)) && stem[3] is >= '1' and <= '9';
+    private static bool IsDevice(string stem) =>
+        Reserved.Contains(stem)
+        || (stem.Length == 4 && (stem.StartsWith("com", StringComparison.Ordinal) || stem.StartsWith("lpt", StringComparison.Ordinal))
+            && (stem[3] is >= '1' and <= '9' or '\u00B9' or '\u00B2' or '\u00B3'));
 
     /// <summary>Archives in the folders, newest first. A mod has no fixed content to check, so the user picks it.</summary>
     public static IReadOnlyList<DownloadCandidate> Candidates(IEnumerable<string> folders, int limit = CandidateLimit)
@@ -186,6 +193,11 @@ public static class UserMods
         {
             try
             {
+                if (UserFiles.NotPlain(System.IO.Path.GetFullPath(folder)))
+                {
+                    continue;
+                }
+
                 foreach (var entry in new DirectoryInfo(folder).EnumerateFiles())
                 {
                     if (UserFiles.IsLink(entry.FullName) || !UserFiles.Archives.Any(extension => entry.Name.EndsWith(extension, StringComparison.OrdinalIgnoreCase)))
@@ -196,7 +208,7 @@ public static class UserMods
                     found.Add((entry.LastWriteTimeUtc.Ticks, entry.FullName, entry.Length));
                 }
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
             {
             }
         }
@@ -308,6 +320,20 @@ public sealed class UserModStore
 
     public UserModStatus Adopt(string appId, string path, string target, IEnumerable<string> existing, IEnumerable<string> rootDirs, string? password, Func<long> stamp)
     {
+        var prepared = Prepare(appId, path, target, existing, rootDirs, password);
+        try
+        {
+            return Commit(prepared, stamp);
+        }
+        finally
+        {
+            Discard(prepared);
+        }
+    }
+
+    /// <summary>Reads and extracts the mod into a staging folder; nothing of the stored copy changes until <see cref="Commit"/>.</summary>
+    public PreparedUserMod Prepare(string appId, string path, string target, IEnumerable<string> existing, IEnumerable<string> rootDirs, string? password)
+    {
         var folder = Folder(appId);
         var wanted = UserMods.Layout(Readable(path, password), target, existing, rootDirs);
         if (UserMods.ReplacesOptiScaler(wanted.Select(pair => pair.Key)))
@@ -316,6 +342,7 @@ public sealed class UserModStore
         }
 
         Directory.CreateDirectory(_root);
+        UserFileStore.SweepStale(_root);
         var staging = Path.Combine(_root, "." + appId + "-" + Guid.NewGuid().ToString("N"));
         try
         {
@@ -329,27 +356,42 @@ public sealed class UserModStore
                 }
             }
 
-            File.WriteAllText(Path.Combine(staging, "meta.json"), PythonJson.Write(new DataObject(new[]
-            {
-                new KeyValuePair<string, DataValue>("filename", new DataString(Path.GetFileName(path))),
-                new KeyValuePair<string, DataValue>("files", new DataArray(wanted.Select(pair => pair.Key).OrderBy(name => name, StringComparer.Ordinal)
-                    .Select(name => (DataValue)new DataString(name)).ToList())),
-                new KeyValuePair<string, DataValue>("target", new DataString(target)),
-                new KeyValuePair<string, DataValue>("id", new DataString(Path.GetFileName(path) + "@" + stamp().ToString(System.Globalization.CultureInfo.InvariantCulture))),
-            })), Utf8);
-            UserFileStore.Swap(staging, folder);
+            return new PreparedUserMod(appId, folder, staging, Path.GetFileName(path), wanted.Select(pair => pair.Key).OrderBy(name => name, StringComparer.Ordinal).ToList(), target);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
         {
+            UserFileStore.DeleteQuietly(staging);
             throw new UserSourceException("unreadable");
         }
-        finally
+        catch
         {
             UserFileStore.DeleteQuietly(staging);
+            throw;
+        }
+    }
+
+    public UserModStatus Commit(PreparedUserMod prepared, Func<long> stamp)
+    {
+        try
+        {
+            File.WriteAllText(Path.Combine(prepared.Staging, "meta.json"), PythonJson.Write(new DataObject(new[]
+            {
+                new KeyValuePair<string, DataValue>("filename", new DataString(prepared.Filename)),
+                new KeyValuePair<string, DataValue>("files", new DataArray(prepared.Files.Select(name => (DataValue)new DataString(name)).ToList())),
+                new KeyValuePair<string, DataValue>("target", new DataString(prepared.Target)),
+                new KeyValuePair<string, DataValue>("id", new DataString(prepared.Filename + "@" + stamp().ToString(System.Globalization.CultureInfo.InvariantCulture))),
+            })), Utf8);
+            UserFileStore.Swap(prepared.Staging, prepared.Folder);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new UserSourceException("unreadable");
         }
 
-        return Status(appId) ?? new UserModStatus();
+        return Status(prepared.AppId) ?? new UserModStatus();
     }
+
+    public void Discard(PreparedUserMod prepared) => UserFileStore.DeleteQuietly(prepared.Staging);
 
     public void Remove(string appId) => UserFileStore.DeleteQuietly(Folder(appId));
 
@@ -382,15 +424,7 @@ public sealed class UserModStore
             throw new UserSourceException("unsafe_archive");
         }
 
-        if (members.Count > UserMods.MaximumFiles)
-        {
-            throw new UserSourceException("too_many_files");
-        }
-
-        if (listing.Entries.Any(entry => entry.Size > UserFiles.MaximumMember) || listing.Entries.Sum(entry => entry.Size) > UserMods.MaximumTotal)
-        {
-            throw new UserSourceException("too_large");
-        }
+        UserFiles.EnforceLimits(listing);
 
         if (listing.Encrypted && string.IsNullOrEmpty(password))
         {
@@ -399,4 +433,29 @@ public sealed class UserModStore
 
         return members;
     }
+}
+
+public sealed class PreparedUserMod
+{
+    internal PreparedUserMod(string appId, string folder, string staging, string filename, IReadOnlyList<string> files, string target)
+    {
+        AppId = appId;
+        Folder = folder;
+        Staging = staging;
+        Filename = filename;
+        Files = files;
+        Target = target;
+    }
+
+    internal string AppId { get; }
+
+    internal string Folder { get; }
+
+    internal string Staging { get; }
+
+    internal string Filename { get; }
+
+    internal IReadOnlyList<string> Files { get; }
+
+    internal string Target { get; }
 }

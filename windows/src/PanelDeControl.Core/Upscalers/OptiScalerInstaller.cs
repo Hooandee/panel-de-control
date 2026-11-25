@@ -172,7 +172,7 @@ public sealed class OptiScalerInstaller
             AnrSources(paths[_catalog.AnrFrameGen], "");
         }
         automatic?.Sources(paths, userFiles);
-        if (mod is { Sources.Count: > 0 } && mod.Target != RelativeTo(mod.GameRoot, target))
+        if (mod is { Sources.Count: > 0 } && !string.Equals(mod.Target, RelativeTo(mod.GameRoot, target), StringComparison.OrdinalIgnoreCase))
         {
             throw new UpscalerException("mod_moved");
         }

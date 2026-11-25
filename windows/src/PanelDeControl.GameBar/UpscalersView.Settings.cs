@@ -396,6 +396,8 @@ public sealed partial class UpscalersView
         "mod_password" => "UpscalersErrModPassword",
         "mod_password_wrong" => "UpscalersErrModPasswordWrong",
         "mod_password_unsupported" => "UpscalersErrModPasswordUnsupported",
+        "mod_password_invalid" => "UpscalersErrModPasswordInvalid",
+        "mod_name_unsupported" => "UpscalersErrModNameUnsupported",
         "mod_unreadable" or "mod_unsafe_archive" or "mod_too_large" or "mod_too_many_files" or "mod_empty" or "user_file_unreadable" => "UpscalersErrModUnreadable",
         "mod_layout" or "mod_ambiguous_files" => "UpscalersErrModLayout",
         "mod_conflict" => "UpscalersErrModConflict",

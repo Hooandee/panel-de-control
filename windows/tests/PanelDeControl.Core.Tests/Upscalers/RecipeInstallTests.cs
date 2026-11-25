@@ -222,6 +222,17 @@ public sealed class RecipeInstallTests : IDisposable
         Assert.Equal(before, Snapshot(_game));
     }
 
+    [Fact]
+    public async Task AModStaysAppliedWhenTheFolderOnlyDiffersInCase()
+    {
+        var mod = AMod(("a.dll", "x"));
+        mod.Target = "binaries/WIN64";
+
+        await InstallWith(null, null, mod: mod);
+
+        Assert.Equal("x", File.ReadAllText(Path.Combine(Target, "a.dll")));
+    }
+
     private UserModInstall AMod(params (string Destination, string Content)[] files)
     {
         var folder = Path.Combine(_root, "stored-mod");

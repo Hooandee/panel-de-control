@@ -52,26 +52,62 @@ public sealed partial class UpscalerService
         }
 
         var chosen = Chosen(path, "mod_unreadable");
+        string relative;
+        IReadOnlyList<string> existing;
+        IReadOnlyList<string> rootFolders;
         lock (settingsLock)
         {
             EnsureNoJob(null);
-            var app = steam.Find(appId) ?? throw new UpscalerException("not_installed");
-            var analysis = Analyze(app, Resolved(app, "optiscaler")?.Exe);
-            var target = analysis.Target is { } found ? Path.GetFullPath(found) : throw new UpscalerException("no_exe");
-            var relative = Path.GetRelativePath(app.Root, target).Replace(Path.DirectorySeparatorChar, '/');
-            var existing = fileSystem.List(target).Select(entry => entry.Name).ToList();
-            var rootFolders = fileSystem.List(app.Root).Where(entry => entry.IsDirectory).Select(entry => entry.Name).ToList();
-            try
+            (relative, existing, rootFolders) = ModPlan(appId);
+        }
+
+        PreparedUserMod prepared;
+        try
+        {
+            prepared = userMods.Prepare(appId, chosen, relative, existing, rootFolders, password);
+        }
+        catch (UserSourceException error)
+        {
+            throw new UpscalerException("mod_" + error.Code);
+        }
+
+        try
+        {
+            lock (settingsLock)
             {
-                userMods.Adopt(appId, chosen, relative == "." ? "" : relative, existing, rootFolders, password, StampNanoseconds);
+                EnsureNoJob(null);
+                if (ModPlan(appId).Relative != relative)
+                {
+                    throw new UpscalerException("mod_moved");
+                }
+
+                try
+                {
+                    userMods.Commit(prepared, StampNanoseconds);
+                }
+                catch (UserSourceException error)
+                {
+                    throw new UpscalerException("mod_" + error.Code);
+                }
             }
-            catch (UserSourceException error)
-            {
-                throw new UpscalerException("mod_" + error.Code);
-            }
+        }
+        finally
+        {
+            userMods.Discard(prepared);
         }
 
         return Ok(game: Game(appId));
+    }
+
+    private (string Relative, IReadOnlyList<string> Existing, IReadOnlyList<string> RootFolders) ModPlan(string appId)
+    {
+        var app = steam.Find(appId) ?? throw new UpscalerException("not_installed");
+        var analysis = Analyze(app, Resolved(app, "optiscaler")?.Exe);
+        var target = analysis.Target is { } found ? Path.GetFullPath(found) : throw new UpscalerException("no_exe");
+        var relative = Path.GetRelativePath(app.Root, target).Replace(Path.DirectorySeparatorChar, '/');
+        return (relative == "." ? "" : relative,
+            fileSystem.List(target).Select(entry => entry.Name).ToList(),
+            fileSystem.List(app.Root).Where(entry => entry.IsDirectory).Select(entry => entry.Name).ToList());
     }
 
     private UpscalersResponse RemoveMod(string appId)
@@ -101,6 +137,11 @@ public sealed partial class UpscalerService
         {
             try
             {
+                if (UserFiles.NotPlain(Path.GetFullPath(entry)))
+                {
+                    continue;
+                }
+
                 foreach (var file in new DirectoryInfo(entry).EnumerateFiles())
                 {
                     if (!UserFiles.IsLink(file.FullName)
@@ -110,7 +151,7 @@ public sealed partial class UpscalerService
                     }
                 }
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
             {
             }
         }
@@ -139,14 +180,36 @@ public sealed partial class UpscalerService
         lock (settingsLock)
         {
             EnsureNoJob(null);
-            try
+        }
+
+        PreparedUserFile prepared;
+        try
+        {
+            prepared = userFiles.Prepare(dependency, chosen);
+        }
+        catch (UserSourceException error)
+        {
+            throw new UpscalerException(error.Code is "missing_files" or "ambiguous_files" ? "user_file_wrong" : "user_file_unreadable");
+        }
+
+        try
+        {
+            lock (settingsLock)
             {
-                userFiles.Adopt(dependency, chosen);
+                EnsureNoJob(null);
+                try
+                {
+                    userFiles.Commit(prepared);
+                }
+                catch (UserSourceException)
+                {
+                    throw new UpscalerException("user_file_unreadable");
+                }
             }
-            catch (UserSourceException error)
-            {
-                throw new UpscalerException(error.Code is "missing_files" or "ambiguous_files" ? "user_file_wrong" : "user_file_unreadable");
-            }
+        }
+        finally
+        {
+            userFiles.Discard(prepared);
         }
 
         return Ok(game: Game(appId));
@@ -209,7 +272,7 @@ public sealed partial class UpscalerService
 
     /// <summary>
     /// The picked file as a plain path Panel may read: under the user's profile, the download folders, or on another drive
-    /// (the removable-media case of Linux), never through a link and never a network path.
+    /// (the removable-media case of Linux), never through a link and never a network path or mapped network drive.
     /// </summary>
     private string Chosen(string path, string code)
     {
@@ -223,30 +286,17 @@ public sealed partial class UpscalerService
             throw new UpscalerException(code);
         }
 
-        var root = Path.GetPathRoot(full) ?? "";
-        if (root.Length != 3 || !char.IsLetter(root[0]) || root[1] != ':' || full.StartsWith(@"\\", StringComparison.Ordinal) || !File.Exists(full)
-            || AnyLink(full))
+        if (!File.Exists(full) || UserFiles.NotPlain(full))
         {
             throw new UpscalerException(code);
         }
+
+        var root = Path.GetPathRoot(full) ?? "";
 
         var systemRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? "";
         var allowed = IsInside(full, profile) || downloadFolders().Any(folder => folder.Length > 0 && IsInside(full, folder))
             || !string.Equals(root, systemRoot, StringComparison.OrdinalIgnoreCase);
         return allowed ? full : throw new UpscalerException(code);
-    }
-
-    private static bool AnyLink(string full)
-    {
-        for (var current = full; !string.IsNullOrEmpty(current) && current.Length > 3; current = Path.GetDirectoryName(current)!)
-        {
-            if (UserFiles.IsLink(current))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private long StampNanoseconds() => (long)(clock() * 1_000_000_000d);

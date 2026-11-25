@@ -640,7 +640,9 @@
   <data name="UpscalersUserFileRemove" xml:space="preserve"><value>Remove the one for {0}</value></data>
   <data name="UpscalersErrModPassword" xml:space="preserve"><value>That archive has a password: type it and try again.</value></data>
   <data name="UpscalersErrModPasswordWrong" xml:space="preserve"><value>The password is not right.</value></data>
-  <data name="UpscalersErrModPasswordUnsupported" xml:space="preserve"><value>Password-protected 7z or rar archives need 7-Zip installed.</value></data>
+  <data name="UpscalersErrModPasswordUnsupported" xml:space="preserve"><value>Password-protected archives (zip, 7z or rar) need 7-Zip installed.</value></data>
+  <data name="UpscalersErrModPasswordInvalid" xml:space="preserve"><value>The password can't contain a double quote (&quot;).</value></data>
+  <data name="UpscalersErrModNameUnsupported" xml:space="preserve"><value>Without 7-Zip installed, this archive's file names can't be read. Install 7-Zip.</value></data>
   <data name="UpscalersErrModUnreadable" xml:space="preserve"><value>That file can't be read or has unsafe content.</value></data>
   <data name="UpscalersErrModLayout" xml:space="preserve"><value>I can't tell where each file of that mod goes.</value></data>
   <data name="UpscalersErrModConflict" xml:space="preserve"><value>The mod brings files that clash with Panel's.</value></data>

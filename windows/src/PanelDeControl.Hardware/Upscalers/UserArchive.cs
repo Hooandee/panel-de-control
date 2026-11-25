@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Security;
 using System.Text;
+using Microsoft.Win32;
 using PanelDeControl.Core.Upscalers;
 
 namespace PanelDeControl.Hardware.Upscalers;
@@ -14,6 +16,7 @@ public sealed class UserArchive : IUserArchive
 {
     private static readonly TimeSpan ListTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ExtractTimeout = TimeSpan.FromMinutes(10);
+    private const int CommandLineBudget = 24000;
     private readonly string? _sevenZip;
     private readonly string? _tar;
 
@@ -25,21 +28,49 @@ public sealed class UserArchive : IUserArchive
         _tar = tar is not null && File.Exists(tar) ? tar : null;
     }
 
-    public static UserArchive Locate(string? tar)
+    internal string? SevenZip => _sevenZip;
+
+    public static UserArchive Locate(string? tar) => Locate(tar, ProgramFolders(), RegistryFolders());
+
+    /// <summary>7-Zip is looked up only where its installer puts it: Program Files and the install path it records. Never PATH.</summary>
+    internal static UserArchive Locate(string? tar, IEnumerable<string> programFolders, IEnumerable<string> registryFolders) =>
+        new(FindSevenZip(programFolders.Select(folder => Path.Combine(folder, "7-Zip")).Concat(registryFolders)), tar);
+
+    internal static string? FindSevenZip(IEnumerable<string> folders) =>
+        folders.Where(folder => !string.IsNullOrWhiteSpace(folder)).Select(folder => Path.Combine(folder.Trim().Trim('"'), "7z.exe")).FirstOrDefault(File.Exists);
+
+    private static IEnumerable<string> ProgramFolders() =>
+        new[] { Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86 }
+            .Select(Environment.GetFolderPath).Where(path => path.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private static IEnumerable<string> RegistryFolders()
     {
-        var candidates = new List<string>();
-        foreach (var folder in new[] { Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86 })
+        var found = new List<string>();
+        if (!OperatingSystem.IsWindows())
         {
-            var path = Environment.GetFolderPath(folder);
-            if (path.Length > 0)
+            return found;
+        }
+
+        foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+        {
+            try
             {
-                candidates.Add(Path.Combine(path, "7-Zip", "7z.exe"));
+                using var machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view);
+                using var key = machine.OpenSubKey(@"SOFTWARE\7-Zip");
+                foreach (var name in new[] { "Path64", "Path" })
+                {
+                    if (key?.GetValue(name) is string value && value.Length > 0)
+                    {
+                        found.Add(value);
+                    }
+                }
+            }
+            catch (Exception error) when (error is SecurityException or UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
             }
         }
 
-        candidates.AddRange((Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(folder => Path.Combine(folder.Trim('"'), "7z.exe")));
-        return new UserArchive(candidates.FirstOrDefault(File.Exists), tar);
+        return found;
     }
 
     public ArchiveListing List(string path, string? password)
@@ -81,18 +112,46 @@ public sealed class UserArchive : IUserArchive
         }
 
         var staging = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(destination))!, ".unpack-" + Guid.NewGuid().ToString("N"));
+        var listFile = staging + ".lst";
         Directory.CreateDirectory(staging);
         try
         {
             var full = Path.GetFullPath(path);
-            var run = _sevenZip is not null
-                ? Run(_sevenZip, new[] { "x", "-y", "-p" + (password ?? ""), "-o" + staging, full }, ExtractTimeout)
-                : _tar is not null
-                    ? Run(_tar, new[] { "-xf", full, "-C", staging }, ExtractTimeout)
-                    : throw new UserSourceException("unreadable");
-            if (run.ExitCode != 0)
+            var members = wanted.Select(pair => pair.Value).Distinct(StringComparer.Ordinal).ToList();
+            if (members.Any(member => member.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0))
             {
-                throw Refusal(run, password);
+                throw new UserSourceException("unsafe_archive");
+            }
+
+            if (_sevenZip is not null)
+            {
+                var passwordSwitch = PasswordSwitch(password);
+                File.WriteAllLines(listFile, members, new UTF8Encoding(false));
+                var run = Run(_sevenZip, new[] { "x", "-y", "-spd", "-sccUTF-8", "-scsUTF-8", "-i@" + listFile, passwordSwitch, "-o" + staging, full }, ExtractTimeout);
+                if (run.ExitCode != 0)
+                {
+                    throw Refusal(run, password, true);
+                }
+            }
+            else if (_tar is not null)
+            {
+                if (members.Any(member => member.Any(character => character > 0x7F)))
+                {
+                    throw new UserSourceException("name_unsupported");
+                }
+
+                foreach (var batch in Batches(members.Select(TarPattern)))
+                {
+                    var run = Run(_tar, new[] { "-xf", full, "-C", staging, "--" }.Concat(batch), ExtractTimeout);
+                    if (run.ExitCode != 0)
+                    {
+                        throw Refusal(run, password, false);
+                    }
+                }
+            }
+            else
+            {
+                throw new UserSourceException("unreadable");
             }
 
             var root = Path.GetFullPath(staging) + Path.DirectorySeparatorChar;
@@ -120,6 +179,57 @@ public sealed class UserArchive : IUserArchive
         finally
         {
             UserFileStore.DeleteQuietly(staging);
+            try
+            {
+                File.Delete(listFile);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    /// <summary>7-Zip parses its own command line and does not honour an escaped quote, so such a password cannot be passed safely.</summary>
+    private static string PasswordSwitch(string? password) =>
+        password is not null && password.Contains('"') ? throw new UserSourceException("password_invalid") : "-p" + (password ?? "");
+
+    /// <summary>bsdtar reads member names as glob patterns.</summary>
+    private static string TarPattern(string member)
+    {
+        var text = new StringBuilder();
+        foreach (var character in member)
+        {
+            if (character is '\\' or '*' or '?' or '[' or ']')
+            {
+                text.Append('\\');
+            }
+
+            text.Append(character);
+        }
+
+        return text.ToString();
+    }
+
+    private static IEnumerable<List<string>> Batches(IEnumerable<string> items)
+    {
+        var batch = new List<string>();
+        var length = 0;
+        foreach (var item in items)
+        {
+            if (batch.Count > 0 && length + item.Length + 3 > CommandLineBudget)
+            {
+                yield return batch;
+                batch = new List<string>();
+                length = 0;
+            }
+
+            batch.Add(item);
+            length += item.Length + 3;
+        }
+
+        if (batch.Count > 0)
+        {
+            yield return batch;
         }
     }
 
@@ -175,10 +285,10 @@ public sealed class UserArchive : IUserArchive
 
     private ArchiveListing ListSevenZip(string path, string? password)
     {
-        var run = Run(_sevenZip!, new[] { "l", "-slt", "-ba", "-p" + (password ?? ""), Path.GetFullPath(path) }, ListTimeout);
+        var run = Run(_sevenZip!, new[] { "l", "-slt", "-ba", "-sccUTF-8", PasswordSwitch(password), Path.GetFullPath(path) }, ListTimeout);
         if (run.ExitCode != 0)
         {
-            throw Refusal(run, password);
+            throw Refusal(run, password, true);
         }
 
         var entries = new List<ArchiveEntry>();
@@ -226,7 +336,12 @@ public sealed class UserArchive : IUserArchive
         var run = Run(_tar, new[] { "-tvf", Path.GetFullPath(path) }, ListTimeout);
         if (run.ExitCode != 0)
         {
-            throw new UserSourceException("unreadable");
+            throw Refusal(run, null, false);
+        }
+
+        if (run.Output.Any(character => character > 0x7F))
+        {
+            throw new UserSourceException("name_unsupported");
         }
 
         var entries = new List<ArchiveEntry>();
@@ -250,12 +365,15 @@ public sealed class UserArchive : IUserArchive
         return new ArchiveListing(entries, false);
     }
 
-    private static UserSourceException Refusal(ProcessResult run, string? password)
+    private static UserSourceException Refusal(ProcessResult run, string? password, bool canDecrypt)
     {
         var said = (run.Output + run.Errors).ToLowerInvariant();
-        return said.Contains("wrong password") || said.Contains("encrypted")
-            ? new UserSourceException(string.IsNullOrEmpty(password) ? "password" : "password_wrong")
-            : new UserSourceException("unreadable");
+        if (!said.Contains("wrong password") && !said.Contains("encrypted") && !said.Contains("passphrase") && !said.Contains("enter password"))
+        {
+            return new UserSourceException("unreadable");
+        }
+
+        return new UserSourceException(!canDecrypt ? "password_unsupported" : string.IsNullOrEmpty(password) ? "password" : "password_wrong");
     }
 
     private static string Inside(string destination, string relative)
