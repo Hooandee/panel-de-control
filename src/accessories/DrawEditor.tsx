@@ -1,7 +1,7 @@
 import { Focusable, GamepadButton, GamepadEvent, NavEntryPositionPreferences, TextField } from "@decky/ui";
 import { FC, useEffect, useRef, useState } from "react";
 import {
-  LuChevronLeft, LuChevronRight, LuCopy, LuEraser, LuFlipHorizontal2, LuLayers, LuPaintBucket, LuPencil, LuPlus, LuSend, LuTrash2,
+  LuChevronLeft, LuChevronRight, LuCopy, LuEraser, LuFlipHorizontal2, LuLayers, LuPaintBucket, LuPencil, LuPlus, LuSend, LuTrash2, LuUndo2,
 } from "react-icons/lu";
 
 import { saveAccessoryDrawing } from "../api";
@@ -13,6 +13,7 @@ import { Chip, ChipRow, EditorShell, IconButton, InspectorGroup, useLive } from 
 import { PANEL_H, PANEL_W } from "./pixelFrames";
 
 const MAX_FRAMES = 48;
+const UNDO_STEPS = 30;
 const SPEEDS = [4, 8, 12];
 const SWATCHES_PER_ROW = 4;
 type Tool = "pencil" | "eraser" | "fill";
@@ -66,7 +67,8 @@ export const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void 
   const [mirror, setMirror] = useState(false);
   const [onion, setOnion] = useState(true);
   const [fps, setFps] = useState(initial.fps || 8);
-  const [name, setName] = useState(initial.name || t("accessories.draw.untitled"));
+  // Left empty rather than a translated "Untitled", which would stick after a language change.
+  const [name, setName] = useState(initial.name || "");
   const [cursor, setCursor] = useState<[number, number]>([32, 27]);
   const [busy, setBusy] = useState(false);
   const [canvasFocused, setCanvasFocused] = useState(false);
@@ -76,6 +78,7 @@ export const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void 
   const canvas = useRef<HTMLCanvasElement>(null);
   const drawingId = useRef(initial.id);
   const dragging = useRef(false);
+  const history = useRef<{ frames: Uint8Array[]; index: number }[]>([]);
 
   const frame = frames[index];
   // Cheap enough to run every render, and the canvas may have just been resized to fit.
@@ -90,7 +93,20 @@ export const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void 
     markDirty();
     setSaveFailed(false);
   };
-  const apply = (x: number, y: number, chosen: Tool = tool) => {
+  // Fill and clearing the only frame wipe a lot at once: every change can be stepped back.
+  const remember = () => {
+    history.current = [...history.current.slice(1 - UNDO_STEPS), { frames: frames.map((f) => new Uint8Array(f)), index }];
+  };
+  const undo = () => {
+    const last = history.current.pop();
+    if (!last) return;
+    dirty();
+    setFrames(last.frames);
+    setIndex(last.index);
+    redraw((n) => n + 1);
+  };
+  const apply = (x: number, y: number, chosen: Tool = tool, stroke = true) => {
+    if (stroke) remember();
     dirty();
     if (chosen === "fill") fill(frame, x, y, colour);
     else paint(frame, x, y, chosen === "eraser" ? [0, 0, 0] : colour, mirror);
@@ -114,6 +130,12 @@ export const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void 
 
   const onButton = (event: GamepadEvent) => {
     const button = event.detail.button;
+    if (button === GamepadButton.TRIGGER_LEFT) {
+      event.preventDefault();
+      event.stopPropagation();
+      undo();
+      return;
+    }
     if (button !== GamepadButton.BUMPER_LEFT && button !== GamepadButton.BUMPER_RIGHT) return;
     event.preventDefault();
     event.stopPropagation();
@@ -131,12 +153,14 @@ export const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void 
 
   const addFrame = (copy: boolean) => {
     if (frames.length >= MAX_FRAMES) return;
+    remember();
     dirty();
     const next = copy ? new Uint8Array(frame) : blankFrame();
     setFrames([...frames.slice(0, index + 1), next, ...frames.slice(index + 1)]);
     setIndex(index + 1);
   };
   const removeFrame = () => {
+    remember();
     dirty();
     if (frames.length === 1) {
       frame.fill(0);
@@ -151,7 +175,7 @@ export const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void 
     if (busy) return;
     setBusy(true);
     try {
-      const result = await saveAccessoryDrawing({ id: drawingId.current, name: name.trim() || t("accessories.draw.untitled"), frames: frames.map(encodeFrame), fps });
+      const result = await saveAccessoryDrawing({ id: drawingId.current, name: name.trim(), frames: frames.map(encodeFrame), fps });
       if (result?.ok && result.id) {
         drawingId.current = result.id;
         onSent(result.id);
@@ -193,7 +217,7 @@ export const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void 
         boxShadow: `0 0 0 ${canvasFocused ? 3 : 1}px ${painting ? theme.color.accent : canvasFocused ? theme.color.textPrimary : theme.color.outline}, ${theme.pixel.shadow}` }}>
       <canvas ref={canvas} width={PANEL_W * pitch} height={PANEL_H * pitch} style={{ display: "block", touchAction: "none" }}
         onPointerDown={(e) => { dragging.current = true; const [x, y] = cellFrom(e); setCursor([x, y]); apply(x, y); }}
-        onPointerMove={(e) => { if (!dragging.current || tool === "fill") return; const [x, y] = cellFrom(e); setCursor([x, y]); apply(x, y); }}
+        onPointerMove={(e) => { if (!dragging.current || tool === "fill") return; const [x, y] = cellFrom(e); setCursor([x, y]); apply(x, y, tool, false); }}
         onPointerUp={() => { dragging.current = false; }} onPointerLeave={() => { dragging.current = false; }} />
     </Focusable>
   );
@@ -210,6 +234,7 @@ export const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void 
         <IconButton label={t("accessories.draw.frame.add")} onPress={() => addFrame(false)} disabled={frames.length >= MAX_FRAMES}><LuPlus /></IconButton>
         <IconButton label={t("accessories.draw.frame.copy")} onPress={() => addFrame(true)} disabled={frames.length >= MAX_FRAMES}><LuCopy /></IconButton>
         <IconButton label={t("accessories.draw.frame.delete")} onPress={removeFrame}><LuTrash2 /></IconButton>
+        <IconButton label={t("accessories.draw.undo")} onPress={undo} disabled={history.current.length === 0}><LuUndo2 /></IconButton>
       </Focusable>
       <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, textAlign: "center" }}>{t("accessories.draw.hint")}</span>
     </div>

@@ -10,6 +10,7 @@ import type { Block } from "../accessories/ComposerEditor";
 import { forgetPreviews, loadPreview, setSceneDraft, useAccessories, usePreviewEpoch, useSceneDraft } from "../accessories/useAccessories";
 import { pauseJsauxApp, setAccessoryLanguage } from "../api";
 import { FocusReturningDropdown } from "../components/FocusReturningDropdown";
+import { useRefocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 import { Loading } from "../components/Loading";
 import { ValueBar } from "../components/ValueBar";
 import { useI18n } from "../i18n";
@@ -128,8 +129,11 @@ const EmptyState: FC<{ busyBy: string | null; onTakeOver: () => void }> = ({ bus
   const busy = !!busyBy;
   const official = !!busyBy && busyBy.startsWith("jsaux");
   const [failed, setFailed] = useState(false);
+  // The take-over button goes once the panel answers; Steam would be left with no focus.
+  const root = useRef<HTMLDivElement>(null);
+  useRefocusWhenRemoved(root);
   return (
-    <div style={{ ...theme.card, padding: theme.space.lg, display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.sm, textAlign: "center" }}>
+    <div ref={root} style={{ ...theme.card, padding: theme.space.lg, display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.sm, textAlign: "center" }}>
       <LuPlug size={28} color={busy ? theme.color.warn : theme.color.accent} />
       <span style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
         {t(!busy ? "accessories.empty.title" : official ? "accessories.busy.title" : "accessories.busy.other.title")}
@@ -170,7 +174,6 @@ export const AccesoriosSection: FC = () => {
     void setAccessoryLanguage(lang).then(() => forgetPreviews()).catch(() => { languageSent = null; });
   }, [lang]);
   const { draft } = useSceneDraft();
-  const heroArea = useRef<HTMLDivElement>(null);
   const setDraft = setSceneDraft;
   if (!state) {
     return failed
@@ -212,14 +215,10 @@ export const AccesoriosSection: FC = () => {
   return (
     <>
       <PanelSectionRow>
-        <div ref={heroArea} style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.sm }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.sm }}>
           <Hero status={status} sceneId={current?.id ?? null} options={current?.options ?? {}} labelKey={meta?.labelKey}
             power={state.power && !state.night_active} onPanel={onPanel} canShow={state.present} onShow={show} />
-          {!state.present && <EmptyState busyBy={state.busy_by} onTakeOver={() => {
-            // The take-over button goes away once the panel answers: hand the focus to the Hero first.
-            heroArea.current?.querySelector<HTMLElement>(".DialogButton")?.focus();
-            void refresh();
-          }} />}
+          {!state.present && <EmptyState busyBy={state.busy_by} onTakeOver={() => void refresh()} />}
           {state.present && state.refused && onPanel === false && current?.id === state.scene
             && <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("accessories.tooLarge")}</span>}
         </div>

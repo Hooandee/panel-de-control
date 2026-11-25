@@ -67,7 +67,7 @@ export function useAccessories() {
     const started = generation.current;
     try {
       const next = await getAccessoriesState();
-      if (alive.current && next && writing.current === 0 && generation.current === started) {
+      if (alive.current && next && writing.current === 0 && brightnessPending.current === null && generation.current === started) {
         setState(next);
         setFailed(false);
       }

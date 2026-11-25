@@ -103,7 +103,9 @@ export const SceneOptions: FC<{
         </Focusable>
       )}
       {options.includes("city") && (
-        <DialogButton onClick={() => openCityModal((city) => onChange({ ...values, city }))}
+        // A fixed label: the text turns into the city's name while the dialog is open, and focus
+        // comes back to this button by its label.
+        <DialogButton onClick={() => openCityModal((city) => onChange({ ...values, city }))} aria-label={t("accessories.city.pick")}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.sm }}>
           <LuMapPin size={15} />
           {typeof (values.city as { name?: string } | undefined)?.name === "string"

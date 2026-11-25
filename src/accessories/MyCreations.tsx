@@ -89,6 +89,8 @@ const ActionArt: FC<{ icon: React.ReactNode }> = ({ icon }) => (
   </div>
 );
 
+let lastImportFailed = false;
+
 export const MyCreations: FC<{
   selectedDrawing: string | null;
   panelDrawing: string | null;
@@ -126,7 +128,9 @@ export const MyCreations: FC<{
       }),
     });
   };
-  const [importFailed, setImportFailed] = useState(false);
+  const [importFailed, setImportFailedState] = useState(lastImportFailed);
+  // The file picker closes the menu, so the result may land after this panel unmounted.
+  const setImportFailed = (failed: boolean) => { lastImportFailed = failed; setImportFailedState(failed); };
   const importFile = async () => {
     let picked: { path: string; realpath?: string };
     try {
