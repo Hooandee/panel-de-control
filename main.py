@@ -1394,7 +1394,7 @@ class Plugin(AmbientRpc):
         service = UpscalerService(
             _user_home(),
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "upscalers"),
-            device_registry.gpu_generation(self._device.vendor, chip, "/"),
+            device_registry.gpu_facts(self._device.vendor, chip, "/")["generation"],
             logger=decky.logger, device=self._device.key,
         )
         service.engine_game_running = lambda: bool(getattr(self, "_current_appid", None))
