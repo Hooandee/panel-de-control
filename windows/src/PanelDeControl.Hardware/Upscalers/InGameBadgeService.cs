@@ -53,6 +53,8 @@ public sealed class InGameBadgeService
     private IReadOnlyDictionary<string, string> roots = new Dictionary<string, string>();
     private DateTimeOffset rootsAt = DateTimeOffset.MinValue;
     private string? factsFor;
+    private int startedFor = -1;
+    private double started;
     private DateTimeOffset factsAt = DateTimeOffset.MinValue;
     private InGameFacts? facts;
     private bool reported;
@@ -117,16 +119,38 @@ public sealed class InGameBadgeService
         }
 
         var time = now();
-        if (factsFor != appId || time - factsAt >= FactsInterval)
+        var run = appId + ":" + current.ProcessId.ToString(CultureInfo.InvariantCulture);
+        if (factsFor != run || time - factsAt >= FactsInterval)
         {
-            facts = reader.Read(stored, data.Catalog.Build(stored.Install.Build), time);
-            factsFor = appId;
+            facts = reader.Read(stored, data.Catalog.Build(stored.Install.Build), time, StartedAt(current.ProcessId));
+            factsFor = run;
             factsAt = time;
         }
 
         var hasContent = InGameContent.HasContent(facts);
-        var visible = policy.Visible(time, mode, appId + ":" + current.ProcessId.ToString(CultureInfo.InvariantCulture), hasContent);
+        var visible = policy.Visible(time, mode, run, hasContent);
         overlay.Present(visible && facts is not null ? new OverlayFrame(InGameContent.Lines(facts, text), current.Window) : null);
+    }
+
+    private double StartedAt(int processId)
+    {
+        if (startedFor == processId)
+        {
+            return started;
+        }
+
+        startedFor = processId;
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            started = new DateTimeOffset(process.StartTime.ToUniversalTime()).ToUnixTimeMilliseconds() / 1000.0;
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            started = 0;
+        }
+
+        return started;
     }
 
     private string? GameOf(string image)

@@ -143,6 +143,20 @@ public sealed class InGameBadgeServiceTests : IDisposable
         Assert.Null(new InGameFactsReader(_ => false, "anr").Read(stored, null, Start));
     }
 
+    [Fact]
+    public void ALogFromAnEarlierSessionSaysNothingAboutTheGameRunningNow()
+    {
+        Log("[12:00:00.000] Creating new FSR 3.1 upscaler\n");
+        File.SetLastWriteTimeUtc(Path.Combine(game, "OptiScaler.log"), DateTime.UtcNow.AddHours(-1));
+        var stored = new StoredUpscaler(new InstalledUpscaler { Build = "fsr-3.1", Engine = "optiscaler", Target = game }, 1);
+        var startedNow = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        var facts = new InGameFactsReader(_ => true, "anr").Read(stored, Data.Catalog.Build("fsr-3.1"), Start, startedNow)!;
+
+        Assert.False(facts.Active);
+        Assert.True(new InGameFactsReader(_ => true, "anr").Read(stored, Data.Catalog.Build("fsr-3.1"), Start)!.Active);
+    }
+
     private sealed class Overlay : IInGameOverlay
     {
         public OverlayFrame? Last { get; private set; }

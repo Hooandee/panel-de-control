@@ -16,9 +16,11 @@ public sealed class InGameFactsReader
     }
 
     /// <summary>Null when the install is gone: nothing to say.</summary>
-    public InGameFacts? Read(StoredUpscaler stored, UpscalerBuild? build, DateTimeOffset now)
+    /// <param name="startedAt">When the running game started (Unix seconds): a log from an earlier session says nothing about this one.</param>
+    public InGameFacts? Read(StoredUpscaler stored, UpscalerBuild? build, DateTimeOffset now, double startedAt = 0)
     {
         var install = stored.Install;
+        var since = Math.Max(stored.InstalledAt, startedAt);
         if (!isInstalled(install))
         {
             return null;
@@ -35,7 +37,7 @@ public sealed class InGameFactsReader
 
         if (install.Engine == "helixsr")
         {
-            var facts = HelixLog.ReadInstall(install, stored.InstalledAt);
+            var facts = HelixLog.ReadInstall(install, since);
             return new InGameFacts
             {
                 Label = label,
@@ -52,7 +54,7 @@ public sealed class InGameFactsReader
             return null;
         }
 
-        var report = Report(install.Target, stored.InstalledAt);
+        var report = Report(install.Target, since);
         var active = OptiScalerLog.Verdict(report) == OptiScalerLog.Active;
         bool? generating = null;
         if (report.FrameGenerationBlind is null)

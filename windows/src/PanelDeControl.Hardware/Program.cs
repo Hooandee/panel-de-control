@@ -109,7 +109,20 @@ public static class Program
                 launchOptions: new SteamLaunchOptions(steamDevTools),
                 vcRuntime: new VcRuntimeProbe().InstalledVersion,
                 helix: HelixSr.ForCatalog(upscalerData.Catalog, UpscalerPaths.Root));
-            _ = Task.Run(() => upscalerService.Gpu);
+            // The first overview adopts what Panel left in games before a reinstall, so the in-game badge knows them
+            // without waiting for the widget, as Linux loads its overview when the plugin starts.
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    _ = upscalerService.Gpu;
+                    upscalerService.Overview();
+                }
+                catch (Exception exception)
+                {
+                    CompanionLog.Write("upscalers.startup", exception.GetType().Name);
+                }
+            });
             var upscalersServer = new UpscalersPipeServer(
                 UpscalersPipeServer.PackagedPipeName,
                 upscalerService,
