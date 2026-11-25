@@ -46,6 +46,18 @@ public enum UpscalersOperation
     /// <summary>Puts back the values the image controls replaced, where they still hold Panel's.</summary>
     [EnumMember(Value = "restore_image")]
     RestoreImage = 12,
+
+    /// <summary>Which executable of the game Panel installs beside; absent clears the choice.</summary>
+    [EnumMember(Value = "set_exe")]
+    SetExe = 13,
+
+    /// <summary>Reads the install's log now, settles the newest history entry and answers the verdict.</summary>
+    [EnumMember(Value = "verify")]
+    Verify = 14,
+
+    /// <summary>Stops the running install or uninstall before it touches the game folder.</summary>
+    [EnumMember(Value = "cancel")]
+    Cancel = 15,
 }
 
 [DataContract]
@@ -142,7 +154,12 @@ public sealed class UpscalersRequest
     [DataMember(Name = "int8", Order = 15, EmitDefaultValue = false)]
     public string? Int8 { get; private set; }
 
+    /// <summary>The executable for <see cref="UpscalersOperation.SetExe"/>, relative to the game folder or absolute inside it.</summary>
+    [DataMember(Name = "exe", Order = 16, EmitDefaultValue = false)]
+    public string? Exe { get; private set; }
+
     public const int MaximumIniKeyLength = 128;
+    public const int MaximumExeLength = 512;
 
     public static UpscalersRequest Overview() => new(UpscalersOperation.Overview);
 
@@ -190,6 +207,13 @@ public sealed class UpscalersRequest
     public static UpscalersRequest RestoreImage(string appId, bool experimental) =>
         new(UpscalersOperation.RestoreImage, appId, experimental: experimental);
 
+    public static UpscalersRequest SetExe(string appId, string? exe, bool experimental) =>
+        new(UpscalersOperation.SetExe, appId, experimental: experimental) { Exe = exe };
+
+    public static UpscalersRequest Verify(string appId) => new(UpscalersOperation.Verify, appId: appId);
+
+    public static UpscalersRequest Cancel(bool experimental) => new(UpscalersOperation.Cancel, experimental: experimental);
+
     public bool ExperimentalEnabled => Experimental == true;
 
     internal void Validate()
@@ -197,7 +221,7 @@ public sealed class UpscalersRequest
         bool Absent(string? field) => field is null;
         bool Token(string? field) => field is { Length: > 0 and <= MaximumFieldLength } && field.All(IsTokenCharacter);
         bool Optional(string? field) => field is null || Token(field);
-        var noSettings = Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8);
+        var noSettings = Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8) && Absent(Exe);
         var noFrameGen = Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && noSettings;
         var noChoice = Absent(Build) && Absent(Quality) && Absent(Model) && noFrameGen;
         bool Printable(string? field, int limit) => field is { Length: > 0 } && field.Length <= limit && !field.Any(char.IsControl);
@@ -209,8 +233,12 @@ public sealed class UpscalersRequest
             UpscalersOperation.Game or UpscalersOperation.Cover => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null && noFrameGen,
             UpscalersOperation.Configure => appId && Absent(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && noSettings
                 && (FrameGenRoute is null || Array.IndexOf(FrameGenRoutes, FrameGenRoute) >= 0),
-            UpscalersOperation.Ini or UpscalersOperation.Image => appId && Experimental is null && noChoice,
+            UpscalersOperation.Ini or UpscalersOperation.Image or UpscalersOperation.Verify => appId && Experimental is null && noChoice,
             UpscalersOperation.RestoreImage => appId && noChoice,
+            UpscalersOperation.SetExe => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
+                && Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8)
+                && (Exe is null || Printable(Exe, MaximumExeLength)),
+            UpscalersOperation.Cancel => Absent(AppId) && noChoice,
             UpscalersOperation.SetIni => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
                 && Printable(Key, MaximumIniKeyLength) && Printable(Value, UpscalerSettings.MaximumIniValueLength)
                 && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8),
@@ -705,6 +733,28 @@ public sealed class UpscalerImageSettings
     };
 }
 
+/// <summary>What the install's log says right now, as Linux's <c>verify</c> answers it.</summary>
+[DataContract]
+public sealed class UpscalerVerification
+{
+    /// <summary><c>not_run</c>, <c>loaded</c>, <c>active</c> or <c>broken</c> (Panel's files are not all there).</summary>
+    [DataMember(Name = "result", Order = 1, IsRequired = true)]
+    public string Result { get; set; } = OptiScalerLog.NotRun;
+
+    /// <summary>False for engines with no log to read (DLL mode).</summary>
+    [DataMember(Name = "verifiable", Order = 2, IsRequired = true)]
+    public bool Verifiable { get; set; }
+
+    [DataMember(Name = "observed", Order = 3, EmitDefaultValue = false)]
+    public string? Observed { get; set; }
+
+    [DataMember(Name = "provider", Order = 4, EmitDefaultValue = false)]
+    public string? Provider { get; set; }
+
+    [DataMember(Name = "fallback", Order = 5, EmitDefaultValue = false)]
+    public string? Fallback { get; set; }
+}
+
 [DataContract]
 public sealed class UpscalerIniEdit
 {
@@ -747,6 +797,9 @@ public sealed class UpscalersResponse
 
     [DataMember(Name = "ini_edit", Order = 11, EmitDefaultValue = false)]
     public UpscalerIniEdit? IniEdit { get; set; }
+
+    [DataMember(Name = "verify", Order = 12, EmitDefaultValue = false)]
+    public UpscalerVerification? Verify { get; set; }
 
     public static UpscalersResponse Rejected(string errorCode, UpscalerJobStatus? job = null) =>
         new() { Status = UpscalersResponseStatus.Rejected, ErrorCode = errorCode, Job = job };

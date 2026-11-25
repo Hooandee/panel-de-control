@@ -608,6 +608,17 @@
   <data name="UpscalersErrAnrReinstall" xml:space="preserve"><value>ANR needs the upscaler reinstalled on OptiScaler 10.</value></data>
   <data name="UpscalersErrFgRoute" xml:space="preserve"><value>That frame generation is not available in this game.</value></data>
   <data name="UpscalersErrIniChanged" xml:space="preserve"><value>OptiScaler.ini changed in the meantime. Try again.</value></data>
+  <data name="UpscalersVerify" xml:space="preserve"><value>Check now</value></data>
+  <data name="UpscalersVerdict_not_run" xml:space="preserve"><value>The game has not run with the upscaler yet</value></data>
+  <data name="UpscalersVerdict_loaded" xml:space="preserve"><value>Loaded; upscaling not confirmed yet</value></data>
+  <data name="UpscalersVerdict_active" xml:space="preserve"><value>Working</value></data>
+  <data name="UpscalersVerdict_broken" xml:space="preserve"><value>The install is broken</value></data>
+  <data name="UpscalersCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="UpscalersExeLabel" xml:space="preserve"><value>Game executable (path inside its folder)</value></data>
+  <data name="UpscalersExeSave" xml:space="preserve"><value>Use this executable</value></data>
+  <data name="UpscalersExeAuto" xml:space="preserve"><value>Detect it automatically</value></data>
+  <data name="UpscalersErrInvalidExe" xml:space="preserve"><value>That executable is not inside the game folder.</value></data>
+  <data name="UpscalersErrCancelled" xml:space="preserve"><value>Cancelled. The game was left as it was.</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>DLL mode</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>In DLL mode, change quality in the game.</value></data>

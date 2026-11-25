@@ -35,6 +35,13 @@ public sealed class UpscalersClient
     public Task<UpscalersResponse> SetIniAsync(string appId, string key, string value, bool experimental) =>
         SendAsync(UpscalersRequest.SetIni(appId, key, value, experimental));
 
+    public Task<UpscalersResponse> VerifyAsync(string appId) => SendAsync(UpscalersRequest.Verify(appId));
+
+    public Task<UpscalersResponse> CancelAsync(bool experimental) => SendAsync(UpscalersRequest.Cancel(experimental));
+
+    public Task<UpscalersResponse> SetExeAsync(string appId, string? exe, bool experimental) =>
+        SendAsync(UpscalersRequest.SetExe(appId, exe, experimental));
+
     public Task<UpscalersResponse> ImageAsync(string appId) => SendAsync(UpscalersRequest.Image(appId));
 
     public Task<UpscalersResponse> SetImageAsync(string appId, bool? sharpnessEnabled, double? sharpnessValue, string? int8, bool experimental) =>

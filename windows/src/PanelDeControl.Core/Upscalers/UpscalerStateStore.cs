@@ -92,6 +92,7 @@ public sealed class UpscalerStateStore
     private readonly Dictionary<string, List<UpscalerHistoryItem>> _history = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<string>> _strandedArgs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ImageSettingsReceipt> _imageReceipts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _exes = new(StringComparer.Ordinal);
 
     /// <param name="path">The state file.</param>
     /// <param name="replace">Moves the finished temporary file over the state file; replaceable so a test can fail it.</param>
@@ -121,6 +122,33 @@ public sealed class UpscalerStateStore
         lock (_lock)
         {
             return _installs.TryGetValue(appId, out var stored) ? Copy(stored) : null;
+        }
+    }
+
+    /// <summary>The executable the user chose for this game, relative to its folder with '/' separators; null when none.</summary>
+    public string? Exe(string appId)
+    {
+        lock (_lock)
+        {
+            return _exes.TryGetValue(appId, out var exe) ? exe : null;
+        }
+    }
+
+    public void SetExe(string appId, string? exe)
+    {
+        lock (_lock)
+        {
+            Mutate(() =>
+            {
+                if (string.IsNullOrEmpty(exe))
+                {
+                    _exes.Remove(appId);
+                }
+                else
+                {
+                    _exes[appId] = exe!;
+                }
+            });
         }
     }
 
@@ -308,6 +336,7 @@ public sealed class UpscalerStateStore
         var history = _history.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
         var stranded = _strandedArgs.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
         var receipts = new Dictionary<string, ImageSettingsReceipt>(_imageReceipts, StringComparer.Ordinal);
+        var exes = new Dictionary<string, string>(_exes, StringComparer.Ordinal);
         try
         {
             change();
@@ -343,6 +372,12 @@ public sealed class UpscalerStateStore
             foreach (var pair in receipts)
             {
                 _imageReceipts[pair.Key] = pair.Value;
+            }
+
+            _exes.Clear();
+            foreach (var pair in exes)
+            {
+                _exes[pair.Key] = pair.Value;
             }
 
             throw;
@@ -381,6 +416,11 @@ public sealed class UpscalerStateStore
                     _strandedArgs[game.Key] = args.ToList();
                 }
 
+                if (entry.Get("exe") is DataString { Value.Length: > 0 } chosen)
+                {
+                    _exes[game.Key] = chosen.Value;
+                }
+
                 if (ReadReceipt(entry.Get("image_settings")) is { } receipt)
                 {
                     _imageReceipts[game.Key] = receipt;
@@ -413,18 +453,24 @@ public sealed class UpscalerStateStore
             _history.Clear();
             _strandedArgs.Clear();
             _imageReceipts.Clear();
+            _exes.Clear();
         }
     }
 
     private void Save()
     {
         var games = new List<KeyValuePair<string, DataValue>>();
-        foreach (var appId in _installs.Keys.Concat(_actions.Keys).Concat(_history.Keys).Concat(_strandedArgs.Keys).Concat(_imageReceipts.Keys).Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
+        foreach (var appId in _installs.Keys.Concat(_actions.Keys).Concat(_history.Keys).Concat(_strandedArgs.Keys).Concat(_imageReceipts.Keys).Concat(_exes.Keys).Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
         {
             var members = new List<KeyValuePair<string, DataValue>>();
             if (_installs.TryGetValue(appId, out var stored))
             {
                 members.Add(Member("install", WriteInstall(stored)));
+            }
+
+            if (_exes.TryGetValue(appId, out var chosenExe))
+            {
+                members.Add(Member("exe", new DataString(chosenExe)));
             }
 
             if (_strandedArgs.TryGetValue(appId, out var strandedArgs) && strandedArgs.Count > 0)

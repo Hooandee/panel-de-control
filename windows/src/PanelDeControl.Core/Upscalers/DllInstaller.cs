@@ -104,6 +104,7 @@ public sealed class DllInstaller
             offset += pair.Value.Size;
         }
 
+        cancel.ThrowIfCancellationRequested();
         if (previous is not null)
         {
             OptiScalerInstaller.Uninstall(previous);

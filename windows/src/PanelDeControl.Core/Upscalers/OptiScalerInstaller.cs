@@ -154,6 +154,7 @@ public sealed class OptiScalerInstaller
             AnrSources(paths[_catalog.AnrFrameGen], "");
         }
         automatic?.Sources(paths);
+        cancel.ThrowIfCancellationRequested();
         var optiScalerBefore = previous is not null && previous.Engine == "optiscaler";
         var edited = optiScalerBefore ? previous!.Edited : Array.Empty<KeyValuePair<string, string>>();
         var imageKept = optiScalerBefore && previous!.ImageOverrides.Count > 0 && ReadIni(previous.Target) is { } oldIni
@@ -177,7 +178,8 @@ public sealed class OptiScalerInstaller
         var assets = Needed(effective, wantsAnr, recipe, automatic);
         if (assets.Any(asset => !paths.ContainsKey(asset.Id)))
         {
-            paths = await FetchAsync(assets, progress, cancel).ConfigureAwait(false);
+            // The previous install is already out of the game: this fetch finishes the swap.
+            paths = await FetchAsync(assets, progress, CancellationToken.None).ConfigureAwait(false);
         }
         var archive = _catalog.Asset(effective.Archive)!;
         var sources = OptiScalerRelease.Sources(paths[archive.Id], archive.Generation);

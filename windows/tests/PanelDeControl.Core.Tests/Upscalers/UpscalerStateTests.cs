@@ -223,6 +223,24 @@ public sealed class UpscalerStateTests : IDisposable
     }
 
     [Fact]
+    public void AChosenExeSurvivesARestartUnderTheLinuxKeyAndOutlivesTheInstall()
+    {
+        var store = new UpscalerStateStore(StatePath);
+        store.SetInstall("1245620", Sample("fsr-3.1", Path.Combine(_root, "Game")), 1700000000);
+        store.SetExe("1245620", "Binaries/Win64/Game.exe");
+        store.SetExe("77", "Other.exe");
+        store.ClearInstall("1245620");
+
+        var reopened = new UpscalerStateStore(StatePath);
+
+        Assert.Equal(("Binaries/Win64/Game.exe", "Other.exe", null), (reopened.Exe("1245620"), reopened.Exe("77"), reopened.Exe("1")));
+        Assert.Contains("\"exe\": \"Binaries/Win64/Game.exe\"", File.ReadAllText(StatePath));
+        reopened.SetExe("1245620", null);
+        Assert.Null(new UpscalerStateStore(StatePath).Exe("1245620"));
+        Assert.Equal("Other.exe", new UpscalerStateStore(StatePath).Exe("77"));
+    }
+
+    [Fact]
     public void HandEditsImageOverridesAndTheReceiptSurviveARestart()
     {
         var store = new UpscalerStateStore(StatePath);

@@ -568,6 +568,17 @@
   <data name="UpscalersErrAnrReinstall" xml:space="preserve"><value>ANR richiede di reinstallare l'upscaler con OptiScaler 10.</value></data>
   <data name="UpscalersErrFgRoute" xml:space="preserve"><value>Questa generazione di frame non è disponibile in questo gioco.</value></data>
   <data name="UpscalersErrIniChanged" xml:space="preserve"><value>OptiScaler.ini è cambiato nel frattempo. Riprova.</value></data>
+  <data name="UpscalersVerify" xml:space="preserve"><value>Verifica ora</value></data>
+  <data name="UpscalersVerdict_not_run" xml:space="preserve"><value>Il gioco non è ancora stato avviato con l'upscaler</value></data>
+  <data name="UpscalersVerdict_loaded" xml:space="preserve"><value>Caricato; upscaling non ancora confermato</value></data>
+  <data name="UpscalersVerdict_active" xml:space="preserve"><value>Funziona</value></data>
+  <data name="UpscalersVerdict_broken" xml:space="preserve"><value>L'installazione è danneggiata</value></data>
+  <data name="UpscalersCancel" xml:space="preserve"><value>Annulla</value></data>
+  <data name="UpscalersExeLabel" xml:space="preserve"><value>Eseguibile del gioco (percorso nella sua cartella)</value></data>
+  <data name="UpscalersExeSave" xml:space="preserve"><value>Usa questo eseguibile</value></data>
+  <data name="UpscalersExeAuto" xml:space="preserve"><value>Rilevalo da solo</value></data>
+  <data name="UpscalersErrInvalidExe" xml:space="preserve"><value>Questo eseguibile non è nella cartella del gioco.</value></data>
+  <data name="UpscalersErrCancelled" xml:space="preserve"><value>Annullato. Il gioco è rimasto com'era.</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>Modalità DLL</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>In modalità DLL, modifica la qualità nel gioco.</value></data>
