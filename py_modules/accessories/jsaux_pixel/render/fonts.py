@@ -691,7 +691,7 @@ TINY = Font(5, _parse(_TINY, 5))
 SMALL = Font(7, _parse(_SMALL, 7))
 
 # Big numerals: each digit is a set of segments on a 0..1 grid, rasterised at the requested
-# height with rounded joints. Colons are two dots.
+# height with rounded joints. Colons are two dots, the minus a single bar.
 _SEGMENTS = {
     "a": ((0.0, 0.0), (1.0, 0.0)), "b": ((1.0, 0.0), (1.0, 0.5)), "c": ((1.0, 0.5), (1.0, 1.0)),
     "d": ((0.0, 1.0), (1.0, 1.0)), "e": ((0.0, 0.5), (0.0, 1.0)), "f": ((0.0, 0.0), (0.0, 0.5)),
@@ -775,6 +775,9 @@ def big(height: int) -> Font:
         for y in range(top, min(height, top + thickness)):
             colon[y] = "#" * thickness
     glyphs[":"] = tuple(colon)
+    bar = round((height - thickness) / 2)
+    bar_width = max(thickness * 2, width - thickness)
+    glyphs["-"] = tuple("#" * bar_width if bar <= y < bar + thickness else "." * bar_width for y in range(height))
     glyphs[" "] = tuple("." * (width // 2) for _ in range(height))
     return Font(height, glyphs, spacing=max(1, thickness // 2 + 1))
 

@@ -3,13 +3,14 @@
 import base64
 import hashlib
 import json
-import unicodedata
+import re
 from datetime import datetime, timedelta
 
 from .. import codec
 from ..render import fonts
 from ..render.canvas import Canvas
 from ..render.palettes import mix, scale, theme_for
+from ..render.text import big_fitting, fit, plain_text
 from .base import Scene, SceneContext, Segment
 from .clocks import _centered, hour_segment
 from .words import words
@@ -20,10 +21,7 @@ _PORTRAIT_W = 36
 
 
 def _title(game: dict | None) -> str:
-    # The pixel fonts have no accents: "Pokémon" is drawn as "POKEMON", not with "?".
-    name = unicodedata.normalize("NFKD", (game or {}).get("name") or "")
-    plain = "".join(ch for ch in name.upper() if not unicodedata.combining(ch))
-    return "".join(ch for ch in plain if (ch.isascii() and ch.isalnum()) or ch in " :-'!?.") or "STEAM"
+    return plain_text((game or {}).get("name") or "") or "STEAM"
 
 
 class SessionScene(Scene):
@@ -48,12 +46,12 @@ class SessionScene(Scene):
         def draw(t: datetime) -> Canvas:
             canvas = Canvas()
             title = _title(game)
-            shown = title if fonts.measure(title, fonts.TINY) <= W - 2 else title[: max(1, (W - 6) // 4)].rstrip() + "."
-            _centered(canvas, 3, shown, fonts.TINY, theme.soft)
+            _centered(canvas, 3, fit(title, fonts.TINY, W - 2), fonts.TINY, theme.soft)
             if game and isinstance(began, (int, float)):
                 minutes = max(0, int((t.timestamp() - began) // 60))
                 text = f"{minutes // 60}:{minutes % 60:02d}"
-                _centered(canvas, 15, text, fonts.big(18), theme.start)
+                font = big_fitting(text, (18, 14, 12), W - 2)
+                _centered(canvas, 15 + (18 - font.height) // 2, text, font, theme.start)
                 _centered(canvas, 38, words(ctx.options).playing, fonts.TINY, theme.soft)
                 hour_progress = (minutes % 60) / 60
                 for i in range(56):
@@ -112,7 +110,7 @@ class CoverScene(Scene):
             _paint(base, art, 0, W, 0)
         else:
             _controller(base, theme)
-            _centered(base, H - 8, _title(ctx.game) if ctx.game else "STEAM", fonts.SMALL, theme.soft)
+            _centered(base, H - 8, fit(_title(ctx.game) if ctx.game else "STEAM", fonts.SMALL, W - 2), fonts.SMALL, theme.soft)
         return Segment([base], [100])
 
     def _side(self, ctx: SceneContext, art: bytes | None, theme) -> Segment:
@@ -133,8 +131,7 @@ class CoverScene(Scene):
             base.text(right, 2 + i * 7, line, fonts.TINY, (255, 255, 255))
         achievements = info.get("achievements") if isinstance(info.get("achievements"), dict) else None
         if achievements:
-            _trophy(base, right, 45)
-            base.text(right + 7, 46, f"{achievements['done']}/{achievements['total']}", fonts.TINY, theme.soft)
+            _beside_icon(base, right, 45, f"{achievements['done']}/{achievements['total']}", theme.soft, _trophy)
         played = info.get("playtime_min")
         began = (ctx.game or {}).get("started_at")
         if not isinstance(played, (int, float)):
@@ -146,8 +143,7 @@ class CoverScene(Scene):
         def draw(t: datetime) -> Canvas:
             frame = base.copy()
             extra = max(0, int((t.timestamp() - sent_at) // 60)) if isinstance(sent_at, (int, float)) else 0
-            _clock_icon(frame, right, 34, theme)
-            frame.text(right + 7, 35, play_time(int(played) + extra), fonts.TINY, theme.start)
+            _beside_icon(frame, right, 34, play_time(int(played) + extra), theme.start, lambda c, x, y: _clock_icon(c, x, y, theme))
             return frame
 
         return hour_segment(start, boundary, draw, lambda a, b: [])
@@ -155,10 +151,20 @@ class CoverScene(Scene):
 
 def play_time(minutes: int) -> str:
     if minutes < 60:
-        return f"{minutes} MIN"
+        return f"{minutes}M"
     if minutes < 600:
-        return f"{minutes // 60}H {minutes % 60:02d}"
-    return f"{minutes // 60} H"
+        return f"{minutes // 60}H{minutes % 60:02d}"
+    return f"{minutes // 60}H"
+
+
+def _beside_icon(canvas: Canvas, x: int, y: int, text: str, colour, icon) -> None:
+    """Icon then text on the panel's right side; a text too wide for that drops the icon and sits flush right."""
+    if fonts.measure(text, fonts.TINY) <= W - (x + 7):
+        icon(canvas, x, y)
+        canvas.text(x + 7, y + 1, text, fonts.TINY, colour)
+        return
+    text = fit(text, fonts.TINY, W - x - 1)
+    canvas.text(W - 1 - fonts.measure(text, fonts.TINY), y + 1, text, fonts.TINY, colour)
 
 
 def _decoded(value, size: int) -> bytes | None:
@@ -178,29 +184,35 @@ def _paint(canvas: Canvas, rgb: bytes, x0: int, width: int, offset: int, source_
 
 
 def _wrap(text: str, width: int, max_lines: int) -> list[str]:
-    lines: list[str] = []
+    # Each line is (text, ended_in_a_break_hyphen); real hyphens stay at the end of their chunk.
+    lines: list[tuple[str, bool]] = []
     for word in text.split():
-        if lines and fonts.measure(f"{lines[-1]} {word}", fonts.TINY) <= width:
-            lines[-1] = f"{lines[-1]} {word}"
-            continue
-        # A word wider than the column breaks with a hyphen, at a syllable when one fits.
-        while fonts.measure(word, fonts.TINY) > width and len(word) > 3:
-            fitting = [cut for cut in range(2, len(word) - 1) if fonts.measure(word[:cut] + "-", fonts.TINY) <= width]
-            if not fitting:
-                break
-            syllables = [cut for cut in fitting if cut in _syllable_breaks(word)]
-            cut = max(syllables or fitting)
-            lines.append(word[:cut] + "-")
-            word = word[cut:]
-        lines.append(word)
+        for k, piece in enumerate(re.findall(r"[^-]*-|[^-]+", word)):
+            if lines and fonts.measure(lines[-1][0] + ("" if k else " ") + piece, fonts.TINY) <= width:
+                lines[-1] = (lines[-1][0] + ("" if k else " ") + piece, False)
+                continue
+            # A piece wider than the column breaks with a hyphen, at a syllable when one fits.
+            while fonts.measure(piece, fonts.TINY) > width and len(piece) > 3:
+                fitting = [cut for cut in range(2, len(piece) - 1)
+                           if piece[cut - 1] != "-" and fonts.measure(piece[:cut] + "-", fonts.TINY) <= width]
+                if not fitting:
+                    break
+                syllables = [cut for cut in fitting if cut in _syllable_breaks(piece)]
+                cut = max(syllables or fitting)
+                lines.append((piece[:cut] + "-", True))
+                piece = piece[cut:]
+            lines.append((piece, False))
     if len(lines) > max_lines:
-        # The last line takes the rest of the name, rejoined across hyphens and cut to fit.
-        rest = " ".join(lines[max_lines - 1:]).replace("- ", "")
+        # The last line takes the rest of the name, rejoined across break hyphens and cut to fit.
+        rest = ""
+        for line, broken in lines[max_lines - 1:]:
+            rest += (line[:-1] if broken else line) + ("" if broken or line.endswith("-") else " ")
+        rest = rest.rstrip()
         last = rest
         while last and fonts.measure(last.rstrip(" :-") + ".", fonts.TINY) > width:
             last = last[:-1]
-        lines = lines[:max_lines - 1] + [last.rstrip(" :-") + "."]
-    return lines
+        return [line for line, _ in lines[:max_lines - 1]] + [last.rstrip(" :-") + "."]
+    return [line for line, _ in lines]
 
 
 _VOWELS = set("AEIOUYÁÉÍÓÚÜ")

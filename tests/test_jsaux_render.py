@@ -58,3 +58,35 @@ def test_quantize_keeps_exact_colours_when_few():
     palette, indexed = cv.quantize([c])
     assert palette[indexed[0][1 * 64 + 1]] == (12, 34, 56)
     assert palette[indexed[0][0]] == (0, 0, 0)
+
+
+def test_plain_text_makes_names_drawable():
+    from accessories.jsaux_pixel.render.text import plain_text
+
+    assert plain_text("Pokémon™ Legends: Z-A") == "POKEMON LEGENDS: Z-A"
+    assert plain_text("Zürich") == "ZURICH"
+    assert plain_text("OLÁ") == "OLA"
+    assert plain_text("Ratchet & Clank") == "RATCHET + CLANK"
+    assert plain_text("Straße Œuvre Ø  \u4e2d") == "STRASSE OEUVRE O"
+    assert plain_text("Hello, World®") == "HELLO. WORLD"
+
+
+def test_fit_cuts_at_a_space_then_at_chars_and_adds_a_dot():
+    from accessories.jsaux_pixel.render.text import fit
+
+    assert fit("SHORT", fonts.SMALL, 62) == "SHORT"
+    cut = fit("RATCHET AND CLANK RIFT APART", fonts.SMALL, 62)
+    assert cut.endswith(".") and fonts.measure(cut, fonts.SMALL) <= 62
+    assert cut == "RATCHET."
+    chars = fit("SUPERCALIFRAGILISTIC", fonts.TINY, 40)
+    assert chars.endswith(".") and fonts.measure(chars, fonts.TINY) <= 40
+
+
+def test_big_minus_lights_pixels_at_mid_height_and_measures_wider_than_nothing():
+    glyph = fonts.big(14).glyph("-")
+    lit_rows = [y for y, row in enumerate(glyph) if "#" in row]
+    assert lit_rows and all(abs(y - 6.5) <= 1.5 for y in lit_rows)
+    c = cv.Canvas()
+    c.text(1, 1, "-5", fonts.big(14), WHITE)
+    assert any(c.get(x, 7) == WHITE for x in range(1, 7))
+    assert fonts.measure("--", fonts.big(14)) > fonts.measure("", fonts.big(14))

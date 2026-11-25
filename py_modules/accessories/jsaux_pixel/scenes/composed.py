@@ -16,6 +16,7 @@ from ..metrics import Stepper
 from ..render import fonts, stickers
 from ..render.canvas import Canvas
 from ..render.palettes import THEMES, mix, scale
+from ..render.text import plain_text
 from .base import Scene, SceneContext, Segment
 from .clocks import _hm, hour_segment, long_date
 from .fit import fits
@@ -222,9 +223,9 @@ def _sprite(block: dict, t: datetime, values: dict, library: Library | None, cac
     elif kind == "date":
         sprite = text_sprite(long_date(t, options), font, theme)
     elif kind == "text":
-        sprite = text_sprite(block["text"].upper() or " ", font, theme)
+        sprite = text_sprite(plain_text(block["text"]) or " ", font, theme)
     elif kind == "pill":
-        sprite = _pill(block["text"].upper(), font, theme)
+        sprite = _pill(plain_text(block["text"]) or " ", font, theme)
     elif kind == "metric":
         label, suffix = _METRICS[block["metric"]]
         value = values.get(id(block))

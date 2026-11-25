@@ -145,7 +145,7 @@ def test_side_cover_without_a_capsule_crops_the_wide_art_and_skips_missing_numbe
     assert segment.frames[0].get(5, 27) == (120, 40, 200)
 
 
-@pytest.mark.parametrize("minutes,text", [(45, "45 MIN"), (125, "2H 05"), (725, "12 H"), (60_000, "1000 H")])
+@pytest.mark.parametrize("minutes,text", [(45, "45M"), (125, "2H05"), (725, "12H"), (60_000, "1000H")])
 def test_play_time_reads_naturally(minutes, text):
     assert game.play_time(minutes) == text
 
@@ -178,3 +178,44 @@ def test_game_names_lose_accents_instead_of_drawing_question_marks():
     from accessories.jsaux_pixel.scenes import game
 
     assert game._title({"name": "Pokémon Légendes"}) == "POKEMON LEGENDES"
+
+
+def test_side_cover_text_never_clips_at_the_right_edge():
+    from accessories.jsaux_pixel.render import fonts
+    from accessories.jsaux_pixel.render.canvas import Canvas
+    from accessories.jsaux_pixel.scenes import game
+
+    drawn = []
+
+    class Probe(Canvas):
+        def text(self, x, y, text, font, rgb):
+            drawn.append((x, text, fonts.measure(text, font)))
+            return super().text(x, y, text, font, rgb)
+
+    for minutes in (5, 59, 60, 725, 60 * 1234):
+        game._beside_icon(Probe(), 39, 34, game.play_time(minutes), (1, 1, 1), lambda c, x, y: None)
+    for done, total in ((12, 167), (167, 167), (1234, 1234)):
+        game._beside_icon(Probe(), 39, 45, f"{done}/{total}", (1, 1, 1), lambda c, x, y: None)
+    assert drawn
+    assert all(x >= 0 and x + width <= 64 for x, _, width in drawn)
+
+
+def test_hyphenated_names_wrap_without_doubled_hyphens():
+    from accessories.jsaux_pixel.render import fonts
+    from accessories.jsaux_pixel.scenes import game
+
+    for name in ("SPIDER-MAN 2", "COUNTER-STRIKE 2", "SPIDER-MAN: MILES MORALES"):
+        for width in (24, 30, 44):
+            lines = game._wrap(name, width, 3)
+            assert not any("--" in line for line in lines)
+            assert all(fonts.measure(line, fonts.TINY) <= width for line in lines)
+    assert game._wrap("COUNTER-STRIKE 2", 44, 3) == ["COUNTER-", "STRIKE 2"]
+
+
+def test_long_session_and_speedrun_timers_shrink_instead_of_overflowing():
+    from accessories.jsaux_pixel.render import fonts
+    from accessories.jsaux_pixel.render.text import big_fitting
+
+    for text in ("100:00", "1234:59"):
+        assert fonts.measure(text, big_fitting(text, (18, 14, 12), 62)) <= 62
+    assert big_fitting("0:00", (18, 14, 12), 62).height == 18

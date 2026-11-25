@@ -11,6 +11,7 @@ from ..metrics import Stepper
 from ..render import fonts
 from ..render.canvas import Canvas
 from ..render.palettes import mix, scale, theme_for
+from ..render.text import plain_text
 from .base import Scene, SceneContext, Segment
 
 W, H = codec.WIDTH, codec.HEIGHT
@@ -29,7 +30,7 @@ _TROPHY = (
 
 
 def _clean(text: str) -> str:
-    return "".join(ch for ch in text.upper() if ch.isalnum() or ch in " :-'!?.")
+    return plain_text(text)
 
 
 def _short(text: str, font: fonts.Font, width: int) -> str:

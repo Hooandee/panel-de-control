@@ -212,6 +212,7 @@ class Runtime:
         if code == 0:
             self._official = (self._monotonic(), False)
             self.service.forget_shown()
+            self.service.release_busy()
         return {"ok": code == 0}
 
     def list_drawings(self) -> dict:

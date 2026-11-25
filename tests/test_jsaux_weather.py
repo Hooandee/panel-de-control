@@ -163,3 +163,14 @@ def test_locate_falls_back_to_the_time_zone_city():
 
 def test_locate_gives_up_cleanly():
     assert weather.locate(fetch=Fetch({}), zone=None) is None
+
+
+def test_negative_temperature_draws_its_minus_sign():
+    from accessories.jsaux_pixel.render.canvas import Canvas
+
+    plain, cold = Canvas(), Canvas()
+    weather._degrees(plain, "5", 6)
+    weather._degrees(cold, "-5", 6)
+    assert cold.pixels() != plain.pixels()
+    bar_row = 6 + 6
+    assert any(cold.get(x, bar_row) != (0, 0, 0) for x in range(64))

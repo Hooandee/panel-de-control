@@ -1,5 +1,6 @@
 """Weather for the panel from Open-Meteo, for a city the user picks (no IP geolocation)."""
 
+import http.client
 import json
 import math
 import threading
@@ -15,6 +16,7 @@ from .metrics import Stepper
 from .render import fonts
 from .render.canvas import Canvas
 from .render.palettes import mix, scale
+from .render.text import fit, plain_text
 from .scenes.base import Scene, SceneContext, Segment
 
 W, H = codec.WIDTH, codec.HEIGHT
@@ -38,7 +40,7 @@ def search_cities(query: str, language: str = "es", fetch: Callable[[str], dict]
     params = urllib.parse.urlencode({"name": query.strip(), "count": 6, "language": language, "format": "json"})
     try:
         results = fetch(_GEOCODE + params).get("results") or []
-    except (OSError, ValueError):
+    except (OSError, ValueError, http.client.HTTPException):
         return []
     cities = []
     for item in results:
@@ -188,9 +190,7 @@ class WeatherScene(Scene):
         _degrees(canvas, str(round(reading["temp"])), 6)
         hi_lo = f"{round(reading['high'])} / {round(reading['low'])}"
         canvas.text(W - 2 - fonts.measure(hi_lo, fonts.TINY), 24, hi_lo, fonts.TINY, (150, 160, 210))
-        city = (_city(options) or {}).get("name", "").upper()
-        if fonts.measure(city, fonts.SMALL) > W - 4:
-            city = city[: max(1, (W - 4) // 6)]
+        city = fit(plain_text((_city(options) or {}).get("name", "")), fonts.SMALL, W - 4)
         canvas.rect(4, 38, W - 8, 1, (40, 36, 60))
         canvas.text((W - fonts.measure(city, fonts.SMALL)) // 2, 43, city, fonts.SMALL, (190, 180, 240))
         return canvas
@@ -363,9 +363,7 @@ def _sky_frame(group: str, day: bool, t: float, reading: dict, options: dict) ->
     _shadowed(canvas, degree_x, 31, "°", fonts.TINY, (255, 255, 255))
     hi_lo = f"{round(reading['high'])}/{round(reading['low'])}"
     _shadowed(canvas, W - 2 - fonts.measure(hi_lo, fonts.TINY), 47, hi_lo, fonts.TINY, (230, 235, 255))
-    city = (_city(options) or {}).get("name", "").upper()
-    while city and fonts.measure(city, fonts.TINY) > W - 6:
-        city = city[:-1]
+    city = fit(plain_text((_city(options) or {}).get("name", "")), fonts.TINY, W - 6)
     _shadowed(canvas, W - 2 - fonts.measure(city, fonts.TINY), 39, city, fonts.TINY, (230, 235, 255))
     return canvas
 
@@ -392,7 +390,7 @@ def locate(fetch: Callable[[str], dict] = _http_json, zone: str | None = None) -
         if data.get("success") and data.get("city"):
             detail = ", ".join(part for part in (data.get("region"), data.get("country")) if part)
             return {"name": str(data["city"]), "detail": detail, "lat": float(data["latitude"]), "lon": float(data["longitude"])}
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException):
         pass
     if zone and "/" in zone:
         found = search_cities(zone.rsplit("/", 1)[-1].replace("_", " "), fetch=fetch)

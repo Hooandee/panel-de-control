@@ -106,7 +106,7 @@ class LavaLamp(Loop):
     BLOBS = ((0.30, 1, 0.0, 9), (0.55, 1, 0.33, 8), (0.72, 2, 0.66, 7), (0.45, 1, 0.5, 6))
 
     def frame(self, index, count, options):
-        theme = theme_for({"theme": options.get("theme", "sunset")})
+        theme = theme_for({**options, "theme": options.get("theme", "sunset")})
         canvas = Canvas()
         t = index / count
         blobs = []

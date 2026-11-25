@@ -118,6 +118,10 @@ class PixelService:
         game_options = stored.get("game_options")
         self._game_options: dict = game_options if isinstance(game_options, dict) and self._game_scene else {}
         self._showing: str | None = None
+        self._shown_options: dict = {}
+        self._open_error: str | None = None
+        self._woke_at = float("-inf")
+        self._last_now: float | None = None
         # (scene, data, seconds on screen, requested at); the seconds start once it is written.
         self._alert: tuple[str, dict, float, float] | None = None
         self._alert_until: float | None = None
@@ -159,6 +163,10 @@ class PixelService:
         """Render again as a user action; identical content is still not rewritten."""
         with self._lock:
             self._user_changed()
+
+    def release_busy(self) -> None:
+        with self._lock:
+            self._busy_by, self._next_probe = None, 0.0
 
     def forget_shown(self) -> None:
         with self._lock:
@@ -230,8 +238,11 @@ class PixelService:
 
     def suspend(self, asleep: Callable[[], Segment]) -> None:
         """Called just before the Steam Machine sleeps: the panel goes dark or keeps a sleeping pet."""
+        requested = self._clock()
         with self._lock:
-            if self._suspended:
+            # The request can wait on an upload past the sleep itself and win the lock only after
+            # the wake: it would then blank a panel that is already awake.
+            if self._suspended or requested <= self._woke_at:
                 return
             self._suspended, self._suspended_at = True, self._clock()
             self._log("INFO", "suspend", mode=self._on_suspend)
@@ -254,6 +265,7 @@ class PixelService:
 
     def resume(self) -> None:
         with self._lock:
+            self._woke_at = self._clock()
             if not self._suspended:
                 return
             self._suspended = False
@@ -297,6 +309,8 @@ class PixelService:
                 "game_scene": self._game_scene,
                 "game_options": dict(self._game_options),
                 "showing": self._showing,
+                "shown_options": dict(self._shown_options),
+                "refused": self._refused is not None and self._refused[0] == self._scene_id,
                 "alerts": dict(self._alerts),
                 "brightness": self._brightness,
                 "pwm": pwm,
@@ -328,6 +342,11 @@ class PixelService:
             return
         with self._lock:
             now = self._clock()
+            if self._last_now is not None and now < self._last_now - _RESUME_JUMP_S:
+                # The wall clock went back (NTP): deadlines set before it would hold for that long.
+                self._retry_at = self._next_probe = self._power_retry_at = self._presence_at = 0.0
+                self._valid_until = None
+            self._last_now = now
             if self._link is not None and not self._suspended and not self._still_present(now):
                 self._drop(now)
             if self._link is None and (self._suspended or not self._connect(now)):
@@ -375,8 +394,12 @@ class PixelService:
         try:
             link.open()
         except TransportError as error:
-            self._log("WARNING", "open_failed", error=str(error))
+            if str(error) != self._open_error:
+                self._log("WARNING", "open_failed", error=str(error))
+            self._open_error = str(error)
+            self._next_probe = now + _BUSY_RECHECK_S
             return False
+        self._open_error = None
         try:
             is_panel = self._handshake(link)
         except TransportError:
@@ -392,6 +415,10 @@ class PixelService:
         if self._held_elsewhere or port.session is None or port.session != self._panel_session:
             self._governor.forget_shown()
             self._held_elsewhere = False
+            # The panel is back on its firmware animation: putting the scene back is a restore,
+            # not a live write that a spent budget or an old failure streak could hold off.
+            self._restoring = True
+            self._retry_at, self._failures = 0.0, 0
         if port.session != self._panel_session:
             self._panel_session = port.session
             self._save()
@@ -453,6 +480,7 @@ class PixelService:
             self._playing_seen = (appid is not None, now)
         elif now - since >= _GAME_SETTLE_S and self._playing != seen:
             self._playing = seen
+            self._restoring = True
             self._log("INFO", "game_started" if seen else "game_ended",
                       game_scene=self._game_scene, chosen_in_game=self._chosen_in is not None)
         # A scene picked during a game wins over the game scene until that game ends.
@@ -506,6 +534,7 @@ class PixelService:
             return
         self._rendered_key, self._valid_until, self._pending_user = key, segment.valid_until, False
         self._showing, self._restoring, self._on_alert = showing, False, self._alert is not None
+        self._shown_options = dict(chosen)
         self._alert_shown(now)
 
     def _alert_shown(self, now: float) -> None:

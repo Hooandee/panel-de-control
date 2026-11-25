@@ -528,6 +528,9 @@ def _kiosk_journal(level: str, event: str, **fields) -> None:
         diary.write(level, "kiosk", event, **fields)
 
 
+_PIXEL_BUILD_LOCK = threading.Lock()
+
+
 def _accessories_journal(level: str, event: str, **fields) -> None:
     diary = journal.active
     if diary is not None:
@@ -11707,7 +11710,12 @@ class Plugin(AmbientRpc):
 
     def _pixel_runtime(self) -> PixelRuntime:
         runtime = getattr(self, "_pixel", None)
-        if runtime is None:
+        if runtime is not None:
+            return runtime
+        with _PIXEL_BUILD_LOCK:
+            runtime = getattr(self, "_pixel", None)
+            if runtime is not None:
+                return runtime
             self._init()
             runtime = PixelRuntime(
                 settings_dir=decky.DECKY_PLUGIN_SETTINGS_DIR,
@@ -16096,6 +16104,8 @@ class Plugin(AmbientRpc):
             self._start_auto_loop()
             self._start_audio_loop()
             self._start_support_watch()
+            # Built off the loop: it reads the catalog, the library and the pet from disk.
+            await asyncio.to_thread(self._pixel_runtime)
             self._pixel_runtime().start()
             if self._pixel_runtime().supported:
                 self._start_pixel_fps_keeper()

@@ -146,7 +146,7 @@ class HeartScene(LiveScene):
         return self._fps(_value(ctx.metrics, "fps")), ctx.options.get("theme")
 
     def _render(self, ctx: SceneContext) -> Segment:
-        theme = theme_for({"theme": ctx.options.get("theme", "sunset")})
+        theme = theme_for({**ctx.options, "theme": ctx.options.get("theme", "sunset")})
         fps = self._fps.shown
         period = next(cs for limit, cs in _FPS_BEATS if fps is None or fps < limit) if fps else 90
         frames, delays = [], []

@@ -1424,6 +1424,8 @@ export interface AccessoriesState {
   game_scene: string | null;
   game_options?: Record<string, unknown>;
   showing: string | null;
+  shown_options?: Record<string, unknown>;
+  refused?: boolean;
   alerts: { achievements: boolean };
   on_suspend: "off" | "pet";
   speedrun_paused?: boolean;

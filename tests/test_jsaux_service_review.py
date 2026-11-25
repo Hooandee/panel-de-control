@@ -465,3 +465,38 @@ def test_a_clock_set_backwards_does_not_block_writes_for_hours():
     assert gov.retry_in("scheduled") <= 20
     clock.t += 21
     assert gov.decide("b", "scheduled") is Decision.ALLOW
+
+
+def test_a_replug_clears_an_old_failure_backoff(tmp_path):
+    panel, clock = FakePanel(), Clock()
+    svc = _svc(tmp_path, panel, clock)
+    svc.set_scene("steady", {})
+    svc.tick()
+    svc._retry_at, svc._failures = clock.t + 1800, 3
+    panel.session = "7-1:7:9"
+    for _ in range(4):
+        clock.t += 6
+        svc.tick()
+    assert len(panel.commands(codec.Cmd.GIF_END)) == 2
+
+
+def test_a_suspend_that_lands_after_the_wake_is_ignored(tmp_path):
+    panel, clock = FakePanel(), Clock()
+    svc = _svc(tmp_path, panel, clock)
+    svc.set_scene("steady", {})
+    svc.tick()
+    real_lock = svc._lock
+
+    class LateLock:
+        def __enter__(self):
+            svc._lock = real_lock
+            svc.resume()  # the wake wins the lock first
+            return real_lock.__enter__()
+
+        def __exit__(self, *exc):
+            return real_lock.__exit__(*exc)
+
+    clock.t += 1
+    svc._lock = LateLock()
+    svc.suspend(lambda: Segment([Canvas()], [100]))
+    assert svc.state()["suspended"] is False

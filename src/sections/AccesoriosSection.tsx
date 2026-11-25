@@ -176,8 +176,12 @@ export const AccesoriosSection: FC = () => {
   const status: Status = state.present ? "connected" : state.busy_by ? "busy" : "searching";
   const current: Draft | null = draft ?? (state.scene ? { id: state.scene, options: state.options } : null);
   const meta = state.catalog.find((scene) => scene.id === current?.id);
+  // While the panel is lit, a scene only counts as shown once it was actually written: a write
+  // held back by the wear budget or refused as too large leaves the previous one on screen.
+  const lit = state.present && state.power && !state.night_active;
   const onPanel = !!current && current.id === state.scene && sameOptions(current.options, state.options)
-    && (!state.showing || state.showing === state.scene);
+    && (!state.showing || (state.showing === state.scene
+      && (!lit || !state.shown_options || sameOptions(state.shown_options, state.options))));
   const gameScenes = state.catalog.filter((scene) => scene.category === "game" || scene.id === "pet");
   const gameOptions = [{ data: "", label: t("accessories.gameScene.none") },
     ...gameScenes.flatMap((scene) => scene.id === "game_cover"
@@ -208,6 +212,8 @@ export const AccesoriosSection: FC = () => {
           <Hero status={status} sceneId={current?.id ?? null} options={current?.options ?? {}} labelKey={meta?.labelKey}
             power={state.power && !state.night_active} onPanel={onPanel} canShow={state.present} onShow={show} />
           {!state.present && <EmptyState busyBy={state.busy_by} onTakeOver={() => void refresh()} />}
+          {state.present && state.refused && onPanel === false && current?.id === state.scene
+            && <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("accessories.tooLarge")}</span>}
         </div>
       </PanelSectionRow>
       <PanelSectionRow>

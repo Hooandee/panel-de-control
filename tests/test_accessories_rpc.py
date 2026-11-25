@@ -3,17 +3,26 @@ import asyncio
 from test_tdp_guard_rpc import plugin  # noqa: F401
 
 
-def test_accessories_state_off_on_other_machines_without_serial_io(plugin, monkeypatch):  # noqa: F811
-    from accessories.jsaux_pixel import detect
-    monkeypatch.setattr(detect, "find_panel", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no io")))
-    state = asyncio.run(plugin.get_accessories_state())
-    assert state["supported"] is False
-    assert state["present"] is False
+def test_other_machines_never_touch_the_serial_port(tmp_path):
+    from accessories.jsaux_pixel.runtime import Runtime
+
+    def no_io():
+        raise AssertionError("no serial io on other machines")
+
+    runtime = Runtime(settings_dir=tmp_path, device_key="rog_ally", log=lambda *a, **k: None,
+                      find_panel=no_io, uid=1000)
+    runtime.start()
+    runtime.service.tick()
+    assert runtime.worker is None
+    state = runtime.state()
+    assert state["supported"] is False and state["present"] is False
 
 
 def test_unknown_scene_is_an_error_not_a_write(plugin):  # noqa: F811
+    before = asyncio.run(plugin.get_accessories_state())["scene"]
     result = asyncio.run(plugin.set_accessory_scene("nope", {}))
     assert result["ok"] is False
+    assert asyncio.run(plugin.get_accessories_state())["scene"] == before
 
 
 def test_session_start_time_is_stable_between_ticks(plugin):  # noqa: F811

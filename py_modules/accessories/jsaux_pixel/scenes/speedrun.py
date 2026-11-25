@@ -11,6 +11,7 @@ from ..render.canvas import Canvas
 from ..render.palettes import mix, scale, theme_for
 from .base import Scene, SceneContext, Segment
 from .clocks import _centered
+from ..render.text import big_fitting, fit
 from .fit import fits
 from .game import _title
 from .words import Words, words
@@ -92,10 +93,9 @@ class SpeedrunScene(Scene):
 
 def _face(theme, said: Words, title: str, text: str, minute_progress: float, paused: bool = False, waiting: bool = False) -> Canvas:
     canvas = Canvas()
-    shown = title if fonts.measure(title, fonts.TINY) <= W - 4 else title[: max(1, (W - 8) // 4)].rstrip() + "."
-    _centered(canvas, 3, shown, fonts.TINY, theme.soft)
-    font = fonts.big(16) if fonts.measure(text, fonts.big(16)) <= W - 2 else fonts.big(12)
-    y = 14 if font.height == 16 else 16
+    _centered(canvas, 3, fit(title, fonts.TINY, W - 4), fonts.TINY, theme.soft)
+    font = big_fitting(text, (16, 12, 10), W - 2)
+    y = 14 + (16 - font.height) // 2
     colour = theme.dim if waiting else scale(theme.start, 0.6) if paused else theme.start
     _centered(canvas, y, text, font, colour)
     label = said.paused if paused else said.ready if waiting else "RUN"
