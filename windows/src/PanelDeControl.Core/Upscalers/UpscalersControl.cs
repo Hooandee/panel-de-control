@@ -239,10 +239,10 @@ public sealed class UpscalersRequest
                 && Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8)
                 && (Exe is null || Printable(Exe, MaximumExeLength)),
             UpscalersOperation.Cancel => Absent(AppId) && noChoice,
-            UpscalersOperation.SetIni => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
+            UpscalersOperation.SetIni => appId && Absent(Exe) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
                 && Printable(Key, MaximumIniKeyLength) && Printable(Value, UpscalerSettings.MaximumIniValueLength)
                 && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8),
-            UpscalersOperation.SetImage => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
+            UpscalersOperation.SetImage => appId && Absent(Exe) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
                 && Absent(Key) && Absent(Value)
                 && (SharpnessEnabled is null) == (SharpnessValue is null)
                 && (SharpnessEnabled is not null || Int8 is not null)
