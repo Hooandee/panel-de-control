@@ -39,6 +39,9 @@ public sealed class InstalledUpscaler
     /// <summary>Each asset that went in and its hash.</summary>
     public IReadOnlyList<KeyValuePair<string, string>> Components { get; set; } = Array.Empty<KeyValuePair<string, string>>();
 
+    /// <summary>Settings Panel changed in the game's own config under the user's profile, so removal can put them back.</summary>
+    public IReadOnlyList<GameConfigRecord> GameConfig { get; set; } = Array.Empty<GameConfigRecord>();
+
     public int Files { get; set; }
 }
 
@@ -65,18 +68,23 @@ public sealed class OptiScalerInstaller
     private readonly BuildCatalog _catalog;
     private readonly AssetCache _cache;
     private readonly string _gpu;
+    private readonly string? _profile;
 
-    public OptiScalerInstaller(BuildCatalog catalog, AssetCache cache, string gpu)
+    /// <param name="profile">The user's profile folder, where a recipe's game settings live; the real one when omitted.</param>
+    public OptiScalerInstaller(BuildCatalog catalog, AssetCache cache, string gpu, string? profile = null)
     {
         _catalog = catalog;
         _cache = cache;
         _gpu = gpu;
+        _profile = profile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     }
 
     /// <param name="analyze">Reads the game folder; called again once the previous install is out.</param>
     /// <param name="claimed">Whether some other install of Panel's owns a folder.</param>
+    /// <param name="automatic">The recipe's dependency packages and configuration, from <see cref="AutomaticRecipe.Plan"/>.</param>
     public async Task<InstalledUpscaler> InstallAsync(Func<GameAnalysis> analyze, ResolvedRecipe? recipe, OptiScalerInstallRequest request,
-        InstalledUpscaler? previous, Func<string, bool> claimed, IProgress<long>? progress, CancellationToken cancel)
+        InstalledUpscaler? previous, Func<string, bool> claimed, IProgress<long>? progress, CancellationToken cancel,
+        AutomaticRecipe? automatic = null)
     {
         var build = _catalog.Build(request.Build);
         if (build is null || !build.Available)
@@ -107,19 +115,20 @@ public sealed class OptiScalerInstaller
         }
         var target = analysis.Target;
         var effective = UpscalerPlanner.ForGame(_catalog, build, Inputs(analysis), _gpu, recipe?.Dependencies ?? Array.Empty<string>());
-        RequestedFrameGen(analysis, recipe, effective, request.Choice);
+        RequestedFrameGen(analysis, recipe, effective, request.Choice, automatic is not null);
 
         // Everything is downloaded before the current install comes out: a failed or cancelled download leaves the
         // game exactly as it was.
         GameFiles.RecoverOrphan(target, claimed);
-        var paths = await FetchAsync(Needed(effective, wantsAnr, recipe), progress, cancel).ConfigureAwait(false);
+        var paths = await FetchAsync(Needed(effective, wantsAnr, recipe, automatic), progress, cancel).ConfigureAwait(false);
         if (wantsAnr)
         {
             AnrSources(paths[_catalog.AnrFrameGen], "");
         }
+        automatic?.Sources(paths);
         if (previous is not null)
         {
-            GameFiles.Remove(previous.Target);
+            Uninstall(previous);
             // Files the game replaced since (an update) stayed behind with stale backups: those copies go, the game's stay.
             GameFiles.RecoverOrphan(target, _ => false);
             analysis = analyze();
@@ -132,7 +141,7 @@ public sealed class OptiScalerInstaller
 
         var proxy = request.Proxy ?? (recipe?.Proxy is { } named && _catalog.Proxies.Contains(named) ? named : null) ?? DefaultProxy;
         effective = UpscalerPlanner.ForGame(_catalog, build, Inputs(analysis), _gpu, recipe?.Dependencies ?? Array.Empty<string>());
-        var assets = Needed(effective, wantsAnr, recipe);
+        var assets = Needed(effective, wantsAnr, recipe, automatic);
         if (assets.Any(asset => !paths.ContainsKey(asset.Id)))
         {
             paths = await FetchAsync(assets, progress, cancel).ConfigureAwait(false);
@@ -150,7 +159,11 @@ public sealed class OptiScalerInstaller
         {
             injector = paths[effective.Injector!];
         }
-        var ordered = sources.ToList();
+        var ordered = automatic is null ? new List<KeyValuePair<string, string>>() : automatic.Sources(paths).ToList();
+        foreach (var pair in sources)
+        {
+            Put(ordered, pair.Key, pair.Value);
+        }
         Put(ordered, proxy, injector);
         var prefix = string.IsNullOrEmpty(effective.ExtraDir) ? "" : effective.ExtraDir + "/";
         foreach (var pair in effective.Replace)
@@ -189,17 +202,26 @@ public sealed class OptiScalerInstaller
             }
         }
 
-        var frameGen = RequestedFrameGen(analysis, recipe, effective, request.Choice);
+        var frameGen = RequestedFrameGen(analysis, recipe, effective, request.Choice, automatic is not null);
         var panel = PanelIni.Compute(_catalog, effective, recipe?.Ini, recipe?.OptiPatcher == true, request.Choice, frameGen, previous?.Anr == true);
         var seeds = Path.Combine(_cache.Root, ".recipe-" + Guid.NewGuid().ToString("N"));
         GameManifest manifest;
         try
         {
+            if (automatic is not null && automatic.Configuration.Count > 0)
+            {
+                Directory.CreateDirectory(seeds);
+                foreach (var pair in automatic.ConfiguredSources(target, seeds))
+                {
+                    Put(ordered, pair.Key, pair.Value);
+                }
+            }
             if (recipe is not null && recipe.Files.Values.Contains(ReframeworkConfig.Asset))
             {
                 Put(ordered, ReframeworkConfig.FileName, SeedReframework(target, seeds, recipe, request.Choice));
             }
-            manifest = GameFiles.Apply(target, ordered, IniText.Apply(baseIni, panel), protect: recipe?.ProtectDlls == true);
+            manifest = GameFiles.Apply(target, ordered, IniText.Apply(baseIni, panel), protect: recipe?.ProtectDlls == true,
+                configuration: automatic?.Configuration);
         }
         finally
         {
@@ -227,12 +249,17 @@ public sealed class OptiScalerInstaller
             Args = recipe?.Args ?? Array.Empty<string>(),
             Managed = panel.Select(pair => pair.Key).OrderBy(key => key, StringComparer.Ordinal).ToList(),
             Components = assets.Select(asset => new KeyValuePair<string, string>(asset.Id, asset.Sha256)).ToList(),
+            GameConfig = recipe is { GameConfig.Count: > 0 } ? GameConfigFiles.Apply(_profile, recipe.GameConfig).ToList() : Array.Empty<GameConfigRecord>(),
             Files = manifest.Files.Count,
         };
     }
 
     /// <summary>Takes an install out; returns the files kept because the game replaced them since.</summary>
-    public static IReadOnlyList<string> Uninstall(InstalledUpscaler install) => GameFiles.Remove(install.Target);
+    public static IReadOnlyList<string> Uninstall(InstalledUpscaler install)
+    {
+        GameConfigFiles.Restore(install.GameConfig);
+        return GameFiles.Remove(install.Target);
+    }
 
     /// <summary>REFramework's config with its menu closed (and its upscaler on Panel's quality), written beside the game's own.</summary>
     private static string SeedReframework(string target, string seeds, ResolvedRecipe recipe, UpscalerChoice choice)
@@ -264,7 +291,8 @@ public sealed class OptiScalerInstaller
     private UpscalerAsset? OptiPatcher() =>
         _catalog.Archives.TryGetValue("optipatcher", out var id) ? _catalog.Asset(id) : null;
 
-    private FrameGenPlan? RequestedFrameGen(GameAnalysis analysis, ResolvedRecipe? recipe, UpscalerBuild effective, UpscalerChoice choice)
+    private FrameGenPlan? RequestedFrameGen(GameAnalysis analysis, ResolvedRecipe? recipe, UpscalerBuild effective, UpscalerChoice choice,
+        bool dependenciesReady)
     {
         var generation = _catalog.Asset(effective.Archive)!.Generation;
         var plan = SolutionPlan.Resolve(_catalog, _gpu, new PlanAnalysis { Apis = analysis.Apis, Inputs = Inputs(analysis), Streamline = analysis.Streamline },
@@ -276,7 +304,7 @@ public sealed class OptiScalerInstaller
                 RecommendedInput = recipe.RecommendedInput,
                 Dependencies = recipe.Dependencies,
             },
-            generation, effective.Engine, choice.FrameGenRoute);
+            generation, effective.Engine, choice.FrameGenRoute, dependenciesReady);
         var requested = SolutionPlan.RequestedFrameGen(plan, choice.FrameGen, choice.FrameGenRoute);
         if (choice.FrameGen && requested is null)
         {
@@ -285,7 +313,7 @@ public sealed class OptiScalerInstaller
         return requested;
     }
 
-    private IReadOnlyList<UpscalerAsset> Needed(UpscalerBuild build, bool anr, ResolvedRecipe? recipe)
+    private IReadOnlyList<UpscalerAsset> Needed(UpscalerBuild build, bool anr, ResolvedRecipe? recipe, AutomaticRecipe? automatic)
     {
         var assets = UpscalerPlanner.BuildAssets(_catalog, build).ToList();
         foreach (var id in recipe?.Files.Values.Distinct(StringComparer.Ordinal) ?? Enumerable.Empty<string>())
@@ -303,6 +331,13 @@ public sealed class OptiScalerInstaller
         if (anr && _catalog.Asset(_catalog.AnrFrameGen) is { } addOn && !assets.Contains(addOn))
         {
             assets.Add(addOn);
+        }
+        foreach (var asset in automatic?.Assets() ?? Array.Empty<UpscalerAsset>())
+        {
+            if (assets.All(known => known.Id != asset.Id))
+            {
+                assets.Add(asset);
+            }
         }
         return assets;
     }

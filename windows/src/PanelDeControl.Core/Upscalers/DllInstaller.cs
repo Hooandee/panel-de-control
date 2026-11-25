@@ -102,7 +102,7 @@ public sealed class DllInstaller
 
         if (previous is not null)
         {
-            GameFiles.Remove(previous.Target);
+            OptiScalerInstaller.Uninstall(previous);
             GameFiles.RecoverOrphan(root, _ => false);
             analysis = analyze();
             targets = Targets(analysis, legacySwap);

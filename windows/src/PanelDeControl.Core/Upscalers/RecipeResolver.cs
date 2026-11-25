@@ -60,6 +60,10 @@ public sealed class ResolvedRecipe
 
     public IReadOnlyList<string> Dependencies { get; internal set; } = Array.Empty<string>();
 
+    /// <summary>Keys the recipe sets in files of the game folder, restored key by key on removal.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Configuration { get; internal set; } =
+        new Dictionary<string, IReadOnlyDictionary<string, string>>();
+
     public long? CatalogRevision { get; internal set; }
 
     public int? CatalogVersion { get; internal set; }
@@ -293,6 +297,7 @@ public sealed class RecipeResolver
             ModFrameGeneration = entry.ModFrameGeneration,
             FgNote = entry.FgNote,
             Dependencies = entry.Dependencies,
+            Configuration = entry.Configuration,
             CatalogRevision = entry.Revision,
             CatalogVersion = catalogVersion,
             Source = "game-recipes",

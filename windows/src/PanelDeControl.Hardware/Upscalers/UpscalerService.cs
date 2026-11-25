@@ -283,7 +283,7 @@ public sealed class UpscalerService : IUpscalersController
                 : new UpscalerRecipeStatus
                 {
                     Status = recipe.Status,
-                    Installable = recipe.Dependencies.Count == 0 && recipe.Configuration.Count == 0,
+                    Installable = AutomaticRecipe.Installable(data.Recipes, recipe),
                     Revision = recipe.Revision,
                     RecommendedBuild = recipe.RecommendedBuild,
                     Dependencies = Dependencies(recipe),
@@ -325,10 +325,7 @@ public sealed class UpscalerService : IUpscalersController
 
         var app = steam.Find(appId) ?? throw new UpscalerException("not_installed");
         var recipe = Recipe(app);
-        if (build.Engine == "optiscaler" && recipe is not null && (recipe.Dependencies.Count > 0 || recipe.Configuration.Count > 0))
-        {
-            throw new UpscalerException("recipe_unsupported");
-        }
+        var automatic = build.Engine == "optiscaler" ? AutomaticRecipe.Plan(data.Recipes, recipe) : null;
 
         GameGuards.EnsureCanInstall(app, runningImages());
         var job = jobs.Begin("install", appId);
@@ -350,7 +347,7 @@ public sealed class UpscalerService : IUpscalersController
             FrameGen = request.FrameGen == true,
             FrameGenRoute = request.FrameGenRoute,
         };
-        _ = start(() => RunInstallAsync(app, build.Id, choice, Resolved(app, build.Engine)));
+        _ = start(() => RunInstallAsync(app, build.Id, choice, Resolved(app, build.Engine), automatic));
         return Ok(job: job);
     }
 
@@ -368,7 +365,7 @@ public sealed class UpscalerService : IUpscalersController
         return Ok(job: job);
     }
 
-    private async Task RunInstallAsync(SteamApp app, string buildId, UpscalerChoice choice, ResolvedRecipe? recipe)
+    private async Task RunInstallAsync(SteamApp app, string buildId, UpscalerChoice choice, ResolvedRecipe? recipe, AutomaticRecipe? automatic)
     {
         var appId = app.AppId;
         Record(appId, "install", "started", buildId, null);
@@ -377,7 +374,7 @@ public sealed class UpscalerService : IUpscalersController
             jobs.Stage("prepare");
             var catalog = data.Catalog;
             var plan = catalog.Build(buildId)!;
-            var assets = UpscalerPlanner.BuildAssets(catalog, plan);
+            var assets = UpscalerPlanner.BuildAssets(catalog, plan).Concat(automatic?.Assets() ?? Array.Empty<UpscalerAsset>()).ToList();
             var total = assets.GroupBy(asset => asset.Sha256, StringComparer.Ordinal).Sum(group => group.Last().Size);
             var pending = assets.Any(asset => !cache.Ready(asset));
             jobs.Stage(pending ? "download" : "install", total);
@@ -407,7 +404,8 @@ public sealed class UpscalerService : IUpscalersController
                     previous?.Install,
                     folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder)),
                     progress,
-                    CancellationToken.None).ConfigureAwait(false);
+                    CancellationToken.None,
+                    automatic).ConfigureAwait(false);
             install.AddedArgs = previous?.Install.AddedArgs ?? Array.Empty<string>();
             try
             {
