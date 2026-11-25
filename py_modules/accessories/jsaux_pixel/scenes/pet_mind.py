@@ -19,6 +19,8 @@ from json_store import atomic_json_save
 TRAITS = ("brave", "playful", "greedy", "sleepy", "curious")
 _HUNGER_S = 8 * 3600
 _AWAKE_S = 16 * 3600
+# Memory keys that start as None: their stored type cannot be read off the default.
+_NULLABLE = {"asleep_since": (int, float), "proud_at": (int, float), "last_session": str, "interaction": list}
 _SLEEP_RECOVERY_S = 7 * 3600
 _FUN_S = 5 * 3600
 _LOVE_S = 20 * 3600
@@ -114,8 +116,12 @@ class Mind:
             "routine": [0.0] * _WEEK_HOURS, "routine_at": now, "seen_at": now,
         }
         for key, value in memory.items():
-            if key in self.memory and (value is None or isinstance(value, type(self.memory[key])) or
-                                       isinstance(value, (int, float)) and isinstance(self.memory[key], (int, float))):
+            if key not in self.memory:
+                continue
+            kind = _NULLABLE.get(key)
+            default = self.memory[key]
+            if value is None or (isinstance(value, kind) if kind else (isinstance(value, type(default)) or
+                                 isinstance(value, (int, float)) and isinstance(default, (int, float)))):
                 self.memory[key] = value
         routine = self.memory["routine"]
         if len(routine) != _WEEK_HOURS or not all(isinstance(v, (int, float)) and v >= 0 for v in routine):

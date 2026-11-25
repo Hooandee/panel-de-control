@@ -236,3 +236,15 @@ def test_a_restart_remembers_when_it_last_saw_the_console(tmp_path):
     again = _mind(tmp_path)
     again.observe(1_000_000.0 + 9 * HOUR, night=False, playing=False)
     assert again.needs(1_000_000.0 + 9 * HOUR)["energy"] > 0.9
+
+
+def test_nullable_memory_survives_a_reload(tmp_path):
+    path = tmp_path / "pet.json"
+    mind = Mind(path)
+    mind.memory.update({"asleep_since": 1_000_000.0, "last_session": "42:123", "proud_at": 5.0, "interaction": ["trophy", 6.0]})
+    mind._save()
+    again = Mind(path)
+    assert again.memory["asleep_since"] == 1_000_000.0
+    assert again.memory["last_session"] == "42:123"
+    assert again.memory["proud_at"] == 5.0
+    assert again.memory["interaction"] == ["trophy", 6.0]

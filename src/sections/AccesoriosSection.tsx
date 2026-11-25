@@ -231,7 +231,7 @@ export const AccesoriosSection: FC = () => {
           <SceneGallery catalog={state.catalog} selectedScene={current?.id ?? ""} panelScene={state.scene ?? ""}
             selectedDrawing={current?.id === "custom" && typeof current.options.drawing === "string" ? current.options.drawing : null}
             panelDrawing={state.scene === "custom" && typeof state.options.drawing === "string" ? state.options.drawing : null}
-            layout={composedBlocks(current?.id === "composed" ? current.options : state.scene === "composed" ? state.options : undefined)}
+            layout={composedBlocks(current?.id === "composed" ? current.options : { layout: state.last_layout })}
             onPick={(id, options) => preview(id, options ?? {})} onSend={(id, options) => void send(id, options)}>
             {current && meta && meta.options.length > 0 && (
               <SceneOptions options={meta.options} values={current.options} speedrunPaused={state.speedrun_paused}

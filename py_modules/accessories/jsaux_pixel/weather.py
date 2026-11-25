@@ -21,6 +21,8 @@ from .scenes.base import Scene, SceneContext, Segment
 
 W, H = codec.WIDTH, codec.HEIGHT
 _TTL_S = 30 * 60
+# Older than this a reading is shown as unknown: yesterday's temperature or a sun at night would lie.
+_STALE_S = 3 * 3600
 _RETRY_S = 5 * 60
 _RETRY_MAX_S = 30 * 60
 _TIMEOUT_S = 6
@@ -100,7 +102,7 @@ class WeatherSource:
             self._spawn(lambda: self._refresh(key))
             with self._lock:
                 cached = self._cache.get(key)
-        return cached[1] if cached else None
+        return cached[1] if cached and now - cached[0] < _STALE_S else None
 
     def pending(self, city: dict) -> bool:
         key = (round(float(city["lat"]), 2), round(float(city["lon"]), 2))

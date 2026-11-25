@@ -28,7 +28,8 @@ class CustomScene(Scene):
     def render(self, ctx: SceneContext) -> Segment:
         drawing = self._drawing(ctx)
         if not drawing:
-            return Segment([Canvas()], [100])
+            # A deleted drawing leaves what is on the panel rather than blanking it.
+            return Segment([Canvas()], [100], ready=False)
         frames = []
         for encoded in drawing["frames"]:
             raw = base64.b64decode(encoded)

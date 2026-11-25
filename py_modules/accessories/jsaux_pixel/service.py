@@ -118,6 +118,8 @@ class PixelService:
         game_options = stored.get("game_options")
         self._game_options: dict = game_options if isinstance(game_options, dict) and self._game_scene else {}
         self._showing: str | None = None
+        layout = stored.get("last_layout")
+        self._last_layout = layout if isinstance(layout, dict) else (self._options.get("layout") if self._scene_id == "composed" else None)
         self._shown_options: dict = {}
         self._open_error: str | None = None
         self._woke_at = float("-inf")
@@ -151,6 +153,8 @@ class PixelService:
             raise ValueError(f"unknown scene {scene_id!r}")
         with self._lock:
             self._scene_id, self._options = scene_id, dict(options or {})
+            if scene_id == "composed":
+                self._last_layout = self._options.get("layout")
             self._chosen_in = self._running_appid
             self._user_changed()
             self._save()
@@ -228,6 +232,8 @@ class PixelService:
             if self._scene_id is None:
                 return
             self._alert, self._alert_until = (scene_id, dict(alert), seconds, self._clock()), None
+            # The governor spaces alerts itself; a wait left by a live reading would make it stale.
+            self._retry_at = 0.0
 
     def set_on_suspend(self, mode: str) -> None:
         if mode not in SUSPEND_MODES:
@@ -253,8 +259,13 @@ class PixelService:
                 if self._on_suspend == "pet":
                     if not self._power_sent or not self._power or self._night_active(now):
                         return
-                    if self._upload(asleep(), "alert", "pet", ("suspend",), now):
+                    if self._upload(asleep(), "restore", "pet", ("suspend",), now):
                         self._rendered_key = ("suspend",)
+                        return
+                    # Out of budget: a dark panel beats an alert or a live dashboard left all night.
+                    reply = self._request(codec.frame(1, codec.Cmd.POWER, b"\x00"))
+                    if reply is not None and codec.is_ack(reply, 1, codec.Cmd.POWER):
+                        self._power_sent = False
                 else:
                     reply = self._request(codec.frame(1, codec.Cmd.POWER, b"\x00"))
                     if reply is not None and codec.is_ack(reply, 1, codec.Cmd.POWER):
@@ -310,6 +321,7 @@ class PixelService:
                 "game_options": dict(self._game_options),
                 "showing": self._showing,
                 "shown_options": dict(self._shown_options),
+                "last_layout": self._last_layout,
                 "refused": self._refused is not None and self._refused[0] == self._scene_id,
                 "alerts": dict(self._alerts),
                 "brightness": self._brightness,
@@ -338,7 +350,7 @@ class PixelService:
             # Steam announced a suspend that never came: the worker kept ticking without a gap.
             self._log("WARNING", "suspend_expired")
             self.resume()
-        if not self._enabled or self._scene_id is None:
+        if not self._enabled or (self._scene_id is None and self._game_scene is None):
             return
         with self._lock:
             now = self._clock()
@@ -488,7 +500,9 @@ class PixelService:
             self._chosen_in = None
 
     def _sync_scene(self, now: float, base: SceneContext) -> None:
-        if now < self._retry_at:
+        # A live reading held back must not delay the hour turning over on a clock face.
+        expired_face = self._valid_until is not None and now >= self._valid_until
+        if now < self._retry_at and not expired_face:
             return
         if self._alert is not None and now >= (self._alert_until if self._alert_until is not None
                                                else self._alert[3] + _ALERT_STALE_S):
@@ -499,6 +513,8 @@ class PixelService:
         else:
             showing = self._game_scene if playing else self._scene_id
             chosen = self._game_options if playing else self._options
+            if showing is None:
+                return
         scene = self._scenes[showing]
         options = {**chosen, **self._option_extras(chosen)}
         ctx = dataclasses.replace(base, options=options)
@@ -643,6 +659,7 @@ class PixelService:
                 "on_suspend": self._on_suspend,
                 "language": self._language,
                 "panel_session": self._panel_session,
+                "last_layout": self._last_layout,
                 "governor": self._governor.snapshot(),
             })
         except OSError as error:

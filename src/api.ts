@@ -1425,6 +1425,7 @@ export interface AccessoriesState {
   game_options?: Record<string, unknown>;
   showing: string | null;
   shown_options?: Record<string, unknown>;
+  last_layout?: { blocks?: unknown[] } | null;
   refused?: boolean;
   alerts: { achievements: boolean };
   on_suspend: "off" | "pet";

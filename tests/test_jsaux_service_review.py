@@ -500,3 +500,48 @@ def test_a_suspend_that_lands_after_the_wake_is_ignored(tmp_path):
     svc._lock = LateLock()
     svc.suspend(lambda: Segment([Canvas()], [100]))
     assert svc.state()["suspended"] is False
+
+
+def test_a_game_scene_alone_connects_and_shows_while_playing(tmp_path):
+    panel, clock, game = FakePanel(), Clock(), {"value": None}
+    svc = _svc(tmp_path, panel, clock, game=game)
+    svc.set_game_scene("steady", {})
+    svc.tick()
+    assert svc.state()["present"] is True
+    assert panel.uploads() == []
+    game["value"] = {"appid": "1"}
+    for _ in range(15):
+        clock.t += 1
+        svc.tick()
+    assert len(panel.uploads()) == 1
+
+
+def test_an_alert_is_not_held_by_a_live_retry(tmp_path):
+    panel, clock = FakePanel(), Clock()
+    svc = _svc(tmp_path, panel, clock)
+    svc.set_scene("steady", {})
+    svc.tick()
+    svc._retry_at = clock.t + 58
+    svc.show_alert("steady", {"title": "x"})
+    assert svc._retry_at == 0.0
+
+
+def test_the_last_composition_is_remembered_after_another_scene(tmp_path):
+    panel, clock = FakePanel(), Clock()
+    scenes = {"composed": Steady(), "steady": Steady()}
+    svc = service.PixelService(
+        store_path=tmp_path / "s.json", find_panel=panel.find, open_link=lambda port: FakeLink(panel),
+        port_holders=lambda dev: [], clock=clock, log=lambda *a, **k: None, scenes=scenes,
+        context=lambda now: SceneContext(now=now), handshake=lambda link: True, official_active=lambda: False,
+        sleep=lambda s: None,
+    )
+    layout = {"blocks": [{"type": "text", "x": 1, "y": 2, "text": "HI"}]}
+    svc.set_scene("composed", {"layout": layout})
+    svc.set_scene("steady", {})
+    assert svc.state()["last_layout"] == layout
+    again = service.PixelService(
+        store_path=tmp_path / "s.json", find_panel=panel.find, open_link=lambda port: FakeLink(panel),
+        port_holders=lambda dev: [], clock=clock, log=lambda *a, **k: None, scenes=scenes,
+        context=lambda now: SceneContext(now=now), handshake=lambda link: True, official_active=lambda: False,
+    )
+    assert again.state()["last_layout"] == layout
