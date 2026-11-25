@@ -548,6 +548,30 @@
   <data name="UpscalersAdvanced" xml:space="preserve"><value>Erweitert</value></data>
   <data name="UpscalersExe" xml:space="preserve"><value>Programmdatei des Spiels</value></data>
   <data name="UpscalersApis" xml:space="preserve"><value>Grafik-APIs</value></data>
+  <data name="UpscalersSettingsTitle" xml:space="preserve"><value>Einstellungen ohne Neuinstallation</value></data>
+  <data name="UpscalersFrameGen" xml:space="preserve"><value>Frame Generation</value></data>
+  <data name="UpscalersRoute_game" xml:space="preserve"><value>Vom Spiel</value></data>
+  <data name="UpscalersRoute_optiscaler" xml:space="preserve"><value>OptiFG</value></data>
+  <data name="UpscalersRoute_anr" xml:space="preserve"><value>Apex ANR</value></data>
+  <data name="UpscalersApply" xml:space="preserve"><value>Änderungen anwenden</value></data>
+  <data name="UpscalersApplied" xml:space="preserve"><value>Gespeichert</value></data>
+  <data name="UpscalersAppliedNextLaunch" xml:space="preserve"><value>Gespeichert. Starte das Spiel neu, um es anzuwenden</value></data>
+  <data name="UpscalersSharpness" xml:space="preserve"><value>Bildschärfe</value></data>
+  <data name="UpscalersSharpnessApply" xml:space="preserve"><value>Bildeinstellungen anwenden</value></data>
+  <data name="UpscalersRestore" xml:space="preserve"><value>Bildeinstellungen wiederherstellen</value></data>
+  <data name="UpscalersInt8" xml:space="preserve"><value>INT8-Beschleunigung</value></data>
+  <data name="UpscalersIniTitle" xml:space="preserve"><value>Alle OptiScaler-Optionen</value></data>
+  <data name="UpscalersIniKey" xml:space="preserve"><value>Option (Abschnitt.Schlüssel)</value></data>
+  <data name="UpscalersIniValue" xml:space="preserve"><value>Wert</value></data>
+  <data name="UpscalersIniSave" xml:space="preserve"><value>Option speichern</value></data>
+  <data name="UpscalersIniSaved" xml:space="preserve"><value>Gespeichert. Starte das Spiel neu, um es anzuwenden</value></data>
+  <data name="UpscalersIniManaged" xml:space="preserve"><value>Von Panel gesteuert</value></data>
+  <data name="UpscalersErrIniManaged" xml:space="preserve"><value>Diese Option steuert Panel: Ändere sie mit den Einstellungen oben.</value></data>
+  <data name="UpscalersErrIniKey" xml:space="preserve"><value>OptiScaler.ini hat diese Option nicht.</value></data>
+  <data name="UpscalersErrIniValue" xml:space="preserve"><value>Dieser Wert ist für diese Option ungültig.</value></data>
+  <data name="UpscalersErrAnrReinstall" xml:space="preserve"><value>ANR braucht eine Neuinstallation mit OptiScaler 10.</value></data>
+  <data name="UpscalersErrFgRoute" xml:space="preserve"><value>Diese Frame Generation ist in diesem Spiel nicht verfügbar.</value></data>
+  <data name="UpscalersErrIniChanged" xml:space="preserve"><value>OptiScaler.ini hat sich inzwischen geändert. Versuche es erneut.</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>DLL-Modus</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>Im DLL-Modus wird die Qualität im Spiel geändert.</value></data>

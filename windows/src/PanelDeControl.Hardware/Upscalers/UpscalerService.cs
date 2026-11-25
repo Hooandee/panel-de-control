@@ -14,7 +14,7 @@ public interface IUpscalersController
 /// What the widget asks of upscalers: reads answer at once, install and uninstall start the one background job the
 /// widget then polls. Everything reported is read back from the game's manifest, never taken from what was asked.
 /// </summary>
-public sealed class UpscalerService : IUpscalersController
+public sealed partial class UpscalerService : IUpscalersController
 {
     public static readonly TimeSpan OverviewScanBudget = TimeSpan.FromSeconds(3);
 
@@ -124,6 +124,23 @@ public sealed class UpscalerService : IUpscalersController
                     }
 
                     return await Task.Run(() => BeginUninstall(request.AppId!), cancellationToken).ConfigureAwait(false);
+                case UpscalersOperation.Ini:
+                    return await Task.Run(() => IniSchema(request.AppId!), cancellationToken).ConfigureAwait(false);
+                case UpscalersOperation.Image:
+                    return await Task.Run(() => ImageSettingsOf(request.AppId!), cancellationToken).ConfigureAwait(false);
+                case UpscalersOperation.Configure or UpscalersOperation.SetIni or UpscalersOperation.SetImage or UpscalersOperation.RestoreImage:
+                    if (!request.ExperimentalEnabled)
+                    {
+                        return UpscalersResponse.Rejected("experimental_required", jobs.Snapshot());
+                    }
+
+                    return await Task.Run(() => request.Operation switch
+                    {
+                        UpscalersOperation.Configure => Configure(request),
+                        UpscalersOperation.SetIni => SetIni(request.AppId!, request.Key!, request.Value!),
+                        UpscalersOperation.SetImage => SetImage(request),
+                        _ => RestoreImage(request.AppId!),
+                    }, cancellationToken).ConfigureAwait(false);
                 default:
                     return UpscalersResponse.Rejected("unsupported_operation", jobs.Snapshot());
             }
@@ -376,7 +393,12 @@ public sealed class UpscalerService : IUpscalersController
 
         // Everything that can refuse the request runs before the job starts: a job is only ever left by Finish or Fail.
         GameGuards.EnsureCanInstall(app, runningImages());
-        var job = jobs.Begin("install", appId);
+        UpscalerJobStatus job;
+        lock (settingsLock)
+        {
+            job = jobs.Begin("install", appId);
+        }
+
 
         var choice = new UpscalerChoice
         {
@@ -399,7 +421,12 @@ public sealed class UpscalerService : IUpscalersController
             GameGuards.EnsureClosed(app, runningImages());
         }
 
-        var job = jobs.Begin("uninstall", appId);
+        UpscalerJobStatus job;
+        lock (settingsLock)
+        {
+            job = jobs.Begin("uninstall", appId);
+        }
+
         _ = start(() => RunUninstallAsync(appId, stored));
         return Ok(job: job);
     }
@@ -434,7 +461,15 @@ public sealed class UpscalerService : IUpscalersController
             try
             {
                 var installedAt = clock();
-                store.SetInstall(appId, install, installedAt);
+                if (install.Engine == "optiscaler")
+                {
+                    store.SetImageReceipt(appId, install.ImageReceipt, new StoredUpscaler(install, installedAt));
+                }
+                else
+                {
+                    store.SetInstall(appId, install, installedAt);
+                }
+
                 WriteRecord(install, installedAt);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -731,7 +766,10 @@ public sealed class UpscalerService : IUpscalersController
     {
         try
         {
-            PanelInstallRecord.Write(install.Target, new StoredUpscaler(install, installedAt));
+            var owner = store.InstalledAppIds.FirstOrDefault(id => SamePath(store.Install(id)?.Install.Target, install.Target));
+            var receipt = owner is null ? null : store.ImageReceipt(owner);
+            PanelInstallRecord.Write(install.Target, new StoredUpscaler(install, installedAt),
+                receipt is not null && SamePath(Path.GetDirectoryName(receipt.Target), install.Target) ? receipt : null);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -1007,6 +1045,11 @@ public sealed class UpscalerService : IUpscalersController
             try
             {
                 store.SetInstall(app.AppId, record.Install, record.InstalledAt);
+                if (PanelInstallRecord.ReadReceipt(target) is { } receipt)
+                {
+                    store.SetImageReceipt(app.AppId, receipt);
+                }
+
                 log("upscalers.recovered", app.AppId);
                 return UpscalerGameStates.Installed;
             }
@@ -1082,6 +1125,11 @@ public sealed class UpscalerService : IUpscalersController
             Fallback = verdict?.Fallback,
             Build = install.Build,
             Version = data.Catalog.Build(install.Build)?.Version,
+            Sharpness = install.Options.Sharpness,
+            FrameGen = install.Options.FrameGen ? true : null,
+            FrameGenRoute = install.Options.FrameGenRoute,
+            Engine = install.Engine,
+            Anr = install.Anr ? true : null,
             Proxy = install.Proxy,
             Exe = install.Exe,
             Quality = install.Options.Quality,
@@ -1174,6 +1222,11 @@ public sealed class UpscalerService : IUpscalersController
             right.Replace('/', '\\').TrimEnd('\\'),
             StringComparison.OrdinalIgnoreCase);
 
-    private UpscalersResponse Ok(UpscalersOverview? overview = null, UpscalerGameDetail? game = null, UpscalerJobStatus? job = null, UpscalerCover? cover = null) =>
-        new() { Status = UpscalersResponseStatus.Ok, Overview = overview, Game = game, Job = job ?? jobs.Snapshot(), Cover = cover };
+    private UpscalersResponse Ok(UpscalersOverview? overview = null, UpscalerGameDetail? game = null, UpscalerJobStatus? job = null, UpscalerCover? cover = null,
+        UpscalerOptions? options = null, UpscalerIniSection[]? ini = null, UpscalerImageSettings? image = null, UpscalerIniEdit? iniEdit = null) =>
+        new()
+        {
+            Status = UpscalersResponseStatus.Ok, Overview = overview, Game = game, Job = job ?? jobs.Snapshot(), Cover = cover,
+            Options = options, Ini = ini, Image = image, IniEdit = iniEdit,
+        };
 }

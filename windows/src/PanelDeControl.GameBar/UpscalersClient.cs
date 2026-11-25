@@ -29,6 +29,22 @@ public sealed class UpscalersClient
     public Task<UpscalersResponse> UninstallAsync(string appId, bool experimental) =>
         SendAsync(UpscalersRequest.Uninstall(appId, experimental));
 
+    public Task<UpscalersResponse> ConfigureAsync(string appId, string? quality, string? sharpness, bool frameGen, string? frameGenRoute, string? model, bool experimental) =>
+        SendAsync(UpscalersRequest.Configure(appId, quality, sharpness, frameGen, frameGenRoute, model, experimental));
+
+    public Task<UpscalersResponse> IniAsync(string appId) => SendAsync(UpscalersRequest.Ini(appId));
+
+    public Task<UpscalersResponse> SetIniAsync(string appId, string key, string value, bool experimental) =>
+        SendAsync(UpscalersRequest.SetIni(appId, key, value, experimental));
+
+    public Task<UpscalersResponse> ImageAsync(string appId) => SendAsync(UpscalersRequest.Image(appId));
+
+    public Task<UpscalersResponse> SetImageAsync(string appId, bool? sharpnessEnabled, double? sharpnessValue, string? int8, bool experimental) =>
+        SendAsync(UpscalersRequest.SetImage(appId, sharpnessEnabled, sharpnessValue, int8, experimental));
+
+    public Task<UpscalersResponse> RestoreImageAsync(string appId, bool experimental) =>
+        SendAsync(UpscalersRequest.RestoreImage(appId, experimental));
+
     private static async Task<UpscalersResponse> SendAsync(UpscalersRequest request)
     {
         string payload;

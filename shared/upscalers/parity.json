@@ -14,7 +14,7 @@
     "get_upscalers_game": {
       "windows": "partial",
       "op": "game",
-      "note": "verdict, history, dependencies and launch args; no ini or image settings yet"
+      "note": "verdict, history, dependencies and launch args; the INI editor and image settings answer through their own operations"
     },
     "install_upscaler": {
       "windows": "partial",
@@ -70,22 +70,29 @@
       "note": "F4, Windows.Graphics.Capture"
     },
     "configure_upscaler": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "configure",
+      "note": "no ini_written snapshot for reports yet"
     },
     "get_upscaler_ini": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "ini"
     },
     "set_upscaler_ini": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "set_ini"
     },
     "get_upscaler_image_settings": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "image"
     },
     "set_upscaler_image_settings": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "set_image"
     },
     "restore_upscaler_image_settings": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "restore_image"
     },
     "record_upscaler_args": {
       "windows": "done",

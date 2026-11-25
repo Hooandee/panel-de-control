@@ -28,6 +28,27 @@ public enum UpscalersOperation
     /// <summary>Reads the in-game badge's mode, or sets it when the request carries one.</summary>
     [EnumMember(Value = "ingame")]
     InGame = 6,
+    /// <summary>Quality, sharpness, model and frame generation of an OptiScaler install, without reinstalling.</summary>
+    [EnumMember(Value = "configure")]
+    Configure = 7,
+
+    /// <summary>Every OptiScaler.ini key with its help, allowed values and whether Panel owns it.</summary>
+    [EnumMember(Value = "ini")]
+    Ini = 8,
+
+    /// <summary>One OptiScaler.ini key the user changed by hand.</summary>
+    [EnumMember(Value = "set_ini")]
+    SetIni = 9,
+
+    [EnumMember(Value = "image")]
+    Image = 10,
+
+    [EnumMember(Value = "set_image")]
+    SetImage = 11,
+
+    /// <summary>Puts back the values the image controls replaced, where they still hold Panel's.</summary>
+    [EnumMember(Value = "restore_image")]
+    RestoreImage = 12,
 }
 
 [DataContract]
@@ -109,6 +130,25 @@ public sealed class UpscalersRequest
     /// <summary>The in-game badge mode to set: <c>off</c>, <c>start</c> or <c>always</c>.</summary>
     [DataMember(Name = "mode", Order = 10, EmitDefaultValue = false)]
     public string? Mode { get; private set; }
+    /// <summary>The OptiScaler.ini key for <see cref="UpscalersOperation.SetIni"/>, as <c>Section.Key</c> or a bare <c>Key</c>.</summary>
+    [DataMember(Name = "key", Order = 11, EmitDefaultValue = false)]
+    public string? Key { get; private set; }
+
+    [DataMember(Name = "value", Order = 12, EmitDefaultValue = false)]
+    public string? Value { get; private set; }
+
+    /// <summary>Image controls: sharpness on or off, with <see cref="SharpnessValue"/> from 0 to 1.</summary>
+    [DataMember(Name = "sharpness_enabled", Order = 13, EmitDefaultValue = false)]
+    public bool? SharpnessEnabled { get; private set; }
+
+    [DataMember(Name = "sharpness_value", Order = 14, EmitDefaultValue = false)]
+    public double? SharpnessValue { get; private set; }
+
+    /// <summary>HelixSR's INT8 switch: <c>auto</c>, <c>on</c> or <c>off</c>.</summary>
+    [DataMember(Name = "int8", Order = 15, EmitDefaultValue = false)]
+    public string? Int8 { get; private set; }
+
+    public const int MaximumIniKeyLength = 128;
 
     public static UpscalersRequest Overview() => new(UpscalersOperation.Overview);
 
@@ -133,6 +173,32 @@ public sealed class UpscalersRequest
     public static UpscalersRequest Uninstall(string appId, bool experimental) =>
         new(UpscalersOperation.Uninstall, appId, experimental: experimental);
 
+    public static UpscalersRequest Configure(string appId, string? quality, string? sharpness, bool frameGen, string? frameGenRoute, string? model, bool experimental) =>
+        new(UpscalersOperation.Configure, appId, quality: quality, model: model, experimental: experimental)
+        {
+            Sharpness = sharpness,
+            FrameGen = frameGen ? true : null,
+            FrameGenRoute = frameGenRoute,
+        };
+
+    public static UpscalersRequest Ini(string appId) => new(UpscalersOperation.Ini, appId: appId);
+
+    public static UpscalersRequest SetIni(string appId, string key, string value, bool experimental) =>
+        new(UpscalersOperation.SetIni, appId, experimental: experimental) { Key = key, Value = value };
+
+    public static UpscalersRequest Image(string appId) => new(UpscalersOperation.Image, appId: appId);
+
+    public static UpscalersRequest SetImage(string appId, bool? sharpnessEnabled, double? sharpnessValue, string? int8, bool experimental) =>
+        new(UpscalersOperation.SetImage, appId, experimental: experimental)
+        {
+            SharpnessEnabled = sharpnessEnabled,
+            SharpnessValue = sharpnessValue,
+            Int8 = int8,
+        };
+
+    public static UpscalersRequest RestoreImage(string appId, bool experimental) =>
+        new(UpscalersOperation.RestoreImage, appId, experimental: experimental);
+
     public bool ExperimentalEnabled => Experimental == true;
 
     internal void Validate()
@@ -140,19 +206,34 @@ public sealed class UpscalersRequest
         bool Absent(string? field) => field is null;
         bool Token(string? field) => field is { Length: > 0 and <= MaximumFieldLength } && field.All(IsTokenCharacter);
         bool Optional(string? field) => field is null || Token(field);
-        var noFrameGen = Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && Absent(Mode);
+        var noSettings = Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8);
+        var noFrameGen = Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && noSettings && Absent(Mode);
+        var noChoice = Absent(Build) && Absent(Quality) && Absent(Model) && noFrameGen;
+        bool Printable(string? field, int limit) => field is { Length: > 0 } && field.Length <= limit && !field.Any(char.IsControl);
         var appId = AppId is { Length: > 0 and <= MaximumAppIdLength } && AppId.All(character => character is >= '0' and <= '9');
         var valid = Operation switch
         {
             UpscalersOperation.Overview or UpscalersOperation.Job =>
                 Absent(AppId) && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null && noFrameGen,
             UpscalersOperation.Game or UpscalersOperation.Cover => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null && noFrameGen,
-            UpscalersOperation.Install => appId && Token(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && Absent(Mode)
+            UpscalersOperation.Configure => appId && Absent(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && noSettings && Absent(Mode)
+                && (FrameGenRoute is null || Array.IndexOf(FrameGenRoutes, FrameGenRoute) >= 0),
+            UpscalersOperation.Ini or UpscalersOperation.Image => appId && Experimental is null && noChoice,
+            UpscalersOperation.RestoreImage => appId && noChoice,
+            UpscalersOperation.SetIni => appId && Absent(Mode) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
+                && Printable(Key, MaximumIniKeyLength) && Printable(Value, UpscalerSettings.MaximumIniValueLength)
+                && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8),
+            UpscalersOperation.SetImage => appId && Absent(Mode) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
+                && Absent(Key) && Absent(Value)
+                && (SharpnessEnabled is null) == (SharpnessValue is null)
+                && (SharpnessEnabled is not null || Int8 is not null)
+                && (Int8 is null || Int8 is "auto" or "on" or "off"),
+            UpscalersOperation.Install => appId && Token(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && Absent(Mode) && noSettings
                 && (FrameGenRoute is null || Array.IndexOf(FrameGenRoutes, FrameGenRoute) >= 0),
             UpscalersOperation.Uninstall => appId && Absent(Build) && Absent(Quality) && Absent(Model) && noFrameGen,
             UpscalersOperation.InGame =>
                 Absent(AppId) && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null
-                && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && (Mode is null || InGameModes.IsValid(Mode)),
+                && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && noSettings && (Mode is null || InGameModes.IsValid(Mode)),
             _ => false,
         };
         if (!valid)
@@ -403,6 +484,24 @@ public sealed class UpscalerInstallEntry
     /// <summary>FSR 4 was chosen but the log shows an older FSR running instead.</summary>
     [DataMember(Name = "fallback", Order = 15, EmitDefaultValue = false)]
     public string? Fallback { get; set; }
+
+    [DataMember(Name = "sharpness", Order = 16, EmitDefaultValue = false)]
+    public string? Sharpness { get; set; }
+
+    /// <summary>Frame generation as the install was last set; true only when on.</summary>
+    [DataMember(Name = "fg", Order = 17, EmitDefaultValue = false)]
+    public bool? FrameGen { get; set; }
+
+    [DataMember(Name = "fg_route", Order = 18, EmitDefaultValue = false)]
+    public string? FrameGenRoute { get; set; }
+
+    /// <summary><c>optiscaler</c>, <c>dll</c> or <c>helixsr</c>: which settings the install can change in place.</summary>
+    [DataMember(Name = "engine", Order = 19, EmitDefaultValue = false)]
+    public string? Engine { get; set; }
+
+    /// <summary>Whether ANR's files went in, so its frame generation route needs no reinstall.</summary>
+    [DataMember(Name = "anr", Order = 20, EmitDefaultValue = false)]
+    public bool? Anr { get; set; }
 }
 
 [DataContract]
@@ -497,6 +596,140 @@ public sealed class UpscalerCover
     public string Data { get; set; } = "";
 }
 
+/// <summary>What an install is set to, in the Linux backend's <c>options</c> shape.</summary>
+[DataContract]
+public sealed class UpscalerOptions
+{
+    [DataMember(Name = "quality", Order = 1, EmitDefaultValue = false)]
+    public string? Quality { get; set; }
+
+    [DataMember(Name = "sharpness", Order = 2, EmitDefaultValue = false)]
+    public string? Sharpness { get; set; }
+
+    /// <summary><c>on</c> or <c>off</c>.</summary>
+    [DataMember(Name = "fg", Order = 3, IsRequired = true)]
+    public string FrameGen { get; set; } = "off";
+
+    [DataMember(Name = "fg_route", Order = 4, EmitDefaultValue = false)]
+    public string? FrameGenRoute { get; set; }
+
+    [DataMember(Name = "model", Order = 5, EmitDefaultValue = false)]
+    public string? Model { get; set; }
+
+    /// <summary>False when the game is running: the change is saved for its next start.</summary>
+    [DataMember(Name = "live", Order = 6, EmitDefaultValue = false)]
+    public bool? Live { get; set; }
+
+    public static UpscalerOptions From(UpscalerChoice choice, bool? live = null) => new()
+    {
+        Quality = choice.Quality,
+        Sharpness = choice.Sharpness,
+        FrameGen = choice.FrameGen ? "on" : "off",
+        FrameGenRoute = choice.FrameGenRoute,
+        Model = choice.Model,
+        Live = live,
+    };
+}
+
+[DataContract]
+public sealed class UpscalerIniKey
+{
+    [DataMember(Name = "key", Order = 1, IsRequired = true)]
+    public string Key { get; set; } = "";
+
+    [DataMember(Name = "value", Order = 2, IsRequired = true)]
+    public string Value { get; set; } = "";
+
+    [DataMember(Name = "help", Order = 3, IsRequired = true)]
+    public string[] Help { get; set; } = new string[0];
+
+    [DataMember(Name = "choices", Order = 4, EmitDefaultValue = false)]
+    public string[]? Choices { get; set; }
+
+    [DataMember(Name = "default", Order = 5, EmitDefaultValue = false)]
+    public string? Default { get; set; }
+
+    [DataMember(Name = "managed", Order = 6, IsRequired = true)]
+    public bool Managed { get; set; }
+}
+
+[DataContract]
+public sealed class UpscalerIniSection
+{
+    [DataMember(Name = "name", Order = 1, IsRequired = true)]
+    public string Name { get; set; } = "";
+
+    [DataMember(Name = "keys", Order = 2, IsRequired = true)]
+    public UpscalerIniKey[] Keys { get; set; } = new UpscalerIniKey[0];
+
+    public static UpscalerIniSection[] From(IReadOnlyList<IniSchemaSection> schema) => schema
+        .Select(section => new UpscalerIniSection
+        {
+            Name = section.Name,
+            Keys = section.Keys.Select(key => new UpscalerIniKey
+            {
+                Key = key.Key,
+                Value = key.Value,
+                Help = key.Help.ToArray(),
+                Choices = key.Choices?.ToArray(),
+                Default = key.Default,
+                Managed = key.Managed,
+            }).ToArray(),
+        })
+        .ToArray();
+}
+
+[DataContract]
+public sealed class UpscalerImageSharpness
+{
+    /// <summary>Absent when the INI's values say neither on nor off.</summary>
+    [DataMember(Name = "enabled", Order = 1, EmitDefaultValue = false)]
+    public bool? Enabled { get; set; }
+
+    /// <summary>0 to 1; absent for <c>auto</c>.</summary>
+    [DataMember(Name = "value", Order = 2, EmitDefaultValue = false)]
+    public double? Value { get; set; }
+}
+
+[DataContract]
+public sealed class UpscalerImageSettings
+{
+    [DataMember(Name = "supported", Order = 1, IsRequired = true)]
+    public bool Supported { get; set; }
+
+    [DataMember(Name = "sharpness", Order = 2, EmitDefaultValue = false)]
+    public UpscalerImageSharpness? Sharpness { get; set; }
+
+    [DataMember(Name = "int8", Order = 3, EmitDefaultValue = false)]
+    public string? Int8 { get; set; }
+
+    /// <summary>Panel changed these values and can put the originals back.</summary>
+    [DataMember(Name = "managed", Order = 4, IsRequired = true)]
+    public bool Managed { get; set; }
+
+    [DataMember(Name = "reason", Order = 5, EmitDefaultValue = false)]
+    public string? Reason { get; set; }
+
+    public static UpscalerImageSettings From(ImageSettingsState state) => new()
+    {
+        Supported = state.Supported,
+        Sharpness = state.Sharpness is { } sharpness ? new UpscalerImageSharpness { Enabled = sharpness.Enabled, Value = sharpness.Value } : null,
+        Int8 = state.Int8,
+        Managed = state.Managed,
+        Reason = state.Reason,
+    };
+}
+
+[DataContract]
+public sealed class UpscalerIniEdit
+{
+    [DataMember(Name = "key", Order = 1, IsRequired = true)]
+    public string Key { get; set; } = "";
+
+    [DataMember(Name = "value", Order = 2, IsRequired = true)]
+    public string Value { get; set; } = "";
+}
+
 [DataContract]
 public sealed class UpscalersResponse
 {
@@ -520,6 +753,17 @@ public sealed class UpscalersResponse
 
     [DataMember(Name = "ingame", Order = 7, EmitDefaultValue = false)]
     public string? InGame { get; set; }
+    [DataMember(Name = "options", Order = 8, EmitDefaultValue = false)]
+    public UpscalerOptions? Options { get; set; }
+
+    [DataMember(Name = "ini", Order = 9, EmitDefaultValue = false)]
+    public UpscalerIniSection[]? Ini { get; set; }
+
+    [DataMember(Name = "image", Order = 10, EmitDefaultValue = false)]
+    public UpscalerImageSettings? Image { get; set; }
+
+    [DataMember(Name = "ini_edit", Order = 11, EmitDefaultValue = false)]
+    public UpscalerIniEdit? IniEdit { get; set; }
 
     public static UpscalersResponse Rejected(string errorCode, UpscalerJobStatus? job = null) =>
         new() { Status = UpscalersResponseStatus.Rejected, ErrorCode = errorCode, Job = job };

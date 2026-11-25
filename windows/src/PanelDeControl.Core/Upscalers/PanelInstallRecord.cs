@@ -14,7 +14,8 @@ public static class PanelInstallRecord
 
     private static readonly UTF8Encoding Utf8 = new(false);
 
-    public static void Write(string target, StoredUpscaler stored)
+    /// <param name="receipt">The image controls' receipt, kept beside the install so a restore still works after Panel is reinstalled.</param>
+    public static void Write(string target, StoredUpscaler stored, ImageSettingsReceipt? receipt = null)
     {
         var meta = Path.Combine(target, GameManifest.Folder);
         if (!Directory.Exists(meta) || (File.GetAttributes(meta) & FileAttributes.ReparsePoint) != 0)
@@ -26,7 +27,13 @@ public static class PanelInstallRecord
         var temporary = Path.Combine(meta, "." + FileName + "." + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
-            File.WriteAllText(temporary, PythonJson.Write(UpscalerStateStore.WriteInstall(stored)), Utf8);
+            var document = (DataObject)UpscalerStateStore.WriteInstall(stored);
+            if (receipt is not null)
+            {
+                document = new DataObject(document.Members.Append(new KeyValuePair<string, DataValue>("image_settings", UpscalerStateStore.WriteReceipt(receipt))).ToList());
+            }
+
+            File.WriteAllText(temporary, PythonJson.Write(document), Utf8);
             if (File.Exists(path))
             {
                 File.Replace(temporary, path, null);
@@ -45,8 +52,14 @@ public static class PanelInstallRecord
         }
     }
 
+    /// <summary>The image controls' receipt saved with the record, if any.</summary>
+    public static ImageSettingsReceipt? ReadReceipt(string target) =>
+        Document(target) is { } document ? UpscalerStateStore.ReadReceipt(document.Get("image_settings")) : null;
+
     /// <summary>Null when there is no record, it is not a regular small file, or it does not parse as an install.</summary>
-    public static StoredUpscaler? Read(string target)
+    public static StoredUpscaler? Read(string target) => Document(target) is { } document ? UpscalerStateStore.ReadInstall(document) : null;
+
+    private static DataObject? Document(string target)
     {
         try
         {
@@ -57,7 +70,7 @@ public static class PanelInstallRecord
                 return null;
             }
 
-            return DataValue.Parse(File.ReadAllText(path, Utf8)) is DataObject document ? UpscalerStateStore.ReadInstall(document) : null;
+            return DataValue.Parse(File.ReadAllText(path, Utf8)) as DataObject;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DataFormatException)
         {

@@ -92,6 +92,7 @@ public sealed class UpscalerStateStore
     private readonly Dictionary<string, List<UpscalerHistoryItem>> _history = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<string>> _strandedArgs = new(StringComparer.Ordinal);
     private string? _inGameMode;
+    private readonly Dictionary<string, ImageSettingsReceipt> _imageReceipts = new(StringComparer.Ordinal);
 
     /// <param name="path">The state file.</param>
     /// <param name="replace">Moves the finished temporary file over the state file; replaceable so a test can fail it.</param>
@@ -177,6 +178,39 @@ public sealed class UpscalerStateStore
                 else
                 {
                     _strandedArgs[appId] = args.Distinct(StringComparer.Ordinal).ToList();
+                }
+            });
+        }
+    }
+
+    /// <summary>What the image controls changed in this game's OptiScaler.ini and the values they replaced.</summary>
+    public ImageSettingsReceipt? ImageReceipt(string appId)
+    {
+        lock (_lock)
+        {
+            return _imageReceipts.TryGetValue(appId, out var receipt) ? receipt.Copy() : null;
+        }
+    }
+
+    /// <summary>Saves the receipt and, when given, the install in one write; a null receipt drops it.</summary>
+    public void SetImageReceipt(string appId, ImageSettingsReceipt? receipt, StoredUpscaler? install = null)
+    {
+        lock (_lock)
+        {
+            Mutate(() =>
+            {
+                if (receipt is null)
+                {
+                    _imageReceipts.Remove(appId);
+                }
+                else
+                {
+                    _imageReceipts[appId] = receipt.Copy();
+                }
+
+                if (install is not null)
+                {
+                    _installs[appId] = Copy(install);
                 }
             });
         }
@@ -295,6 +329,7 @@ public sealed class UpscalerStateStore
         var history = _history.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
         var stranded = _strandedArgs.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
         var inGameMode = _inGameMode;
+        var receipts = new Dictionary<string, ImageSettingsReceipt>(_imageReceipts, StringComparer.Ordinal);
         try
         {
             change();
@@ -325,6 +360,12 @@ public sealed class UpscalerStateStore
             foreach (var pair in stranded)
             {
                 _strandedArgs[pair.Key] = pair.Value;
+            }
+
+            _imageReceipts.Clear();
+            foreach (var pair in receipts)
+            {
+                _imageReceipts[pair.Key] = pair.Value;
             }
 
             throw;
@@ -368,6 +409,11 @@ public sealed class UpscalerStateStore
                     _strandedArgs[game.Key] = args.ToList();
                 }
 
+                if (ReadReceipt(entry.Get("image_settings")) is { } receipt)
+                {
+                    _imageReceipts[game.Key] = receipt;
+                }
+
                 if (entry.Get("history") is DataArray past)
                 {
                     var items = past.Items.OfType<DataObject>().Select(ReadHistory).Where(item => item is not null).Cast<UpscalerHistoryItem>().ToList();
@@ -394,13 +440,14 @@ public sealed class UpscalerStateStore
             _actions.Clear();
             _history.Clear();
             _strandedArgs.Clear();
+            _imageReceipts.Clear();
         }
     }
 
     private void Save()
     {
         var games = new List<KeyValuePair<string, DataValue>>();
-        foreach (var appId in _installs.Keys.Concat(_actions.Keys).Concat(_history.Keys).Concat(_strandedArgs.Keys).Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
+        foreach (var appId in _installs.Keys.Concat(_actions.Keys).Concat(_history.Keys).Concat(_strandedArgs.Keys).Concat(_imageReceipts.Keys).Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
         {
             var members = new List<KeyValuePair<string, DataValue>>();
             if (_installs.TryGetValue(appId, out var stored))
@@ -411,6 +458,11 @@ public sealed class UpscalerStateStore
             if (_strandedArgs.TryGetValue(appId, out var strandedArgs) && strandedArgs.Count > 0)
             {
                 members.Add(Member("stranded_args", new DataArray(strandedArgs.Select(arg => (DataValue)new DataString(arg)).ToList())));
+            }
+
+            if (_imageReceipts.TryGetValue(appId, out var receipt))
+            {
+                members.Add(Member("image_settings", WriteReceipt(receipt)));
             }
 
             if (_history.TryGetValue(appId, out var past) && past.Count > 0)
@@ -537,6 +589,9 @@ public sealed class UpscalerStateStore
                     Path = Text(setting.Get("path")),
                 }).ToList()
                 : new List<GameConfigRecord>(),
+            Edited = Pairs(install.Get("edited")),
+            VerificationSince = install.Get("verification_since") is DataNumber since ? since.Real : null,
+            ImageOverrides = Pairs(install.Get("image_overrides")),
         };
         var at = install.Get("installed_at") is DataNumber number ? number.Real : 0;
         return new StoredUpscaler(installed, at);
@@ -577,6 +632,18 @@ public sealed class UpscalerStateStore
             Member("args", new DataArray(install.Args.Select(arg => (DataValue)new DataString(arg)).ToList())),
             Member("added_args", new DataArray(install.AddedArgs.Select(arg => (DataValue)new DataString(arg)).ToList())),
         };
+        if (install.VerificationSince is { } verificationSince)
+        {
+            members.Add(Member("verification_since", new DataNumber(null, verificationSince)));
+        }
+        if (install.Edited.Count > 0)
+        {
+            members.Add(Member("edited", WritePairs(install.Edited)));
+        }
+        if (install.ImageOverrides.Count > 0)
+        {
+            members.Add(Member("image_overrides", WritePairs(install.ImageOverrides)));
+        }
         if (install.Engine == "helixsr")
         {
             members.Add(Member("way", new DataString(install.Way)));
@@ -654,6 +721,26 @@ public sealed class UpscalerStateStore
     });
 
     private static KeyValuePair<string, DataValue> Member(string key, DataValue value) => new(key, value);
+
+    private static List<KeyValuePair<string, string>> Pairs(DataValue? value) =>
+        value is DataObject mapping
+            ? mapping.Members.Where(pair => pair.Value is DataString).Select(pair => new KeyValuePair<string, string>(pair.Key, ((DataString)pair.Value).Value)).ToList()
+            : new List<KeyValuePair<string, string>>();
+
+    private static DataObject WritePairs(IEnumerable<KeyValuePair<string, string>> pairs) =>
+        new(pairs.Select(pair => Member(pair.Key, new DataString(pair.Value))).ToList());
+
+    internal static ImageSettingsReceipt? ReadReceipt(DataValue? value) =>
+        value is DataObject receipt && Text(receipt.Get("target")) is { Length: > 0 } target
+            ? new ImageSettingsReceipt { Target = target, Original = Pairs(receipt.Get("original")), Applied = Pairs(receipt.Get("applied")) }
+            : null;
+
+    internal static DataObject WriteReceipt(ImageSettingsReceipt receipt) => new(new[]
+    {
+        Member("target", new DataString(receipt.Target)),
+        Member("original", WritePairs(receipt.Original)),
+        Member("applied", WritePairs(receipt.Applied)),
+    });
 
     private static DataValue Optional(string? value) => value is null ? DataNull.Instance : new DataString(value);
 

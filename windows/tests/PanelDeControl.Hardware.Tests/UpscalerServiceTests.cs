@@ -531,6 +531,190 @@ public sealed partial class UpscalerServiceTests : IDisposable
         Assert.Equal("active", new UpscalerStateStore(StatePath).History("100").Single().Result);
     }
 
+    private const string ImageIni = "[Upscalers]\r\nDx12Upscaler=auto\r\n\r\n[Log]\r\nLogLevel=0\r\n\r\n[CAS]\r\nEnabled=auto\r\nMotionSharpnessEnabled=auto\r\n\r\n" +
+        "[Sharpness]\r\nOverrideSharpness=false\r\nSharpness=0.30\r\n";
+    private const string TweaksIni = "\r\n[Tweaks]\r\n; Overlay position\r\n; a, b, c - Default (auto) is a\r\nPosition=a\r\nScale=1.0\r\n";
+
+    private static string IniPath(string game) => Path.Combine(Target(game), "OptiScaler.ini");
+
+    private static string IniValue(string game, string key) => IniText.Read(File.ReadAllText(IniPath(game)), key) ?? "";
+
+    private void Edit(string appId, Action<InstalledUpscaler> change)
+    {
+        var edited = new UpscalerStateStore(StatePath);
+        var stored = edited.Install(appId)!;
+        change(stored.Install);
+        edited.SetInstall(appId, stored.Install, stored.InstalledAt);
+    }
+
+    private static Task<UpscalersResponse> Send(UpscalerService service, UpscalersRequest request) => service.HandleAsync(request, CancellationToken.None);
+
+    [Fact]
+    public async Task ConfigureRewritesTheQualityKeysAndSavesTheOptions()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        var service = Service();
+
+        var refused = await Send(service, UpscalersRequest.Configure("100", "quality", "soft", false, null, null, false));
+        var response = await Send(service, UpscalersRequest.Configure("100", "quality", "soft", false, null, null, true));
+
+        Assert.Equal((UpscalersResponseStatus.Rejected, "experimental_required"), (refused.Status, refused.ErrorCode));
+        Assert.Equal(UpscalersResponseStatus.Ok, response.Status);
+        Assert.Equal(("quality", "soft", "off"), (response.Options!.Quality, response.Options.Sharpness, response.Options.FrameGen));
+        Assert.Equal(("true", "1.50", "1.50"), (IniValue(game, "QualityOverrides.QualityRatioOverrideEnabled"), IniValue(game, "QualityOverrides.QualityRatioQuality"), IniValue(game, "QualityOverrides.QualityRatioDLAA")));
+        Assert.Equal(("true", "0.30"), (IniValue(game, "Sharpness.OverrideSharpness"), IniValue(game, "Sharpness.Sharpness")));
+        var saved = new UpscalerStateStore(StatePath).Install("100")!.Install.Options;
+        Assert.Equal(("quality", "soft"), (saved.Quality, saved.Sharpness));
+    }
+
+    [Fact]
+    public async Task AReadOnlyIniIsRewrittenAndStaysReadOnly()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        File.SetAttributes(IniPath(game), File.GetAttributes(IniPath(game)) | FileAttributes.ReadOnly);
+        try
+        {
+            var response = await Send(Service(), UpscalersRequest.Configure("100", "performance", null, false, null, null, true));
+
+            Assert.Equal(UpscalersResponseStatus.Ok, response.Status);
+            Assert.Equal("2.00", IniValue(game, "QualityOverrides.QualityRatioQuality"));
+            Assert.True((File.GetAttributes(IniPath(game)) & FileAttributes.ReadOnly) != 0);
+        }
+        finally
+        {
+            File.SetAttributes(IniPath(game), File.GetAttributes(IniPath(game)) & ~FileAttributes.ReadOnly);
+        }
+    }
+
+    [Fact]
+    public async Task ConfigureWithOnlyFrameGenOffTouchesNothingElse()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        Edit("100", install => install.Options = new UpscalerChoice { Quality = install.Options.Quality, FrameGen = true });
+        File.WriteAllText(IniPath(game), IniText.Apply(File.ReadAllText(IniPath(game)),
+            new[] { new KeyValuePair<string, string>("FrameGen.Enabled", "true"), new KeyValuePair<string, string>("FrameGen.FGInput", "fsrfg") }));
+        var quality = IniValue(game, "QualityOverrides.QualityRatioQuality");
+
+        var response = await Send(Service(), UpscalersRequest.Configure("100", "performance", null, false, null, null, true));
+
+        Assert.Equal(UpscalersResponseStatus.Ok, response.Status);
+        Assert.Equal("off", response.Options!.FrameGen);
+        Assert.Equal(("false", "nofg", "nofg"), (IniValue(game, "FrameGen.Enabled"), IniValue(game, "FrameGen.FGInput"), IniValue(game, "FrameGen.FGOutput")));
+        Assert.Equal(quality, IniValue(game, "QualityOverrides.QualityRatioQuality"));
+        Assert.False(new UpscalerStateStore(StatePath).Install("100")!.Install.Options.FrameGen);
+    }
+
+    [Fact]
+    public async Task WhileTheGameRunsAQualityChangeIsSavedForTheNextStartAndAFrameGenChangeIsRefused()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        running.Add(Path.Combine(game, "Binaries", "Win64", "Game.exe"));
+        var service = Service();
+
+        var quality = await Send(service, UpscalersRequest.Configure("100", "balanced", null, false, null, null, true));
+        var frameGen = await Send(service, UpscalersRequest.Configure("100", "balanced", null, true, "game", null, true));
+
+        Assert.Equal(UpscalersResponseStatus.Ok, quality.Status);
+        Assert.Equal(("balanced", false), (quality.Options!.Quality, quality.Options.Live));
+        Assert.Equal("1.70", IniValue(game, "QualityOverrides.QualityRatioQuality"));
+        Assert.Equal((UpscalersResponseStatus.Rejected, "running"), (frameGen.Status, frameGen.ErrorCode));
+        Assert.Equal("balanced", new UpscalerStateStore(StatePath).Install("100")!.Install.Options.Quality);
+        Assert.False(new UpscalerStateStore(StatePath).Install("100")!.Install.Options.FrameGen);
+    }
+
+    [Fact]
+    public async Task ConfigureRefusesADllInstallAndAGameWithoutOne()
+    {
+        AddGame("100", "Plain");
+        await InstallThroughService("100");
+        Edit("100", install => install.Engine = "dll");
+        var service = Service();
+        var dll = await Send(service, UpscalersRequest.Configure("100", "balanced", null, false, null, null, true));
+        Assert.Equal((UpscalersResponseStatus.Rejected, "dll_no_options"), (dll.Status, dll.ErrorCode));
+        var none = await Send(service, UpscalersRequest.Configure("999", "balanced", null, false, null, null, true));
+        Assert.Equal("not_patched", none.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AHandEditIsWrittenRecordedAndKeptButPanelsOwnKeysAndBadValuesAreRefused()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        File.AppendAllText(IniPath(game), TweaksIni);
+        var service = Service();
+
+        var logLevel = IniValue(game, "Log.LogLevel");
+        var edit = await Send(service, UpscalersRequest.SetIni("100", "Tweaks.Scale", "1.5", true));
+        var bare = await Send(service, UpscalersRequest.SetIni("100", "Position", "b", true));
+        var managed = await Send(service, UpscalersRequest.SetIni("100", "Log.LogLevel", "3", true));
+        var unknown = await Send(service, UpscalersRequest.SetIni("100", "Tweaks.Nope", "1", true));
+        var outside = await Send(service, UpscalersRequest.SetIni("100", "Tweaks.Position", "z", true));
+        var noFlag = await Send(service, UpscalersRequest.SetIni("100", "Tweaks.Scale", "2.0", false));
+
+        Assert.Equal(("Tweaks.Scale", "1.5"), (edit.IniEdit!.Key, edit.IniEdit.Value));
+        Assert.Equal(("Tweaks.Position", "b"), (bare.IniEdit!.Key, bare.IniEdit.Value));
+        Assert.Equal(("1.5", "b"), (IniValue(game, "Tweaks.Scale"), IniValue(game, "Tweaks.Position")));
+        Assert.Equal(new[] { "ini_managed", "ini_key", "ini_value", "experimental_required" }, new[] { managed.ErrorCode, unknown.ErrorCode, outside.ErrorCode, noFlag.ErrorCode });
+        Assert.Equal(logLevel, IniValue(game, "Log.LogLevel"));
+        var edited = new UpscalerStateStore(StatePath).Install("100")!.Install.Edited;
+        Assert.Equal(new[] { "Tweaks.Scale=1.5", "Tweaks.Position=b" }, edited.Select(pair => pair.Key + "=" + pair.Value));
+        var schema = (await Send(service, UpscalersRequest.Ini("100"))).Ini!;
+        Assert.Contains(schema.SelectMany(section => section.Keys), key => key.Key == "Dx12Upscaler" && key.Managed);
+        Assert.Contains(schema.SelectMany(section => section.Keys), key => key.Key == "Scale" && !key.Managed);
+    }
+
+    [Fact]
+    public async Task AReinstallKeepsTheHandEdit()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        File.AppendAllText(IniPath(game), TweaksIni);
+        Assert.Equal(UpscalersResponseStatus.Ok, (await Send(Service(), UpscalersRequest.SetIni("100", "Tweaks.Scale", "1.5", true))).Status);
+
+        await InstallThroughService("100");
+
+        Assert.Equal("1.5", IniValue(game, "Tweaks.Scale"));
+        Assert.Equal("Tweaks.Scale", Assert.Single(new UpscalerStateStore(StatePath).Install("100")!.Install.Edited).Key);
+    }
+
+    [Fact]
+    public async Task ImageSettingsCanBePutBackAndTheQualityPickerKeepsThem()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        File.WriteAllText(IniPath(game), ImageIni);
+        var service = Service();
+
+        var initial = (await Send(service, UpscalersRequest.Image("100"))).Image!;
+        var set = await Send(service, UpscalersRequest.SetImage("100", true, 0.5, null, true));
+
+        Assert.Equal((true, false), (initial.Supported, initial.Managed));
+        Assert.Equal(UpscalersResponseStatus.Ok, set.Status);
+        Assert.Equal((true, true, 0.5, true), (set.Image!.Supported, set.Image.Sharpness!.Enabled, set.Image.Sharpness.Value, set.Image.Managed));
+        Assert.Equal(("true", "true", "0.50"), (IniValue(game, "CAS.Enabled"), IniValue(game, "Sharpness.OverrideSharpness"), IniValue(game, "Sharpness.Sharpness")));
+        Assert.Contains("Sharpness.Sharpness", new UpscalerStateStore(StatePath).Install("100")!.Install.ImageOverrides.Select(pair => pair.Key));
+
+        var configured = await Send(service, UpscalersRequest.Configure("100", "balanced", "high", false, null, null, true));
+
+        Assert.Equal(UpscalersResponseStatus.Ok, configured.Status);
+        Assert.Equal("1.70", IniValue(game, "QualityOverrides.QualityRatioQuality"));
+        Assert.Equal(("true", "true", "0.50"), (IniValue(game, "CAS.Enabled"), IniValue(game, "Sharpness.OverrideSharpness"), IniValue(game, "Sharpness.Sharpness")));
+
+        var restored = await Send(service, UpscalersRequest.RestoreImage("100", true));
+
+        Assert.Equal(UpscalersResponseStatus.Ok, restored.Status);
+        Assert.False(restored.Image!.Managed);
+        Assert.Equal(("auto", "false", "0.30"), (IniValue(game, "CAS.Enabled"), IniValue(game, "Sharpness.OverrideSharpness"), IniValue(game, "Sharpness.Sharpness")));
+        Assert.Null(new UpscalerStateStore(StatePath).ImageReceipt("100"));
+        Assert.Empty(new UpscalerStateStore(StatePath).Install("100")!.Install.ImageOverrides);
+        var again = await Send(service, UpscalersRequest.RestoreImage("100", true));
+        Assert.Equal("image_settings_changed", again.ErrorCode);
+    }
+
     private sealed class FakeLaunchOptions : ISteamLaunchOptions
     {
         public FakeLaunchOptions(string value) => Value = value;

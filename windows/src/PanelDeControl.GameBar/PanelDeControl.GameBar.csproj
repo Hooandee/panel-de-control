@@ -65,6 +65,7 @@
     <Compile Include="ThemesView.cs" />
     <Compile Include="UpscalersClient.cs" />
     <Compile Include="UpscalersView.cs" />
+    <Compile Include="UpscalersView.Settings.cs" />
     <Compile Include="VolumeControlClient.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

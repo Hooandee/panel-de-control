@@ -283,6 +283,27 @@ public sealed class RecipeInstallTests : IDisposable
     }
 
     [Fact]
+    public async Task TheImageReceiptSurvivesTheStateFile()
+    {
+        var install = await Install(Resolve("1174180"));
+        var receipt = new ImageSettingsReceipt
+        {
+            Target = Path.Combine(Target, GameFiles.IniName),
+            Original = { new("Sharpness.Sharpness", "auto") },
+            Applied = { new("Sharpness.Sharpness", "0.41") },
+        };
+
+        PanelInstallRecord.Write(Target, new StoredUpscaler(install, 1), receipt);
+
+        var read = PanelInstallRecord.ReadReceipt(Target)!;
+        Assert.Equal((receipt.Target, "auto", "0.41"), (read.Target, read.Original.Single().Value, read.Applied.Single().Value));
+        Assert.NotNull(PanelInstallRecord.Read(Target));
+        PanelInstallRecord.Write(Target, new StoredUpscaler(install, 1));
+        Assert.Null(PanelInstallRecord.ReadReceipt(Target));
+        OptiScalerInstaller.Uninstall(install);
+    }
+
+    [Fact]
     public void ReframeworkKeysFollowLinux()
     {
         Assert.Equal("a=1\nTemporalUpscaler_Enabled=true\nTemporalUpscaler_UseNativeResolution=true\n",

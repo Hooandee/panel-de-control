@@ -56,6 +56,18 @@ public sealed class InstalledUpscaler
 
     /// <summary>HelixSR's install record, the file whose presence says HelixSR is still in the game.</summary>
     public string HelixFile { get; set; } = "";
+
+    /// <summary>OptiScaler.ini keys the user changed in the advanced editor; they survive a repair or a new version.</summary>
+    public IReadOnlyList<KeyValuePair<string, string>> Edited { get; set; } = Array.Empty<KeyValuePair<string, string>>();
+
+    /// <summary>Sharpness keys the image controls own, so a new quality or a reinstall keeps them.</summary>
+    public IReadOnlyList<KeyValuePair<string, string>> ImageOverrides { get; set; } = Array.Empty<KeyValuePair<string, string>>();
+
+    /// <summary>When a new model went in without a reinstall: the log only counts from then on (Unix seconds).</summary>
+    public double? VerificationSince { get; set; }
+
+    /// <summary>Set by an install that kept the image controls' sharpness, for the caller to store; never saved with the install.</summary>
+    public ImageSettingsReceipt? ImageReceipt { get; set; }
 }
 
 public sealed class OptiScalerInstallRequest
@@ -142,6 +154,11 @@ public sealed class OptiScalerInstaller
             AnrSources(paths[_catalog.AnrFrameGen], "");
         }
         automatic?.Sources(paths);
+        var optiScalerBefore = previous is not null && previous.Engine == "optiscaler";
+        var edited = optiScalerBefore ? previous!.Edited : Array.Empty<KeyValuePair<string, string>>();
+        var imageKept = optiScalerBefore && previous!.ImageOverrides.Count > 0 && ReadIni(previous.Target) is { } oldIni
+            ? UpscalerSettings.ImageOverrides(previous, oldIni)
+            : Array.Empty<KeyValuePair<string, string>>();
         if (previous is not null)
         {
             Uninstall(previous);
@@ -220,6 +237,17 @@ public sealed class OptiScalerInstaller
 
         var frameGen = RequestedFrameGen(analysis, recipe, effective, request.Choice, automatic is not null);
         var panel = PanelIni.Compute(_catalog, effective, recipe?.Ini, recipe?.OptiPatcher == true, request.Choice, frameGen, previous?.Anr == true);
+        // Hand edits from the advanced editor survive a repair or a new version; Panel's own keys win over them.
+        var carried = UpscalerSettings.CarriedEdits(edited, panel.Select(pair => pair.Key));
+        var beforeImage = IniText.Apply(IniText.Apply(baseIni, panel), carried);
+        var image = imageKept.Where(pair => IniText.Read(baseIni, pair.Key) is not null).ToList();
+        var ini = IniText.Apply(beforeImage, image);
+        var receipt = image.Count == 0 ? null : new ImageSettingsReceipt
+        {
+            Target = Path.Combine(target, GameFiles.IniName),
+            Original = image.Select(pair => new KeyValuePair<string, string>(pair.Key, IniText.Read(beforeImage, pair.Key)!)).ToList(),
+            Applied = image.ToList(),
+        };
         var seeds = Path.Combine(_cache.Root, ".recipe-" + Guid.NewGuid().ToString("N"));
         GameManifest manifest;
         try
@@ -236,7 +264,7 @@ public sealed class OptiScalerInstaller
             {
                 Put(ordered, ReframeworkConfig.FileName, SeedReframework(target, seeds, recipe, request.Choice));
             }
-            manifest = GameFiles.Apply(target, ordered, IniText.Apply(baseIni, panel), protect: recipe?.ProtectDlls == true,
+            manifest = GameFiles.Apply(target, ordered, ini, protect: recipe?.ProtectDlls == true,
                 configuration: automatic?.Configuration);
         }
         finally
@@ -267,6 +295,9 @@ public sealed class OptiScalerInstaller
             Components = assets.Select(asset => new KeyValuePair<string, string>(asset.Id, asset.Sha256)).ToList(),
             GameConfig = recipe is { GameConfig.Count: > 0 } ? GameConfigFiles.Carry(previous?.GameConfig, GameConfigFiles.Apply(_profile, recipe.GameConfig, _documents)).ToList() : Array.Empty<GameConfigRecord>(),
             Files = manifest.Files.Count,
+            Edited = carried,
+            ImageOverrides = image,
+            ImageReceipt = receipt,
         };
     }
 
@@ -309,10 +340,26 @@ public sealed class OptiScalerInstaller
         return seed;
     }
 
+    private static string? ReadIni(string target)
+    {
+        try
+        {
+            var info = new FileInfo(Path.Combine(target, GameFiles.IniName));
+            return info.Exists && (info.Attributes & FileAttributes.ReparsePoint) == 0 && info.Length <= ImageSettings.MaximumBytes
+                ? File.ReadAllText(info.FullName, new UTF8Encoding(false, false))
+                : null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     private UpscalerAsset? OptiPatcher() =>
         _catalog.Archives.TryGetValue("optipatcher", out var id) ? _catalog.Asset(id) : null;
 
-    private FrameGenPlan? RequestedFrameGen(GameAnalysis analysis, ResolvedRecipe? recipe, UpscalerBuild effective, UpscalerChoice choice,
+    /// <summary>The frame generation route this game can take for the choice; <c>fg_route_unavailable</c> when it asks for one it cannot.</summary>
+    public FrameGenPlan? RequestedFrameGen(GameAnalysis analysis, ResolvedRecipe? recipe, UpscalerBuild effective, UpscalerChoice choice,
         bool dependenciesReady)
     {
         var generation = _catalog.Asset(effective.Archive)!.Generation;
