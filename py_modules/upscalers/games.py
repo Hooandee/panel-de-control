@@ -1,6 +1,7 @@
 """Where an installed game lives, which executable creates its device and what it ships."""
 
 import json
+import logging
 import os
 import re
 import stat
@@ -14,6 +15,8 @@ from pathlib import Path
 from steam_cleaner import vdf
 
 from . import launchers, pe
+
+_log = logging.getLogger(__name__)
 
 STATE_FULLY_INSTALLED = 4
 STATE_UPDATE_RUNNING = 256 | 1024
@@ -287,9 +290,9 @@ def _script_shortcut(home: str, appid: str, name: str, exe: str, launch_options:
     key = launchers.unifideck_key(launch_options) if home and "unifideck" in exe.lower() else None
     if key:
         row = launchers.unifideck_row(home, key)
-        if row is None or not row[0]:
+        if row is None or row[0] == "xcloud" or not row[0]:
             return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True,
-                             unavailable="unifideck_not_installed" if row is None else "unifideck_no_exe")
+                             unavailable="unifideck_no_exe" if row and not row[0] else "unifideck_not_installed")
         if not Path(row[0]).is_file():
             return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True,
                              unavailable="unifideck_missing")
@@ -306,8 +309,9 @@ def find_shortcut(home: str, appid: str) -> Installed | None:
             continue
         for profile in profiles:
             try:
-                shortcuts = vdf.read_shortcuts(profile / "config/shortcuts.vdf")
-            except (OSError, ValueError, UnicodeError):
+                shortcuts = vdf.read_shortcuts(profile / "config/shortcuts.vdf", lenient=True)
+            except (OSError, ValueError, UnicodeError) as error:
+                _log.info("shortcuts.vdf unreadable: %s", type(error).__name__ if not isinstance(error, ValueError) else error)
                 continue
             for entry in shortcuts.values() if isinstance(shortcuts, dict) else ():
                 if not isinstance(entry, dict) or str(entry.get("appid")) != appid:

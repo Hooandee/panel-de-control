@@ -81,6 +81,17 @@ it("leaves out store shortcuts with no installed game behind them", async () => 
   expect(screen.getByText("up.list.linux")).toBeTruthy();
 });
 
+it("lists an installed store game Panel cannot act on with its reason, without opening it", async () => {
+  const api = await import("../api");
+  vi.mocked(api.getUpscalersCompat).mockResolvedValueOnce({
+    "1": { inputs: [], native: false, unavailable: "unifideck_no_exe" }, "2": { inputs: [], native: true },
+  } as never);
+  await act(async () => { render(<EscaladoresSection />); });
+  expect(screen.getByText("A")).toBeTruthy();
+  expect(screen.getByText("up.list.unavailable.unifideck_no_exe")).toBeTruthy();
+  expect(readSelectorContext().selector).toMatchObject({ filtered: 0, unavailable: { unifideck_no_exe: 1 } });
+});
+
 it("holds shortcuts back until it knows whether a game is behind them", async () => {
   const api = await import("../api");
   games.push({ installed: false, liveAppid: 3, instanceKey: "3", name: "Shortcut", coverUrls: [], lastPlayed: 0, isNonSteam: true });
