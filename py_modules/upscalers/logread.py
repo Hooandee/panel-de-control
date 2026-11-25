@@ -10,6 +10,7 @@ from pathlib import Path
 
 LOG_NAME = "OptiScaler.log"
 MAX_BYTES = 4 * 1024 * 1024
+HEAD_BYTES = 1024 * 1024
 
 _FACTS = (
     ("version", re.compile(r"OptiScaler\s+v?(\d+\.\d+[\w.\-]*)")),
@@ -50,14 +51,19 @@ def read(target: Path, since: float | None = None) -> dict:
     try:
         stat = path.stat()
         with open(path, "rb") as handle:
-            if stat.st_size > MAX_BYTES:
+            if stat.st_size > MAX_BYTES + HEAD_BYTES:
+                # A chatty game buries the startup lines (version, upscaler, resolution) far from the tail.
+                head = handle.read(HEAD_BYTES)
+                head = head[:head.rfind(b"\n") + 1]
                 handle.seek(stat.st_size - MAX_BYTES)
-            text = handle.read().decode("utf-8", "replace")
+                text = head.decode("utf-8", "replace") + handle.read().decode("utf-8", "replace")
+            else:
+                text = handle.read().decode("utf-8", "replace")
     except OSError:
         return {"present": False}
 
     facts: dict = {"present": True, "modified": stat.st_mtime}
-    first = _CLOCK.match(text) if stat.st_size <= MAX_BYTES else None
+    first = _CLOCK.match(text)
     if first:
         # OptiScaler starts a fresh log at every launch and stamps lines with the time of day only.
         day = datetime.fromtimestamp(stat.st_mtime)

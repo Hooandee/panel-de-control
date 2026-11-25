@@ -56,6 +56,15 @@ def _case(name, log, **extra):
     return {"name": name, "log": log, **extra}
 
 
+def _parts(name, *parts, **extra):
+    """A log too big to store: each part is [text, repeat]."""
+    return {"name": name, "log": None, "log_parts": [list(part) for part in parts], **extra}
+
+
+SPAM = "[13:20:00.000000] [I] spam spam spam spam\n"
+HEAD_ONLY = "[13:19:00.000000] [W] OptiScaler v0.9.4-final loaded\n" + FSR31.split("\n", 3)[3]
+
+
 CASES = [
     _case("no-log", None),
     _case("stale-log-is-not-run", FSR31, since=MTIME + 100),
@@ -119,6 +128,9 @@ CASES = [
           "[C] `anonymous-namespace'::PrepareCachedResource Exposure missing\n[E] \n[E]    Foo::Bar failed\n[W] not an error\n"
           + "".join(f"[E] Source{n}::Fail\n" * n for n in range(1, 9))),
     _case("crlf-line-endings", "[I] Creating new fsr31 upscaler\r\n[E] Foo::Bar failed\r\n"),
+    _parts("huge-log-startup-only-in-head", [HEAD_ONLY, 1], [SPAM, 130000], ["[E] Tail::Fail\n", 1]),
+    _parts("huge-log-tail-overrides-head", [HEAD_ONLY, 1], [SPAM, 130000], ["[I] init successful for FSR 4.1.2, upscaler changed\n", 1]),
+    _parts("log-between-limit-and-head-is-read-whole", ["[E] Head::Fail\n" + HEAD_ONLY, 1], [SPAM, 110000], ["[E] Tail::Fail\n", 1]),
     _case("anr-not-written-yet", None, anr_log=None),
     _case("anr-no-summary-yet", None, anr_log=ANR_START),
     _case("anr-generating", None, anr_log=ANR_START + ANR_PACING, anr_now_after=5),
@@ -135,9 +147,12 @@ CASES = [
 def _expected(case: dict) -> dict:
     with tempfile.TemporaryDirectory() as temp:
         folder = Path(temp)
-        if case["log"] is not None:
+        text = case["log"] if case["log"] is not None else None
+        if "log_parts" in case:
+            text = "".join(part * count for part, count in case["log_parts"])
+        if text is not None:
             log = folder / logread.LOG_NAME
-            log.write_bytes(case["log"].encode("utf-8"))
+            log.write_bytes(text.encode("utf-8"))
             os.utime(log, (MTIME, MTIME))
         facts = logread.read(folder, case.get("since"))
         install = {"engine": "optiscaler", "build": case["requested"]} if case.get("requested") else None
