@@ -107,6 +107,14 @@ def frontend_context(value) -> dict:
         "covers": badges.get("covers") if isinstance(badges.get("covers"), bool) else None,
         "in_game": badges.get("in_game") if badges.get("in_game") in ("off", "start", "always") else None,
     }
+    scan = badges.get("cover_scan")
+    if isinstance(scan, dict):
+        counts = {key: scan[key] for key in ("labelled", "images", "placed") if type(scan.get(key)) is int and 0 <= scan[key] < 10**6}
+        skipped = scan.get("skipped") if isinstance(scan.get("skipped"), dict) else {}
+        counts["skipped"] = {key: value for key, value in skipped.items()
+                             if key in ("size", "no_tile", "collapsed", "icon", "collection", "hidden") and type(value) is int and 0 <= value < 10**6}
+        result["badges"]["cover_scan"] = counts
+    result["reported"] = bool(value)
     result["running"] = None
     if isinstance(running, dict):
         result["running"] = {key: running[key][:256] for key in ("stable_appid", "name") if isinstance(running.get(key), str)}
