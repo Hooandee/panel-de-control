@@ -112,6 +112,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         ApplyAccent(ReadSavedAccent());
         BuildAccentSwatches();
         CreateHeroGlow();
+        CreateAurora();
+        Motion.Breathe(LiveHalo, 0.08f, 0.45f, TimeSpan.FromSeconds(2.4));
+        Motion.Breathe(HeroGlowHost, 0.6f, 1f, TimeSpan.FromSeconds(4.5));
         foreach (var line in new[]
         {
             PowerModeDetail, PowerDrawDetail, PowerStatus, CpuControlStatus, CpuControlNote, RefreshRateStatus,
@@ -119,15 +122,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         })
         {
             CollapseWhenEmpty(line);
-        }
-
-        foreach (var toggle in new[] { ExperimentalTdpToggle, MuteToggle, CpuBoostToggle })
-        {
-            toggle.OnContent = string.Empty;
-            toggle.OffContent = string.Empty;
-            toggle.MinWidth = 0;
-            toggle.Width = 44;
-            toggle.HorizontalAlignment = HorizontalAlignment.Right;
         }
 
         refreshTimer.Tick += OnRefreshTimerTick;
@@ -241,6 +235,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs args)
     {
+        Motion.Spin(RefreshIcon);
         await RefreshAsync();
         if (DiagnosticsList.Visibility == Visibility.Visible)
         {
@@ -754,10 +749,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         foreach (var chip in RefreshRateChips.Children.OfType<Button>())
         {
             var active = Equals(chip.Tag, response.ObservedHertz);
-            chip.Background = active
-                ? new SolidColorBrush(WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x70))
-                : new SolidColorBrush(Colors.Transparent);
-            chip.FontWeight = active ? Windows.UI.Text.FontWeights.SemiBold : Windows.UI.Text.FontWeights.Normal;
+            Components.MarkChoice(chip, active);
             chip.IsEnabled = !refreshWritePending;
         }
 
@@ -847,6 +839,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 ? string.Empty
                 : StatusText(snapshot.Readings.FirstOrDefault());
         ConnectionStatus.Visibility = healthy ? Visibility.Collapsed : Visibility.Visible;
+        var live = ResourceBrush(healthy ? "PdcOkBrush" : "PdcWarnBrush");
+        LiveDot.Fill = live;
+        LiveHalo.Fill = live;
     }
 
     private async void VolumeSlider_ValueChanged(
@@ -1354,8 +1349,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         DesktopHeaderSlot.Children.Add(StatusBlock);
         DesktopContent.Children.Add(SectionHeaderBlock);
         DesktopContent.Children.Add(SectionHost);
-        HeaderDetail.TextWrapping = TextWrapping.Wrap;
-        HeaderDetail.TextTrimming = TextTrimming.None;
+        HeaderDetail.Orientation = Orientation.Vertical;
+        foreach (var pill in HeaderDetail.Children.OfType<FrameworkElement>())
+        {
+            pill.HorizontalAlignment = HorizontalAlignment.Left;
+        }
         SectionHeaderBlock.Margin = new Thickness(0, 0, 0, 24);
         SectionHeaderBlock.Visibility = Visibility.Visible;
         SectionTitle.FontSize = 30;
@@ -1639,12 +1637,34 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     }
 
     // Fills the bar when the tabs fit; when they do not, the grid grows past it and the bar scrolls.
-    private void SectionTabsScroller_SizeChanged(object sender, SizeChangedEventArgs args) =>
+    private void SectionTabsScroller_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
         SectionTabs.MinWidth = args.NewSize.Width;
+        _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, () => PlaceTabIndicator(animate: false));
+    }
+
+    private void PlaceTabIndicator(bool animate)
+    {
+        if (desktopLayout || sections.Count <= selectedSection)
+        {
+            return;
+        }
+
+        SectionTabsLayer.UpdateLayout();
+        var tab = sections[selectedSection].Tab;
+        if (tab.ActualWidth <= 0)
+        {
+            return;
+        }
+
+        var origin = tab.TransformToVisual(SectionTabsLayer).TransformPoint(new Point(0, 0));
+        Motion.Glide(TabIndicator, TabIndicatorShift, origin.X, tab.ActualWidth, animate);
+    }
 
     private void SelectSection(int index)
     {
         var wasThemes = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
+        var previous = selectedSection;
         selectedSection = index;
         if (!wasThemes && sections[index].Definition.Id == "themes")
         {
@@ -1653,13 +1673,22 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         var current = sections[index].Definition;
         var accent = ToColor(current.AccentArgb);
+        var sectionFill = new SolidColorBrush(WithAlpha(Lighten(accent), 0x48));
+        var sectionRim = new SolidColorBrush(WithAlpha(Lighten(accent), 0xB0));
         for (var position = 0; position < sections.Count; position++)
         {
             var view = sections[position];
             var selected = position == index;
+            if (selected && view.Panel.Visibility != Visibility.Visible)
+            {
+                Motion.PrepareEntrance(view.Panel, Math.Sign(index - previous));
+            }
+
             view.Panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
             view.Label.Visibility = selected || desktopLayout ? Visibility.Visible : Visibility.Collapsed;
-            view.Tab.Background = new SolidColorBrush(selected ? WithAlpha(accent, 0x70) : Colors.Transparent);
+            view.Tab.Background = selected && desktopLayout ? sectionFill : ResourceBrush("PdcTransparentBrush");
+            view.Tab.BorderBrush = sectionRim;
+            view.Tab.BorderThickness = new Thickness(selected && desktopLayout ? 1 : 0);
             view.Tab.Foreground = ResourceBrush(selected ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
             if (!desktopLayout)
             {
@@ -1669,6 +1698,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         if (!desktopLayout)
         {
+            TabIndicator.Background = sectionFill;
+            TabIndicator.BorderBrush = sectionRim;
+            PlaceTabIndicator(animate: true);
             sections[index].Tab.StartBringIntoView();
         }
 
@@ -1680,17 +1712,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         SectionTitle.Text = Localized("Nav" + current.ResourceStem);
         SectionDescription.Text = Localized("Nav" + current.ResourceStem + "Desc");
 
-        var glow = new ColorAnimation
-        {
-            To = WithAlpha(Lighten(accent), 0x44),
-            Duration = new Duration(TimeSpan.FromMilliseconds(420)),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-        };
-        Storyboard.SetTarget(glow, SectionGlowTop);
-        Storyboard.SetTargetProperty(glow, "Color");
-        var storyboard = new Storyboard();
-        storyboard.Children.Add(glow);
-        storyboard.Begin();
+        aurora?.Tint(WithAlpha(Lighten(accent), 0x60), WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x38));
     }
 
 
@@ -1830,6 +1852,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         heroZone = zone;
         var zoneColor = ToColor(PowerArc.ColorFor(fraction));
         PowerZoneLabel.Text = Localized("PowerZone" + zone);
+        Motion.Pop(PowerZoneLabel);
         PowerZoneLabel.Foreground = new SolidColorBrush(zoneColor);
         SetHeroGlow(zoneColor);
     }
@@ -2026,6 +2049,19 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     }
 
     private CompositionColorGradientStop? heroGlowStop;
+    private Motion.Aurora? aurora;
+
+    private void CreateAurora()
+    {
+        try
+        {
+            aurora = new Motion.Aurora(AuroraHost);
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("aurora", exception);
+        }
+    }
 
     private void CreateHeroGlow()
     {
@@ -2068,10 +2104,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         ReportText.PlaceholderText = Localized(feature ? "ReportDescribeHintFeature" : "ReportDescribeHint");
         foreach (var (chip, active) in new[] { (ReportKindBug, !feature), (ReportKindFeature, feature) })
         {
-            chip.Background = active
-                ? new SolidColorBrush(WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x70))
-                : new SolidColorBrush(Colors.Transparent);
-            chip.FontWeight = active ? Windows.UI.Text.FontWeights.SemiBold : Windows.UI.Text.FontWeights.Normal;
+            Components.MarkChoice(chip, active);
             chip.IsEnabled = !reportSending;
         }
 
@@ -2215,6 +2248,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             ApplyAccent(AccentPalette.Resolve(id));
             MarkSelectedSwatch(id);
+            Motion.Pop((FrameworkElement)sender);
             SelectSection(selectedSection);
             try
             {
@@ -2245,6 +2279,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         "ToggleSwitchFillOnPressed",
     };
 
+    // Brushes in Theme/PdcGlass.xaml that carry the accent at their own opacity.
+    private static readonly string[] AccentDerivedBrushes =
+    {
+        "PdcAccentSoftBrush",
+        "PdcAccentRimBrush",
+    };
+
     private static void ApplyAccent(AccentColor accent)
     {
         if (Application.Current.Resources["PdcAccentBrush"] is SolidColorBrush brush)
@@ -2253,6 +2294,14 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             foreach (var key in AccentAliases)
             {
                 Application.Current.Resources[key] = brush;
+            }
+
+            foreach (var key in AccentDerivedBrushes)
+            {
+                if (Application.Current.Resources[key] is SolidColorBrush derived)
+                {
+                    derived.Color = brush.Color;
+                }
             }
         }
     }

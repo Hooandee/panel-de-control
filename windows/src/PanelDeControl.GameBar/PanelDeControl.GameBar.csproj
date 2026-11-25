@@ -55,10 +55,12 @@
     <Compile Include="BrightnessControlClient.cs" />
     <Compile Include="RefreshRateClient.cs" />
     <Compile Include="ReportClient.cs" />
+    <Compile Include="Components.cs" />
     <Compile Include="CpuControlClient.cs" />
     <Compile Include="CrashLog.cs" />
     <Compile Include="HardwareBrokerLauncher.cs" />
     <Compile Include="InventoryClient.cs" />
+    <Compile Include="Motion.cs" />
     <Compile Include="TelemetryClient.cs" />
     <Compile Include="TdpControlClient.cs" />
     <Compile Include="ThemesClient.cs" />
@@ -79,6 +81,14 @@
       <SubType>Designer</SubType>
     </ApplicationDefinition>
     <Page Include="Theme\PdcTokens.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Theme\PdcGlass.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Theme\PdcComponents.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

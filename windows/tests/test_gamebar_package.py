@@ -753,7 +753,7 @@ class GameBarLocalizationTests(unittest.TestCase):
             )
 
     def test_widget_has_no_hard_coded_visible_text(self):
-        allowed = {"—", "↻", "CPU", "GPU", "W", "%", " · "}
+        allowed = {"—", "↻", "CPU", "GPU", "W", "%", "LB", "RB"}
         visible = (
             "Text",
             "Content",
@@ -792,17 +792,22 @@ class DiagnosticsCardTests(unittest.TestCase):
 
 class DesignSystemTests(unittest.TestCase):
     def test_widget_and_app_never_hard_code_colours(self):
-        for path in (WIDGET, PROJECT_DIR / "App.xaml"):
+        for path in (WIDGET, PROJECT_DIR / "App.xaml", PROJECT_DIR / "Theme" / "PdcComponents.xaml"):
             xaml = path.read_text(encoding="utf-8")
             self.assertNotRegex(xaml, r'"#[0-9A-Fa-f]{6,8}"', path.name)
         code = WIDGET_CODE.read_text(encoding="utf-8")
         self.assertNotIn("Color.FromArgb(255,", code)
 
     def test_app_merges_the_generated_tokens(self):
-        app = (PROJECT_DIR / "App.xaml").read_text(encoding="utf-8")
+        # App -> PdcComponents -> PdcGlass -> PdcTokens: one instance of every brush, so accent repaints reach them all.
         project = PROJECT.read_text(encoding="utf-8")
-        self.assertIn('Source="ms-appx:///Theme/PdcTokens.xaml"', app)
-        self.assertIn('<Page Include="Theme\\PdcTokens.xaml">', project)
+        for path, merged in (
+            (PROJECT_DIR / "App.xaml", "PdcComponents"),
+            (PROJECT_DIR / "Theme" / "PdcComponents.xaml", "PdcGlass"),
+            (PROJECT_DIR / "Theme" / "PdcGlass.xaml", "PdcTokens"),
+        ):
+            self.assertIn(f'Source="ms-appx:///Theme/{merged}.xaml"', path.read_text(encoding="utf-8"), path.name)
+            self.assertIn(f'<Page Include="Theme\\{merged}.xaml">', project)
         self.assertIn('x:Key="PdcAccentBrush"', (PROJECT_DIR / "Theme" / "PdcTokens.xaml").read_text(encoding="utf-8"))
 
     def test_every_power_zone_has_a_localized_label(self):

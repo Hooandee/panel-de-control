@@ -238,7 +238,6 @@ public sealed class ThemesView : UserControl
     private void BuildRemoval(ThemeCard card)
     {
         card.RemoveButton.Style = Resource<Style>("PdcSoftButtonStyle");
-        card.RemoveButton.Background = new SolidColorBrush(Windows.UI.Colors.Transparent);
         card.RemoveButton.Foreground = Resource<Brush>("PdcTextMutedBrush");
         card.RemoveButton.HorizontalAlignment = HorizontalAlignment.Left;
         card.RemoveButton.Padding = new Thickness(0, 8, 0, 2);
@@ -263,8 +262,7 @@ public sealed class ThemesView : UserControl
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
         buttons.Children.Add(card.RemoveConfirmButton);
         buttons.Children.Add(card.RemoveCancelButton);
-        card.RemoveConfirm.Background = Resource<Brush>("PdcLayerBrush");
-        card.RemoveConfirm.CornerRadius = Resource<CornerRadius>("PdcRadiusInset");
+        card.RemoveConfirm.Style = Resource<Style>("PdcInsetStyle");
         card.RemoveConfirm.Padding = new Thickness(14, 12, 14, 14);
         card.RemoveConfirm.Margin = new Thickness(0, 10, 0, 0);
         card.RemoveConfirm.Child = new StackPanel { Children = { card.RemoveTitle, card.RemoveDescription, buttons } };
@@ -324,14 +322,9 @@ public sealed class ThemesView : UserControl
         card.State.Style = Resource<Style>("PdcCaptionStyle");
         card.State.Margin = new Thickness(0, 10, 0, 0);
         card.State.TextWrapping = TextWrapping.WrapWholeWords;
-        card.Toggle.OnContent = string.Empty;
-        card.Toggle.OffContent = string.Empty;
-        card.Toggle.MinWidth = 0;
-        card.Toggle.Width = 44;
-        card.Toggle.HorizontalAlignment = HorizontalAlignment.Right;
-        card.Toggle.VerticalAlignment = VerticalAlignment.Center;
+        card.Toggle.Style = Resource<Style>("PdcToggleStyle");
         card.Toggle.Toggled += (_, _) => _ = ToggleThemeAsync(card);
-        card.Action.Style = Resource<Style>("PdcChipButtonStyle");
+        card.Action.Style = Resource<Style>("PdcPrimaryButtonStyle");
         card.Action.Padding = new Thickness(14, 9, 14, 9);
         card.Action.Margin = new Thickness(0, 12, 0, 0);
         card.Action.HorizontalAlignment = HorizontalAlignment.Left;
@@ -342,7 +335,6 @@ public sealed class ThemesView : UserControl
         card.EarlyAction.HorizontalAlignment = HorizontalAlignment.Left;
         card.EarlyAction.Click += (_, _) => _ = InstallEarlyFromFileAsync(card);
         card.OptionsButton.Style = Resource<Style>("PdcSoftButtonStyle");
-        card.OptionsButton.Background = new SolidColorBrush(Windows.UI.Colors.Transparent);
         card.OptionsButton.Foreground = Resource<Brush>("PdcTextPrimaryBrush");
         card.OptionsButton.HorizontalAlignment = HorizontalAlignment.Stretch;
         card.OptionsButton.HorizontalContentAlignment = HorizontalAlignment.Left;
@@ -453,7 +445,7 @@ public sealed class ThemesView : UserControl
                     CharacterSpacing = 60,
                 };
             case "checkbox":
-                var toggle = new ToggleSwitch { OnContent = string.Empty, OffContent = string.Empty, MinWidth = 0, Width = 44, HorizontalAlignment = HorizontalAlignment.Right, Tag = option.Name };
+                var toggle = new ToggleSwitch { Style = Resource<Style>("PdcToggleStyle"), Tag = option.Name };
                 AutomationProperties.SetName(toggle, label);
                 toggle.Toggled += (_, _) =>
                 {
@@ -486,7 +478,7 @@ public sealed class ThemesView : UserControl
                 return new StackPanel
                 {
                     Spacing = 6,
-                    Children = { new TextBlock { Text = label, Style = Resource<Style>("PdcBodyStyle") }, new Border { Background = Resource<Brush>("PdcLayerBrush"), CornerRadius = new CornerRadius(12), Padding = new Thickness(3), Child = segments } },
+                    Children = { new TextBlock { Text = label, Style = Resource<Style>("PdcBodyStyle") }, new Border { Style = Resource<Style>("PdcInsetStyle"), Child = segments } },
                 };
             default:
                 var combo = new ComboBox { Header = label, HorizontalAlignment = HorizontalAlignment.Stretch, Tag = option.Name };
@@ -577,9 +569,7 @@ public sealed class ThemesView : UserControl
                 case Grid segments:
                     foreach (var chip in segments.Children.OfType<Button>())
                     {
-                        var active = (string)chip.Tag == option.Value;
-                        chip.Background = active ? Resource<Brush>("PdcLayerStrongBrush") : new SolidColorBrush(Windows.UI.Colors.Transparent);
-                        chip.FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal;
+                        Components.MarkChoice(chip, (string)chip.Tag == option.Value);
                     }
 
                     break;

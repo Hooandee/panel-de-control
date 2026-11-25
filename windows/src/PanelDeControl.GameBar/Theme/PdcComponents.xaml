@@ -1,0 +1,387 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Component catalog of the Windows widget. Screens assign a style from here; they never restyle a piece locally. -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///Theme/PdcGlass.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <FontFamily x:Key="PdcIconFontFamily">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+    <FontFamily x:Key="PdcDisplayFontFamily">Segoe UI Variable Display, Segoe UI Variable</FontFamily>
+
+    <!-- Surfaces -->
+    <Style x:Key="PdcCardStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource PdcGlassBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource PdcGlassRimBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource PdcRimThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusSurface}" />
+        <Setter Property="Padding" Value="{StaticResource PdcCardPadding}" />
+        <Setter Property="Margin" Value="0,0,0,12" />
+    </Style>
+    <Style x:Key="PdcTileStyle" TargetType="Border" BasedOn="{StaticResource PdcCardStyle}">
+        <Setter Property="Margin" Value="0" />
+    </Style>
+    <Style x:Key="PdcInsetStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource PdcLayerBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource PdcLayerBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource PdcRimThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusInset}" />
+        <Setter Property="Padding" Value="4" />
+    </Style>
+    <Style x:Key="PdcBarStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource PdcGlassBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource PdcGlassRimBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource PdcRimThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusBar}" />
+        <Setter Property="Padding" Value="5" />
+    </Style>
+    <Style x:Key="PdcPillStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource PdcLayerBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource PdcGlassRimBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource PdcRimThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusPill}" />
+        <Setter Property="Padding" Value="10,3,10,4" />
+    </Style>
+    <Style x:Key="PdcIconTileStyle" TargetType="Border">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusChip}" />
+        <Setter Property="Background" Value="{StaticResource PdcAccentSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource PdcGlassRimBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource PdcRimThickness}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Text -->
+    <Style x:Key="PdcTitleStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource PdcDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
+    </Style>
+    <Style x:Key="PdcCaptionStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource PdcFontFamily}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{StaticResource PdcTextMutedBrush}" />
+    </Style>
+    <Style x:Key="PdcBodyStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource PdcFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource PdcFontBody}" />
+        <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style x:Key="PdcMutedStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcBodyStyle}">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{StaticResource PdcTextMutedBrush}" />
+    </Style>
+    <Style x:Key="PdcValueStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource PdcDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource PdcFontValue}" />
+        <Setter Property="FontWeight" Value="SemiLight" />
+        <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
+        <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
+    </Style>
+    <Style x:Key="PdcInlineValueStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcValueStyle}">
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="FontWeight" Value="Normal" />
+    </Style>
+
+    <!-- Buttons: hover lifts a wash, press shrinks fast, release springs back. -->
+    <ControlTemplate x:Key="PdcSoftButtonTemplate" TargetType="Button">
+        <Grid
+            x:Name="Root"
+            Background="{TemplateBinding Background}"
+            BorderBrush="{TemplateBinding BorderBrush}"
+            BorderThickness="{TemplateBinding BorderThickness}"
+            CornerRadius="{TemplateBinding CornerRadius}"
+            RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform>
+                <ScaleTransform x:Name="PressScale" />
+            </Grid.RenderTransform>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualStateGroup.Transitions>
+                        <VisualTransition From="Pressed" GeneratedDuration="0:0:0.36">
+                            <VisualTransition.GeneratedEasingFunction>
+                                <BackEase EasingMode="EaseOut" Amplitude="0.6" />
+                            </VisualTransition.GeneratedEasingFunction>
+                        </VisualTransition>
+                    </VisualStateGroup.Transitions>
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="Wash" Storyboard.TargetProperty="Opacity" To="0.07" Duration="{StaticResource PdcMotionHover}" />
+                        </Storyboard>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="Wash" Storyboard.TargetProperty="Opacity" To="0.14" Duration="0" />
+                            <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleX" To="{StaticResource PdcPressScale}" Duration="{StaticResource PdcMotionPress}" />
+                            <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleY" To="{StaticResource PdcPressScale}" Duration="{StaticResource PdcMotionPress}" />
+                        </Storyboard>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="Content" Storyboard.TargetProperty="Opacity" To="0.35" Duration="0" />
+                        </Storyboard>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+            <Border x:Name="Wash" Background="{StaticResource PdcTextPrimaryBrush}" CornerRadius="{TemplateBinding CornerRadius}" Opacity="0" />
+            <ContentPresenter
+                x:Name="Content"
+                Padding="{TemplateBinding Padding}"
+                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                Content="{TemplateBinding Content}"
+                ContentTemplate="{TemplateBinding ContentTemplate}"
+                Foreground="{TemplateBinding Foreground}"
+                FontSize="{TemplateBinding FontSize}"
+                FontWeight="{TemplateBinding FontWeight}" />
+        </Grid>
+    </ControlTemplate>
+    <Style x:Key="PdcSoftButtonStyle" TargetType="Button">
+        <Setter Property="Template" Value="{StaticResource PdcSoftButtonTemplate}" />
+        <Setter Property="Background" Value="{StaticResource PdcTransparentBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualPrimaryBrush" Value="{StaticResource PdcAccentBrush}" />
+        <Setter Property="FocusVisualSecondaryBrush" Value="{StaticResource PdcShellBrush}" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="{StaticResource PdcFocusThickness}" />
+        <Setter Property="FocusVisualMargin" Value="{StaticResource PdcFocusMargin}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="IsTabStop" Value="True" />
+    </Style>
+    <Style x:Key="PdcIconButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusPill}" />
+        <Setter Property="Background" Value="{StaticResource PdcGlassBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource PdcGlassRimBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource PdcRimThickness}" />
+        <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
+    </Style>
+    <Style x:Key="PdcTabButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
+        <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusInset}" />
+        <Setter Property="Foreground" Value="{StaticResource PdcTextMutedBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="4,9" />
+    </Style>
+    <Style x:Key="PdcSegmentButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
+        <Setter Property="CornerRadius" Value="11" />
+        <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
+        <Setter Property="FontSize" Value="{StaticResource PdcFontBody}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="4,10" />
+    </Style>
+    <Style x:Key="PdcChipButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
+        <Setter Property="Background" Value="{StaticResource PdcGlassBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource PdcGlassRimBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource PdcRimThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusChip}" />
+        <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
+        <Setter Property="FontSize" Value="{StaticResource PdcFontBody}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="4,9" />
+    </Style>
+    <Style x:Key="PdcPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcChipButtonStyle}">
+        <Setter Property="Background" Value="{StaticResource PdcAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource PdcRimHiBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource PdcOnAccentBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="16,10" />
+    </Style>
+
+    <!-- Slider: thick track with a glowing fill and a knob that swells while held. -->
+    <Style x:Key="PdcSliderStyle" TargetType="Slider">
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualPrimaryBrush" Value="{StaticResource PdcAccentBrush}" />
+        <Setter Property="FocusVisualSecondaryBrush" Value="{StaticResource PdcShellBrush}" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="{StaticResource PdcFocusThickness}" />
+        <Setter Property="FocusVisualMargin" Value="-6,-2" />
+        <Setter Property="IsTabStop" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Slider">
+                    <Grid x:Name="Root" Background="Transparent">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualStateGroup.Transitions>
+                                    <VisualTransition From="Pressed" GeneratedDuration="0:0:0.36">
+                                        <VisualTransition.GeneratedEasingFunction>
+                                            <BackEase EasingMode="EaseOut" Amplitude="0.6" />
+                                        </VisualTransition.GeneratedEasingFunction>
+                                    </VisualTransition>
+                                    <VisualTransition GeneratedDuration="0:0:0.14" />
+                                </VisualStateGroup.Transitions>
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="FillGlow" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="FillGlow" Storyboard.TargetProperty="Opacity" To="0.7" Duration="0" />
+                                        <DoubleAnimation Storyboard.TargetName="ThumbScale" Storyboard.TargetProperty="ScaleX" To="{StaticResource PdcThumbPressScale}" Duration="0" />
+                                        <DoubleAnimation Storyboard.TargetName="ThumbScale" Storyboard.TargetProperty="ScaleY" To="{StaticResource PdcThumbPressScale}" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HorizontalTemplate" Storyboard.TargetProperty="Opacity" To="0.35" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <Grid x:Name="HorizontalTemplate" MinHeight="40">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Rectangle x:Name="HorizontalTrackRect" Grid.ColumnSpan="3" Height="8" RadiusX="4" RadiusY="4" Fill="{StaticResource PdcTrackBrush}" />
+                            <Rectangle x:Name="FillGlow" Height="18" RadiusX="9" RadiusY="9" Opacity="0.28" Fill="{TemplateBinding Foreground}" IsHitTestVisible="False" />
+                            <Rectangle x:Name="HorizontalDecreaseRect" Height="8" RadiusX="4" RadiusY="4" Fill="{TemplateBinding Foreground}" />
+                            <Thumb
+                                x:Name="HorizontalThumb"
+                                Grid.Column="1"
+                                Width="24"
+                                Height="24"
+                                Background="{TemplateBinding Foreground}"
+                                RenderTransformOrigin="0.5,0.5"
+                                DataContext="{TemplateBinding Value}"
+                                AutomationProperties.AccessibilityView="Raw">
+                                <Thumb.RenderTransform>
+                                    <ScaleTransform x:Name="ThumbScale" />
+                                </Thumb.RenderTransform>
+                                <Thumb.Template>
+                                    <ControlTemplate TargetType="Thumb">
+                                        <Grid>
+                                            <Ellipse Margin="-5" Fill="{TemplateBinding Background}" Opacity="0.25" />
+                                            <Ellipse Fill="{StaticResource PdcKnobBrush}" Stroke="{TemplateBinding Background}" StrokeThickness="3" />
+                                        </Grid>
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Grid>
+                        <Grid x:Name="VerticalTemplate" Visibility="Collapsed">
+                            <Rectangle x:Name="VerticalTrackRect" />
+                            <Rectangle x:Name="VerticalDecreaseRect" />
+                            <Thumb x:Name="VerticalThumb" />
+                        </Grid>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Toggle: a pill that fills with the accent and a knob that glides across with a soft overshoot. -->
+    <Style x:Key="PdcToggleStyle" TargetType="ToggleSwitch">
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualPrimaryBrush" Value="{StaticResource PdcAccentBrush}" />
+        <Setter Property="FocusVisualSecondaryBrush" Value="{StaticResource PdcShellBrush}" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="{StaticResource PdcFocusThickness}" />
+        <Setter Property="FocusVisualMargin" Value="{StaticResource PdcFocusMargin}" />
+        <Setter Property="IsTabStop" Value="True" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Width" Value="50" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleSwitch">
+                    <Grid Background="Transparent">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualStateGroup.Transitions>
+                                    <VisualTransition GeneratedDuration="0:0:0.2" />
+                                </VisualStateGroup.Transitions>
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Wash" Storyboard.TargetProperty="Opacity" To="0.08" Duration="{StaticResource PdcMotionHover}" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="KnobScale" Storyboard.TargetProperty="ScaleX" To="1.18" Duration="{StaticResource PdcMotionPress}" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="SwitchRoot" Storyboard.TargetProperty="Opacity" To="0.35" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="ToggleStates">
+                                <VisualStateGroup.Transitions>
+                                    <VisualTransition From="Dragging" To="On" GeneratedDuration="0">
+                                        <Storyboard>
+                                            <RepositionThemeAnimation TargetName="SwitchKnob" FromHorizontalOffset="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TemplateSettings.KnobCurrentToOnOffset}" />
+                                            <DoubleAnimation Storyboard.TargetName="SwitchKnobBounds" Storyboard.TargetProperty="Opacity" To="1" Duration="0" />
+                                        </Storyboard>
+                                    </VisualTransition>
+                                    <VisualTransition From="Dragging" To="Off" GeneratedDuration="0">
+                                        <Storyboard>
+                                            <RepositionThemeAnimation TargetName="SwitchKnob" FromHorizontalOffset="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TemplateSettings.KnobCurrentToOffOffset}" />
+                                        </Storyboard>
+                                    </VisualTransition>
+                                    <VisualTransition From="On" To="Off" GeneratedDuration="0:0:0.3">
+                                        <VisualTransition.GeneratedEasingFunction>
+                                            <BackEase EasingMode="EaseOut" Amplitude="0.5" />
+                                        </VisualTransition.GeneratedEasingFunction>
+                                    </VisualTransition>
+                                    <VisualTransition From="Off" To="On" GeneratedDuration="0:0:0.3">
+                                        <VisualTransition.GeneratedEasingFunction>
+                                            <BackEase EasingMode="EaseOut" Amplitude="0.5" />
+                                        </VisualTransition.GeneratedEasingFunction>
+                                    </VisualTransition>
+                                </VisualStateGroup.Transitions>
+                                <VisualState x:Name="Dragging" />
+                                <VisualState x:Name="Off" />
+                                <VisualState x:Name="On">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="KnobTranslateTransform" Storyboard.TargetProperty="X" To="20" Duration="0" />
+                                        <DoubleAnimation Storyboard.TargetName="SwitchKnobBounds" Storyboard.TargetProperty="Opacity" To="1" Duration="0" />
+                                        <DoubleAnimation Storyboard.TargetName="KnobGlow" Storyboard.TargetProperty="Opacity" To="0.45" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="ContentStates">
+                                <VisualState x:Name="OffContent" />
+                                <VisualState x:Name="OnContent" />
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <ContentPresenter x:Name="HeaderContentPresenter" Visibility="Collapsed" />
+                        <Grid x:Name="SwitchRoot" Width="50" Height="30" HorizontalAlignment="Right" Control.IsTemplateFocusTarget="True">
+                            <Ellipse x:Name="KnobGlow" Width="34" Height="34" Margin="0,0,-4,0" HorizontalAlignment="Right" Fill="{StaticResource PdcAccentBrush}" Opacity="0" IsHitTestVisible="False" />
+                            <Border x:Name="OuterBorder" CornerRadius="15" Background="{StaticResource PdcLayerStrongBrush}" BorderBrush="{StaticResource PdcGlassRimBrush}" BorderThickness="{StaticResource PdcRimThickness}" />
+                            <Border x:Name="SwitchKnobBounds" CornerRadius="15" Background="{StaticResource PdcAccentBrush}" BorderBrush="{StaticResource PdcRimHiBrush}" BorderThickness="{StaticResource PdcRimThickness}" Opacity="0" />
+                            <Border x:Name="Wash" CornerRadius="15" Background="{StaticResource PdcTextPrimaryBrush}" Opacity="0" />
+                            <Grid x:Name="SwitchKnob" Width="22" Height="22" Margin="4,0,0,0" HorizontalAlignment="Left">
+                                <Grid.RenderTransform>
+                                    <TranslateTransform x:Name="KnobTranslateTransform" />
+                                </Grid.RenderTransform>
+                                <Ellipse Fill="{StaticResource PdcKnobBrush}" RenderTransformOrigin="0.5,0.5">
+                                    <Ellipse.RenderTransform>
+                                        <ScaleTransform x:Name="KnobScale" />
+                                    </Ellipse.RenderTransform>
+                                </Ellipse>
+                            </Grid>
+                            <Thumb x:Name="SwitchThumb" AutomationProperties.AccessibilityView="Raw">
+                                <Thumb.Template>
+                                    <ControlTemplate TargetType="Thumb">
+                                        <Rectangle Fill="Transparent" />
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Grid>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>
