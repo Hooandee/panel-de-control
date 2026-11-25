@@ -61,7 +61,10 @@ public sealed partial class UpscalerService : IUpscalersController
         Func<byte[], int, ScaledCover?>? scaleCover = null,
         ISteamLaunchOptions? launchOptions = null,
         Func<string?>? vcRuntime = null,
-        HelixSr? helix = null)
+        HelixSr? helix = null,
+        IUserArchive? userArchive = null,
+        Func<IReadOnlyList<string>>? downloadFolders = null,
+        string? profile = null)
     {
         this.data = data;
         this.store = store;
@@ -78,6 +81,7 @@ public sealed partial class UpscalerService : IUpscalersController
         this.launchOptions = launchOptions;
         this.vcRuntime = vcRuntime ?? (() => null);
         this.helix = helix;
+        InitializeUserSources(userArchive, downloadFolders, profile);
         gpu = new Lazy<GpuFamilyResult>(() => this.readGpu());
         device = new Lazy<string?>(() => this.readDevice());
     }
@@ -130,8 +134,13 @@ public sealed partial class UpscalerService : IUpscalersController
                     return await Task.Run(() => ImageSettingsOf(request.AppId!), cancellationToken).ConfigureAwait(false);
                 case UpscalersOperation.Verify:
                     return await Task.Run(() => Verify(request.AppId!), cancellationToken).ConfigureAwait(false);
+                case UpscalersOperation.ModCandidates:
+                    return await Task.Run(ModCandidates, cancellationToken).ConfigureAwait(false);
+                case UpscalersOperation.UserFileCandidates:
+                    return await Task.Run(() => UserFileCandidates(request.Dependency!), cancellationToken).ConfigureAwait(false);
                 case UpscalersOperation.Configure or UpscalersOperation.SetIni or UpscalersOperation.SetImage or UpscalersOperation.RestoreImage
-                    or UpscalersOperation.SetExe or UpscalersOperation.Cancel or UpscalersOperation.AdoptForeign or UpscalersOperation.RestoreForeign:
+                    or UpscalersOperation.SetExe or UpscalersOperation.Cancel or UpscalersOperation.AdoptForeign or UpscalersOperation.RestoreForeign
+                    or UpscalersOperation.AddMod or UpscalersOperation.RemoveMod or UpscalersOperation.AddUserFile or UpscalersOperation.RemoveUserFile:
                     if (!request.ExperimentalEnabled)
                     {
                         return UpscalersResponse.Rejected("experimental_required", jobs.Snapshot());
@@ -146,6 +155,10 @@ public sealed partial class UpscalerService : IUpscalersController
                         UpscalersOperation.Cancel => Cancel(),
                         UpscalersOperation.AdoptForeign => AdoptForeign(request.AppId!),
                         UpscalersOperation.RestoreForeign => RestoreForeign(request.AppId!),
+                        UpscalersOperation.AddMod => AddMod(request.AppId!, request.Path!, request.Password),
+                        UpscalersOperation.RemoveMod => RemoveMod(request.AppId!),
+                        UpscalersOperation.AddUserFile => AddUserFile(request.AppId!, request.Dependency!, request.Path!),
+                        UpscalersOperation.RemoveUserFile => RemoveUserFile(request.AppId!, request.Dependency!),
                         _ => RestoreImage(request.AppId!),
                     }, cancellationToken).ConfigureAwait(false);
                 default:
@@ -353,6 +366,8 @@ public sealed partial class UpscalerService : IUpscalersController
                     ? new UpscalerInstallEntry { Proxy = "", Status = UpscalerGameStates.Installed }
                     : null,
             ForeignBackup = ForeignBackupReport(app, analysis.Target),
+            Mod = ModStatus(appId, stored?.Install),
+            ModDownload = UserMods.Downloads.TryGetValue(appId, out var download) ? download : null,
         };
     }
 
@@ -607,7 +622,9 @@ public sealed partial class UpscalerService : IUpscalersController
                 folder => store.InstalledAppIds.Any(other => SamePath(store.Install(other)?.Install.Target, folder)),
                 progress,
                 cancel,
-                automatic).ConfigureAwait(false);
+                automatic,
+                ModFor(app),
+                dependency => userFiles.Sources(dependency)).ConfigureAwait(false);
     }
 
     private async Task RunUninstallAsync(string appId, StoredUpscaler stored, CancellationToken cancel)
@@ -752,7 +769,18 @@ public sealed partial class UpscalerService : IUpscalersController
             return null;
         }
 
-        var plan = RecipeDependencyPlan.Build(data.Recipes, recipe, component => component == "vc14_x64" ? vcRuntime() : null);
+        var brought = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var named = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var dependency in data.Recipes.DependencyOrder(recipe.Dependencies).Where(dependency => dependency.Kind == "user_files"))
+        {
+            if (userFiles.Status(dependency) is { State: not "missing" } status)
+            {
+                brought[dependency.Id] = status.InstalledVersion;
+                named[dependency.Id] = status.Filename;
+            }
+        }
+
+        var plan = RecipeDependencyPlan.Build(data.Recipes, recipe, component => component == "vc14_x64" ? vcRuntime() : null, brought);
         var entries = plan.Entries
             .Where(entry => entry.Outcome != DependencyOutcome.NotApplicable)
             .Select(entry => new UpscalerDependencyStatus
@@ -771,6 +799,15 @@ public sealed partial class UpscalerService : IUpscalersController
                 Installed = entry.InstalledVersion,
                 Required = entry.RequiredVersion,
                 Url = entry.Url,
+                UserState = entry.Outcome switch
+                {
+                    DependencyOutcome.NeedsUserFile => "missing",
+                    DependencyOutcome.UserFileReady => "ready",
+                    DependencyOutcome.UserFileOtherVersion => "other_version",
+                    DependencyOutcome.UserFileAvoid => "avoid",
+                    _ => null,
+                },
+                Filename = named.TryGetValue(entry.Id, out var brought) ? brought : null,
             })
             .ToArray();
         return entries.Length > 0 ? entries : null;
@@ -1295,10 +1332,11 @@ public sealed partial class UpscalerService : IUpscalersController
 
     private UpscalersResponse Ok(UpscalersOverview? overview = null, UpscalerGameDetail? game = null, UpscalerJobStatus? job = null, UpscalerCover? cover = null,
         UpscalerOptions? options = null, UpscalerIniSection[]? ini = null, UpscalerImageSettings? image = null, UpscalerIniEdit? iniEdit = null,
-        UpscalerVerification? verify = null, string[]? moved = null, string[]? restored = null, string[]? kept = null) =>
+        UpscalerVerification? verify = null, string[]? moved = null, string[]? restored = null, string[]? kept = null,
+        UpscalerCandidates? candidates = null) =>
         new()
         {
-            Moved = moved, Restored = restored, Kept = kept,
+            Moved = moved, Restored = restored, Kept = kept, Candidates = candidates,
             Status = UpscalersResponseStatus.Ok, Overview = overview, Game = game, Job = job ?? jobs.Snapshot(), Cover = cover,
             Options = options, Ini = ini, Image = image, IniEdit = iniEdit, Verify = verify,
         };

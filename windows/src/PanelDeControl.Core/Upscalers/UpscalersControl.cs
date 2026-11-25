@@ -69,6 +69,27 @@ public enum UpscalersOperation
     /// <summary>Puts back what <see cref="AdoptForeign"/> moved aside.</summary>
     [EnumMember(Value = "restore_foreign")]
     RestoreForeign = 17,
+
+    /// <summary>Archives in the user's Downloads and Desktop that could be a mod for the game, newest first.</summary>
+    [EnumMember(Value = "mod_candidates")]
+    ModCandidates = 18,
+
+    /// <summary>Keeps the user's mod for the game; the next install puts its files beside the exe.</summary>
+    [EnumMember(Value = "add_mod")]
+    AddMod = 19,
+
+    [EnumMember(Value = "remove_mod")]
+    RemoveMod = 20,
+
+    /// <summary>Downloads that carry the files a recipe dependency asks the user to bring.</summary>
+    [EnumMember(Value = "user_file_candidates")]
+    UserFileCandidates = 21,
+
+    [EnumMember(Value = "add_user_file")]
+    AddUserFile = 22,
+
+    [EnumMember(Value = "remove_user_file")]
+    RemoveUserFile = 23,
 }
 
 [DataContract]
@@ -172,8 +193,22 @@ public sealed class UpscalersRequest
     [DataMember(Name = "exe", Order = 16, EmitDefaultValue = false)]
     public string? Exe { get; private set; }
 
+    /// <summary>The file the user picked for <see cref="UpscalersOperation.AddMod"/> or <see cref="UpscalersOperation.AddUserFile"/>.</summary>
+    [DataMember(Name = "path", Order = 17, EmitDefaultValue = false)]
+    public string? Path { get; private set; }
+
+    /// <summary>The password of a protected mod archive.</summary>
+    [DataMember(Name = "password", Order = 18, EmitDefaultValue = false)]
+    public string? Password { get; private set; }
+
+    /// <summary>The recipe dependency whose file the user brings.</summary>
+    [DataMember(Name = "dependency", Order = 19, EmitDefaultValue = false)]
+    public string? Dependency { get; private set; }
+
     public const int MaximumIniKeyLength = 128;
     public const int MaximumExeLength = 512;
+    public const int MaximumPathLength = 520;
+    public const int MaximumPasswordLength = 256;
 
     public static UpscalersRequest Overview() => new(UpscalersOperation.Overview);
 
@@ -237,6 +272,23 @@ public sealed class UpscalersRequest
     public static UpscalersRequest RestoreForeign(string appId, bool experimental) =>
         new(UpscalersOperation.RestoreForeign, appId, experimental: experimental);
 
+    public static UpscalersRequest ModCandidates(string appId) => new(UpscalersOperation.ModCandidates, appId: appId);
+
+    public static UpscalersRequest AddMod(string appId, string path, string? password, bool experimental) =>
+        new(UpscalersOperation.AddMod, appId, experimental: experimental) { Path = path, Password = password };
+
+    public static UpscalersRequest RemoveMod(string appId, bool experimental) =>
+        new(UpscalersOperation.RemoveMod, appId, experimental: experimental);
+
+    public static UpscalersRequest UserFileCandidates(string dependency) =>
+        new(UpscalersOperation.UserFileCandidates) { Dependency = dependency };
+
+    public static UpscalersRequest AddUserFile(string appId, string dependency, string path, bool experimental) =>
+        new(UpscalersOperation.AddUserFile, appId, experimental: experimental) { Dependency = dependency, Path = path };
+
+    public static UpscalersRequest RemoveUserFile(string appId, string dependency, bool experimental) =>
+        new(UpscalersOperation.RemoveUserFile, appId, experimental: experimental) { Dependency = dependency };
+
     public bool ExperimentalEnabled => Experimental == true;
 
     internal void Validate()
@@ -244,7 +296,10 @@ public sealed class UpscalersRequest
         bool Absent(string? field) => field is null;
         bool Token(string? field) => field is { Length: > 0 and <= MaximumFieldLength } && field.All(IsTokenCharacter);
         bool Optional(string? field) => field is null || Token(field);
-        var noSettings = Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8) && Absent(Exe);
+        var settingsFree = Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8) && Absent(Exe);
+        var noSource = Absent(Path) && Absent(Password) && Absent(Dependency);
+        var noSettings = settingsFree && noSource;
+        var bare = Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && settingsFree && Absent(Mode);
         var noFrameGen = Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && noSettings && Absent(Mode);
         var noChoice = Absent(Build) && Absent(Quality) && Absent(Model) && noFrameGen;
         bool Printable(string? field, int limit) => field is { Length: > 0 } && field.Length <= limit && !field.Any(char.IsControl);
@@ -259,18 +314,25 @@ public sealed class UpscalersRequest
             UpscalersOperation.Ini or UpscalersOperation.Image or UpscalersOperation.Verify => appId && Experimental is null && noChoice,
             UpscalersOperation.RestoreImage or UpscalersOperation.AdoptForeign or UpscalersOperation.RestoreForeign => appId && noChoice,
             UpscalersOperation.SetExe => appId && Absent(Mode) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
-                && Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8)
+                && Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8) && noSource
                 && (Exe is null || Printable(Exe, MaximumExeLength)),
             UpscalersOperation.Cancel => Absent(AppId) && noChoice,
             UpscalersOperation.SetIni => appId && Absent(Mode) && Absent(Exe) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
                 && Printable(Key, MaximumIniKeyLength) && Printable(Value, UpscalerSettings.MaximumIniValueLength)
-                && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8),
+                && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8) && noSource,
             UpscalersOperation.SetImage => appId && Absent(Mode) && Absent(Exe) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
                 && Absent(Key) && Absent(Value)
                 && (SharpnessEnabled is null) == (SharpnessValue is null)
                 && (SharpnessEnabled is not null || Int8 is not null)
-                && (Int8 is null || Int8 is "auto" or "on" or "off"),
-            UpscalersOperation.Install => appId && Token(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && Absent(Mode) && noSettings
+                && (Int8 is null || Int8 is "auto" or "on" or "off") && noSource,
+            UpscalersOperation.ModCandidates => appId && Experimental is null && noChoice,
+            UpscalersOperation.RemoveMod => appId && noChoice,
+            UpscalersOperation.AddMod => appId && bare && Absent(Dependency) && Printable(Path, MaximumPathLength)
+                && (Password is null || Printable(Password, MaximumPasswordLength)),
+            UpscalersOperation.UserFileCandidates => Absent(AppId) && Experimental is null && bare && Absent(Path) && Absent(Password) && Token(Dependency),
+            UpscalersOperation.AddUserFile => appId && bare && Absent(Password) && Token(Dependency) && Printable(Path, MaximumPathLength),
+            UpscalersOperation.RemoveUserFile => appId && bare && Absent(Path) && Absent(Password) && Token(Dependency),
+            UpscalersOperation.Install => appId && noSource && Token(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && Absent(Mode) && noSettings
                 && (FrameGenRoute is null || Array.IndexOf(FrameGenRoutes, FrameGenRoute) >= 0),
             UpscalersOperation.Uninstall => appId && Absent(Build) && Absent(Quality) && Absent(Model) && noFrameGen,
             UpscalersOperation.InGame =>
@@ -440,6 +502,80 @@ public sealed class UpscalerDependencyStatus
 
     [DataMember(Name = "url", Order = 7, EmitDefaultValue = false)]
     public string? Url { get; set; }
+
+    /// <summary>For a <c>user_file</c> dependency: <c>missing</c>, <c>ready</c>, <c>other_version</c> or <c>avoid</c>.</summary>
+    [DataMember(Name = "user_state", Order = 8, EmitDefaultValue = false)]
+    public string? UserState { get; set; }
+
+    /// <summary>The file the user brought for a <c>user_file</c> dependency.</summary>
+    [DataMember(Name = "filename", Order = 9, EmitDefaultValue = false)]
+    public string? Filename { get; set; }
+}
+
+/// <summary>A mod the user brought for the game, as Linux's <c>mod</c> reports it.</summary>
+[DataContract]
+public sealed class UpscalerModStatus
+{
+    [DataMember(Name = "filename", Order = 1, EmitDefaultValue = false)]
+    public string? Filename { get; set; }
+
+    [DataMember(Name = "count", Order = 2, IsRequired = true)]
+    public int Count { get; set; }
+
+    /// <summary>The first files, as they go beside the exe.</summary>
+    [DataMember(Name = "files", Order = 3, IsRequired = true)]
+    public string[] Files { get; set; } = new string[0];
+
+    /// <summary>The installed upscaler already carries this mod.</summary>
+    [DataMember(Name = "applied", Order = 4, IsRequired = true)]
+    public bool Applied { get; set; }
+
+    /// <summary>Removed here but still in the game until the upscaler is installed again.</summary>
+    [DataMember(Name = "removed", Order = 5, EmitDefaultValue = false)]
+    public bool? Removed { get; set; }
+}
+
+[DataContract]
+public sealed class UpscalerCandidate
+{
+    [DataMember(Name = "path", Order = 1, IsRequired = true)]
+    public string Path { get; set; } = "";
+
+    [DataMember(Name = "filename", Order = 2, IsRequired = true)]
+    public string Filename { get; set; } = "";
+
+    /// <summary>Bytes; a mod's candidates carry it so a download watcher can wait until the file stops growing.</summary>
+    [DataMember(Name = "size", Order = 3, EmitDefaultValue = false)]
+    public long? Size { get; set; }
+
+    /// <summary>The version a user file carries.</summary>
+    [DataMember(Name = "version", Order = 4, EmitDefaultValue = false)]
+    public string? Version { get; set; }
+}
+
+[DataContract]
+public sealed class UpscalerDownloading
+{
+    [DataMember(Name = "filename", Order = 1, IsRequired = true)]
+    public string Filename { get; set; } = "";
+
+    [DataMember(Name = "size", Order = 2, IsRequired = true)]
+    public long Size { get; set; }
+}
+
+[DataContract]
+public sealed class UpscalerCandidates
+{
+    /// <summary>The first of Downloads and Desktop that exists, else the user's profile.</summary>
+    [DataMember(Name = "folder", Order = 1, IsRequired = true)]
+    public string Folder { get; set; } = "";
+
+    [DataMember(Name = "candidates", Order = 2, IsRequired = true)]
+    public UpscalerCandidate[] Candidates { get; set; } = new UpscalerCandidate[0];
+
+    /// <summary>A download still being written (mods only).</summary>
+    [DataMember(Name = "downloading", Order = 3, EmitDefaultValue = false)]
+    public UpscalerDownloading? Downloading { get; set; }
 }
 
 [DataContract]
@@ -586,6 +722,14 @@ public sealed class UpscalerGameDetail
     /// <summary>Another tool's files Panel moved aside and can put back.</summary>
     [DataMember(Name = "foreign_backup", Order = 21, EmitDefaultValue = false)]
     public UpscalerForeignBackup? ForeignBackup { get; set; }
+
+    /// <summary>The user's mod for this game.</summary>
+    [DataMember(Name = "mod", Order = 22, EmitDefaultValue = false)]
+    public UpscalerModStatus? Mod { get; set; }
+
+    /// <summary>Where to get the mod the game's wiki entry asks for, when it is a free download.</summary>
+    [DataMember(Name = "mod_download", Order = 23, EmitDefaultValue = false)]
+    public string? ModDownload { get; set; }
 }
 
 [DataContract]
@@ -856,6 +1000,10 @@ public sealed class UpscalersResponse
     [DataMember(Name = "kept", Order = 15, EmitDefaultValue = false)]
     public string[]? Kept { get; set; }
 
+    /// <summary>What <see cref="UpscalersOperation.ModCandidates"/> and <see cref="UpscalersOperation.UserFileCandidates"/> found.</summary>
+    [DataMember(Name = "candidates", Order = 16, EmitDefaultValue = false)]
+    public UpscalerCandidates? Candidates { get; set; }
+
     public static UpscalersResponse Rejected(string errorCode, UpscalerJobStatus? job = null) =>
         new() { Status = UpscalersResponseStatus.Rejected, ErrorCode = errorCode, Job = job };
 
@@ -879,7 +1027,7 @@ public sealed class UpscalersResponse
 
 public static class UpscalersWireCodec
 {
-    public const int MaximumRequestLength = 1024;
+    public const int MaximumRequestLength = 2048;
     public const int MaximumResponseLength = 512 * 1024;
     public const int MaximumCoverBytes = 256 * 1024;
     public const int MaximumCoverWidth = 200;

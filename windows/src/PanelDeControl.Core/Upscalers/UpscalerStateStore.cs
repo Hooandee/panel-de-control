@@ -684,6 +684,9 @@ public sealed class UpscalerStateStore
             Edited = Pairs(install.Get("edited")),
             VerificationSince = install.Get("verification_since") is DataNumber since ? since.Real : null,
             ImageOverrides = Pairs(install.Get("image_overrides")),
+            Mod = install.Get("mod") is DataObject mod && Text(mod.Get("filename")) is { } modFile && Text(mod.Get("id")) is { } modId
+                ? new KeyValuePair<string, string>(modFile, modId)
+                : null,
         };
         var at = install.Get("installed_at") is DataNumber number ? number.Real : 0;
         return new StoredUpscaler(installed, at);
@@ -735,6 +738,14 @@ public sealed class UpscalerStateStore
         if (install.ImageOverrides.Count > 0)
         {
             members.Add(Member("image_overrides", WritePairs(install.ImageOverrides)));
+        }
+        if (install.Mod is { } mod)
+        {
+            members.Add(Member("mod", new DataObject(new[]
+            {
+                Member("filename", new DataString(mod.Key)),
+                Member("id", new DataString(mod.Value)),
+            })));
         }
         if (install.Engine == "helixsr")
         {

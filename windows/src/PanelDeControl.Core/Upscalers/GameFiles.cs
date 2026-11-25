@@ -27,9 +27,10 @@ public static class GameFiles
     /// <param name="copy">The file copy, replaceable so a test can fail it halfway.</param>
     /// <param name="protect">Leaves Panel's libraries and the saved originals read-only (a recipe's <c>protect_dlls</c>).</param>
     /// <param name="configuration">Keys Panel set per configuration file, journaled so removal puts back only those.</param>
+    /// <param name="owned">Files that are Panel's whatever their hash later (a user's mod the game rewrites); removal takes them out regardless.</param>
     public static GameManifest Apply(string target, IReadOnlyList<KeyValuePair<string, string>> sources, string? iniText,
         Action<string, string>? copy = null, bool protect = false,
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? configuration = null)
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? configuration = null, IEnumerable<string>? owned = null)
     {
         copy ??= (source, destination) => File.Copy(source, destination, false);
         var meta = Path.Combine(target, GameManifest.Folder);
@@ -40,6 +41,10 @@ public static class GameFiles
         var backup = Path.Combine(meta, "backup");
         Directory.CreateDirectory(meta);
         var manifest = new GameManifest { Incomplete = true, Engine = iniText is null ? "dll" : null };
+        if (owned is not null)
+        {
+            manifest.Owned.AddRange(owned.Distinct(StringComparer.Ordinal));
+        }
         if (configuration is { Count: > 0 })
         {
             manifest.Configuration = new DataObject(configuration.Select(file => new KeyValuePair<string, DataValue>(file.Key,

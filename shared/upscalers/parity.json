@@ -19,7 +19,7 @@
     "install_upscaler": {
       "windows": "partial",
       "op": "install",
-      "note": "optiscaler (with sharpness, FG route, ANR, recipe game_files packages, ReShade.ini configuration and game_config settings), dll and helixsr (HLX FSR 4 through HelixSR's own bridge run with python.org's embeddable Python Panel downloads; no latest-release lookup); a game folder moved to another library still removes and reinstalls cleanly (the stored folders are mapped to the current one); user-supplied recipe files pending"
+      "note": "optiscaler (with sharpness, FG route, ANR, recipe game_files packages, ReShade.ini configuration and game_config settings), dll and helixsr (HLX FSR 4 through HelixSR's own bridge run with python.org's embeddable Python Panel downloads; no latest-release lookup); a game folder moved to another library still removes and reinstalls cleanly (the stored folders are mapped to the current one); the files a user brings (a mod and recipe user_files) go in with the next OptiScaler install"
     },
     "uninstall_upscaler": {
       "windows": "done",
@@ -125,22 +125,33 @@
       "note": "the backup record is recovered from its folder when Panel's state was wiped"
     },
     "get_upscaler_mod_candidates": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "mod_candidates",
+      "note": "archives in the shell's Downloads folder (wherever it was moved) and the Desktop, newest first, with the partial download in progress; the folder is the first that exists, else the profile"
     },
     "add_upscaler_mod": {
-      "windows": "pending"
+      "windows": "partial",
+      "op": "add_mod",
+      "note": "layout, conflict and size rules and mod_settings as Linux; the file must be under the profile, the download folders or on another drive, never through a link; zip is read in-process, 7z and rar through 7-Zip when installed (with passwords) or Windows' tar.exe without decryption, and a protected archive without 7-Zip answers mod_password_unsupported; only OptiScaler installs carry the mod (not dll or helixsr); no Proton prefix verbs or native DLL overrides (they mean nothing on Windows) and no mod_launch_exe swap of the launch executable"
     },
     "remove_upscaler_mod": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "remove_mod",
+      "note": "takes the stored copy away; the game keeps the files until the next install, reported as removed"
     },
     "get_upscaler_user_file_candidates": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "user_file_candidates",
+      "note": "Downloads and Desktop, archives and loose DLLs that carry what the dependency names"
     },
     "add_upscaler_user_file": {
-      "windows": "pending"
+      "windows": "partial",
+      "op": "add_user_file",
+      "note": "the file is judged and its version read as Linux does (the DLL's version resource first, then the file name) and the next install places it; same path and archive rules as add_mod, without passwords"
     },
     "remove_upscaler_user_file": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "remove_user_file"
     },
     "get_lsfg_status": {
       "windows": "not_applicable",

@@ -217,6 +217,7 @@ public sealed partial class UpscalersView : UserControl
         }
 
         advancedPanel.Children.Add(BuildExeEditor());
+        advancedPanel.Children.Add(BuildSourcesEditor());
         advancedPanel.Children.Add(BuildIniEditor());
 
         gamePanel.Children.Add(backButton);
@@ -587,6 +588,7 @@ public sealed partial class UpscalersView : UserControl
     {
         advancedOpen = !advancedOpen;
         RenderAdvanced();
+        UpdateActionState();
         if (advancedOpen)
         {
             _ = LoadIniAsync();
@@ -1062,6 +1064,7 @@ public sealed partial class UpscalersView : UserControl
         actionButton.IsEnabled = detail is not null && !jobRunning && !loadingGame && !settingsBusy && reason is null;
         RenderSettings();
         RenderGameExtras();
+        RenderSources();
     }
 
     private async void ActionButton_Click(object sender, RoutedEventArgs args)

@@ -18,6 +18,23 @@ public sealed class UpscalerStateTests : IDisposable
     private string StatePath => Path.Combine(_root, "upscalers", "state.json");
 
     [Fact]
+    public void TheModAnInstallCarriedSurvivesARestartUnderTheLinuxKey()
+    {
+        var store = new UpscalerStateStore(StatePath);
+        var install = Sample("fsr-3.1", Path.Combine(_root, "Game"));
+        install.Mod = new KeyValuePair<string, string>("ERSS-FG 1.2.zip", "ERSS-FG 1.2.zip@1700000000000000000");
+        store.SetInstall("1245620", install, 1);
+
+        var text = File.ReadAllText(StatePath);
+        Assert.Contains("\"mod\":{\"filename\":\"ERSS-FG 1.2.zip\",\"id\":\"ERSS-FG 1.2.zip@1700000000000000000\"}", text.Replace(" ", "").Replace("\n", "").Replace("\r", "").Replace("ERSS-FG1.2.zip", "ERSS-FG 1.2.zip"));
+        Assert.Equal(install.Mod, new UpscalerStateStore(StatePath).Install("1245620")!.Install.Mod);
+
+        store.SetInstall("1245620", Sample("fsr-3.1", Path.Combine(_root, "Game")), 1);
+        Assert.Null(new UpscalerStateStore(StatePath).Install("1245620")!.Install.Mod);
+        Assert.DoesNotContain("\"mod\"", File.ReadAllText(StatePath));
+    }
+
+    [Fact]
     public void AnInstallSurvivesARestart()
     {
         var store = new UpscalerStateStore(StatePath);
