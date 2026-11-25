@@ -18,12 +18,14 @@ type Session =
 const MODAL_CLASS = "pdc-accessory-editor";
 const STYLE_ID = "pdc-accessory-editor-style";
 function ensureModalStyle(doc: Document) {
-  if (doc.getElementById(STYLE_ID)) return;
-  const style = doc.createElement("style");
+  const style = doc.getElementById(STYLE_ID) ?? doc.head.appendChild(doc.createElement("style"));
   style.id = STYLE_ID;
   style.textContent = `.${MODAL_CLASS} > .DialogContent { width: auto !important; max-width: 96vw; }`;
-  doc.head.appendChild(style);
 }
+
+let openEditorHandle: { Close: () => void } | null = null;
+let openConfirmHandle: { Close: () => void } | null = null;
+let unloading = false;
 
 const EditorModal: FC<{ session: Session; closeModal?: () => void }> = ({ session, closeModal }) => {
   const { t } = useI18n();
@@ -44,11 +46,11 @@ const EditorModal: FC<{ session: Session; closeModal?: () => void }> = ({ sessio
     if (closed.current || asking.current) return;
     if (!dirty.current) return close();
     asking.current = true;
-    confirmDestructive(
+    openConfirmHandle = confirmDestructive(
       { title: t("accessories.draw.discardTitle"), desc: t("accessories.draw.discardDesc"),
         confirmLabel: t("accessories.draw.discard"), cancelLabel: t("accessories.draw.keepEditing"), onConfirm: close },
       root.current?.ownerDocument.defaultView ?? window,
-      () => { asking.current = false; },
+      () => { asking.current = false; openConfirmHandle = null; },
     );
   }, [close, t]);
 
@@ -82,15 +84,17 @@ function mainWindow(): Window {
   return (window as unknown as SteamWindows).SteamUIStore?.WindowStore?.SteamUIWindows?.[0]?.m_BrowserWindow ?? window;
 }
 
-let openEditorHandle: { Close: () => void } | null = null;
 
 /** Opens an editor over Steam and, once it closes, brings the quick access menu back where it was. */
 export function openEditor(session: Session): void {
+  // A double press on a gallery tile would otherwise open two editors.
+  if (openEditorHandle) return;
+  unloading = false;
   Navigation.CloseSideMenus();
   const handle = showModal(<EditorModal session={session} />, mainWindow(), {
     fnOnClose: () => {
       if (openEditorHandle === handle) openEditorHandle = null;
-      Navigation.OpenQuickAccessMenu(QuickAccessTab.Decky);
+      if (!unloading) Navigation.OpenQuickAccessMenu(QuickAccessTab.Decky);
     },
   });
   openEditorHandle = handle;
@@ -98,11 +102,15 @@ export function openEditor(session: Session): void {
 
 /** On unload: an editor left open outlives the plugin, dead, and keeps the gamepad focus. */
 export function closeAccessoryEditor(): void {
-  const handle = openEditorHandle;
-  openEditorHandle = null;
-  try {
-    handle?.Close();
-  } catch {
-    /* Steam already dropped the dialog */
+  if (!openEditorHandle) return;
+  unloading = true;
+  for (const handle of [openConfirmHandle, openEditorHandle]) {
+    try {
+      handle?.Close();
+    } catch {
+      /* Steam already dropped the dialog */
+    }
   }
+  openConfirmHandle = null;
+  openEditorHandle = null;
 }

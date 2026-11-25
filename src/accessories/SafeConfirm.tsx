@@ -32,6 +32,6 @@ const SafeConfirm: FC<Props> = ({ title, desc, confirmLabel, cancelLabel, onConf
 
 /** `parent` is the window the caller lives in: a confirmation asked from an editor must open
  *  over that editor in Steam's main window, not in the quick access menu it closed. */
-export function confirmDestructive(props: Omit<Props, "closeModal">, parent: Window = window, onDismiss?: () => void): void {
-  showModal(<SafeConfirm {...props} />, parent, { fnOnClose: onDismiss });
+export function confirmDestructive(props: Omit<Props, "closeModal">, parent: Window = window, onDismiss?: () => void): { Close: () => void } {
+  return showModal(<SafeConfirm {...props} />, parent, { fnOnClose: onDismiss });
 }

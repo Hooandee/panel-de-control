@@ -1,13 +1,13 @@
 """The handful of termios calls the panel link needs.
 
 Decky Loader 3.3 ships an embedded Python built without the ``termios`` extension, so importing it
-stops the whole plugin. The standard module is used when present; otherwise the same calls go
-straight to libc through ctypes (Linux ABI, identical on x86_64 and aarch64).
+stops the whole plugin. The standard module is used when present; otherwise the same calls go to
+the kernel's own TCGETS/TCSETS ioctls (asm-generic layout, shared by x86_64 and aarch64). glibc's
+cfsetspeed is skipped on purpose: from 2.42 it takes plain baud numbers instead of B* constants.
 """
 
-import ctypes
-import ctypes.util
-import os
+import fcntl
+import struct
 
 try:
     import termios as _termios
@@ -22,46 +22,36 @@ if _termios is not None:
     TCSANOW, TCIFLUSH, TIOCEXCL = _termios.TCSANOW, _termios.TCIFLUSH, _termios.TIOCEXCL
     tcgetattr, tcsetattr, tcflush = _termios.tcgetattr, _termios.tcsetattr, _termios.tcflush
 else:
-
-    class error(Exception):  # noqa: N801 - mirrors termios.error
-        pass
+    error = OSError
 
     B1000000 = 0o010010
     IGNPAR, CS8, CREAD, CLOCAL = 0o4, 0o60, 0o200, 0o4000
     VMIN, VTIME = 6, 5
     TCSANOW, TCIFLUSH = 0, 0
     TIOCEXCL = 0x540C
-    _NCCS = 32
-
-    class _Termios(ctypes.Structure):
-        _fields_ = [
-            ("c_iflag", ctypes.c_uint), ("c_oflag", ctypes.c_uint), ("c_cflag", ctypes.c_uint),
-            ("c_lflag", ctypes.c_uint), ("c_line", ctypes.c_ubyte), ("c_cc", ctypes.c_ubyte * _NCCS),
-            ("c_ispeed", ctypes.c_uint), ("c_ospeed", ctypes.c_uint),
-        ]
-
-    _libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6", use_errno=True)
-
-    def _check(result: int) -> None:
-        if result != 0:
-            code = ctypes.get_errno()
-            raise error(code, os.strerror(code))
+    _TCGETS, _TCSETS, _TCFLSH = 0x5401, 0x5402, 0x540B
+    _CBAUD = 0o010017
+    _NCCS = 19
+    # struct termios: tcflag_t c_iflag, c_oflag, c_cflag, c_lflag; cc_t c_line; cc_t c_cc[19]
+    _LAYOUT = struct.Struct(f"=4IB{_NCCS}B")
 
     def tcgetattr(fd: int) -> list:
-        attrs = _Termios()
-        _check(_libc.tcgetattr(fd, ctypes.byref(attrs)))
-        return [attrs.c_iflag, attrs.c_oflag, attrs.c_cflag, attrs.c_lflag,
-                _libc.cfgetispeed(ctypes.byref(attrs)), _libc.cfgetospeed(ctypes.byref(attrs)), list(attrs.c_cc)]
+        raw = bytearray(_LAYOUT.size)
+        fcntl.ioctl(fd, _TCGETS, raw)
+        iflag, oflag, cflag, lflag, _line, *cc = _LAYOUT.unpack(raw)
+        speed = cflag & _CBAUD
+        return [iflag, oflag, cflag, lflag, speed, speed, list(cc)]
 
     def tcsetattr(fd: int, when: int, values: list) -> None:
-        attrs = _Termios()
-        _check(_libc.tcgetattr(fd, ctypes.byref(attrs)))
-        attrs.c_iflag, attrs.c_oflag, attrs.c_cflag, attrs.c_lflag = values[:4]
-        for index, value in enumerate(values[6][:_NCCS]):
-            attrs.c_cc[index] = value
-        _check(_libc.cfsetispeed(ctypes.byref(attrs), values[4]))
-        _check(_libc.cfsetospeed(ctypes.byref(attrs), values[5]))
-        _check(_libc.tcsetattr(fd, when, ctypes.byref(attrs)))
+        if when != TCSANOW:
+            raise ValueError("only TCSANOW is supported")
+        iflag, oflag, cflag, lflag, _ispeed, ospeed, cc = values
+        current = bytearray(_LAYOUT.size)
+        fcntl.ioctl(fd, _TCGETS, current)
+        line = _LAYOUT.unpack(current)[4]
+        cflag = (cflag & ~_CBAUD) | (ospeed & _CBAUD)
+        chars = (list(cc) + [0] * _NCCS)[:_NCCS]
+        fcntl.ioctl(fd, _TCSETS, _LAYOUT.pack(iflag, oflag, cflag, lflag, line, *chars))
 
     def tcflush(fd: int, queue: int) -> None:
-        _check(_libc.tcflush(fd, queue))
+        fcntl.ioctl(fd, _TCFLSH, queue)

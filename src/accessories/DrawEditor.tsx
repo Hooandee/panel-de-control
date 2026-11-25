@@ -171,11 +171,13 @@ export const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void 
     // only takes them while painting.
     <Focusable onGamepadDirection={painting ? onDirection : undefined} onButtonDown={painting ? onButton : undefined}
       onOKButton={() => { if (painting) apply(cursor[0], cursor[1]); else setPainting(true); }}
-      onSecondaryButton={() => apply(cursor[0], cursor[1], "eraser")} onOptionsButton={() => apply(cursor[0], cursor[1], "fill")}
+      onSecondaryButton={() => { if (painting) apply(cursor[0], cursor[1], "eraser"); }}
+      onOptionsButton={() => { if (painting) apply(cursor[0], cursor[1], "fill"); }}
       onCancelButton={painting ? stopPainting : undefined}
       onOKActionDescription={painting ? t(`accessories.draw.tool.${tool}`) : t("accessories.draw.start")}
       onCancelActionDescription={painting ? t("accessories.draw.stop") : undefined}
-      onSecondaryActionDescription={t("accessories.draw.tool.eraser")} onOptionsActionDescription={t("accessories.draw.tool.fill")}
+      onSecondaryActionDescription={painting ? t("accessories.draw.tool.eraser") : undefined}
+      onOptionsActionDescription={painting ? t("accessories.draw.tool.fill") : undefined}
       onMenuButton={() => void send()} onMenuActionDescription={t("accessories.draw.send")}
       onGamepadFocus={() => { setCanvasFocused(true); setPainting(true); }}
       onGamepadBlur={() => { setCanvasFocused(false); setPainting(false); }} noFocusRing

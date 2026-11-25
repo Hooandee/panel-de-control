@@ -65,14 +65,12 @@ const swapped = (a: Block | undefined, b: Block | undefined) => ((a?.rot ?? 0) -
 
 const STYLE_ID = "pdc-composer-style";
 function ensureStyle(doc: Document) {
-  if (doc.getElementById(STYLE_ID)) return;
-  const style = doc.createElement("style");
+  const style = doc.getElementById(STYLE_ID) ?? doc.head.appendChild(doc.createElement("style"));
   style.id = STYLE_ID;
   style.textContent = `
     @keyframes pdcPulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
     @keyframes pdcGuide { 0% { opacity: 1; } 100% { opacity: 0; } }
   `;
-  doc.head.appendChild(style);
 }
 
 interface StickerBook {
@@ -179,11 +177,10 @@ export const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => v
   }, [JSON.stringify(blocks)]);
 
   const current = blocks[selected];
-  // Hands focus to a control before the one holding it unmounts: Steam has no focus otherwise.
-  const focusLater = (target: { current: HTMLElement | null }) => window.setTimeout(() => {
-    const control = target.current?.querySelector<HTMLElement>(".Focusable, button") ?? target.current;
+  const focusPiecesTab = () => {
+    const control = piecesTab.current?.querySelector<HTMLElement>(".Focusable, .DialogButton, button") ?? piecesTab.current;
     if (control) navigation.focus(control);
-  }, 0);
+  };
 
   const change = (list: Block[]) => {
     markDirty();
@@ -205,13 +202,12 @@ export const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => v
   const remove = () => {
     if (!current) return;
     const left = blocks.filter((_, i) => i !== selected);
+    // The Remove chip goes away with the last piece: focus has to move before it unmounts.
+    if (!left.length) focusPiecesTab();
     change(left);
     setSelected(Math.max(0, Math.min(selected, left.length - 1)));
     setGrabbing(false);
-    if (!left.length) {
-      setTab("pieces");
-      focusLater(piecesTab);
-    }
+    if (!left.length) setTab("pieces");
   };
   const duplicate = () => {
     if (!current || blocks.length >= MAX_BLOCKS) return;
@@ -257,6 +253,8 @@ export const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => v
     if (!grabbing || !delta || !current) return;
     event.preventDefault();
     event.stopPropagation();
+    // A move before the backend has placed a new piece would be overwritten by that placement.
+    if (placing.current !== null) return;
     const snapped = snapMove(liveBoxes, selected, delta[0], delta[1]);
     if (snapped.guideX !== null || snapped.guideY !== null) setGuide({ x: snapped.guideX, y: snapped.guideY, at: Date.now() });
     update({ x: snapped.x, y: snapped.y });
