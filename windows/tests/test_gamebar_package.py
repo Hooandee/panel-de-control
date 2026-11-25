@@ -879,7 +879,27 @@ class DesignSystemTests(unittest.TestCase):
             for path in PROJECT_DIR.glob("*.cs")
             if path.name != "Components.cs"
         )
-        self.assertLessEqual(assignments, 16)
+        self.assertLessEqual(assignments, 13)
+
+    def test_brushes_the_code_casts_are_solid_in_every_skin(self):
+        # ResourceBrush() casts to SolidColorBrush: a skin that redefines one of those keys as a gradient crashes.
+        casted = set()
+        for path in PROJECT_DIR.glob("*.cs"):
+            casted |= set(re.findall(r'ResourceBrush\("(Pdc\w+)"\)', path.read_text(encoding="utf-8")))
+        for path in (PROJECT_DIR / "Theme" / "Skins").glob("PdcSkin*.xaml"):
+            for element in ElementTree.parse(path).getroot():
+                key = element.attrib.get("{http://schemas.microsoft.com/winfx/2006/xaml}Key")
+                if key in casted:
+                    self.assertTrue(element.tag.endswith("SolidColorBrush"), f"{path.name} {key}")
+
+    def test_skin_slots_match_the_app_order(self):
+        app = (PROJECT_DIR / "App.xaml").read_text(encoding="utf-8")
+        merged = re.findall(r'<ResourceDictionary Source="ms-appx:///Theme/([^"]+)"', app)
+        skins = (PROJECT_DIR / "Skins.cs").read_text(encoding="utf-8")
+        skin_slot = int(re.search(r"SkinSlot = (\d+);", skins).group(1))
+        components_slot = int(re.search(r"ComponentsSlot = (\d+);", skins).group(1))
+        self.assertTrue(merged[skin_slot].startswith("Skins/PdcSkin"))
+        self.assertEqual("PdcComponents.xaml", merged[components_slot])
 
     def test_every_skin_defines_the_same_keys(self):
         key = re.compile(r'x:Key="([^"]+)"')

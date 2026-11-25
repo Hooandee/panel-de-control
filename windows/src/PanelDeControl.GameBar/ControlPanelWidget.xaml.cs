@@ -117,7 +117,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         BuildAccentSwatches();
         BuildSkinChoices();
         ApplySkinLayout();
-        Motion.Breathe(LiveHalo, 0.08f, 0.45f, TimeSpan.FromSeconds(2.4));
         foreach (var line in new[]
         {
             PowerModeDetail, PowerDrawDetail, PowerStatus, CpuControlStatus, CpuControlNote, RefreshRateStatus,
@@ -174,6 +173,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
 
         disposed = true;
+        UpdateAmbient(allowed: false);
         refreshTimer.Stop();
         heroTimer.Stop();
         InvalidatePendingOperations();
@@ -191,6 +191,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private async void OnLoaded(object sender, RoutedEventArgs args)
     {
+        UpdateAmbient();
         if (gameBarWidget is null || gameBarWidget.Visible)
         {
             refreshTimer.Start();
@@ -200,6 +201,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
+        UpdateAmbient(allowed: false);
         refreshTimer.Stop();
         heroTimer.Stop();
         InvalidatePendingOperations();
@@ -225,6 +227,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             return;
         }
 
+        UpdateAmbient();
         if (sender.Visible)
         {
             refreshTimer.Start();
@@ -410,18 +413,52 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private async void OnGameBarDisplayModeChanged(XboxGameBarWidget sender, object args)
     {
-        if (sender.GameBarDisplayMode != XboxGameBarDisplayMode.Foreground)
-        {
-            return;
-        }
-
         if (!Dispatcher.HasThreadAccess)
         {
             await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => OnGameBarDisplayModeChanged(sender, args));
             return;
         }
 
-        await ApplySteamHomeAsync();
+        if (disposed)
+        {
+            return;
+        }
+
+        UpdateAmbient();
+        if (sender.GameBarDisplayMode == XboxGameBarDisplayMode.Foreground)
+        {
+            await ApplySteamHomeAsync();
+        }
+    }
+
+    private bool ambientRunning;
+
+    // Breathing and the aurora loop forever; a pinned widget over a game or a hidden one must not keep the
+    // compositor busy, so they run only while the widget is in front.
+    private void UpdateAmbient(bool allowed = true)
+    {
+        var shown = allowed && !disposed && (gameBarWidget is null ||
+            (gameBarWidget.Visible && gameBarWidget.GameBarDisplayMode == XboxGameBarDisplayMode.Foreground));
+        if (shown == ambientRunning)
+        {
+            return;
+        }
+
+        ambientRunning = shown;
+        aurora?.Run(shown);
+        if (shown)
+        {
+            Motion.Breathe(LiveHalo, 0.08f, 0.45f, TimeSpan.FromSeconds(2.4));
+            if (Skins.Current == PdcSkin.Glass)
+            {
+                Motion.Breathe(HeroGlowHost, 0.6f, 1f, TimeSpan.FromSeconds(4.5));
+            }
+        }
+        else
+        {
+            Motion.StopBreathing(LiveHalo);
+            Motion.StopBreathing(HeroGlowHost);
+        }
     }
 
     private Task RefreshThemesWhenShownAsync()
@@ -1298,7 +1335,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             CreateHeroGlow();
             CreateAurora();
-            Motion.Breathe(HeroGlowHost, 0.6f, 1f, TimeSpan.FromSeconds(4.5));
             PowerArcShine.Data = CreateArcSegmentGeometry(0.02, 0.98, ArcRadius - 3.5);
             PowerArcShine.Visibility = Visibility.Visible;
         }
@@ -1360,11 +1396,22 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
 
         var parameter = (object?)gameBarWidget;
+        var previous = Skins.Current;
         reopenSectionId = "themes";
-        Dispose();
         Skins.Choose(skin);
-        frame.Navigate(typeof(ControlPanelWidget), parameter);
-        frame.BackStack.Clear();
+        try
+        {
+            // The old page stays alive until the new one is built, so a failure leaves a working widget.
+            frame.Navigate(typeof(ControlPanelWidget), parameter);
+            frame.BackStack.Clear();
+            Dispose();
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("skin-switch", exception);
+            reopenSectionId = null;
+            Skins.Choose(previous);
+        }
     }
 
     private static PathGeometry CreateArcSegmentGeometry(double from, double to, double radius = ArcRadius)
@@ -2383,13 +2430,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
-    private static readonly string[] AccentAliases =
-    {
-        "ToggleSwitchFillOn",
-        "ToggleSwitchFillOnPointerOver",
-        "ToggleSwitchFillOnPressed",
-    };
-
     // Brushes of the Glass skin that carry the user's accent at their own opacity.
     private static readonly string[] AccentDerivedBrushes =
     {
@@ -2403,11 +2443,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (Application.Current.Resources["PdcAccentBrush"] is SolidColorBrush brush)
         {
             brush.Color = ToColor(accent.Argb);
-            foreach (var key in AccentAliases)
-            {
-                Application.Current.Resources[key] = brush;
-            }
-
             foreach (var key in AccentDerivedBrushes)
             {
                 if (Application.Current.Resources[key] is SolidColorBrush derived)

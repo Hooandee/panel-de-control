@@ -18,30 +18,31 @@ namespace PanelDeControl.GameBar;
 internal static class Motion
 {
     private static readonly TimeSpan GlideLength = TimeSpan.FromMilliseconds(380);
-    private static bool? enabled;
+    private static readonly UISettings Settings = new();
+    private static Storyboard? glide;
 
+    // Read every time: the user can turn Windows animations off while the widget is running.
     public static bool Enabled
     {
         get
         {
-            if (enabled is null)
+            try
             {
-                try
-                {
-                    enabled = new UISettings().AnimationsEnabled;
-                }
-                catch
-                {
-                    enabled = true;
-                }
+                return Settings.AnimationsEnabled;
             }
-
-            return enabled.Value;
+            catch
+            {
+                return true;
+            }
         }
     }
 
     public static void Glide(FrameworkElement indicator, TranslateTransform transform, double x, double width, bool animate)
     {
+        // A finished storyboard holds its end values over local ones, so it is stopped before placing directly
+        // and the end values are written locally once it completes.
+        glide?.Stop();
+        glide = null;
         if (!animate || !Enabled || indicator.Width is not > 0)
         {
             transform.X = x;
@@ -60,6 +61,13 @@ internal static class Motion
         var storyboard = new Storyboard();
         storyboard.Children.Add(move);
         storyboard.Children.Add(grow);
+        storyboard.Completed += (_, _) =>
+        {
+            transform.X = x;
+            indicator.Width = width;
+            storyboard.Stop();
+        };
+        glide = storyboard;
         storyboard.Begin();
     }
 
@@ -102,6 +110,9 @@ internal static class Motion
             CrashLog.Write("motion-entrance", exception);
         }
     }
+
+    public static void StopBreathing(UIElement element) =>
+        ElementCompositionPreview.GetElementVisual(element).StopAnimation("Opacity");
 
     public static void Breathe(UIElement element, float low, float high, TimeSpan period)
     {
@@ -178,6 +189,8 @@ internal static class Motion
         private const float BlobSize = 560;
         private readonly Compositor compositor;
         private readonly CompositionColorGradientStop[] stops;
+        private readonly SpriteVisual[] blobs;
+        private readonly Vector3KeyFrameAnimation[] drifts;
 
         public Aurora(UIElement host)
         {
@@ -190,6 +203,8 @@ internal static class Motion
                 (From: new Vector2(-200, 220), To: new Vector2(80, 120), Seconds: 29, Strength: 0.45f),
             };
             stops = new CompositionColorGradientStop[paths.Length];
+            blobs = new SpriteVisual[paths.Length];
+            drifts = new Vector3KeyFrameAnimation[paths.Length];
             for (var index = 0; index < paths.Length; index++)
             {
                 var path = paths[index];
@@ -202,21 +217,34 @@ internal static class Motion
                 blob.Brush = brush;
                 blob.Opacity = path.Strength;
                 blob.Offset = new Vector3(path.From, 0);
-                if (Enabled)
-                {
-                    var drift = compositor.CreateVector3KeyFrameAnimation();
-                    drift.InsertKeyFrame(0, new Vector3(path.From, 0));
-                    drift.InsertKeyFrame(0.5f, new Vector3(path.To, 0));
-                    drift.InsertKeyFrame(1, new Vector3(path.From, 0));
-                    drift.Duration = TimeSpan.FromSeconds(path.Seconds);
-                    drift.IterationBehavior = AnimationIterationBehavior.Forever;
-                    blob.StartAnimation("Offset", drift);
-                }
-
+                var drift = compositor.CreateVector3KeyFrameAnimation();
+                drift.InsertKeyFrame(0, new Vector3(path.From, 0));
+                drift.InsertKeyFrame(0.5f, new Vector3(path.To, 0));
+                drift.InsertKeyFrame(1, new Vector3(path.From, 0));
+                drift.Duration = TimeSpan.FromSeconds(path.Seconds);
+                drift.IterationBehavior = AnimationIterationBehavior.Forever;
+                blobs[index] = blob;
+                drifts[index] = drift;
                 container.Children.InsertAtTop(blob);
             }
 
             ElementCompositionPreview.SetElementChildVisual(host, container);
+        }
+
+        // Endless loops keep the compositor producing frames, so they only run while the widget is on screen.
+        public void Run(bool running)
+        {
+            for (var index = 0; index < blobs.Length; index++)
+            {
+                if (running && Enabled)
+                {
+                    blobs[index].StartAnimation("Offset", drifts[index]);
+                }
+                else
+                {
+                    blobs[index].StopAnimation("Offset");
+                }
+            }
         }
 
         public void Tint(Color primary, Color secondary)

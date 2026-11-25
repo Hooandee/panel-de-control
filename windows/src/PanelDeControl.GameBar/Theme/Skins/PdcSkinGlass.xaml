@@ -2,8 +2,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
-        Skin A, "Cristal tallado" (default). Every skin defines exactly the same keys; PdcComponents reads them with
-        ThemeResource and the page with StaticResource, so a skin is only ever a set of values.
+        Skin A, "Cristal tallado" (default). Every other skin defines at least these keys and may also override
+        generated tokens; PdcComponents reads them with ThemeResource, so a skin is only ever a set of values.
     -->
     <Color x:Key="PdcSkinTextColor">#EBFFFFFF</Color>
     <Color x:Key="PdcSkinClearColor">#00FFFFFF</Color>

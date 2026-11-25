@@ -114,7 +114,7 @@
                                     <TranslateTransform x:Name="TabIndicatorShift" />
                                 </Border.RenderTransform>
                             </Border>
-                            <Grid x:Name="SectionTabs" ColumnSpacing="4" />
+                            <Grid x:Name="SectionTabs" ColumnSpacing="4" TabFocusNavigation="Once" />
                         </Grid>
                     </ScrollViewer>
                     <Border Grid.Column="2" Margin="0,0,2,0" Style="{StaticResource PdcKeyHintStyle}">

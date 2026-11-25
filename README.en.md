@@ -114,8 +114,9 @@ top one.
 
 Panel is coming to Windows in early access, as an Xbox Game Bar widget and as an app. Themes already
 work in Steam Big Picture just like on Linux, with no CSS Loader: install, enable and tweak them from
-Panel itself. The other sections show what your device reports and will open up over time. If
-something doesn't work as you expected, you can send me a report from Settings.
+Panel itself. The other sections show what your device reports and will open up over time. In
+Themes you pick the look of Panel itself: Glass, Instrument or Editorial. If something doesn't work as
+you expected, you can send me a report from Settings.
 
 ## 🕹️ Devices
 
