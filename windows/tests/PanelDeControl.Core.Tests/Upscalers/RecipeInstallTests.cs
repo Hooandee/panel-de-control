@@ -167,6 +167,60 @@ public sealed class RecipeInstallTests : IDisposable
     }
 
     [Fact]
+    public async Task SettingsUnderDocumentsFollowTheRedirectedDocumentsFolder()
+    {
+        var documents = Path.Combine(_root, "OneDrive", "Documentos");
+        var path = Path.Combine(documents, "Rockstar Games", "Red Dead Redemption 2", "Settings", "system.xml");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "<API>kSettingAPI_Vulkan</API>");
+        var recipe = Resolve("1174180");
+
+        var install = await new OptiScalerInstaller(Catalog, _cache, "rdna35", Path.Combine(_root, "profile"), documents).InstallAsync(Analysis, recipe,
+            new OptiScalerInstallRequest { Build = "fsr-3.1" }, null, _ => false, null, CancellationToken.None);
+
+        Assert.Equal("<API>kSettingAPI_DX12</API>", File.ReadAllText(path));
+        Assert.Equal(path, Assert.Single(install.GameConfig).Path);
+        Assert.False(Directory.Exists(Path.Combine(_root, "profile")));
+        OptiScalerInstaller.Uninstall(install);
+        Assert.Equal("<API>kSettingAPI_Vulkan</API>", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public async Task SettingsStayChangedWhileTheFilesCouldNotBeRemoved()
+    {
+        var path = Path.Combine(_root, "profile", "Documents", "Rockstar Games", "Red Dead Redemption 2", "Settings", "system.xml");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "<API>kSettingAPI_Vulkan</API>");
+        var install = await Install(Resolve("1174180"));
+
+        IReadOnlyList<string> kept;
+        using (new FileStream(Path.Combine(Target, install.Proxy), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            kept = OptiScalerInstaller.Uninstall(install);
+        }
+
+        Assert.Contains(install.Proxy, kept);
+        Assert.Equal("<API>kSettingAPI_DX12</API>", File.ReadAllText(path));
+        Assert.NotNull(GameFiles.ReadManifest(Target));
+    }
+
+    [Fact]
+    public async Task ADependencyThatPlacesDinput8AlsoGetsREFrameworksMenuClosed()
+    {
+        Unpack("luma-ff7");
+        var files = RecipeFiles().ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        files["dependencies.json"] = System.Text.Encoding.UTF8.GetBytes(
+            System.Text.Encoding.UTF8.GetString(files["dependencies.json"]).Replace("\"ReShade64.dll\": \"dxgi.dll\"", "\"dinput8.dll\": \"dxgi.dll\""));
+        var catalog = RecipeCatalog.Load(files);
+        var recipe = new RecipeResolver(catalog).Resolve("1462040", "optiscaler", "windows", "x86_64", null, PhysicalFileSystem.Instance, _game)!;
+        var automatic = AutomaticRecipe.Plan(catalog, catalog.Match("1462040", "optiscaler", "windows", "amd64"))!;
+
+        await Install(recipe, automatic);
+
+        Assert.Contains("REFrameworkConfig_MenuOpen=false", File.ReadAllText(Path.Combine(Target, ReframeworkConfig.FileName)));
+    }
+
+    [Fact]
     public async Task RedDeadWithoutItsSettingsYetWritesNothing()
     {
         var install = await Install(Resolve("1174180"));

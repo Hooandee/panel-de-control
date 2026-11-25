@@ -32,13 +32,16 @@ public sealed class GameManifest
 
     public bool HasConfiguration => Configuration is DataObject { Count: > 0 };
 
-    public string? Hash(string relative) => Files.FirstOrDefault(pair => pair.Key == relative).Value;
+    /// <summary>NTFS names a file whatever its case, so two spellings are one manifest entry there.</summary>
+    public static StringComparer PathComparer { get; } = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
-    public bool Owns(string relative) => Files.Any(pair => pair.Key == relative);
+    public string? Hash(string relative) => Files.FirstOrDefault(pair => PathComparer.Equals(pair.Key, relative)).Value;
+
+    public bool Owns(string relative) => Files.Any(pair => PathComparer.Equals(pair.Key, relative));
 
     public void Set(string relative, string? hash)
     {
-        var index = Files.FindIndex(pair => pair.Key == relative);
+        var index = Files.FindIndex(pair => PathComparer.Equals(pair.Key, relative));
         if (index >= 0)
         {
             Files[index] = new KeyValuePair<string, string?>(relative, hash);

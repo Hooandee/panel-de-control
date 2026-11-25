@@ -1,4 +1,5 @@
 using System.Net;
+using System.Runtime.InteropServices;
 using PanelDeControl.Core.Upscalers;
 using Xunit;
 
@@ -72,8 +73,61 @@ public sealed class DllInstallerTests : IDisposable
         Write(GameManifest.Folder + "/" + GameManifest.FileName, "{}");
 
         var error = await Assert.ThrowsAsync<UpscalerException>(() => new DllInstaller(Catalog, _cache)
-            .InstallAsync("fsr-4.1.2-dll", _game, () => Analysis(new[] { "bin/x64_dx12/" + Provider }), true, null, false, null, CancellationToken.None));
+            .InstallAsync("fsr-4.1.2-dll", _game, () => Analysis(new[] { "bin/x64_dx12/" + Provider }), true, null, false, null, CancellationToken.None,
+                _ => true));
         Assert.Equal("dll_conflict", error.Code);
+    }
+
+    [Fact]
+    public async Task LeftoversNoInstallClaimsAreClearedBeforeTheConflictCheck()
+    {
+        Write("bin/x64_dx12/" + Provider, "game fsr");
+        Write(GameManifest.Folder + "/" + GameManifest.FileName, "{}");
+        var install = await new DllInstaller(Catalog, _cache)
+            .InstallAsync("fsr-4.1.2-dll", _game, () => Analysis(new[] { "bin/x64_dx12/" + Provider }), true, null, false, null, CancellationToken.None);
+
+        Assert.Equal("dll", install.Engine);
+        Assert.Empty(GameFiles.Remove(install.Target));
+        Assert.Equal("game fsr", Read("bin/x64_dx12/" + Provider));
+        Assert.False(Directory.Exists(Path.Combine(_game, GameManifest.Folder)));
+    }
+
+    [Fact]
+    public async Task ALinkedFolderOnTheWayToTheLibraryIsRefused()
+    {
+        var outside = Path.Combine(_root, "Outside");
+        Directory.CreateDirectory(outside);
+        File.WriteAllText(Path.Combine(outside, Provider), "someone else's");
+        Directory.CreateDirectory(_game);
+        if (!GameFilesSafetyTests.Junction(Path.Combine(_game, "bin"), outside))
+        {
+            return;
+        }
+
+        var error = await Assert.ThrowsAsync<UpscalerException>(() => new DllInstaller(Catalog, _cache)
+            .InstallAsync("fsr-4.1.2-dll", _game, () => Analysis(new[] { "bin/" + Provider }), true, null, false, null, CancellationToken.None));
+
+        Assert.Equal("unsafe_folder", error.Code);
+        Assert.Equal("someone else's", File.ReadAllText(Path.Combine(outside, Provider)));
+        Directory.Delete(Path.Combine(_game, "bin"));
+    }
+
+    [Fact]
+    public async Task TwoSpellingsOfOneFolderAreOneFileAndComeOutExactly()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return;
+        }
+        Write("bin/x64_dx12/" + Provider, "original");
+        var before = Snapshot();
+
+        var install = await new DllInstaller(Catalog, _cache).InstallAsync("fsr-4.1.2-dll", _game,
+            () => Analysis(new[] { "bin/x64_dx12/" + Provider, "Bin/x64_dx12/" + Provider }), true, null, false, null, CancellationToken.None);
+
+        Assert.Equal(1, install.Files);
+        Assert.Empty(GameFiles.Remove(install.Target));
+        Assert.Equal(before, Snapshot());
     }
 
     [Fact]

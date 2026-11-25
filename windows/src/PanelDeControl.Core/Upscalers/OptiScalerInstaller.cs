@@ -69,14 +69,17 @@ public sealed class OptiScalerInstaller
     private readonly AssetCache _cache;
     private readonly string _gpu;
     private readonly string? _profile;
+    private readonly string? _documents;
 
     /// <param name="profile">The user's profile folder, where a recipe's game settings live; the real one when omitted.</param>
-    public OptiScalerInstaller(BuildCatalog catalog, AssetCache cache, string gpu, string? profile = null)
+    /// <param name="documents">The Documents folder for settings under <c>Documents/</c>; the real one (OneDrive included) when no profile is given, else <c>profile/Documents</c>.</param>
+    public OptiScalerInstaller(BuildCatalog catalog, AssetCache cache, string gpu, string? profile = null, string? documents = null)
     {
         _catalog = catalog;
         _cache = cache;
         _gpu = gpu;
         _profile = profile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        _documents = documents ?? (profile is null ? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) : null);
     }
 
     /// <param name="analyze">Reads the game folder; called again once the previous install is out.</param>
@@ -216,7 +219,7 @@ public sealed class OptiScalerInstaller
                     Put(ordered, pair.Key, pair.Value);
                 }
             }
-            if (recipe is not null && recipe.Files.Values.Contains(ReframeworkConfig.Asset))
+            if (recipe is not null && (recipe.Files.Values.Contains(ReframeworkConfig.Asset) || automatic?.PlacedFiles.Any(name => string.Equals(name, "dinput8.dll", StringComparison.OrdinalIgnoreCase)) == true))
             {
                 Put(ordered, ReframeworkConfig.FileName, SeedReframework(target, seeds, recipe, request.Choice));
             }
@@ -249,7 +252,7 @@ public sealed class OptiScalerInstaller
             Args = recipe?.Args ?? Array.Empty<string>(),
             Managed = panel.Select(pair => pair.Key).OrderBy(key => key, StringComparer.Ordinal).ToList(),
             Components = assets.Select(asset => new KeyValuePair<string, string>(asset.Id, asset.Sha256)).ToList(),
-            GameConfig = recipe is { GameConfig.Count: > 0 } ? GameConfigFiles.Apply(_profile, recipe.GameConfig).ToList() : Array.Empty<GameConfigRecord>(),
+            GameConfig = recipe is { GameConfig.Count: > 0 } ? GameConfigFiles.Apply(_profile, recipe.GameConfig, _documents).ToList() : Array.Empty<GameConfigRecord>(),
             Files = manifest.Files.Count,
         };
     }
@@ -257,8 +260,13 @@ public sealed class OptiScalerInstaller
     /// <summary>Takes an install out; returns the files kept because the game replaced them since.</summary>
     public static IReadOnlyList<string> Uninstall(InstalledUpscaler install)
     {
-        GameConfigFiles.Restore(install.GameConfig);
-        return GameFiles.Remove(install.Target);
+        var kept = GameFiles.Remove(install.Target);
+        // Settings go back only once the files are out: a refused removal leaves both as they were.
+        if (GameFiles.ReadManifest(install.Target) is null)
+        {
+            GameConfigFiles.Restore(install.GameConfig);
+        }
+        return kept;
     }
 
     /// <summary>REFramework's config with its menu closed (and its upscaler on Panel's quality), written beside the game's own.</summary>
@@ -385,7 +393,7 @@ public sealed class OptiScalerInstaller
 
     private static void Put(List<KeyValuePair<string, string>> sources, string relative, string path)
     {
-        var index = sources.FindIndex(pair => pair.Key == relative);
+        var index = sources.FindIndex(pair => GameManifest.PathComparer.Equals(pair.Key, relative));
         if (index >= 0)
         {
             sources[index] = new KeyValuePair<string, string>(relative, path);
