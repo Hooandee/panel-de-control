@@ -228,10 +228,6 @@ def test_flip_ds_lifecycle_requires_opt_in_and_restores_tdp(tmp_path, monkeypatc
     monkeypatch.setattr(
         main.powerstation_conflict.Detector, "tdp_active", lambda self: conflict,
     )
-    fercds_active = True
-    monkeypatch.setattr(
-        main.Plugin, "_flip_ds_service_owners_clear", lambda self: not fercds_active,
-    )
     detect = main.device_registry.detect
     monkeypatch.setattr(main.device_registry, "detect", partial(detect, root=root))
     for name in ("CoreControl", "SmtControl", "select_boost", "FanReader"):
@@ -252,7 +248,7 @@ def test_flip_ds_lifecycle_requires_opt_in_and_restores_tdp(tmp_path, monkeypatc
     monkeypatch.setattr(main.controller_hhd, "set_tdp_enable", reject_write)
 
     async def exercise():
-        nonlocal conflict, fercds_active
+        nonlocal conflict
         await plugin._main()
         try:
             assert (await plugin.get_device())["key"] == "ayaneo_flip_1s_ds"
@@ -268,9 +264,6 @@ def test_flip_ds_lifecycle_requires_opt_in_and_restores_tdp(tmp_path, monkeypatc
             assert rail_writes == []
 
             conflict = False
-            assert "power" in (await plugin.set_ui_module("power", False))["disabled"]
-            assert rail_writes == []
-            fercds_active = False
             assert "power" not in (await plugin.set_ui_module("power", False))["disabled"]
             assert await plugin.get_tdp_control_enabled()
             state = await plugin.get_tdp_state()

@@ -35,7 +35,7 @@ import game_freeze
 import theme_hltb
 import theme_protondb
 from gamescope_perf import GamescopePerf
-from user_session import UserSession, session_for_uid, spawn_args
+from user_session import UserSession, spawn_args
 from pdc_platform.user_session import find_session
 from gamescope_stats import GamescopeStats
 import osinfo
@@ -4492,49 +4492,11 @@ class Plugin(AmbientRpc):
             else "external_owner"
         )
 
-    def _flip_ds_service_owners_clear(self) -> bool:
-        import pwd
-
-        user = getattr(decky, "DECKY_USER", None)
-        if not user:
-            return False
-        try:
-            session = session_for_uid(pwd.getpwnam(user).pw_uid)
-        except KeyError:
-            return False
-        if session is None:
-            return False
-        args = ["list-units", "--type=service", "--state=active,activating,deactivating",
-                "--no-legend", "--plain", "--no-pager"]
-        systemctl = controller_detect.resolve_bin("systemctl")
-        user_command, user_env, identity = spawn_args(session, ["systemctl", "--user", *args])
-        probes = (
-            ([systemctl, *args], controller_detect.clean_env(), {}),
-            (user_command, user_env, identity),
-        )
-        for command, env, kwargs in probes:
-            try:
-                result = subprocess.run(
-                    command, capture_output=True, text=True, timeout=2, env=env, **kwargs,
-                )
-            except (OSError, subprocess.SubprocessError) as error:
-                decky.logger.warning("FLIP 1S DS TDP service check failed: %s", error)
-                return False
-            if result.returncode != 0:
-                decky.logger.warning("FLIP 1S DS TDP service check exited %s", result.returncode)
-                return False
-            for line in result.stdout.splitlines():
-                fields = line.split()
-                if fields and fields[0] in {"fercds-menu.service", "fercds-backend.service"}:
-                    return False
-        return True
-
     def _capped_tdp_owner_clear(self) -> bool:
         return (
             self._powerstation_detector.tdp_active() is False
             and (self._controller_backend.manager != controller_detect.HHD
                  or self._hhd_tdp_client.current_tdp_enable() is False)
-            and self._flip_ds_service_owners_clear()
         )
 
     def _tdp_write_authorized(self) -> bool:

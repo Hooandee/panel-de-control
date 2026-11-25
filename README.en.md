@@ -129,11 +129,11 @@ your device isn't on the list, Panel looks at what it can control on it and show
 
 On Linux, Panel recognizes the **AYANEO FLIP 1S DS** and displays fan RPM when the
 kernel exposes it through `ayaneo_ec`. TDP control is off by default. Disable
-other TDP managers (including FercDS and PowerDeck, if installed) before enabling
-it in Settings. Auto-TDP and low-battery TDP hold each require a separate opt-in;
-hold is inactive while Auto-TDP is active. Panel uses unmodified RyzenAdj and
-caps STAPM, fast PPT and slow PPT at 25 W on battery and AC. It
-requires readable limits and a baseline it can restore without exceeding that cap.
+other TDP managers before enabling it in Settings. Auto-TDP and low-battery TDP
+hold each require a separate opt-in; hold is inactive while Auto-TDP is active.
+Panel uses unmodified RyzenAdj and caps STAPM, fast PPT and slow PPT at 25 W on
+battery and AC. It requires readable limits and a baseline it can restore
+without exceeding that cap.
 CPU, GPU and fan controls remain with the system or your existing tools.
 
 ## 📦 Installation

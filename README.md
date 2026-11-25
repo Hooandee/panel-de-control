@@ -129,12 +129,12 @@ equipo no está en la lista, Panel mira qué se puede controlar en él y te ense
 
 En Linux, Panel reconoce la **AYANEO FLIP 1S DS** y muestra las RPM del ventilador
 si el kernel las publica mediante `ayaneo_ec`. El control de TDP está desactivado
-por defecto. Desactiva los demás gestores de TDP (incluidos FercDS y PowerDeck,
-si están instalados) antes de activarlo en Ajustes. Auto-TDP y el mantenimiento
-del TDP con batería baja se activan por separado; este último no actúa mientras
-Auto-TDP esté activo. Panel usa RyzenAdj sin modificar y limita STAPM, PPT rápido
-y PPT lento a 25 W tanto con batería como con cargador. Requiere poder leer los límites
-y restaurar sus valores originales sin superar ese máximo. Los controles de CPU,
+por defecto. Desactiva los demás gestores de TDP antes de activarlo en Ajustes.
+Auto-TDP y el mantenimiento del TDP con batería baja se activan por separado;
+este último no actúa mientras Auto-TDP esté activo. Panel usa RyzenAdj sin modificar
+y limita STAPM, PPT rápido y PPT lento a 25 W tanto con batería como con cargador.
+Requiere poder leer los límites y restaurar sus valores originales sin superar
+ese máximo. Los controles de CPU,
 GPU y ventilador quedan a cargo del sistema o de las herramientas que ya uses.
 
 ## 📦 Instalación
