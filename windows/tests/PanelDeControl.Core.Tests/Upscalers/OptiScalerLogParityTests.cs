@@ -31,10 +31,23 @@ public sealed class OptiScalerLogParityTests : IDisposable
         var fixture = Fixture["cases"]!.AsArray().Single(item => item!["name"]!.GetValue<string>() == name)!.AsObject();
         var expected = fixture["expected"]!.AsObject();
         var modified = DateTimeOffset.FromUnixTimeSeconds(Fixture["mtime"]!.GetValue<long>()).UtcDateTime;
-        if (fixture["log"] is JsonValue log)
+        string? logText = fixture["log"] is JsonValue log ? log.GetValue<string>() : null;
+        if (fixture["log_parts"] is JsonArray parts)
+        {
+            var builder = new StringBuilder();
+            foreach (var part in parts)
+            {
+                var pair = part!.AsArray();
+                builder.Insert(builder.Length, pair[0]!.GetValue<string>(), pair[1]!.GetValue<int>());
+            }
+
+            logText = builder.ToString();
+        }
+
+        if (logText is not null)
         {
             var path = Path.Combine(_folder, OptiScalerLog.LogName);
-            File.WriteAllBytes(path, new UTF8Encoding(false).GetBytes(log.GetValue<string>()));
+            File.WriteAllBytes(path, new UTF8Encoding(false).GetBytes(logText));
             File.SetLastWriteTimeUtc(path, modified);
         }
 

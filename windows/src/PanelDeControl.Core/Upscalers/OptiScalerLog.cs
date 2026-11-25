@@ -117,6 +117,7 @@ public static class OptiScalerLog
 {
     public const string LogName = "OptiScaler.log";
     public const int MaximumBytes = 4 * 1024 * 1024;
+    public const int HeadBytes = 1024 * 1024;
     public const int AnrFreshSeconds = 25;
     public const string NotRun = "not_run";
     public const string Loaded = "loaded";
@@ -167,7 +168,6 @@ public static class OptiScalerLog
         var path = Path.Combine(target, LogName);
         string text;
         DateTime modifiedUtc;
-        bool whole;
         try
         {
             var info = new FileInfo(path);
@@ -178,8 +178,7 @@ public static class OptiScalerLog
 
             modifiedUtc = info.LastWriteTimeUtc;
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            whole = stream.Length <= MaximumBytes;
-            text = DecodeTail(stream, MaximumBytes);
+            text = DecodeHeadAndTail(stream);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -187,10 +186,7 @@ public static class OptiScalerLog
         }
 
         var report = new OptiScalerLogReport { Present = true, Modified = modifiedUtc };
-        if (whole)
-        {
-            report.Started = StartOfLog(text, modifiedUtc);
-        }
+        report.Started = StartOfLog(text, modifiedUtc);
 
         if (since is { } install && modifiedUtc < install.ToUniversalTime())
         {
@@ -461,6 +457,37 @@ public static class OptiScalerLog
         (int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) * 3600)
         + (int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture) * 60)
         + int.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
+
+    private static string DecodeHeadAndTail(FileStream stream)
+    {
+        if (stream.Length <= MaximumBytes + HeadBytes)
+        {
+            return DecodeTail(stream, MaximumBytes + HeadBytes);
+        }
+
+        var head = new byte[HeadBytes];
+        var read = ReadFully(stream, head);
+        var end = Array.LastIndexOf(head, (byte)'\n', read - 1) + 1;
+        var utf8 = new UTF8Encoding(false, false);
+        return utf8.GetString(head, 0, end) + DecodeTail(stream, MaximumBytes);
+    }
+
+    private static int ReadFully(FileStream stream, byte[] buffer)
+    {
+        var read = 0;
+        while (read < buffer.Length)
+        {
+            var count = stream.Read(buffer, read, buffer.Length - read);
+            if (count == 0)
+            {
+                break;
+            }
+
+            read += count;
+        }
+
+        return read;
+    }
 
     private static string DecodeTail(FileStream stream, int maximum)
     {
