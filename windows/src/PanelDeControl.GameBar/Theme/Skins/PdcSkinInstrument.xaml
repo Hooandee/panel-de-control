@@ -26,6 +26,7 @@
     <SolidColorBrush x:Key="PdcTabSelectedTextBrush" Color="#FF140D02" />
     <SolidColorBrush x:Key="PdcAccentSoftBrush" Color="{StaticResource PdcSkinAmberColor}" Opacity="0.18" />
     <SolidColorBrush x:Key="PdcAccentRimBrush" Color="{StaticResource PdcSkinAmberColor}" />
+    <SolidColorBrush x:Key="PdcIconTileBrush" Color="{StaticResource PdcSkinAmberColor}" Opacity="0.1" />
     <SolidColorBrush x:Key="PdcTabIndicatorBrush" Color="{StaticResource PdcSkinAmberColor}" />
     <SolidColorBrush x:Key="PdcTabIndicatorRimBrush" Color="{StaticResource PdcSkinAmberColor}" />
     <SolidColorBrush x:Key="PdcCardBrush" Color="{StaticResource PdcSkinAmberColor}" Opacity="0.035" />

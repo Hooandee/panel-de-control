@@ -55,7 +55,7 @@
         <Setter Property="Width" Value="34" />
         <Setter Property="Height" Value="34" />
         <Setter Property="CornerRadius" Value="{ThemeResource PdcRadiusChip}" />
-        <Setter Property="Background" Value="{ThemeResource PdcAccentSoftBrush}" />
+        <Setter Property="Background" Value="{ThemeResource PdcIconTileBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource PdcCardRimBrush}" />
         <Setter Property="BorderThickness" Value="{ThemeResource PdcRimThickness}" />
         <Setter Property="VerticalAlignment" Value="Center" />

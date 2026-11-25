@@ -2372,6 +2372,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         "PdcAccentSoftBrush",
         "PdcAccentRimBrush",
+        "PdcIconTileBrush",
     };
 
     private static void ApplyAccent(AccentColor accent)

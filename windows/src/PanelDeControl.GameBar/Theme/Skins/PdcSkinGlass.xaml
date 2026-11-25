@@ -26,6 +26,7 @@
     <!-- Accent-derived: ControlPanelWidget.ApplyAccent repaints them with the user's accent (this skin only). -->
     <SolidColorBrush x:Key="PdcAccentSoftBrush" Color="#FF4EA1FF" Opacity="0.26" />
     <SolidColorBrush x:Key="PdcAccentRimBrush" Color="#FF4EA1FF" Opacity="0.7" />
+    <SolidColorBrush x:Key="PdcIconTileBrush" Color="#FF4EA1FF" Opacity="0.2" />
     <SolidColorBrush x:Key="PdcTabIndicatorBrush" Color="#FF4EA1FF" Opacity="0.26" />
     <SolidColorBrush x:Key="PdcTabIndicatorRimBrush" Color="#FF4EA1FF" Opacity="0.7" />
 

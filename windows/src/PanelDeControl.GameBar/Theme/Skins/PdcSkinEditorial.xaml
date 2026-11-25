@@ -24,6 +24,7 @@
     <SolidColorBrush x:Key="PdcTabSelectedTextBrush" Color="{StaticResource PdcSkinInkColor}" />
     <SolidColorBrush x:Key="PdcAccentSoftBrush" Color="{StaticResource PdcSkinInkColor}" />
     <SolidColorBrush x:Key="PdcAccentRimBrush" Color="{StaticResource PdcSkinInkColor}" />
+    <SolidColorBrush x:Key="PdcIconTileBrush" Color="{StaticResource PdcSkinClearColor}" />
     <SolidColorBrush x:Key="PdcTabIndicatorBrush" Color="{StaticResource PdcSkinLimeColor}" />
     <SolidColorBrush x:Key="PdcTabIndicatorRimBrush" Color="{StaticResource PdcSkinLimeColor}" />
     <SolidColorBrush x:Key="PdcCardBrush" Color="{StaticResource PdcSkinClearColor}" />
