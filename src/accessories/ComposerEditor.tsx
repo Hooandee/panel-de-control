@@ -160,7 +160,12 @@ export const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => v
     const timer = window.setTimeout(() => {
       void composeAccessoryLayout({ blocks }, place)
         .then((result) => {
-          if (!live || !result || result.ok === false) return;
+          if (!result || result.ok === false) {
+            // A refused placement must not leave the new piece locked in place.
+            if (place !== null && placing.current === place) placing.current = null;
+            return;
+          }
+          if (!live) return;
           setPreview(decodeFrames(result));
           setBoxes(result.boxes);
           setMode(result.mode);
@@ -171,7 +176,7 @@ export const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => v
             setBlocks(adopted);
           }
         })
-        .catch(() => undefined);
+        .catch(() => { if (place !== null && placing.current === place) placing.current = null; });
     }, place !== null ? 0 : COMPOSE_DELAY_MS);
     return () => { live = false; window.clearTimeout(timer); };
   }, [JSON.stringify(blocks)]);
@@ -229,7 +234,10 @@ export const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => v
     setSelected((selected + step + blocks.length) % blocks.length);
     setTab("edit");
   };
+  const shown = useRef(false);
   const show = () => {
+    if (shown.current) return;
+    shown.current = true;
     onShow(blocks);
     close();
   };

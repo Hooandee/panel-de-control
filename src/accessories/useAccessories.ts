@@ -61,6 +61,7 @@ export function useAccessories() {
   const generation = useRef(0);
   const writing = useRef(0);
   const brightnessTimer = useRef<number | undefined>(undefined);
+  const brightnessPending = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
     const started = generation.current;
@@ -83,6 +84,9 @@ export function useAccessories() {
       alive.current = false;
       window.clearInterval(timer);
       window.clearTimeout(brightnessTimer.current);
+      // Closing the menu right after a slide must not lose the last value.
+      if (brightnessPending.current !== null) void setAccessoryBrightness(brightnessPending.current).catch(() => undefined);
+      brightnessPending.current = null;
     };
   }, [refresh]);
 
@@ -108,8 +112,11 @@ export function useAccessories() {
     setState((prev) => (prev ? { ...prev, brightness: percent } : prev));
     generation.current += 1;
     window.clearTimeout(brightnessTimer.current);
-    brightnessTimer.current = window.setTimeout(() => void apply(() => setAccessoryBrightness(percent), { brightness: percent }),
-      BRIGHTNESS_SETTLE_MS);
+    brightnessPending.current = percent;
+    brightnessTimer.current = window.setTimeout(() => {
+      brightnessPending.current = null;
+      void apply(() => setAccessoryBrightness(percent), { brightness: percent });
+    }, BRIGHTNESS_SETTLE_MS);
   }, [apply]);
 
   return {

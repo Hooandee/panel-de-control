@@ -13,7 +13,7 @@ import { openEditor } from "./editorRoute";
 import { importImage } from "./imageImport";
 import { decodeFrames, DecodedFrames } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
-import { forgetPreviews } from "./useAccessories";
+import { forgetPreviews, setSceneDraft } from "./useAccessories";
 import { useLive } from "./EditorShell";
 import { OnPanelDot, TileRows, tileStyle } from "./tiles";
 
@@ -119,28 +119,39 @@ export const MyCreations: FC<{
     confirmDestructive({
       title: t("accessories.draw.deleteTitle"), desc: summary.name || t("accessories.draw.untitled"),
       confirmLabel: t("accessories.draw.delete"), cancelLabel: t("accessories.draw.cancel"),
-      onConfirm: () => void deleteAccessoryDrawing(summary.id).then(refresh),
+      onConfirm: () => void deleteAccessoryDrawing(summary.id).catch(() => undefined).then(() => {
+        forgetPreviews();
+        refresh();
+        if (summary.id === selectedDrawing) setSceneDraft(null);
+      }),
     });
   };
+  const [importFailed, setImportFailed] = useState(false);
   const importFile = async () => {
+    let picked: { path: string; realpath?: string };
     try {
-      const picked = await openFilePicker(0, "/home/deck/Pictures", true, true, undefined, ["png", "gif", "jpg", "jpeg", "webp"]);
+      picked = await openFilePicker(0, "/home/deck", true, true, undefined, ["png", "gif", "jpg", "jpeg", "webp"]);
+    } catch {
+      return; // picker cancelled
+    }
+    try {
       const file = await readAccessoryImage(picked.realpath ?? picked.path);
-      if (!file?.ok || !file.data || !file.mime) return;
+      if (!file?.ok || !file.data || !file.mime) throw new Error("unreadable");
       const decoded = await importImage(file.mime, file.data);
       const name = (picked.path.split("/").pop() ?? "").replace(/\.[^.]+$/, "").slice(0, 40);
       const saved = await saveAccessoryDrawing({ name, frames: decoded.frames, fps: decoded.fps });
-      if (saved?.ok && saved.id) {
-        forgetPreviews();
-        refresh();
-        onPick(saved.id);
-      }
+      if (!saved?.ok || !saved.id) throw new Error("not saved");
+      setImportFailed(false);
+      forgetPreviews();
+      refresh();
+      onPick(saved.id);
     } catch {
-      /* picker cancelled */
+      setImportFailed(true);
     }
   };
 
   return (
+    <>
     <TileRows>
       <Tile selected={false} label={t("accessories.draw.new")} onChoose={() => openEditor({ kind: "draw", draft: { name: "", frames: [], fps: 8 }, onSent: sent })}>
         <ActionArt icon={<LuPencil size={30} />} />
@@ -160,5 +171,7 @@ export const MyCreations: FC<{
         </Tile>
       ))}
     </TileRows>
+    {importFailed && <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("accessories.draw.importFailed")}</span>}
+    </>
   );
 };

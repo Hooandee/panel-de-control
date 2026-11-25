@@ -33,7 +33,8 @@ function stops(size: number, panel: number, others: { start: number; size: numbe
 
 function axis(from: number, delta: number, size: number, panel: number, others: { start: number; size: number }[]) {
   const wanted = from + delta;
-  const clamp = (v: number) => Math.max(1 - size, Math.min(panel - 1, v));
+  // At least one column stays on the panel, and never past what the backend accepts (> -panel).
+  const clamp = (v: number) => Math.max(Math.max(1 - size, 1 - panel), Math.min(panel - 1, v));
   if (delta === 0) return { at: clamp(wanted), guide: null as number | null };
   const ahead = stops(size, panel, others)
     .filter((stop) => (delta > 0 ? stop.at > from : stop.at < from) && Math.abs(stop.at - wanted) <= MAGNET)

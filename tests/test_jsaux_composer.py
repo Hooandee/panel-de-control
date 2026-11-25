@@ -72,7 +72,6 @@ def test_drawing_block_places_the_users_art(tmp_path):
 @pytest.mark.parametrize("bad", [
     {"blocks": "x"},
     {"blocks": [{"type": "nope", "x": 0, "y": 0}]},
-    {"blocks": [{"type": "text", "x": 999, "y": 0, "text": "a"}]},
     {"blocks": [{"type": "text", "x": 0, "y": 0, "text": "a" * 200}]},
     {"blocks": [{"type": "metric", "x": 0, "y": 0, "metric": "evil"}]},
     {"blocks": [{"type": "text", "x": 0, "y": 0, "text": "a"}] * 31},
@@ -188,3 +187,9 @@ def test_a_layout_too_rich_to_animate_sheds_frames_until_it_fits(tmp_path):
     segment = scene.render(_ctx(blocks))
     assert encoded_size(segment) <= codec.MAX_GIF_BYTES
     assert segment.frames
+
+
+def test_a_piece_pushed_off_the_edge_is_clamped_instead_of_blanking_the_layout():
+
+    blocks = validate_layout({"blocks": [{"type": "text", "x": -200, "y": 999, "text": "a"}]})
+    assert (blocks[0]["x"], blocks[0]["y"]) == (-63, 53)

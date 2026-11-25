@@ -1,5 +1,5 @@
 import { DialogButton, PanelSectionRow, type SingleDropdownOption, ToggleField } from "@decky/ui";
-import { FC, useEffect, useState } from "react";
+import { FC, useEffect, useRef, useState } from "react";
 import { LuCheck, LuPlug, LuSend, LuSun } from "react-icons/lu";
 
 import { PixelPreview } from "../accessories/PixelPreview";
@@ -153,6 +153,9 @@ interface Draft {
   options: Record<string, unknown>;
 }
 
+const composedBlocks = (options: Record<string, unknown> | undefined): Block[] =>
+  (options?.layout as { blocks?: Block[] } | undefined)?.blocks ?? [];
+
 const sameOptions = (a: Record<string, unknown>, b: Record<string, unknown>) => JSON.stringify(a) === JSON.stringify(b);
 
 let languageSent: string | null = null;
@@ -167,6 +170,7 @@ export const AccesoriosSection: FC = () => {
     void setAccessoryLanguage(lang).then(() => forgetPreviews()).catch(() => { languageSent = null; });
   }, [lang]);
   const { draft } = useSceneDraft();
+  const heroArea = useRef<HTMLDivElement>(null);
   const setDraft = setSceneDraft;
   if (!state) {
     return failed
@@ -208,10 +212,14 @@ export const AccesoriosSection: FC = () => {
   return (
     <>
       <PanelSectionRow>
-        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.sm }}>
+        <div ref={heroArea} style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.sm }}>
           <Hero status={status} sceneId={current?.id ?? null} options={current?.options ?? {}} labelKey={meta?.labelKey}
             power={state.power && !state.night_active} onPanel={onPanel} canShow={state.present} onShow={show} />
-          {!state.present && <EmptyState busyBy={state.busy_by} onTakeOver={() => void refresh()} />}
+          {!state.present && <EmptyState busyBy={state.busy_by} onTakeOver={() => {
+            // The take-over button goes away once the panel answers: hand the focus to the Hero first.
+            heroArea.current?.querySelector<HTMLElement>(".DialogButton")?.focus();
+            void refresh();
+          }} />}
           {state.present && state.refused && onPanel === false && current?.id === state.scene
             && <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("accessories.tooLarge")}</span>}
         </div>
@@ -224,7 +232,7 @@ export const AccesoriosSection: FC = () => {
           <SceneGallery catalog={state.catalog} selectedScene={current?.id ?? ""} panelScene={state.scene ?? ""}
             selectedDrawing={current?.id === "custom" && typeof current.options.drawing === "string" ? current.options.drawing : null}
             panelDrawing={state.scene === "custom" && typeof state.options.drawing === "string" ? state.options.drawing : null}
-            layout={current?.id === "composed" ? ((current.options.layout as { blocks?: Block[] } | undefined)?.blocks ?? []) : []}
+            layout={composedBlocks(current?.id === "composed" ? current.options : state.scene === "composed" ? state.options : undefined)}
             onPick={(id, options) => preview(id, options ?? {})} onSend={(id, options) => void send(id, options)}>
             {current && meta && meta.options.length > 0 && (
               <SceneOptions options={meta.options} values={current.options} speedrunPaused={state.speedrun_paused}

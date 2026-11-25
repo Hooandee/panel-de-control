@@ -50,8 +50,10 @@ def validate_layout(layout: dict) -> list[dict]:
         if not isinstance(block, dict) or block.get("type") not in _TYPES:
             raise ValueError("unknown block")
         x, y = block.get("x"), block.get("y")
-        if not isinstance(x, int) or not isinstance(y, int) or not (-W < x < W and -H < y < H):
+        if not isinstance(x, int) or not isinstance(y, int):
             raise ValueError("block outside the display")
+        # A stored layout must never blank the whole panel over one piece pushed off the edge.
+        x, y = max(1 - W, min(W - 1, x)), max(1 - H, min(H - 1, y))
         text = str(block.get("text") or "")
         if len(text) > 24:
             raise ValueError("text too long")
@@ -70,7 +72,7 @@ def validate_layout(layout: dict) -> list[dict]:
         colour = block.get("color")
         if colour not in THEMES and not (colour == "original" and block["type"] == "sticker"):
             colour = "original" if block["type"] == "sticker" else "aurora"
-        clean.append({**block, "text": text, "size": size, "rot": rot, "font": block.get("font") or _default_font(block["type"], size),
+        clean.append({**block, "x": x, "y": y, "text": text, "size": size, "rot": rot, "font": block.get("font") or _default_font(block["type"], size),
                       "color": colour})
     return clean
 
