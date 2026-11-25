@@ -1,6 +1,7 @@
 """Where an installed game lives, which executable creates its device and what it ships."""
 
 import json
+import logging
 import os
 import re
 import stat
@@ -14,6 +15,8 @@ from pathlib import Path
 from steam_cleaner import vdf
 
 from . import launchers, pe
+
+_log = logging.getLogger(__name__)
 
 STATE_FULLY_INSTALLED = 4
 STATE_UPDATE_RUNNING = 256 | 1024
@@ -306,8 +309,9 @@ def find_shortcut(home: str, appid: str) -> Installed | None:
             continue
         for profile in profiles:
             try:
-                shortcuts = vdf.read_shortcuts(profile / "config/shortcuts.vdf")
-            except (OSError, ValueError, UnicodeError):
+                shortcuts = vdf.read_shortcuts(profile / "config/shortcuts.vdf", lenient=True)
+            except (OSError, ValueError, UnicodeError) as error:
+                _log.info("shortcuts.vdf unreadable: %s", type(error).__name__ if not isinstance(error, ValueError) else error)
                 continue
             for entry in shortcuts.values() if isinstance(shortcuts, dict) else ():
                 if not isinstance(entry, dict) or str(entry.get("appid")) != appid:
