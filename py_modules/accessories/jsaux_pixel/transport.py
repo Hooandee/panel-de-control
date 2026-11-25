@@ -4,11 +4,11 @@ import fcntl
 import os
 import select
 import tempfile
-import termios
 import time
 from pathlib import Path
 
 from . import codec
+from . import serial_tty as termios
 
 _REPLY_BYTES = 9
 # An animation id the firmware does not have: it answers with a rejection and leaves the screen

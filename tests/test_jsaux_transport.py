@@ -1,4 +1,5 @@
 import os
+import sys
 import termios
 import threading
 
@@ -184,3 +185,44 @@ def test_each_plug_in_gets_its_own_usb_session(tmp_path):
     (device / "busnum").write_text("7\n")
     (device / "devnum").write_text("5\n")
     assert detect.find_panel(root).session == "7-1:7:5"
+
+
+@pytest.fixture
+def without_termios(monkeypatch):
+    import importlib
+
+    from accessories.jsaux_pixel import serial_tty
+
+    monkeypatch.setitem(sys.modules, "termios", None)
+    yield importlib.reload(serial_tty)
+    monkeypatch.undo()
+    importlib.reload(serial_tty)
+
+
+def test_loads_without_termios(without_termios):
+    # Decky Loader 3.3 embeds a Python without termios; the plugin must still start.
+    shim = without_termios
+    assert shim.B1000000 == 0o010010
+    assert issubclass(shim.error, Exception)
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="libc termios layout is Linux's")
+def test_libc_fallback_configures_a_tty(without_termios):
+    import pty
+
+    shim = without_termios
+    master, slave = pty.openpty()
+    try:
+        attrs = shim.tcgetattr(slave)
+        attrs[0] = shim.IGNPAR
+        attrs[2] = shim.CS8 | shim.CREAD | shim.CLOCAL
+        attrs[4] = attrs[5] = shim.B1000000
+        attrs[6][shim.VMIN] = 0
+        shim.tcsetattr(slave, shim.TCSANOW, attrs)
+        shim.tcflush(slave, shim.TCIFLUSH)
+        again = shim.tcgetattr(slave)
+        assert again[0] == shim.IGNPAR
+        assert again[4] == shim.B1000000
+    finally:
+        os.close(master)
+        os.close(slave)
