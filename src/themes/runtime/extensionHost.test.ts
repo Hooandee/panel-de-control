@@ -547,6 +547,33 @@ describe("ThemeExtensionRuntimeHost", () => {
     host.dispose();
   });
 
+  it("scopes the upscaler badge subscription to the theme's mount", async () => {
+    const stop = vi.fn();
+    const games = { pause: vi.fn(async () => true), resume: vi.fn(async () => {}), howLongToBeat: vi.fn(async () => null), protonDb: vi.fn(async () => null), upscalerBadge: vi.fn(() => ({ label: "FSR 4", short: "FSR 4", state: "installed" })), onUpscalerBadges: vi.fn(() => stop) };
+    const listener = vi.fn();
+    let seen: ThemeExtensionMountContext["games"];
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(),
+      doc: document,
+      games,
+      evaluate: () => Object.freeze({
+        abiVersion: 1,
+        mount: (context: ThemeExtensionMountContext) => {
+          seen = context.games;
+          context.games?.onUpscalerBadges?.(listener);
+          return () => {};
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+    host.reconcile(snapshot());
+    await settle();
+    expect(seen?.upscalerBadge?.(1)).toEqual({ label: "FSR 4", short: "FSR 4", state: "installed" });
+    expect(games.onUpscalerBadges).toHaveBeenCalledWith(listener);
+    expect(stop).not.toHaveBeenCalled();
+    host.dispose();
+    expect(stop).toHaveBeenCalled();
+  });
+
   it("lets a theme freeze the game and thaws it when the theme goes", async () => {
     const games = { forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}), howLongToBeat: vi.fn(async () => null), protonDb: vi.fn(async () => null) };
     const mountWith = (use: (context: ThemeExtensionMountContext) => void) => new ThemeExtensionRuntimeHost({

@@ -94,3 +94,27 @@ describe("theme games protonDb", () => {
     expect(await createThemeGamesAccess({ forceClose: vi.fn() }).protonDb(1)).toBeNull();
   });
 });
+
+describe("theme games upscaler badge", () => {
+  it("passes Panel's pill text by decimal app id and drops malformed replies", () => {
+    const upscalerBadge = vi.fn((appid: string) => appid === "10" ? { label: "FSR 4.1.2", short: "FSR 4", state: "installed", extra: 1 } : { label: 3 });
+    const games = createThemeGamesAccess({ upscalerBadge });
+    expect(games.upscalerBadge!(10)).toEqual({ label: "FSR 4.1.2", short: "FSR 4", state: "installed" });
+    expect(upscalerBadge).toHaveBeenCalledWith("10");
+    expect(games.upscalerBadge!(11)).toBeNull();
+    expect(games.upscalerBadge!("x")).toBeNull();
+    expect(createThemeGamesAccess({ upscalerBadge: () => null }).upscalerBadge!(10)).toBeNull();
+    expect(createThemeGamesAccess({ upscalerBadge: () => { throw new Error("gone"); } }).upscalerBadge!(10)).toBeNull();
+  });
+
+  it("subscribes to changes and is absent when Panel cannot offer them", () => {
+    const stop = vi.fn();
+    const subscribeUpscalerBadges = vi.fn(() => stop);
+    const games = createThemeGamesAccess({ subscribeUpscalerBadges });
+    const listener = vi.fn();
+    expect(games.onUpscalerBadges!(listener)).toBe(stop);
+    expect(subscribeUpscalerBadges).toHaveBeenCalledWith(listener);
+    expect(createThemeGamesAccess({ forceClose: vi.fn() }).upscalerBadge).toBeUndefined();
+    expect(createThemeGamesAccess({ forceClose: vi.fn() }).onUpscalerBadges).toBeUndefined();
+  });
+});

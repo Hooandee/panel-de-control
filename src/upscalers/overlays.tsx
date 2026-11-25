@@ -104,6 +104,38 @@ function useCoverLabels(): Record<string, Badge> {
   return useMemo(() => shown ? { ...engines, ...installed } : NO_COVERS, [engines, installed, shown]);
 }
 
+export interface CoverBadge {
+  label: string;
+  short: string;
+  state: string;
+}
+
+/** What the cover pill of a game says, for themes that paint covers themselves; null when none or when the user hides pills. */
+export function coverBadgeFor(appid: string): CoverBadge | null {
+  if (!readCoverBadges()) return null;
+  const badge = installs[appid] ?? engineCovers[appid];
+  return badge ? { label: badge.label, short: badge.short, state: badge.state } : null;
+}
+
+function coverBadgeSignature(): string {
+  if (!readCoverBadges()) return "";
+  const pick = (map: Record<string, Badge>) => Object.entries(map).map(([appid, b]) => `${appid}:${b.label}|${b.short}|${b.state}`).join(",");
+  return `${pick(engineCovers)};${pick(installs)}`;
+}
+
+/** Calls back only when a cover pill appears, goes or changes (install, removal, fallback, the Escaladores option). */
+export function subscribeCoverBadges(listener: () => void): () => void {
+  let last = coverBadgeSignature();
+  const check = () => {
+    const next = coverBadgeSignature();
+    if (next === last) return;
+    last = next;
+    listener();
+  };
+  listeners.add(check);
+  return () => { listeners.delete(check); };
+}
+
 /** Games with a Panel upscaler or engine profile, for a report to describe. */
 export function reportedAppids(): string[] {
   return [...new Set([...Object.keys(installs), ...Object.keys(engineCovers)])];
