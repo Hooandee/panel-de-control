@@ -108,13 +108,16 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         InitializeComponent();
         ThemeLibraryHost.Content = themesView;
         PowerArcTrack.Data = CreatePowerArcGeometry(1);
-        PowerArcFill.Data = CreatePowerArcGeometry(0);
-        ApplyAccent(ReadSavedAccent());
+        SetHeroArc(0);
+        if (Skins.Current == PdcSkin.Glass)
+        {
+            ApplyAccent(ReadSavedAccent());
+        }
+
         BuildAccentSwatches();
-        CreateHeroGlow();
-        CreateAurora();
+        BuildSkinChoices();
+        ApplySkinLayout();
         Motion.Breathe(LiveHalo, 0.08f, 0.45f, TimeSpan.FromSeconds(2.4));
-        Motion.Breathe(HeroGlowHost, 0.6f, 1f, TimeSpan.FromSeconds(4.5));
         foreach (var line in new[]
         {
             PowerModeDetail, PowerDrawDetail, PowerStatus, CpuControlStatus, CpuControlNote, RefreshRateStatus,
@@ -144,7 +147,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 }
 
                 BuildSections();
-                SelectSection(0);
+                var reopen = sections.FindIndex(view => view.Definition.Id == reopenSectionId);
+                reopenSectionId = null;
+                SelectSection(Math.Max(reopen, 0));
             }
             catch (Exception exception)
             {
@@ -1257,9 +1262,117 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         return CreateArcSegmentGeometry(0, fraction);
     }
 
-    private static PathGeometry CreateArcSegmentGeometry(double from, double to)
+    private double heroFraction;
+
+    private void SetHeroArc(double fraction)
     {
-        var start = PowerArc.PointAt(from, ArcCenterX, ArcCenterY, ArcRadius);
+        heroFraction = fraction;
+        PowerArcFill.Data = CreatePowerArcGeometry(fraction);
+        LinearHeroFill.Width = Math.Max(0, fraction * LinearHero.ActualWidth);
+    }
+
+    private void LinearHero_SizeChanged(object sender, SizeChangedEventArgs args) =>
+        LinearHeroFill.Width = Math.Max(0, heroFraction * args.NewSize.Width);
+
+    // Scale marks just outside the arc, one every tenth of the range (Instrument skin).
+    private static PathGeometry CreateArcTicksGeometry()
+    {
+        var geometry = new PathGeometry();
+        for (var step = 0; step <= 10; step++)
+        {
+            var inner = PowerArc.PointAt(step / 10.0, ArcCenterX, ArcCenterY, ArcRadius + 7);
+            var outer = PowerArc.PointAt(step / 10.0, ArcCenterX, ArcCenterY, ArcRadius + (step % 5 == 0 ? 15 : 11));
+            var figure = new PathFigure { StartPoint = new Point(inner.X, inner.Y) };
+            figure.Segments.Add(new LineSegment { Point = new Point(outer.X, outer.Y) });
+            geometry.Figures.Add(figure);
+        }
+
+        return geometry;
+    }
+
+    private void ApplySkinLayout()
+    {
+        var skin = Skins.Current;
+        var glass = skin == PdcSkin.Glass;
+        AuroraHost.Visibility = glass ? Visibility.Visible : Visibility.Collapsed;
+        HeroGlowHost.Visibility = glass ? Visibility.Visible : Visibility.Collapsed;
+        if (glass)
+        {
+            CreateHeroGlow();
+            CreateAurora();
+            Motion.Breathe(HeroGlowHost, 0.6f, 1f, TimeSpan.FromSeconds(4.5));
+            // Specular lip along the inner edge of the arc track.
+            PowerArcShine.Data = CreateArcSegmentGeometry(0.02, 0.98, ArcRadius - 3.5);
+            PowerArcShine.Visibility = Visibility.Visible;
+        }
+
+        if (skin == PdcSkin.Instrument)
+        {
+            PowerArcTicks.Data = CreateArcTicksGeometry();
+            PowerArcTicks.Visibility = Visibility.Visible;
+            PowerArcTrack.StrokeStartLineCap = PenLineCap.Flat;
+            PowerArcTrack.StrokeEndLineCap = PenLineCap.Flat;
+            PowerArcFill.StrokeStartLineCap = PenLineCap.Flat;
+            PowerArcFill.StrokeEndLineCap = PenLineCap.Flat;
+        }
+
+        if (skin == PdcSkin.Editorial)
+        {
+            PowerArcView.Visibility = Visibility.Collapsed;
+            LinearHero.Visibility = Visibility.Visible;
+            PowerDrawValue.FontWeight = Windows.UI.Text.FontWeights.Bold;
+            PowerDrawValue.FontStretch = Windows.UI.Text.FontStretch.Condensed;
+            TabIndicator.VerticalAlignment = VerticalAlignment.Bottom;
+            TabIndicator.Height = 3;
+            TabIndicator.BorderThickness = new Thickness(0);
+        }
+
+        AccentTitle.Visibility = glass ? Visibility.Visible : Visibility.Collapsed;
+        AccentSwatches.Visibility = glass ? Visibility.Visible : Visibility.Collapsed;
+        SkinAccentNote.Visibility = glass ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private static string? reopenSectionId;
+
+    private void BuildSkinChoices()
+    {
+        SkinLabel.Text = Localized("SkinLabel");
+        SkinAccentNote.Text = Localized("SkinOwnAccent");
+        for (var index = 0; index < Skins.All.Count; index++)
+        {
+            var skin = Skins.All[index];
+            var choice = new Button
+            {
+                Content = Localized("Skin" + skin),
+                Tag = skin,
+                Style = (Style)Application.Current.Resources["PdcSegmentButtonStyle"],
+            };
+            Components.MarkChoice(choice, skin == Skins.Current);
+            choice.Click += SkinChoice_Click;
+            Grid.SetColumn(choice, index);
+            SkinChoices.Children.Add(choice);
+        }
+    }
+
+    // Skin values are read when elements are built, so the page is built again on the new skin.
+    private void SkinChoice_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: PdcSkin skin } || skin == Skins.Current || Frame is not Frame frame)
+        {
+            return;
+        }
+
+        var parameter = (object?)gameBarWidget;
+        reopenSectionId = "themes";
+        Dispose();
+        Skins.Choose(skin);
+        frame.Navigate(typeof(ControlPanelWidget), parameter);
+        frame.BackStack.Clear();
+    }
+
+    private static PathGeometry CreateArcSegmentGeometry(double from, double to, double radius = ArcRadius)
+    {
+        var start = PowerArc.PointAt(from, ArcCenterX, ArcCenterY, radius);
         var figure = new PathFigure
         {
             StartPoint = new Point(start.X, start.Y),
@@ -1267,11 +1380,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         };
         if (to > from)
         {
-            var end = PowerArc.PointAt(to, ArcCenterX, ArcCenterY, ArcRadius);
+            var end = PowerArc.PointAt(to, ArcCenterX, ArcCenterY, radius);
             figure.Segments.Add(new ArcSegment
             {
                 Point = new Point(end.X, end.Y),
-                Size = new Size(ArcRadius, ArcRadius),
+                Size = new Size(radius, radius),
                 IsLargeArc = PowerArc.IsLargeArc(to - from),
                 SweepDirection = SweepDirection.Clockwise,
             });
@@ -1673,8 +1786,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         var current = sections[index].Definition;
         var accent = ToColor(current.AccentArgb);
-        var sectionFill = new SolidColorBrush(WithAlpha(Lighten(accent), 0x48));
-        var sectionRim = new SolidColorBrush(WithAlpha(Lighten(accent), 0xB0));
+        var glass = Skins.Current == PdcSkin.Glass;
+        Brush sectionFill = glass ? new SolidColorBrush(WithAlpha(Lighten(accent), 0x48)) : ResourceBrush("PdcTabIndicatorBrush");
+        Brush sectionRim = glass ? new SolidColorBrush(WithAlpha(Lighten(accent), 0xB0)) : ResourceBrush("PdcTabIndicatorRimBrush");
+        // A lime block behind light text does not read in the Editorial side menu; it gets a quiet layer instead.
+        var desktopFill = Skins.Current == PdcSkin.Editorial ? ResourceBrush("PdcLayerStrongBrush") : sectionFill;
         for (var position = 0; position < sections.Count; position++)
         {
             var view = sections[position];
@@ -1686,10 +1802,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
             view.Panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
             view.Label.Visibility = selected || desktopLayout ? Visibility.Visible : Visibility.Collapsed;
-            view.Tab.Background = selected && desktopLayout ? sectionFill : ResourceBrush("PdcTransparentBrush");
+            view.Tab.Background = selected && desktopLayout ? desktopFill : ResourceBrush("PdcTransparentBrush");
             view.Tab.BorderBrush = sectionRim;
             view.Tab.BorderThickness = new Thickness(selected && desktopLayout ? 1 : 0);
-            view.Tab.Foreground = ResourceBrush(selected ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
+            view.Tab.Foreground = ResourceBrush(
+                !selected ? "PdcTextMutedBrush"
+                : desktopLayout && Skins.Current == PdcSkin.Editorial ? "PdcTextPrimaryBrush"
+                : "PdcTabSelectedTextBrush");
             if (!desktopLayout)
             {
                 SectionTabs.ColumnDefinitions[position].Width = selected ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
@@ -1791,7 +1910,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             heroZone = null;
             PowerZoneLabel.Text = string.Empty;
             SetHeroGlow(null);
-            PowerArcFill.Data = CreatePowerArcGeometry(0);
+            SetHeroArc(0);
             return;
         }
 
@@ -1834,7 +1953,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         var fraction = PowerArc.Fraction(watts, 0, heroScaleWatts);
         PowerDrawValue.Text = watts.ToString("0.0");
-        PowerArcFill.Data = CreatePowerArcGeometry(fraction);
+        SetHeroArc(fraction);
         PowerArcFill.Stroke = heroGradient ??= HeroGradient();
         if (!heroScaleFromDevice)
         {
@@ -1863,7 +1982,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var fraction = PowerArc.Fraction(watts, tdpMinimumWatts, scaleMaximum);
         var color = ToColor(PowerArc.ColorFor(fraction));
         PowerDrawValue.Text = watts.ToString("0");
-        PowerArcFill.Data = CreatePowerArcGeometry(tdpPresentation.AppliedWatts.HasValue ? fraction : 0);
+        SetHeroArc(tdpPresentation.AppliedWatts.HasValue ? fraction : 0);
         PowerArcFill.Stroke = new SolidColorBrush(color);
         if (tdpPresentation.AppliedWatts is null)
         {
@@ -1918,7 +2037,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var fraction = Math.Min(Math.Max(level, 0), 100) / 100;
         var color = BatteryColorFor(level);
         PowerDrawValue.Text = level.ToString("0");
-        PowerArcFill.Data = CreatePowerArcGeometry(fraction);
+        SetHeroArc(fraction);
         PowerArcFill.Stroke = new SolidColorBrush(color);
         PowerZoneLabel.Text = Localized("HeroBattery");
         PowerZoneLabel.Foreground = new SolidColorBrush(color);

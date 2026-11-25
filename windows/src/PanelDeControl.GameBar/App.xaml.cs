@@ -22,6 +22,7 @@ sealed partial class App : Application
         try
         {
             InitializeComponent();
+            Skins.ApplySaved();
         }
         catch (Exception exception)
         {

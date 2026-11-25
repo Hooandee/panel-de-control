@@ -798,17 +798,44 @@ class DesignSystemTests(unittest.TestCase):
         code = WIDGET_CODE.read_text(encoding="utf-8")
         self.assertNotIn("Color.FromArgb(255,", code)
 
-    def test_app_merges_the_generated_tokens(self):
-        # App -> PdcComponents -> PdcGlass -> PdcTokens: one instance of every brush, so accent repaints reach them all.
+    def test_app_merges_tokens_then_skin_then_components(self):
+        # Skins.cs swaps slot 1: the skin overrides generated tokens and the components read both.
+        app = (PROJECT_DIR / "App.xaml").read_text(encoding="utf-8")
         project = PROJECT.read_text(encoding="utf-8")
-        for path, merged in (
-            (PROJECT_DIR / "App.xaml", "PdcComponents"),
-            (PROJECT_DIR / "Theme" / "PdcComponents.xaml", "PdcGlass"),
-            (PROJECT_DIR / "Theme" / "PdcGlass.xaml", "PdcTokens"),
-        ):
-            self.assertIn(f'Source="ms-appx:///Theme/{merged}.xaml"', path.read_text(encoding="utf-8"), path.name)
-            self.assertIn(f'<Page Include="Theme\\{merged}.xaml">', project)
+        order = ["Theme/PdcTokens.xaml", "Theme/Skins/PdcSkinGlass.xaml", "Theme/PdcComponents.xaml"]
+        positions = [app.index(f'Source="ms-appx:///{path}"') for path in order]
+        self.assertEqual(sorted(positions), positions)
+        for path in order + ["Theme/Skins/PdcSkinInstrument.xaml", "Theme/Skins/PdcSkinEditorial.xaml"]:
+            self.assertIn(f'<Page Include="{path.replace("/", chr(92))}">', project)
+        self.assertIn("private const int SkinSlot = 1;", (PROJECT_DIR / "Skins.cs").read_text(encoding="utf-8"))
         self.assertIn('x:Key="PdcAccentBrush"', (PROJECT_DIR / "Theme" / "PdcTokens.xaml").read_text(encoding="utf-8"))
+
+    def test_every_resource_the_widget_uses_is_defined(self):
+        # A missing key only fails when the page loads, on the device.
+        theme = PROJECT_DIR / "Theme"
+        defined = set()
+        for path in (theme / "PdcTokens.xaml", theme / "Skins" / "PdcSkinGlass.xaml", theme / "PdcComponents.xaml"):
+            defined |= set(re.findall(r'x:Key="([^"]+)"', path.read_text(encoding="utf-8")))
+        used = set()
+        for path in (WIDGET, theme / "PdcComponents.xaml"):
+            used |= set(re.findall(r"\{(?:Static|Theme)Resource (\w+)\}", path.read_text(encoding="utf-8")))
+        for path in PROJECT_DIR.glob("*.cs"):
+            code = path.read_text(encoding="utf-8")
+            used |= set(re.findall(r'Resources\["(Pdc\w+)"\]', code))
+            used |= set(re.findall(r'Resource(?:Brush|<\w+>)\("(Pdc\w+)"\)', code))
+            used |= set(re.findall(r'Components\.(?:Brush|Style)\("(Pdc\w+)"\)', code))
+        self.assertEqual(set(), used - defined)
+
+    def test_every_skin_defines_the_same_keys(self):
+        key = re.compile(r'x:Key="([^"]+)"')
+        skins = {
+            path.name: {name for name in key.findall(path.read_text(encoding="utf-8")) if not name.startswith("PdcSkin")}
+            for path in (PROJECT_DIR / "Theme" / "Skins").glob("PdcSkin*.xaml")
+        }
+        self.assertEqual(3, len(skins))
+        glass = skins["PdcSkinGlass.xaml"]
+        for name, keys in skins.items():
+            self.assertEqual(set(), glass - keys, f"{name} misses keys of the default skin")
 
     def test_every_power_zone_has_a_localized_label(self):
         strings = load_strings("en-US")

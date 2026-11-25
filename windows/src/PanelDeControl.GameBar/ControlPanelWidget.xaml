@@ -11,6 +11,8 @@
 
     <Grid>
         <Grid x:Name="AuroraHost" IsHitTestVisible="False" />
+        <Rectangle Fill="{StaticResource PdcBackdropRowsBrush}" IsHitTestVisible="False" />
+        <Rectangle Fill="{StaticResource PdcBackdropColumnsBrush}" IsHitTestVisible="False" />
         <Rectangle Fill="{StaticResource PdcShellFadeBrush}" IsHitTestVisible="False" />
 
         <Grid x:Name="WidgetShell" Padding="16,16,16,8">
@@ -53,7 +55,7 @@
                             Padding="8,1,8,2"
                             VerticalAlignment="Center"
                             Background="{StaticResource PdcAccentBrush}"
-                            CornerRadius="{StaticResource PdcRadiusPill}">
+                            CornerRadius="{StaticResource PdcRadiusRound}">
                             <TextBlock
                                 x:Name="EarlyBadgeText"
                                 FontSize="10"
@@ -172,7 +174,7 @@
                 <ColumnDefinition Width="272" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Grid Background="{StaticResource PdcGlassBrush}" BorderBrush="{StaticResource PdcGlassRimBrush}" BorderThickness="0,0,1,0" Padding="18,22,18,18">
+            <Grid Background="{StaticResource PdcCardBrush}" BorderBrush="{StaticResource PdcCardRimBrush}" BorderThickness="0,0,1,0" Padding="18,22,18,18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -200,32 +202,46 @@
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         IsHitTestVisible="False" />
-                    <Viewbox Width="244" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Viewbox x:Name="PowerArcView" Width="244" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Grid Width="200" Height="184">
+                            <Path
+                                x:Name="PowerArcTicks"
+                                Stroke="{StaticResource PdcTextMutedBrush}"
+                                StrokeThickness="1.5"
+                                Opacity="0.7"
+                                Visibility="Collapsed" />
                             <Path
                                 x:Name="PowerArcTrack"
                                 Stroke="{StaticResource PdcTrackBrush}"
-                                StrokeThickness="10"
+                                StrokeThickness="{StaticResource PdcArcThickness}"
                                 StrokeStartLineCap="Round"
                                 StrokeEndLineCap="Round" />
                             <Path
                                 x:Name="ChargerBand"
                                 Stroke="{StaticResource PdcWarnBrush}"
                                 Opacity="0.18"
-                                StrokeThickness="10"
+                                StrokeThickness="{StaticResource PdcArcThickness}"
                                 StrokeStartLineCap="Round"
                                 StrokeEndLineCap="Round" />
                             <Path
                                 x:Name="PowerArcFill"
-                                StrokeThickness="10"
+                                StrokeThickness="{StaticResource PdcArcThickness}"
                                 StrokeStartLineCap="Round"
                                 StrokeEndLineCap="Round" />
                             <Path
                                 x:Name="BoostArc"
                                 Stroke="{StaticResource PdcBoostBrush}"
-                                StrokeThickness="10"
+                                StrokeThickness="{StaticResource PdcArcThickness}"
                                 StrokeStartLineCap="Round"
                                 StrokeEndLineCap="Round" />
+                            <Path
+                                x:Name="PowerArcShine"
+                                Stroke="{StaticResource PdcKnobBrush}"
+                                StrokeThickness="1.2"
+                                Opacity="0.45"
+                                StrokeStartLineCap="Round"
+                                StrokeEndLineCap="Round"
+                                Visibility="Collapsed" />
                             <Canvas IsHitTestVisible="False">
                                 <Ellipse
                                     x:Name="TdpMarker"
@@ -241,7 +257,7 @@
                             <TextBlock
                                 x:Name="PowerDrawValue"
                                 Text="—"
-                                FontSize="60"
+                                FontSize="{StaticResource PdcHeroValueSize}"
                                 FontWeight="Light"
                                 Style="{StaticResource PdcValueStyle}" />
                             <TextBlock
@@ -269,6 +285,10 @@
                             FontWeight="SemiBold"
                             Style="{StaticResource PdcCaptionStyle}" />
                     </StackPanel>
+                    <Grid x:Name="LinearHero" Height="22" Margin="2,0,2,4" VerticalAlignment="Bottom" Visibility="Collapsed" SizeChanged="LinearHero_SizeChanged">
+                        <Rectangle Height="2" Fill="{StaticResource PdcTrackBrush}" />
+                        <Rectangle x:Name="LinearHeroFill" Width="0" Height="4" HorizontalAlignment="Left" Fill="{StaticResource PdcAccentBrush}" />
+                    </Grid>
                 </Grid>
                 <TextBlock
                     x:Name="PowerDrawDetail"
@@ -645,7 +665,18 @@
 
             <Border x:Name="AccentCard" Tag="themes.accent" Style="{StaticResource PdcCardStyle}">
                 <StackPanel>
-                    <TextBlock x:Uid="AccentLabel" Style="{StaticResource PdcTitleStyle}" />
+                    <TextBlock x:Name="SkinLabel" Style="{StaticResource PdcTitleStyle}" />
+                    <Border Margin="0,10,0,0" Style="{StaticResource PdcInsetStyle}">
+                        <Grid x:Name="SkinChoices" ColumnSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                        </Grid>
+                    </Border>
+                    <TextBlock x:Name="SkinAccentNote" Margin="0,10,0,0" Style="{StaticResource PdcMutedStyle}" Visibility="Collapsed" />
+                    <TextBlock x:Name="AccentTitle" x:Uid="AccentLabel" Margin="0,18,0,0" Style="{StaticResource PdcTitleStyle}" />
                     <Grid x:Name="AccentSwatches" Margin="0,12,0,0" RowSpacing="4" />
                 </StackPanel>
             </Border>

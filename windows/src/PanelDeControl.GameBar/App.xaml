@@ -4,11 +4,14 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <!--
-            PdcComponents merges PdcGlass, which merges the generated PdcTokens: one instance of every brush.
-            The outer dictionary stays without Source because ApplyAccent writes keys into it at runtime.
+            Order matters: generated tokens, then the skin (Skins.cs swaps slot 1 and may override tokens), then the
+            components, which read both through ThemeResource. The outer dictionary has no Source because
+            ApplyAccent writes keys into it at runtime.
         -->
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Theme/PdcTokens.xaml" />
+                <ResourceDictionary Source="ms-appx:///Theme/Skins/PdcSkinGlass.xaml" />
                 <ResourceDictionary Source="ms-appx:///Theme/PdcComponents.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>

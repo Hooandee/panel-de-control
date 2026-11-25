@@ -55,6 +55,7 @@
     <Compile Include="BrightnessControlClient.cs" />
     <Compile Include="RefreshRateClient.cs" />
     <Compile Include="ReportClient.cs" />
+    <Compile Include="Skins.cs" />
     <Compile Include="Components.cs" />
     <Compile Include="CpuControlClient.cs" />
     <Compile Include="CrashLog.cs" />
@@ -84,7 +85,15 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="Theme\PdcGlass.xaml">
+    <Page Include="Theme\Skins\PdcSkinGlass.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Theme\Skins\PdcSkinInstrument.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Theme\Skins\PdcSkinEditorial.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

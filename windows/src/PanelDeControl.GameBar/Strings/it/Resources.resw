@@ -470,4 +470,9 @@
   <data name="SteamHomeButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Vai alla Home di Steam</value>
   </data>
+  <data name="SkinLabel" xml:space="preserve"><value>Stile del pannello</value></data>
+  <data name="SkinGlass" xml:space="preserve"><value>Vetro</value></data>
+  <data name="SkinInstrument" xml:space="preserve"><value>Strumento</value></data>
+  <data name="SkinEditorial" xml:space="preserve"><value>Editoriale</value></data>
+  <data name="SkinOwnAccent" xml:space="preserve"><value>Questo stile ha il suo colore.</value></data>
 </root>
