@@ -14,6 +14,8 @@ import { importImage } from "./imageImport";
 import { decodeFrames, DecodedFrames } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
 import { forgetPreviews, setSceneDraft } from "./useAccessories";
+import { getQamDocument } from "../qamDocument";
+import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { useLive } from "./EditorShell";
 import { OnPanelDot, TileRows, tileStyle } from "./tiles";
 
@@ -57,18 +59,20 @@ const Tile: FC<{
   selected: boolean;
   onPanel?: boolean;
   label: string;
+  /** Focus comes back to a tile by this label after a dialog, so it must not change with a rename. */
+  focusKey?: string;
   onChoose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   children: React.ReactNode;
-}> = ({ selected, onPanel, label, onChoose, onEdit, onDelete, children }) => {
+}> = ({ selected, onPanel, label, focusKey, onChoose, onEdit, onDelete, children }) => {
   const { t } = useI18n();
   const [focused, setFocused] = useState(false);
   const choose = useLive(onChoose);
   const edit = useLive(() => onEdit?.());
   const remove = useLive(() => onDelete?.());
   return (
-    <Focusable onActivate={choose} onClick={choose}
+    <Focusable onActivate={choose} onClick={choose} aria-label={focusKey}
       onSecondaryButton={onEdit ? edit : undefined} onSecondaryActionDescription={onEdit ? t("accessories.draw.edit") : undefined}
       onOptionsButton={onDelete ? remove : undefined} onOptionsActionDescription={onDelete ? t("accessories.draw.delete") : undefined}
       onGamepadFocus={() => setFocused(true)} onGamepadBlur={() => setFocused(false)} style={tileStyle(focused, selected)}>
@@ -90,6 +94,26 @@ const ActionArt: FC<{ icon: React.ReactNode }> = ({ icon }) => (
 );
 
 let lastImportFailed = false;
+
+const drawingKey = (id: string) => `drawing:${id}`;
+const focusNav = createThemeNavigationAccess({ allowInactiveContext: true });
+
+// The deleted tile was the dialog's opener, so Steam would drop focus on the QAM tabs: put it on
+// its neighbour once the reopened menu has drawn it.
+function focusSoon(label: string): void {
+  const deadline = Date.now() + 2000;
+  const attempt = () => {
+    const doc = getQamDocument();
+    const target = Array.from(doc?.querySelectorAll<HTMLElement>(".pdc-root .Focusable") ?? [])
+      .find((element) => (element.getAttribute("aria-label") || element.textContent || "").trim() === label);
+    if (target) {
+      focusNav.focus(target);
+      if (target.classList.contains("gpfocus")) return;
+    }
+    if (Date.now() < deadline) window.setTimeout(attempt, 50);
+  };
+  window.setTimeout(attempt, 0);
+}
 
 export const MyCreations: FC<{
   selectedDrawing: string | null;
@@ -121,17 +145,24 @@ export const MyCreations: FC<{
     confirmDestructive({
       title: t("accessories.draw.deleteTitle"), desc: summary.name || t("accessories.draw.untitled"),
       confirmLabel: t("accessories.draw.delete"), cancelLabel: t("accessories.draw.cancel"),
-      onConfirm: () => void deleteAccessoryDrawing(summary.id).catch(() => undefined).then(() => {
+      onConfirm: () => {
+        const at = drawings.findIndex((drawing) => drawing.id === summary.id);
+        const neighbour = drawings[at + 1] ?? drawings[at - 1];
+        focusSoon(neighbour ? drawingKey(neighbour.id) : t("accessories.draw.new"));
+        void deleteAccessoryDrawing(summary.id).catch(() => undefined).then(() => {
         forgetPreviews();
         refresh();
         if (summary.id === selectedDrawing) setSceneDraft(null);
-      }),
+        });
+      },
     });
   };
-  const [importFailed, setImportFailedState] = useState(lastImportFailed);
+  // Shown once: a failure reported after the picker closed the menu, not on every later visit.
+  const [importFailed, setImportFailedState] = useState(() => { const failed = lastImportFailed; lastImportFailed = false; return failed; });
   // The file picker closes the menu, so the result may land after this panel unmounted.
   const setImportFailed = (failed: boolean) => { lastImportFailed = failed; setImportFailedState(failed); };
   const importFile = async () => {
+    setImportFailed(false);
     let picked: { path: string; realpath?: string };
     try {
       picked = await openFilePicker(0, "/home/deck", true, true, undefined, ["png", "gif", "jpg", "jpeg", "webp"]);
@@ -169,7 +200,7 @@ export const MyCreations: FC<{
       </Tile>
       {drawings.map((drawing) => (
         <Tile key={drawing.id} selected={drawing.id === selectedDrawing} onPanel={drawing.id === panelDrawing}
-          label={drawing.name || t("accessories.draw.untitled")}
+          label={drawing.name || t("accessories.draw.untitled")} focusKey={drawingKey(drawing.id)}
           onChoose={() => onPick(drawing.id)} onEdit={() => void edit(drawing)} onDelete={() => remove(drawing)}>
           <PixelPreview decoded={cachedThumb(drawing.thumb)} pitch={TILE_PITCH} animate={false} />
         </Tile>

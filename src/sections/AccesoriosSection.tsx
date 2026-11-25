@@ -124,16 +124,28 @@ const Hero: FC<{
   );
 };
 
+// Goes away as soon as the JSAUX app lets go, before the panel answers; Steam would be left
+// with no focus, so it hands focus on when it unmounts.
+const TakeOverButton: FC<{ onDone: (ok: boolean) => void }> = ({ onDone }) => {
+  const { t } = useI18n();
+  const root = useRef<HTMLDivElement>(null);
+  useRefocusWhenRemoved(root);
+  return (
+    <div ref={root} style={{ marginTop: theme.space.xs }}>
+      <DialogButton onClick={() => void pauseJsauxApp().then((r) => onDone(!!r?.ok)).catch(() => onDone(false))}>
+        {t("accessories.busy.takeOver")}
+      </DialogButton>
+    </div>
+  );
+};
+
 const EmptyState: FC<{ busyBy: string | null; onTakeOver: () => void }> = ({ busyBy, onTakeOver }) => {
   const { t } = useI18n();
   const busy = !!busyBy;
   const official = !!busyBy && busyBy.startsWith("jsaux");
   const [failed, setFailed] = useState(false);
-  // The take-over button goes once the panel answers; Steam would be left with no focus.
-  const root = useRef<HTMLDivElement>(null);
-  useRefocusWhenRemoved(root);
   return (
-    <div ref={root} style={{ ...theme.card, padding: theme.space.lg, display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.sm, textAlign: "center" }}>
+    <div style={{ ...theme.card, padding: theme.space.lg, display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.sm, textAlign: "center" }}>
       <LuPlug size={28} color={busy ? theme.color.warn : theme.color.accent} />
       <span style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
         {t(!busy ? "accessories.empty.title" : official ? "accessories.busy.title" : "accessories.busy.other.title")}
@@ -141,12 +153,7 @@ const EmptyState: FC<{ busyBy: string | null; onTakeOver: () => void }> = ({ bus
       <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.45 }}>
         {!busy ? t("accessories.empty.body") : official ? t("accessories.busy.body") : t("accessories.busy.other.body", { name: busyBy ?? "" })}
       </span>
-      {official && (
-        <DialogButton style={{ marginTop: theme.space.xs }}
-          onClick={() => void pauseJsauxApp().then((r) => { setFailed(!r?.ok); if (r?.ok) onTakeOver(); }).catch(() => setFailed(true))}>
-          {t("accessories.busy.takeOver")}
-        </DialogButton>
-      )}
+      {official && <TakeOverButton onDone={(ok) => { setFailed(!ok); if (ok) onTakeOver(); }} />}
       {failed && <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("accessories.busy.failed")}</span>}
     </div>
   );
