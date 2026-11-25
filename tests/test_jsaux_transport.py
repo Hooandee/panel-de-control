@@ -149,8 +149,11 @@ def test_is_reply_accepts_nak_but_not_corruption():
     assert not codec.is_reply(codec.frame(1, codec.Cmd.ANIMATION, b"\x00")[:-1] + b"\x00", 1, codec.Cmd.ANIMATION)
 
 
-def test_two_links_cannot_hold_the_panel_at_once(pty_panel, tmp_path):
-    master, path = pty_panel
+def test_two_links_cannot_hold_the_panel_at_once(tmp_path):
+    import fcntl
+
+    master, slave = os.openpty()
+    path = os.ttyname(slave)
     _FakePanel(master)
     first = transport.Transport(path, baud=BAUD, lock_path=tmp_path / "pixel.lock")
     second = transport.Transport(path, baud=BAUD, lock_path=tmp_path / "pixel.lock")
@@ -160,8 +163,15 @@ def test_two_links_cannot_hold_the_panel_at_once(pty_panel, tmp_path):
             second.open()
     finally:
         first.close()
-    second.open()
-    second.close()
+    # A real adapter has no other fd open once the first link closes; this test keeps the pty's
+    # own slave open, which would keep the exclusive flag on.
+    fcntl.ioctl(slave, termios.TIOCNXCL)
+    try:
+        second.open()
+        second.close()
+    finally:
+        os.close(slave)
+        os.close(master)
 
 
 def test_a_vanished_panel_is_a_transport_error_and_closes_the_link(pty_panel, monkeypatch):
