@@ -13,7 +13,7 @@ from pathlib import Path
 
 from controllers.detect import clean_env
 
-from . import demo, detect, metrics, transport, weather
+from . import detect, metrics, transport, weather
 from .library import Library
 from .render.canvas import quantize
 from .scenes import catalog
@@ -78,7 +78,6 @@ class Runtime:
         self._system_metrics = system_metrics or metrics.SystemMetrics().sample
         self._events: dict = {}
         self._care_shown_at = float("-inf")
-        self._demo_index = -1
         self.service = PixelService(
             store_path=Path(settings_dir) / "accessories" / "jsaux_pixel.json",
             find_panel=find_panel,
@@ -385,40 +384,6 @@ class Runtime:
             "firmwareAnimation": None,
             "ready": segment.ready,
         }
-
-    def demo(self, art: dict | None) -> dict:
-        """Shows the next shot of the demo reel on the panel and returns its preview."""
-        reel = demo.reel(self._demo_art(art))
-        self._demo_index = (self._demo_index + 1) % len(reel)
-        shot = reel[self._demo_index]
-        scenes = {scene.id: scene for _, scene in self._entries}
-        segment = shot.render(scenes, time.time(), self._local_zone())
-        shown = self.service.show_demo(segment)
-        self._log("INFO", "demo", shot=shot.id, shown=shown)
-        return {**self._frames(segment), "shot": shot.id, "index": self._demo_index, "total": len(reel), "shown": shown}
-
-    def stop_demo(self) -> dict:
-        self._demo_index = -1
-        self.service.refresh()
-        return self.state()
-
-    def _demo_art(self, art) -> dict | None:
-        if not isinstance(art, dict):
-            return None
-        try:
-            if len(base64.b64decode(str(art.get("rgb") or ""), validate=True)) != _ART_BYTES:
-                return None
-            portrait = art.get("portrait")
-            if portrait is not None and len(base64.b64decode(str(portrait), validate=True)) != _PORTRAIT_BYTES:
-                portrait = None
-        except ValueError:
-            return None
-        achievements = art.get("achievements")
-        valid = isinstance(achievements, dict) and all(isinstance(achievements.get(k), int) for k in ("done", "total"))
-        playtime = art.get("playtime_min")
-        return {"appid": str(art.get("appid") or "demo"), "name": str(art.get("name") or "")[:40], "rgb": art["rgb"],
-                "portrait": portrait, "achievements": achievements if valid else None,
-                "playtime_min": int(playtime) if isinstance(playtime, (int, float)) and playtime >= 0 else None}
 
     def compose(self, layout: dict, place: int | None = None) -> dict:
         blocks = validate_layout(layout)
