@@ -1,4 +1,4 @@
-import { DialogButton, DropdownItem, PanelSectionRow, ToggleField } from "@decky/ui";
+import { DialogButton, PanelSectionRow, type SingleDropdownOption, ToggleField } from "@decky/ui";
 import { FC, useEffect, useState } from "react";
 import { LuCheck, LuPlug, LuSend, LuSun } from "react-icons/lu";
 
@@ -9,10 +9,32 @@ import { SceneOptions } from "../accessories/SceneOptions";
 import type { Block } from "../accessories/ComposerEditor";
 import { loadPreview, setSceneDraft, useAccessories, usePreviewEpoch, useSceneDraft } from "../accessories/useAccessories";
 import { pauseJsauxApp } from "../api";
+import { FocusReturningDropdown } from "../components/FocusReturningDropdown";
 import { Loading } from "../components/Loading";
 import { ValueBar } from "../components/ValueBar";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+
+
+/** A setting whose explanation sits under its name and whose choices open full width below both,
+ *  so long labels and options are never squeezed side by side in the quick access menu. */
+const SettingDropdown: FC<{
+  id: string;
+  label: string;
+  description: string;
+  options: SingleDropdownOption[];
+  selected: unknown;
+  onChange: (option: SingleDropdownOption) => void;
+}> = ({ id, label, description, options, selected, onChange }) => (
+  <FocusReturningDropdown controlId={id} layout="below" childrenContainerWidth="max" menuLabel={label} rgOptions={options}
+    selectedOption={selected} onChange={onChange}
+    label={(
+      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs, paddingBottom: theme.space.xs }}>
+        <span>{label}</span>
+        <span style={{ fontSize: theme.font.caption, fontWeight: 400, color: theme.color.textMuted, lineHeight: 1.35 }}>{description}</span>
+      </div>
+    )} />
+);
 
 const HERO_PITCH = 4;
 const HALF_HOURS = Array.from({ length: 48 }, (_, i) => {
@@ -200,17 +222,17 @@ export const AccesoriosSection: FC = () => {
             <ToggleField label={t("accessories.power")} checked={state.power} onChange={(on) => void setPower(on)} />
           </PanelSectionRow>
           <PanelSectionRow>
-            <DropdownItem layout="below" childrenContainerWidth="max" label={t("accessories.gameScene")} description={t("accessories.gameScene.desc")} rgOptions={gameOptions}
-              selectedOption={gameSelected} onChange={(option) => pickGameScene(String(option.data ?? ""))} />
+            <SettingDropdown id="accessories-game-scene" label={t("accessories.gameScene")} description={t("accessories.gameScene.desc")}
+              options={gameOptions} selected={gameSelected} onChange={(option) => pickGameScene(String(option.data ?? ""))} />
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label={t("accessories.alerts.achievements")} description={t("accessories.alerts.achievements.desc")}
               checked={state.alerts.achievements} onChange={(on) => void setAlerts(on)} />
           </PanelSectionRow>
           <PanelSectionRow>
-            <DropdownItem layout="below" childrenContainerWidth="max" label={t("accessories.suspend")} description={t("accessories.suspend.desc")}
-              rgOptions={[{ data: "off", label: t("accessories.suspend.off") }, { data: "pet", label: t("accessories.suspend.pet") }]}
-              selectedOption={state.on_suspend ?? "off"} onChange={(option) => void setOnSuspend(option.data === "pet" ? "pet" : "off")} />
+            <SettingDropdown id="accessories-suspend" label={t("accessories.suspend")} description={t("accessories.suspend.desc")}
+              options={[{ data: "off", label: t("accessories.suspend.off") }, { data: "pet", label: t("accessories.suspend.pet") }]}
+              selected={state.on_suspend ?? "off"} onChange={(option) => void setOnSuspend(option.data === "pet" ? "pet" : "off")} />
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label={t("accessories.night")} description={state.night.enabled ? t("accessories.night.range", { from: state.night.from, to: state.night.to }) : undefined}
@@ -219,12 +241,12 @@ export const AccesoriosSection: FC = () => {
           {state.night.enabled && (
             <>
               <PanelSectionRow>
-                <DropdownItem label={t("accessories.night.from")} rgOptions={HALF_HOURS} selectedOption={state.night.from}
-                  onChange={(option) => void setNight({ ...state.night, from: String(option.data) })} />
+                <FocusReturningDropdown controlId="accessories-night-from" label={t("accessories.night.from")} rgOptions={HALF_HOURS}
+                  selectedOption={state.night.from} onChange={(option) => void setNight({ ...state.night, from: String(option.data) })} />
               </PanelSectionRow>
               <PanelSectionRow>
-                <DropdownItem label={t("accessories.night.to")} rgOptions={HALF_HOURS} selectedOption={state.night.to}
-                  onChange={(option) => void setNight({ ...state.night, to: String(option.data) })} />
+                <FocusReturningDropdown controlId="accessories-night-to" label={t("accessories.night.to")} rgOptions={HALF_HOURS}
+                  selectedOption={state.night.to} onChange={(option) => void setNight({ ...state.night, to: String(option.data) })} />
               </PanelSectionRow>
             </>
           )}
