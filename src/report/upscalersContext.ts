@@ -1,6 +1,6 @@
 import { listInstalledGames } from "../launch/steamApi";
 import { readRunningGame } from "../tdp/runningGame";
-import { readCoverBadges, readInGameMode, reportedAppids } from "../upscalers/overlays";
+import { coverScan, readCoverBadges, readInGameMode, reportedAppids } from "../upscalers/overlays";
 import { readSelectorContext } from "../upscalers/selectorContext";
 
 const MAX_GAMES = 12;
@@ -55,7 +55,7 @@ export function steamFacts(details: Details, userId: string | null): SteamGameFa
 
 export async function upscalersReportContext() {
   const collected_at = new Date().toISOString();
-  const badges = { covers: readCoverBadges(), in_game: readInGameMode() };
+  const badges = { covers: readCoverBadges(), in_game: readInGameMode(), cover_scan: coverScan() };
   let running: { stable_appid: string; live_appid: string; name: string; is_non_steam: boolean | null } | null = null;
   try {
     const current = readRunningGame();

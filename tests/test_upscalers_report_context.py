@@ -91,7 +91,7 @@ def test_report_keeps_other_games_when_one_diagnostic_fails(steam, fake_catalog,
 def test_frontend_rejects_wrong_types_and_non_live_ids():
     result = diagnostics.frontend_context({'collected_at': 1, 'status': [],
         'running': {'live_appid': '../not-id', 'name': False, 'stable_appid': 42}})
-    assert result == {'status': 'unavailable', 'badges': {'covers': None, 'in_game': None}, 'running': {'is_non_steam': None}, 'games': {}}
+    assert result == {'status': 'unavailable', 'badges': {'covers': None, 'in_game': None}, 'reported': True, 'running': {'is_non_steam': None}, 'games': {}}
 
 
 def test_diagnostic_failure_does_not_stop_operation(steam, fake_catalog, proc, monkeypatch):
@@ -348,3 +348,11 @@ def test_badge_preferences_reach_the_report_and_nothing_else_does():
     context = diagnostics.frontend_context({"status": "available", "badges": {"covers": False, "in_game": "always", "x": "y"}})
     assert context["badges"] == {"covers": False, "in_game": "always"}
     assert diagnostics.frontend_context({"badges": {"covers": "no", "in_game": "rm -rf"}})["badges"] == {"covers": None, "in_game": None}
+
+
+def test_frontend_cover_scan_keeps_counts_only():
+    scan = {"labelled": 2, "images": 0, "placed": 0, "skipped": {"hidden": 3, "x": 1, "size": "9"}, "extra": "y"}
+    context = diagnostics.frontend_context({"status": "available", "badges": {"covers": True, "in_game": "off", "cover_scan": scan}})
+    assert context["badges"]["cover_scan"] == {"labelled": 2, "images": 0, "placed": 0, "skipped": {"hidden": 3}}
+    assert context["reported"] is True
+    assert diagnostics.frontend_context(None)["reported"] is False
