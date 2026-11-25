@@ -636,6 +636,7 @@ export const fr: Record<string, string> = {
   "up.notice.dx11Launch": "Ce jeu se lance en DirectX 11. Pour que FSR 4 fonctionne, choisissez DLSS dans ses réglages graphiques",
   "up.helix.pick.fsr": "Dans le jeu, choisissez AMD FSR. La qualité se règle dans son menu",
   "up.error.helixsr_no_fsr": "Ce jeu n'a pas FSR 3.1, HLX FSR 4 n'a donc rien à remplacer",
+  "up.error.helixsr_recipe_blocked": "HLX FSR 4 est bloqué pour ce jeu : il remplacerait la bibliothèque FSR 3.1 du jeu, qui doit rester intacte",
   "up.error.helixsr_failed": "HelixSR n'a pas pu terminer",
   "up.error.helixsr_missing": "HelixSR n'est pas téléchargé",
   "up.error.unsafe_archive": "Le téléchargement n'est pas sûr et a été écarté",
