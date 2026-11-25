@@ -6,12 +6,14 @@ from enum import Enum
 
 _HOUR = 3600.0
 _DAY = 24 * _HOUR
-_MIN_GAP = {"scheduled": 20.0, "live": 60.0, "alert": 0.0}
+_MIN_GAP = {"scheduled": 20.0, "live": 60.0, "alert": 20.0}
 _AUTOMATIC_PER_HOUR = 60
 _AUTOMATIC_PER_DAY = 600
 _USER_PER_HOUR = 240
 _BOUNDARY_GAP = 60.0
 _BOUNDARY_PER_HOUR = 30
+_RESTORE_PER_HOUR = 60
+_OWN_BUDGET = ("user", "boundary", "restore")
 DAILY_CEILING = 1500
 
 
@@ -48,30 +50,31 @@ class Governor:
             if boundaries and now - max(boundaries) < _BOUNDARY_GAP:
                 return Decision.TOO_SOON
             return Decision.ALLOW
-        automatic = [(t, k, m) for t, k, m in self._uploads if k not in ("user", "boundary")]
+        if kind == "restore":
+            # Putting the scene back after an alert or a resume: blocking it would leave the alert
+            # (or a stale frame) up for an hour.
+            restores = sum(1 for t, k, _ in self._uploads if k == "restore" and now - t < _HOUR)
+            return Decision.BUDGET if restores >= _RESTORE_PER_HOUR else Decision.ALLOW
+        automatic = [(t, k, m) for t, k, m in self._uploads if k not in _OWN_BUDGET]
         if sum(1 for t, _, _ in automatic if now - t < _HOUR) >= _AUTOMATIC_PER_HOUR:
             return Decision.BUDGET
         if len(automatic) >= _AUTOMATIC_PER_DAY:
             return Decision.BUDGET
         gap = _MIN_GAP.get(kind, _MIN_GAP["scheduled"])
-        if kind == "live":
-            relevant = [t for t, _, m in self._uploads if m == metric]
-        else:
-            relevant = [t for t, _, _ in automatic]
+        relevant = self._relevant(kind, metric, automatic)
         if relevant and now - max(relevant) < gap:
             return Decision.TOO_SOON
         return Decision.ALLOW
 
     def retry_in(self, kind: str, metric: str | None = None, decision: "Decision | None" = None) -> float:
         now = self._clock()
-        automatic = [(t, k, m) for t, k, m in self._uploads if k not in ("user", "boundary")]
+        self._prune(now)
+        automatic = [(t, k, m) for t, k, m in self._uploads if k not in _OWN_BUDGET]
         gap = _MIN_GAP.get(kind, _MIN_GAP["scheduled"])
-        if kind == "live":
-            relevant = [t for t, _, m in self._uploads if m == metric]
-        elif kind == "boundary":
+        if kind == "boundary":
             gap, relevant = _BOUNDARY_GAP, [t for t, k, _ in self._uploads if k == "boundary"]
         else:
-            relevant = [t for t, _, _ in automatic]
+            relevant = self._relevant(kind, metric, automatic)
         wait = gap - (now - max(relevant)) if relevant else 0.0
         if decision is Decision.BUDGET or sum(1 for t, _, _ in automatic if now - t < _HOUR) >= _AUTOMATIC_PER_HOUR:
             wait = max(wait, 60.0)
@@ -97,8 +100,17 @@ class Governor:
     def snapshot(self) -> dict:
         return {"last_hash": self._last_hash, "uploads": [list(u) for u in self._uploads]}
 
+    def _relevant(self, kind: str, metric: str | None, automatic: list) -> list[float]:
+        if kind == "live":
+            return [t for t, _, m in self._uploads if m == metric]
+        if kind == "alert":
+            # Alerts only wait for each other, so a burst collapses into one write per gap.
+            return [t for t, k, _ in automatic if k == "alert"]
+        return [t for t, _, _ in automatic]
+
     def _prune(self, now: float) -> None:
-        self._uploads = [u for u in self._uploads if now - u[0] < _DAY]
+        # A wall clock set backwards would leave writes "in the future" blocking the gap for hours.
+        self._uploads = [(min(t, now), k, m) for t, k, m in self._uploads if now - t < _DAY]
 
     def _restore(self, snapshot: dict) -> None:
         last = snapshot.get("last_hash")

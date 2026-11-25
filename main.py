@@ -11768,12 +11768,12 @@ class Plugin(AmbientRpc):
         return result
 
     def _pixel_game_started(self, appid) -> int | None:
-        cached = getattr(self, "_pixel_started", None)
-        if cached and cached[0] == appid:
-            return cached[1]
         since = getattr(self, "_current_appid_at", None)
+        cached = getattr(self, "_pixel_started", None)
+        if cached and cached[0] == (appid, since):
+            return cached[1]
         started = round(time.time() - (time.monotonic() - since)) if since is not None else None
-        self._pixel_started = (appid, started)
+        self._pixel_started = ((appid, since), started)
         return started
 
     async def accessory_event(self, name, data=None) -> bool:
@@ -11819,6 +11819,9 @@ class Plugin(AmbientRpc):
 
     async def set_accessory_scene(self, scene_id, options=None) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_scene, str(scene_id), dict(options or {}))
+
+    async def set_accessory_language(self, language) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_language, str(language or ""))
 
     async def set_accessory_brightness(self, percent) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_brightness, int(percent))

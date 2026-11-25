@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import json
+import unicodedata
 from datetime import datetime, timedelta
 
 from .. import codec
@@ -11,6 +12,7 @@ from ..render.canvas import Canvas
 from ..render.palettes import mix, scale, theme_for
 from .base import Scene, SceneContext, Segment
 from .clocks import _centered, hour_segment
+from .words import words
 
 W, H = codec.WIDTH, codec.HEIGHT
 _ART_BYTES = W * H * 3
@@ -18,8 +20,10 @@ _PORTRAIT_W = 36
 
 
 def _title(game: dict | None) -> str:
-    name = (game or {}).get("name") or ""
-    return "".join(ch for ch in name.upper() if ch.isalnum() or ch in " :-'!?.") or "STEAM"
+    # The pixel fonts have no accents: "Pokémon" is drawn as "POKEMON", not with "?".
+    name = unicodedata.normalize("NFKD", (game or {}).get("name") or "")
+    plain = "".join(ch for ch in name.upper() if not unicodedata.combining(ch))
+    return "".join(ch for ch in plain if (ch.isascii() and ch.isalnum()) or ch in " :-'!?.") or "STEAM"
 
 
 class SessionScene(Scene):
@@ -50,13 +54,13 @@ class SessionScene(Scene):
                 minutes = max(0, int((t.timestamp() - began) // 60))
                 text = f"{minutes // 60}:{minutes % 60:02d}"
                 _centered(canvas, 15, text, fonts.big(18), theme.start)
-                _centered(canvas, 38, "EN PARTIDA" if ctx.options.get("lang", "es") == "es" else "PLAYING", fonts.TINY, theme.soft)
+                _centered(canvas, 38, words(ctx.options).playing, fonts.TINY, theme.soft)
                 hour_progress = (minutes % 60) / 60
                 for i in range(56):
                     canvas.px(4 + i, 47, mix(theme.start, theme.end, i / 55) if i < round(56 * hour_progress) else theme.dim)
             else:
-                _centered(canvas, 18, "--:--", fonts.big(14), theme.dim)
-                _centered(canvas, 38, "STEAM", fonts.TINY, theme.soft)
+                _centered(canvas, 18, "--:--", fonts.big(14), theme.soft)
+                _centered(canvas, 38, words(ctx.options).idle, fonts.TINY, theme.soft)
             return canvas
 
         return hour_segment(start, boundary, draw, lambda a, b: [])
@@ -85,8 +89,9 @@ class CoverScene(Scene):
         event = ctx.events.get("game_art") if isinstance(ctx.events, dict) else None
         if not isinstance(event, dict):
             return None
+        # Only the running game's art: the last game's would linger on the panel after it closed.
         appid = (ctx.game or {}).get("appid")
-        if appid is not None and str(event.get("appid")) != str(appid):
+        if appid is None or str(event.get("appid")) != str(appid):
             return None
         return _decoded(event.get("rgb"), _ART_BYTES)
 

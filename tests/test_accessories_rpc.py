@@ -24,6 +24,8 @@ def test_session_start_time_is_stable_between_ticks(plugin):  # noqa: F811
     _time.sleep(0.01)
     assert plugin._pixel_context()["game"]["started_at"] == first
     assert isinstance(first, int)
+    plugin._current_appid_at = _time.monotonic()
+    assert plugin._pixel_context()["game"]["started_at"] - first >= 1799
 
 
 def test_reports_keep_the_weather_city_out(plugin, monkeypatch):  # noqa: F811

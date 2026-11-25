@@ -121,7 +121,7 @@ class WeatherSource:
                 "high": float(daily["temperature_2m_max"][0]),
                 "low": float(daily["temperature_2m_min"][0]),
             }
-        except (OSError, ValueError, KeyError, IndexError, TypeError):
+        except Exception:  # noqa: BLE001 - http.client errors are not OSError; a dead thread would pin _busy
             with self._lock:
                 failures = self._failures.get(key, 0)
                 self._failures[key] = failures + 1

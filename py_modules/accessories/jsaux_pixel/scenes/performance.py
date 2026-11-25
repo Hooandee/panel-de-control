@@ -11,7 +11,7 @@ from ..render import fonts
 from ..render.canvas import Canvas
 from ..render.palettes import mix, scale, theme_for
 from .base import Scene, SceneContext, Segment
-from .clocks import _DAYS, _centered, _hm, hour_segment
+from .clocks import _centered, _hm, hour_segment, short_date
 
 W, H = codec.WIDTH, codec.HEIGHT
 _DASH = "--"
@@ -198,8 +198,7 @@ class DashboardScene(LiveScene):
 
     def _draw(self, t, options, theme, values, fps) -> Canvas:
         canvas = Canvas()
-        date = f"{_DAYS[t.weekday()]} {t.day:02d}"
-        canvas.text(1, 1, date, fonts.SMALL, theme.soft)
+        canvas.text(1, 1, short_date(t, options), fonts.SMALL, theme.soft)
         hour, minute = _hm(t, options)
         clock = f"{hour:02d}:{minute:02d}"
         canvas.text(W - 1 - fonts.measure(clock, fonts.SMALL), 1, clock, fonts.SMALL, theme.start)

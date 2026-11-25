@@ -48,6 +48,16 @@ def test_metric_block_moves_in_steps(scene):
     assert scene.render(_ctx(blocks, {"gpu_pct": 76})).kind == "live"
 
 
+def test_a_clock_next_to_a_metric_keeps_ticking(scene):
+    blocks = [{"type": "clock", "x": 4, "y": 2, "size": "m", "color": "mint"},
+              {"type": "metric", "x": 2, "y": 40, "size": "s", "metric": "gpu_pct", "color": "aurora"}]
+    scene.key(_ctx(blocks, {"gpu_pct": 50}))
+    segment = scene.render(_ctx(blocks, {"gpu_pct": 50}))
+    assert (segment.kind, segment.metric) == ("live", "composed")
+    assert segment.valid_until == datetime(2026, 10, 22, 22, 0, tzinfo=TZ).timestamp()
+    assert len(segment.frames) > 1
+
+
 def test_drawing_block_places_the_users_art(tmp_path):
     lib = library.Library(tmp_path)
     saved = lib.save({"name": "x", "frames": [base64.b64encode(bytes([0, 200, 0]) * (64 * 54)).decode()], "fps": 4})

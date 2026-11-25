@@ -13,6 +13,7 @@ from .base import Scene, SceneContext, Segment
 from .clocks import _centered
 from .fit import fits
 from .game import _title
+from .words import Words, words
 
 W, H = codec.WIDTH, codec.HEIGHT
 _WINDOW_S = 600
@@ -59,28 +60,28 @@ class SpeedrunScene(Scene):
         origin, paused = _run(ctx)
         title = _title(ctx.game) if ctx.game else "SPEEDRUN"
         if origin is None or not ctx.game:
-            return Segment([_face(theme, title, "0:00", 0.0, waiting=True)], [100])
+            return Segment([_face(theme, words(ctx.options), title, "0:00", 0.0, waiting=True)], [100])
         if paused is not None:
             seconds = elapsed(ctx)
-            still = _face(theme, title, clock_text(seconds), (seconds % 60) / 60, paused=True)
+            still = _face(theme, words(ctx.options), title, clock_text(seconds), (seconds % 60) / 60, paused=True)
             return Segment([still], [100])
         now_s = ctx.now - origin
         span = _WINDOW_S
         while True:
             end_s = (int(now_s // _WINDOW_S) * _WINDOW_S) + _WINDOW_S if span == _WINDOW_S else now_s + span
-            segment = self._window(theme, title, now_s, end_s, origin)
+            segment = self._window(theme, words(ctx.options), title, now_s, end_s, origin)
             if fits(segment) or span <= _MIN_WINDOW_S:
                 return segment
             span = _MIN_WINDOW_S
 
-    def _window(self, theme, title: str, now_s: float, end_s: float, origin: float) -> Segment:
+    def _window(self, theme, said: Words, title: str, now_s: float, end_s: float, origin: float) -> Segment:
         frames: list[Canvas] = []
         delays: list[int] = []
         second = int(now_s)
         shown_from = now_s
         while second < end_s:
             following = min(second + 1, end_s)
-            frames.append(_face(theme, title, clock_text(second), (second % 60) / 60))
+            frames.append(_face(theme, said, title, clock_text(second), (second % 60) / 60))
             delays.append(max(1, round((following - shown_from) * 100)))
             shown_from = following
             second += 1
@@ -89,7 +90,7 @@ class SpeedrunScene(Scene):
         return Segment(frames, delays, valid_until=origin + end_s)
 
 
-def _face(theme, title: str, text: str, minute_progress: float, paused: bool = False, waiting: bool = False) -> Canvas:
+def _face(theme, said: Words, title: str, text: str, minute_progress: float, paused: bool = False, waiting: bool = False) -> Canvas:
     canvas = Canvas()
     shown = title if fonts.measure(title, fonts.TINY) <= W - 4 else title[: max(1, (W - 8) // 4)].rstrip() + "."
     _centered(canvas, 3, shown, fonts.TINY, theme.soft)
@@ -97,7 +98,7 @@ def _face(theme, title: str, text: str, minute_progress: float, paused: bool = F
     y = 14 if font.height == 16 else 16
     colour = theme.dim if waiting else scale(theme.start, 0.6) if paused else theme.start
     _centered(canvas, y, text, font, colour)
-    label = "PAUSA" if paused else "LISTO" if waiting else "RUN"
+    label = said.paused if paused else said.ready if waiting else "RUN"
     _centered(canvas, 37, label, fonts.TINY, theme.end if not paused else theme.soft)
     filled = round(56 * minute_progress)
     for i in range(56):

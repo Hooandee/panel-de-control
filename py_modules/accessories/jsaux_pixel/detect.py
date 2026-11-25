@@ -9,6 +9,7 @@ _PRODUCT = "7523"
 # USB root ports the official app treats as able to feed the panel's full current (Steam
 # Machine). Anything else, hubs included, gets the weak-supply brightness ceiling.
 STRONG_SUPPLY_PORTS = frozenset({"7-1", "5-1", "1-2"})
+_BOOT_ID = Path("/proc/sys/kernel/random/boot_id")
 
 
 @dataclass(frozen=True)
@@ -17,7 +18,8 @@ class PanelPort:
     bus_port: str
     strong_supply: bool
     # Bus and device number change on every plug-in or power loss, when the panel restarts on its
-    # firmware animation instead of the last GIF.
+    # firmware animation instead of the last GIF. A cold boot can hand out the same numbers again,
+    # so the boot id is part of it too.
     session: str | None = None
 
 
@@ -46,7 +48,11 @@ def _session(usb_device: Path) -> str | None:
         number = (usb_device / "devnum").read_text().strip()
     except OSError:
         return None
-    return f"{usb_device.name}:{bus}:{number}"
+    try:
+        boot = _BOOT_ID.read_text().strip()
+    except OSError:
+        boot = "?"
+    return f"{usb_device.name}:{bus}:{number}:{boot}"
 
 
 def port_holders(dev: str, proc_root: Path = Path("/proc"), own_pid: int | None = None) -> list[tuple[int, str]]:

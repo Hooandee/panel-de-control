@@ -14,9 +14,18 @@ from ..render.canvas import BLACK, Canvas
 from ..render.palettes import Theme, mix, scale, theme_for
 from .base import Scene, SceneContext, Segment
 from .fit import fits
+from .words import words
 
-_DAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
-_MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
+
+
+def short_date(t: datetime, options: dict | None) -> str:
+    return f"{words(options).days[t.weekday()]} {t.day:02d}"
+
+
+def long_date(t: datetime, options: dict | None) -> str:
+    said = words(options)
+    return f"{said.days[t.weekday()]} {t.day:02d} {said.months[t.month - 1]}"
+
 _TRANSITION_CS = 6
 
 
@@ -100,8 +109,7 @@ class DigitalClock(HourClock):
     def draw(self, t: datetime, options: dict) -> Canvas:
         theme = theme_for(options)
         canvas = Canvas()
-        date = f"{_DAYS[t.weekday()]} {t.day:02d} {_MONTHS[t.month - 1]}"
-        _centered(canvas, 3, date, fonts.SMALL, theme.soft)
+        _centered(canvas, 3, long_date(t, options), fonts.SMALL, theme.soft)
         hour, minute = _hm(t, options)
         _gradient_text(canvas, 15, f"{hour:02d}:{minute:02d}", fonts.big(19), theme)
         left = (codec.WIDTH - 60) // 2
@@ -197,8 +205,7 @@ class TetrisClock(HourClock):
         canvas.rect(colon_x, top + 13, 2, 2, theme.soft)
         for x in range(4, codec.WIDTH - 4):
             canvas.px(x, 38, theme.dim)
-        date = f"{_DAYS[t.weekday()]} {t.day:02d}"
-        _centered(canvas, 43, date, fonts.TINY, theme.soft)
+        _centered(canvas, 43, short_date(t, options), fonts.TINY, theme.soft)
         return canvas
 
     def draw(self, t: datetime, options: dict) -> Canvas:

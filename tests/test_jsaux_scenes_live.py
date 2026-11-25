@@ -161,3 +161,20 @@ def test_long_game_names_break_at_syllables_and_fit_the_side_column():
     assert game._wrap("RED DEAD REDEMPTION 2", width, 3)[-1] == "REDEM."
     for name in ("METAPHOR: REFANTAZIO", "ARKNIGHTS: ENDFIELD", "BALDUR'S GATE 3"):
         assert all(fonts.measure(line, fonts.TINY) <= width for line in game._wrap(name, width, 3))
+
+
+def test_the_cover_forgets_the_last_game_once_it_closes():
+    from accessories.jsaux_pixel.scenes import game
+
+    art = {"game_art": {"appid": "413150", "rgb": base64.b64encode(bytes([200]) * (64 * 54 * 3)).decode()}}
+    scene = game.CoverScene()
+    playing = SceneContext(now=0, tz=TZ, game={"appid": "413150", "name": "Stardew"}, events=art)
+    idle = SceneContext(now=0, tz=TZ, game=None, events=art)
+    assert scene._art(playing) is not None
+    assert scene._art(idle) is None
+
+
+def test_game_names_lose_accents_instead_of_drawing_question_marks():
+    from accessories.jsaux_pixel.scenes import game
+
+    assert game._title({"name": "Pokémon Légendes"}) == "POKEMON LEGENDES"

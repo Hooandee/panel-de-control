@@ -89,6 +89,7 @@ class Runtime:
             enabled=self.supported,
             option_extras=self._option_extras,
             official_active=self.official_active,
+            zone=self._local_zone,
         )
         self.worker: Worker | None = None
 
@@ -185,10 +186,12 @@ class Runtime:
         return [solid, solid] if solid else None
 
     def _option_extras(self, options: dict) -> dict:
-        if options.get("theme") != "ledbar":
-            return {}
-        colors = self.ledbar_colors()
-        return {"ledbar": colors} if colors else {}
+        extras = {"lang": self.service.language}
+        if options.get("theme") == "ledbar":
+            colors = self.ledbar_colors()
+            if colors:
+                extras["ledbar"] = colors
+        return extras
 
     def _user_systemctl(self, *args: str) -> int:
         env = {**clean_env(), "XDG_RUNTIME_DIR": f"/run/user/{self._uid}",
@@ -274,8 +277,15 @@ class Runtime:
         scene, showing, game_scene, options = self.service.wanted_scenes()
         if {scene, showing, game_scene} & _FPS_SCENES:
             return True
-        blocks = ((options or {}).get("layout") or {}).get("blocks") if scene == "composed" else None
-        return any(isinstance(b, dict) and b.get("metric") == "fps" for b in blocks or [])
+        for scene_id, chosen in ((scene, options), (game_scene, self.service.game_options())):
+            blocks = ((chosen or {}).get("layout") or {}).get("blocks") if scene_id == "composed" else None
+            if any(isinstance(b, dict) and b.get("metric") == "fps" for b in blocks or []):
+                return True
+        return False
+
+    def set_language(self, language: str) -> dict:
+        self.service.set_language(language)
+        return self.state()
 
     def set_alerts(self, prefs: dict) -> dict:
         self.service.set_alerts(prefs)

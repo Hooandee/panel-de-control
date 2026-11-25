@@ -63,3 +63,15 @@ def test_frame_on_screen_matches_wall_clock():
             assert frame.pixels() == expected.pixels()
             break
         elapsed += delay
+
+
+def test_dates_follow_the_panel_language():
+    from accessories.jsaux_pixel.scenes.clocks import long_date, short_date
+    from datetime import datetime
+
+    wednesday = datetime(2026, 11, 25, 10, 0, tzinfo=TZ)
+    assert long_date(wednesday, {"lang": "es"}) == "MIE 25 NOV"
+    assert long_date(wednesday, {"lang": "en"}) == "WED 25 NOV"
+    assert short_date(wednesday, {"lang": "de"}) == "MI 25"
+    assert long_date(wednesday, {"lang": "pt-BR"}) == "QUA 25 NOV"
+    assert long_date(wednesday, {}) == "WED 25 NOV"

@@ -17,7 +17,7 @@ from ..render import fonts, stickers
 from ..render.canvas import Canvas
 from ..render.palettes import THEMES, mix, scale
 from .base import Scene, SceneContext, Segment
-from .clocks import _DAYS, _MONTHS, _hm, hour_segment
+from .clocks import _hm, hour_segment, long_date
 from .fit import fits
 
 W, H = codec.WIDTH, codec.HEIGHT
@@ -220,7 +220,7 @@ def _sprite(block: dict, t: datetime, values: dict, library: Library | None, cac
         else:
             sprite = text_sprite(text, font, theme)
     elif kind == "date":
-        sprite = text_sprite(f"{_DAYS[t.weekday()]} {t.day:02d} {_MONTHS[t.month - 1]}", font, theme)
+        sprite = text_sprite(long_date(t, options), font, theme)
     elif kind == "text":
         sprite = text_sprite(block["text"].upper() or " ", font, theme)
     elif kind == "pill":
@@ -313,14 +313,19 @@ class ComposedScene(Scene):
             return canvas
 
         now = datetime.fromtimestamp(ctx.now, ctx.tz)
-        if mode == "clock":
+        if mode == "clock" or mode == "live" and any(block["type"] in ("clock", "date") for block in blocks):
+            # A clock next to a metric still gets its hour of minutes; the metric only rewrites it
+            # when its reading steps, within the live gap.
             boundary = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
             repeats = max(1, 90 // max(1, cycle * 6)) if cycle > 1 else 0
 
             def wiggle(_previous: datetime, minute: datetime) -> list[Canvas]:
                 return [draw(minute, frame) for _ in range(repeats) for frame in range(cycle)]
 
-            return hour_segment(now, boundary, draw, wiggle if cycle > 1 else (lambda a, b: []))
+            segment = hour_segment(now, boundary, draw, wiggle if cycle > 1 else (lambda a, b: []))
+            if mode == "live":
+                segment.kind, segment.metric = "live", "composed"
+            return segment
         while True:
             frames = [draw(now, frame) for frame in range(cycle)]
             segment = Segment(frames, [_ANIM_CS if cycle > 1 else 100] * len(frames))
