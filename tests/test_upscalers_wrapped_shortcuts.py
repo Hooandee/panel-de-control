@@ -154,3 +154,19 @@ def test_a_script_that_only_mentions_a_store_id_stays_listed(home):
     script = _script(home / "Games/emu/run.sh", "exec ./emu\n")
     found = games.from_hint("14", {"exe": str(script), "dir": str(script.parent), "name": "Emu", "opts": "epic:abc %command%"}, str(home))
     assert (found.native, found.unavailable) == (True, None)
+
+
+def test_unactionable_shortcuts_are_logged_once_until_the_counts_change(steam, fake_catalog, proc, monkeypatch, tmp_path, caplog):
+    import logging
+    service = _service(steam, fake_catalog, proc)
+    service.logger = logging.getLogger("pdc-test-selector")
+    missing = games.Installed("99", "Library only", tmp_path, 4, None, True, True, unavailable="unifideck_not_installed")
+    other = games.Installed("98", "Other", tmp_path, 4, None, True, True, unavailable="unifideck_missing")
+    found = {"98": other, "99": missing}
+    monkeypatch.setattr(games, "find_installed", lambda home, appid, lookup=None, steam_library=None: found.get(appid))
+    with caplog.at_level(logging.INFO, logger="pdc-test-selector"):
+        service.compatibility(["99"])
+        service.compatibility(["99"])
+        assert len(caplog.records) == 1
+        service.compatibility(["98", "99"])
+        assert len(caplog.records) == 2
