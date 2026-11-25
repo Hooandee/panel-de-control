@@ -13,7 +13,7 @@ import { openEditor } from "./editorRoute";
 import { importImage } from "./imageImport";
 import { decodeFrames, DecodedFrames } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
-import { forgetPreviews, setSceneDraft } from "./useAccessories";
+import { forgetPreviews, setSceneDraft, usePreviewEpoch } from "./useAccessories";
 import { getQamDocument } from "../qamDocument";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { useLive } from "./EditorShell";
@@ -93,7 +93,25 @@ const ActionArt: FC<{ icon: React.ReactNode }> = ({ icon }) => (
   </div>
 );
 
-let lastImportFailed = false;
+// The file picker closes the menu, so an import ends in whichever panel is mounted by then.
+let importFailedNow = false;
+const importWatchers = new Set<(failed: boolean) => void>();
+function setImportFailed(failed: boolean): void {
+  importFailedNow = failed;
+  importWatchers.forEach((watch) => watch(failed));
+}
+function useImportFailed(): boolean {
+  const [failed, setFailed] = useState(importFailedNow);
+  useEffect(() => {
+    importWatchers.add(setFailed);
+    return () => {
+      importWatchers.delete(setFailed);
+      // Seen once: not shown again on a later visit.
+      if (importWatchers.size === 0) importFailedNow = false;
+    };
+  }, []);
+  return failed;
+}
 
 const drawingKey = (id: string) => `drawing:${id}`;
 const focusNav = createThemeNavigationAccess({ allowInactiveContext: true });
@@ -129,7 +147,9 @@ export const MyCreations: FC<{
   const refresh = useCallback(() => {
     void listAccessoryDrawings().then((result) => setDrawings(result?.drawings ?? [])).catch(() => setDrawings([]));
   }, []);
-  useEffect(refresh, [refresh]);
+  // Imports and deletes finish after Steam remounted this panel; the epoch they bump re-lists.
+  const epoch = usePreviewEpoch();
+  useEffect(refresh, [refresh, epoch]);
 
   const sent = (id: string) => {
     forgetPreviews();
@@ -157,10 +177,7 @@ export const MyCreations: FC<{
       },
     });
   };
-  // Shown once: a failure reported after the picker closed the menu, not on every later visit.
-  const [importFailed, setImportFailedState] = useState(() => { const failed = lastImportFailed; lastImportFailed = false; return failed; });
-  // The file picker closes the menu, so the result may land after this panel unmounted.
-  const setImportFailed = (failed: boolean) => { lastImportFailed = failed; setImportFailedState(failed); };
+  const importFailed = useImportFailed();
   const importFile = async () => {
     setImportFailed(false);
     let picked: { path: string; realpath?: string };
