@@ -1355,6 +1355,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             LinearHero.Visibility = Visibility.Visible;
             PowerDrawValue.FontWeight = Windows.UI.Text.FontWeights.Bold;
             PowerDrawValue.FontStretch = Windows.UI.Text.FontStretch.Condensed;
+            // The unit sits on the number's baseline; a 132 px line leaves far more room below it than 60 px.
+            HeroWattsUnit.Margin = new Thickness(6, 0, 0, 34);
+            HeroPercentUnit.Margin = new Thickness(6, 0, 0, 34);
             TabIndicator.VerticalAlignment = VerticalAlignment.Bottom;
             TabIndicator.Height = 3;
             TabIndicator.BorderThickness = new Thickness(0);
