@@ -13,6 +13,7 @@ import { disablePlugin, disabledPlugins, installedPlugins } from "./deckyPlugins
 export interface TdpConflictHook {
   conflict: boolean;
   rivals: ConflictResult["rivals"];
+  steamOsManagerActive: boolean;
   takeoverAvailable: boolean;
   monitorOnly: boolean;
   // Turn off SimpleDeckyTDP (Decky) — reversible from Decky.
@@ -29,6 +30,7 @@ export interface TdpConflictHook {
 export function useTdpConflict(supported: boolean, weControl: boolean): TdpConflictHook {
   const [hhdManaging, setHhdManaging] = useState(false);
   const [powerstationActive, setPowerstationActive] = useState(false);
+  const [steamOsManagerActive, setSteamOsManagerActive] = useState(false);
   const [sdtdp, setSdtdp] = useState(false);
   const alive = useRef(true);
 
@@ -38,6 +40,7 @@ export function useTdpConflict(supported: boolean, weControl: boolean): TdpConfl
     if (res) {
       setHhdManaging(!!res.hhd_managing);
       setPowerstationActive(!!res.powerstation_active);
+      setSteamOsManagerActive(res.steamos_manager_active === true);
     }
     setSdtdp(sdtdpActive(installedPlugins(), disabledPlugins()));
   }, []);
@@ -56,6 +59,7 @@ export function useTdpConflict(supported: boolean, weControl: boolean): TdpConfl
     sdtdp,
     hhdManaging,
     powerstationActive,
+    steamOsManagerActive,
     weControl,
     tdpSupported: supported,
   });
@@ -79,6 +83,7 @@ export function useTdpConflict(supported: boolean, weControl: boolean): TdpConfl
   return {
     conflict,
     rivals,
+    steamOsManagerActive,
     takeoverAvailable,
     monitorOnly: computeMonitorOnly(supported, weControl),
     disableSdtdp,

@@ -1561,7 +1561,7 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     diagnostics = bundle["state"]["tdp_diagnostics"]
     assert diagnostics["backend_descriptor"] == plugin._tdp_backend_diagnostics()
     cpu_gpu = bundle["state"]["cpu_gpu_diagnostics"]
-    assert set(cpu_gpu) == {"cpu", "gpu", "steamdeck_ppt", "reapply"}
+    assert set(cpu_gpu) == {"cpu", "gpu", "steamdeck_ppt", "reapply", "resume_hold"}
     assert cpu_gpu["cpu"]["supported"] is False
     assert cpu_gpu["gpu"]["supported"] is False
     assert bundle["state"]["lifecycle_diagnostics"] == plugin._lifecycle.diagnostics()
@@ -1984,6 +1984,7 @@ def test_transition_records_action_scope_and_write_result(plugin):
         "ok": True,
         "applied": event["target"]["pl1"],
         "detail": "",
+        "failure_kind": None,
     }
     assert event["target_reasons"]["pl2"] == "live_min"
     assert "appid" not in json.dumps(event).lower()
@@ -2619,6 +2620,80 @@ def test_backends_without_physical_evidence_are_left_alone(plugin, variant):
     assert overshoot_logs(plugin) == []
 
 
+@pytest.mark.parametrize(("guarded", "expected_writes"), [(True, 1), (False, 0)])
+def test_legacy_asus_fallback_is_watched_only_where_it_is_guarded(
+    plugin, guarded, expected_writes
+):
+    backend = HiddenLimitBackend()
+    backend.name = "asus-nb-wmi"
+    backend.hidden_overshoot_guard = guarded
+    start_game(plugin, backend)
+    backend.hidden = True
+    backend.writes.clear()
+    run(plugin, 10.0, SUSTAIN_S + 6.0)
+    assert len(backend.writes) == expected_writes
+    assert bool(overshoot_logs(plugin)) is guarded
+
+
+class PolicyBoundBackend(HiddenLimitBackend):
+    """Xbox Ally X RC74XA on a kernel without its power limits (#1012): the
+    legacy rails echo every write while the firmware ignores them; only a
+    thermal policy write before the rails brings them back, as HHD does."""
+
+    name = "asus-nb-wmi"
+    hidden_overshoot_guard = True
+    thermal_policy_reassert = True
+    kernel_power_limits_missing = True
+
+    def __init__(self, policy_ok=True):
+        super().__init__(restore_on="never")
+        self.policy_ok = policy_ok
+        self.policy_writes = 0
+
+    def reassert_thermal_policy(self):
+        self.policy_writes += 1
+        if not self.policy_ok:
+            return {"ok": False, "policy": 0, "detail": "policy write failed"}
+        self.restore_on = "any"
+        return {"ok": True, "policy": 0, "readback": 0}
+
+    def read_thermal_policy(self):
+        return 0
+
+
+def test_legacy_asus_fallback_reasserts_the_thermal_policy_as_last_step(plugin):
+    backend = PolicyBoundBackend()
+    start_game(plugin, backend)
+    backend.hidden = True
+    run(plugin, 10.0, SUSTAIN_S + 3 * VERIFY_S + 10.0)
+    assert backend.policy_writes == 1
+    assert backend.hidden is False
+    logs = overshoot_logs(plugin)
+    assert [(entry["state"], entry["method"]) for entry in logs][-2:] == [
+        ("correcting", "policy"),
+        ("restored", "policy"),
+    ]
+    assert logs[0]["thermal_policy"] == 0
+    assert logs[0]["kernel_power_limits_missing"] is True
+    assert logs[0]["applied"] == {"asus-nb-wmi": {"pl1": 20, "pl2": 20, "pl3": 20}}
+    policy_logs = [
+        args for args in plugin._test_logs["info"]
+        if args and args[0] == "TDP overshoot policy %s"
+    ]
+    assert len(policy_logs) == 1
+
+
+def test_failed_thermal_policy_write_still_rewrites_and_never_blocks(plugin):
+    backend = PolicyBoundBackend(policy_ok=False)
+    start_game(plugin, backend)
+    backend.hidden = True
+    run(plugin, 10.0, SUSTAIN_S + 3 * VERIFY_S + 10.0)
+    assert backend.policy_writes == 1
+    assert len(backend.writes) == 4
+    assert overshoot_logs(plugin)[-1]["state"] == "unresolved"
+    assert plugin._tdp_status == "in_sync"
+
+
 class Profiles:
     def __init__(self, value):
         self.value = value
@@ -2736,6 +2811,7 @@ def _legion_go_s_capped_on_charger(plugin, monkeypatch, live_max):
         )
 
     monkeypatch.setattr(backend, "observe", observe)
+    monkeypatch.setattr(backend, "reports_live_max", True, raising=False)
     plugin._tdp_observation = observe()
     plugin._settings["low_battery_tdp_hold"] = True
     plugin._tdp_profiles.set_levels("global", 25, 30, 35)
@@ -2786,15 +2862,10 @@ def test_legion_go_s_firmware_cap_hold_stays_off_when_the_setting_is_off(
     assert sidecar.calls == []
 
 
-def test_legion_go_s_hold_latched_on_battery_stays_on_the_charger_until_reboot(
-    plugin,
-    monkeypatch,
-):
+def _latch_low_battery_hold(plugin, monkeypatch, live_max):
     import main as main_module
 
-    sidecar = _legion_go_s_capped_on_charger(
-        plugin, monkeypatch, {"pl1": 33, "pl2": 33, "pl3": 35},
-    )
+    sidecar = _legion_go_s_capped_on_charger(plugin, monkeypatch, live_max)
     monkeypatch.setattr(main_module, "_current_boot_id", lambda: "boot-a")
     monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
     monkeypatch.setattr(
@@ -2804,16 +2875,271 @@ def test_legion_go_s_hold_latched_on_battery_stays_on_the_charger_until_reboot(
     )
     plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=False))
     assert plugin._settings["low_battery_hold_latched_boot"] == "boot-a"
-
     monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": True)
+    return sidecar
+
+
+def test_legion_go_s_hold_latched_on_battery_covers_the_cap_on_the_charger(
+    plugin,
+    monkeypatch,
+):
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 15, "pl2": 15, "pl3": 20},
+    )
+
     plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+
     assert len(sidecar.calls) == 2
     assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_legion_go_s_hold_latched_releases_once_the_firmware_lifts_its_cap(
+    plugin,
+    monkeypatch,
+):
+    # The firmware reports its full maxima again within the same boot.
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 40, "pl2": 43, "pl3": 53},
+    )
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+
+    assert len(sidecar.calls) == 1
+    assert sidecar.releases == 1
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_legion_go_s_hold_latched_without_live_maxima_waits_for_reboot(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 15, "pl2": 15, "pl3": 20},
+    )
+    monkeypatch.setattr(
+        plugin._tdp_backend, "observe", lambda: TdpObservation(readable=False),
+    )
+    plugin._primary_tdp_live_max_seen = None
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+    assert len(sidecar.calls) == 2
 
     monkeypatch.setattr(main_module, "_current_boot_id", lambda: "boot-b")
     plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
     assert len(sidecar.calls) == 2
     assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_legion_go_s_failed_live_max_read_keeps_the_last_maxima_seen(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 15, "pl2": 15, "pl3": 20},
+    )
+    monkeypatch.setattr(
+        plugin._tdp_backend, "observe", lambda: TdpObservation(readable=False),
+    )
+    monkeypatch.setattr(main_module, "_current_boot_id", lambda: "boot-b")
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+
+    assert len(sidecar.calls) == 2
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_legion_go_s_fresh_live_max_read_beats_a_stale_observation(
+    plugin,
+    monkeypatch,
+):
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 40, "pl2": 43, "pl3": 53},
+    )
+    sidecar.active = False
+    sidecar.safety_locked = False
+    sidecar.calls.clear()
+    backend = plugin._tdp_backend
+    plugin._tdp_observation = TdpObservation(
+        readable=True,
+        surfaces={backend.name: {
+            "pl1": RailReading(15, 5, 15),
+            "pl2": RailReading(15, 5, 15),
+            "pl3": RailReading(20, 5, 20),
+        }},
+    )
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+
+    assert sidecar.calls == []
+    assert backend.set_levels_calls == 1
+
+
+@pytest.mark.parametrize(
+    ("hold_enabled", "reports_live_max", "reads"),
+    [(True, True, 1), (False, True, 0), (True, False, 0)],
+)
+def test_live_maxima_are_read_only_when_the_hold_can_use_them(
+    plugin, monkeypatch, hold_enabled, reports_live_max, reads,
+):
+    _legion_go_s_capped_on_charger(
+        plugin, monkeypatch, {"pl1": 15, "pl2": 15, "pl3": 20},
+    )
+    backend = plugin._tdp_backend
+    calls = []
+    monkeypatch.setattr(backend, "observe", lambda: calls.append(1))
+    monkeypatch.setattr(backend, "reports_live_max", reports_live_max, raising=False)
+    plugin._settings["low_battery_tdp_hold"] = hold_enabled
+
+    plugin._refresh_primary_tdp_live_max()
+
+    assert len(calls) == reads
+
+
+def test_legion_go_s_latched_restart_reads_the_firmware_before_holding(
+    plugin,
+    monkeypatch,
+):
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 40, "pl2": 43, "pl3": 53},
+    )
+    sidecar.active = False
+    sidecar.safety_locked = False
+    sidecar.calls.clear()
+    plugin._primary_tdp_live_max_seen = None
+    plugin._tdp_observation = TdpObservation(readable=False)
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("lifecycle", on_ac=True))
+
+    assert sidecar.calls == []
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_legion_go_s_hold_latched_with_partial_maxima_keeps_the_hold(
+    plugin,
+    monkeypatch,
+):
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 15, "pl2": 15, "pl3": 20},
+    )
+    backend = plugin._tdp_backend
+    monkeypatch.setattr(backend, "observe", lambda: TdpObservation(
+        readable=True,
+        surfaces={backend.name: {
+            "pl1": RailReading(15, 5, 40),
+            "pl2": RailReading(15, 5, 43),
+            "pl3": RailReading(20, 5, None),
+        }},
+    ))
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+
+    assert len(sidecar.calls) == 2
+    assert backend.set_levels_calls == 0
+
+
+def test_guard_rewrites_the_primary_rails_when_the_hold_releases(
+    plugin,
+    monkeypatch,
+):
+    # The release leaves the hold's limits in the SoC while the firmware attributes
+    # may already read the target.
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 40, "pl2": 43, "pl3": 53},
+    )
+    sidecar.active = True
+    backend = plugin._tdp_backend
+    backend._levels.update({"pl1": 25, "pl2": 30, "pl3": 35})
+    _reset_guard_memory(plugin)
+    plugin._tdp_observation = backend.observe()
+
+    plugin._tdp_guard_tick(now=500.0)
+
+    assert sidecar.releases == 1
+    assert backend.set_levels_calls == 1
+    assert plugin._tdp_history[-1]["action"] == "low-battery-hold-released"
+
+
+def _released_hold_with_primary_in_sync(plugin, monkeypatch):
+    sidecar = _latch_low_battery_hold(
+        plugin, monkeypatch, {"pl1": 40, "pl2": 43, "pl3": 53},
+    )
+    sidecar.active = True
+    backend = plugin._tdp_backend
+    backend._levels.update({"pl1": 25, "pl2": 30, "pl3": 35})
+    backend.set_levels_calls = 0
+    _reset_guard_memory(plugin)
+    plugin._tdp_observation = backend.observe()
+    return sidecar, backend
+
+
+def test_guard_rewrites_after_a_release_tick_that_returned_early(plugin, monkeypatch):
+    sidecar, backend = _released_hold_with_primary_in_sync(plugin, monkeypatch)
+    download_mode = iter((True, None))
+    monkeypatch.setattr(
+        plugin, "_hold_for_steam_download_mode",
+        lambda command, now: next(download_mode),
+    )
+
+    plugin._tdp_guard_tick(now=500.0)
+    assert sidecar.releases == 1
+    assert backend.set_levels_calls == 0
+
+    plugin._tdp_guard_tick(now=505.0)
+    assert backend.set_levels_calls == 1
+    assert plugin._tdp_history[-1]["action"] == "low-battery-hold-released"
+
+
+def test_guard_retries_the_rewrite_when_the_first_one_fails(plugin, monkeypatch):
+    sidecar, backend = _released_hold_with_primary_in_sync(plugin, monkeypatch)
+    write = backend.set_levels
+    outcomes = iter((False, True))
+
+    def flaky_write(pl1, pl2, pl3, ac):
+        if next(outcomes):
+            return write(pl1, pl2, pl3, ac)
+        backend.set_levels_calls += 1
+        return TdpResult(pl1, backend._levels["pl1"], False, "write_rejected")
+
+    monkeypatch.setattr(backend, "set_levels", flaky_write)
+
+    plugin._tdp_guard_tick(now=500.0)
+    assert sidecar.releases == 1
+    assert backend.set_levels_calls == 1
+
+    _reset_guard_memory(plugin)
+    plugin._tdp_guard_tick(now=505.0)
+    assert backend.set_levels_calls == 2
+    assert plugin._tdp_history[-1]["action"] == "low-battery-hold-released"
+
+    _reset_guard_memory(plugin)
+    plugin._tdp_guard_tick(now=510.0)
+    assert backend.set_levels_calls == 2
+
+
+def test_guard_rewrites_after_a_command_release_whose_write_failed(plugin, monkeypatch):
+    sidecar, backend = _released_hold_with_primary_in_sync(plugin, monkeypatch)
+    write = backend.set_levels
+    outcomes = iter((False, True))
+
+    def flaky_write(pl1, pl2, pl3, ac):
+        if next(outcomes):
+            return write(pl1, pl2, pl3, ac)
+        backend.set_levels_calls += 1
+        return TdpResult(pl1, backend._levels["pl1"], False, "write_rejected")
+
+    monkeypatch.setattr(backend, "set_levels", flaky_write)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+    assert sidecar.releases == 1
+    assert backend.set_levels_calls == 1
+
+    _reset_guard_memory(plugin)
+    plugin._tdp_guard_tick(now=500.0)
+    assert backend.set_levels_calls == 2
+    assert plugin._tdp_history[-1]["action"] == "low-battery-hold-released"
 
 
 def test_guard_rewrites_the_level_once_after_armada_powerd_restarts(plugin):
@@ -2832,3 +3158,245 @@ def test_guard_rewrites_the_level_once_after_armada_powerd_restarts(plugin):
     plugin._tdp_guard_tick(now=13.0)
     assert plugin._tdp_backend.set_levels_calls == 1
     assert plugin._tdp_history[-1]["action"] == "powerd-restart-reassert"
+
+
+@pytest.mark.parametrize("auto_tdp", [False, True])
+def test_backend_operation_logs_apply_without_extra_hardware_reads(plugin, monkeypatch, auto_tdp):
+    import journal
+    events = []
+    monkeypatch.setattr(journal, "active", types.SimpleNamespace(
+        write=lambda *args, **data: events.append((args, data)),
+    ))
+    cached = plugin._tdp_observation.as_dict()
+    def unexpected_read():
+        raise AssertionError("diagnostic hardware probe")
+    monkeypatch.setattr(plugin._tdp_backend, "observe", unexpected_read)
+    monkeypatch.setattr(plugin._tdp_backend, "read_profile", unexpected_read)
+    result = plugin._apply_tdp_targets({"pl1": 20, "pl2": 20, "pl3": 20}, True, auto_tdp)
+    assert result.ok
+    event = events[-1][1]
+    assert event["operation"] == "apply"
+    assert event["auto_tdp"] is auto_tdp
+    assert event["before_cached"] == cached
+    assert event["result"]["applied_w"] == 20
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_backend_operation_logs_failed_recovery(plugin, monkeypatch):
+    import journal
+    events = []
+    monkeypatch.setattr(journal, "active", types.SimpleNamespace(
+        write=lambda *args, **data: events.append((args, data)),
+    ))
+    plugin._tdp_backend.safety_locked = True
+    plugin._tdp_backend.recover_runtime_transaction = lambda: {"ok": False, "detail": "pending"}
+    assert not plugin._recover_tdp_runtime_transaction()
+    assert events[-1][0] == ("WARNING", "tdp", "backend_operation")
+    assert events[-1][1]["operation"] == "recover"
+    assert events[-1][1]["result"]["ok"] is False
+
+
+def _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=False, handles=None):
+    import main
+    from tdp.steam_download_mode import SteamDownloadModeHold
+
+    monkeypatch.setattr(main, "_monotonic", lambda: 10.5)
+    monkeypatch.setattr(main, "find_session", lambda: None)
+    monkeypatch.setattr(main, "download_mode_handles", lambda session: handles)
+    monkeypatch.setattr(main, "jupiter_fan_control_active", lambda: fan_service_active)
+    plugin._tdp_backend.name = "steamdeck-hwmon"
+    plugin._steam_download_hold = SteamDownloadModeHold(6)
+    plugin._tdp_profiles.set_pl1("global", 15)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("initial"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend.set_levels_calls = 0
+
+
+def _steam_enters_download_mode(plugin):
+    plugin._tdp_backend._levels.update(pl1=6, pl2=6, pl3=6)
+
+
+def test_guard_leaves_steam_download_mode_tdp_alone(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch)
+    _steam_enters_download_mode(plugin)
+
+    for tick in range(6):
+        plugin._tdp_guard_tick(now=10.0 + tick)
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_reason == "steam_download_mode"
+    assert plugin._tdp_diagnostics()["steam_download_mode"]["active"] is True
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("reapply"))
+    assert not result.ok
+    assert plugin._tdp_reason == "steam_download_mode"
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_guard_resumes_once_steam_restores_the_limit(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_backend._levels.update(pl1=15, pl2=15, pl3=15)
+    plugin._tdp_guard_tick(now=40.0)
+
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_write_authorized()
+    assert plugin._steam_download_hold.diagnostics()["last"]["held_s"] == 30.0
+    assert plugin._steam_download_hold.diagnostics()["last"]["why"] == "rails_changed"
+
+
+def test_user_tdp_change_wins_over_steam_download_mode(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("manual-watts"))
+
+    assert result.ok
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_backend._levels["pl1"] == 15
+
+
+def test_own_write_at_the_download_limit_never_becomes_a_hold(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch)
+    plugin._tdp_profiles.set_pl1("global", 6)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("game-change"))
+    plugin._tdp_profiles.set_pl1("global", 15)
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_backend._levels["pl1"] == 15
+
+
+def _ticks_until_reverted(plugin, start=10.0):
+    for tick in range(12):
+        plugin._tdp_guard_tick(now=start + tick * 0.75)
+        if plugin._tdp_backend.set_levels_calls:
+            return start + tick * 0.75
+    return None
+
+
+@pytest.mark.parametrize(
+    ("fan_service_active", "handles"), [(True, None), (None, None), (False, 0)],
+)
+def test_unconfirmed_limit_is_written_back_after_a_short_wait(
+    plugin, monkeypatch, fan_service_active, handles,
+):
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active, handles)
+    _steam_enters_download_mode(plugin)
+
+    reverted_at = _ticks_until_reverted(plugin)
+
+    assert not plugin._steam_download_hold.active
+    assert reverted_at is not None and reverted_at >= 15.0
+    assert plugin._tdp_backend._levels["pl1"] == 15
+
+
+def test_handles_win_over_the_fan_service(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=True, handles=1)
+    _steam_enters_download_mode(plugin)
+
+    assert _ticks_until_reverted(plugin) is None
+    assert plugin._steam_download_hold.active
+
+
+def test_fan_service_stopping_late_still_enters_the_hold(plugin, monkeypatch):
+    import main
+
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=True)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+    monkeypatch.setattr(main, "jupiter_fan_control_active", lambda: False)
+    plugin._tdp_guard_tick(now=12.0)
+
+    assert plugin._steam_download_hold.active
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_our_fan_curve_stopping_the_service_proves_nothing(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch)
+    plugin._fan_ctrl = types.SimpleNamespace(owns_jupiter=True)
+    _steam_enters_download_mode(plugin)
+
+    assert _ticks_until_reverted(plugin) is not None
+    assert not plugin._steam_download_hold.active
+
+
+def test_leaves_the_hold_when_steam_ends_the_mode_without_restoring(plugin, monkeypatch):
+    import main
+
+    _steam_download_mode_deck(plugin, monkeypatch, handles=1)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+    monkeypatch.setattr(main, "download_mode_handles", lambda session: 0)
+    plugin._tdp_guard_tick(now=21.0)
+
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_write_authorized()
+
+
+def test_other_writers_wait_while_steam_has_not_confirmed(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=True)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+
+    for reason in ("settle-retry", "lifecycle", "reapply"):
+        result = plugin._execute_tdp_command(plugin._capture_tdp_command(reason))
+        assert not result.ok
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_backend._levels["pl1"] == 6
+
+
+def test_writes_before_the_first_guard_tick_respect_steam_download_mode(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch, handles=1)
+    _steam_enters_download_mode(plugin)
+
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("lifecycle"))
+
+    assert not result.ok
+    assert plugin._steam_download_hold.active
+    assert plugin._tdp_reason == "steam_download_mode"
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_no_steam_queries_when_the_plugin_does_not_own_the_tdp(plugin, monkeypatch):
+    import main
+
+    _steam_download_mode_deck(plugin, monkeypatch)
+    asked = []
+    monkeypatch.setattr(main, "download_mode_handles", lambda session: asked.append(1))
+    plugin._os_id = "anatase"
+    plugin._tdp_external_owner = True
+    _steam_enters_download_mode(plugin)
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=12.0)
+
+    assert asked == []
+    assert not plugin._steam_download_hold.holding
+    assert plugin._tdp_reason == "external_owner"
+
+
+def test_steam_download_mode_hold_needs_the_deck_backend(plugin, monkeypatch):
+    import main
+    from tdp.steam_download_mode import SteamDownloadModeHold
+
+    monkeypatch.setattr(main, "jupiter_fan_control_active", lambda: False)
+    plugin._steam_download_hold = SteamDownloadModeHold(6)
+    plugin._tdp_profiles.set_pl1("global", 15)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("initial"))
+    _reset_guard_memory(plugin)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_backend.set_levels_calls == 1

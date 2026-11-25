@@ -53,7 +53,7 @@ export function createPanelThemeInstaller(): PanelThemeInstaller {
       themeId,
       expectedVersion,
     ),
-    prepareEarly: (archivePath) => requireConfiguredHost().prepareEarly(archivePath),
+    prepareEarly: (archivePath, catalogId) => requireConfiguredHost().prepareEarly(archivePath, catalogId),
     commit: (transaction) => call("commit", transaction),
     discard: (catalogId) => call("discard", catalogId),
     rollback: (transaction) => call("rollback", transaction),

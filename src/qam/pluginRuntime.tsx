@@ -1,4 +1,4 @@
-import { staticClasses } from "@decky/ui";
+import { QamTabTitle } from "./QamTabTitle";
 
 import {
   cleanupOwnedQuickAccessTabs,
@@ -14,7 +14,6 @@ import {
   subscribeLayout as subscribePanelLayout,
 } from "../customize/store";
 import { getViews, subscribeViews } from "../customize/viewStore";
-import { getCurrentLanguage, subscribeLanguage, translate } from "../i18n";
 import { getQamDocument } from "../qamDocument";
 import { getQamLayout, saveQamLayout, subscribeQamLayout } from "./store";
 import { startQamComposerRuntime } from "./runtime";
@@ -39,7 +38,6 @@ function getCatalog() {
     layout: getPanelLayout(),
     desktopMode: getDesktopSnapshot()?.enabled === true,
     present: getPresent,
-    presentationKeySuffix: getCurrentLanguage(),
   });
 }
 
@@ -51,7 +49,6 @@ function subscribeCatalog(listener: () => void): () => void {
     subscribePanelLayout(listener),
     subscribeDevice(listener),
     subscribeDesktopState(listener),
-    subscribeLanguage(listener),
   ];
   return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
 }
@@ -81,9 +78,7 @@ export function startPluginQamRuntime(host: unknown = window) {
         id,
         {
           title: (
-            <div className={staticClasses.Title}>
-              {descriptor.label || translate(descriptor.labelKey)}
-            </div>
+            <QamTabTitle label={descriptor.label} labelKey={descriptor.labelKey} />
           ),
           content: (
             <PinnedQamView

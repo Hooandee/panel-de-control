@@ -104,7 +104,7 @@ const asModuleExports = (candidate: unknown): Record<string, unknown> => {
   return candidate as Record<string, unknown>;
 };
 
-const currentSteamRuntime = (): SteamWebpackRuntime | null => {
+export const currentSteamRuntime = (): SteamWebpackRuntime | null => {
   const chunks = (window as unknown as { webpackChunksteamui?: SteamWebpackChunks })
     .webpackChunksteamui;
   if (!chunks || typeof chunks.push !== "function") {
@@ -344,6 +344,42 @@ export function resolveSteamPerformanceStore(): SteamPerformanceStore | null {
       error: steamPerformanceError(error),
     });
     return null;
+  }
+}
+
+export type SteamPerformanceProfile = "global" | "game" | "unknown";
+
+const validProfileId = (value: unknown): string | null => {
+  if (typeof value === "number" && !Number.isSafeInteger(value)) return null;
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const text = String(value);
+  if (!/^[1-9][0-9]*$/.test(text)) return null;
+  try {
+    return BigInt(text) <= BigInt("18446744073709551615") ? text : null;
+  } catch {
+    return null;
+  }
+};
+
+export function readSteamPerformanceProfile(runningGameId: number | null): SteamPerformanceProfile {
+  try {
+    const store = resolveSteamPerformanceStore();
+    if (!store) return "unknown";
+    const current = validProfileId(store.nCurrentGameID);
+    const active = validProfileId(store.nActiveProfileGameID);
+    if (current === null || active === null) return "unknown";
+    if (runningGameId === null) {
+      return active === STEAM_GLOBAL_PROFILE_GAME_ID ? "global" : "unknown";
+    }
+    if (!Number.isInteger(runningGameId) || runningGameId <= 0 || runningGameId > 0xffffffff) {
+      return "unknown";
+    }
+    if (current === STEAM_GLOBAL_PROFILE_GAME_ID
+      || appIdFromSteamGameId(current) !== String(runningGameId)) return "unknown";
+    if (active === STEAM_GLOBAL_PROFILE_GAME_ID) return "global";
+    return active === current ? "game" : "unknown";
+  } catch {
+    return "unknown";
   }
 }
 

@@ -111,12 +111,13 @@ public static class SectionCatalog
         }),
         new SectionDefinition("themes", "Themes", 0xFF925783, "", new[]
         {
+            new BlockDefinition("library", "BlockThemeLibrary", "", implementedOnWindows: true),
             new BlockDefinition("accent", "BlockAccent", "", implementedOnWindows: true),
         }),
         new SectionDefinition("settings", "Settings", 0xFF626B73, "", new[]
         {
             new BlockDefinition("diagnostics", "BlockDiagnostics", "", implementedOnWindows: true),
-            new BlockDefinition("reports", "BlockReports", ""),
+            new BlockDefinition("reports", "BlockReports", "", implementedOnWindows: true),
             new BlockDefinition("updates", "BlockUpdates", ""),
         }),
     };

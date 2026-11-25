@@ -279,3 +279,113 @@ def test_a_crashing_release_counts_as_not_released(monkeypatch):
 
     asyncio.run(plugin.set_board_fan_enabled(False))
     assert plugin._board_fans.calls == ["kept"]
+
+
+def test_board_driven_by_the_system_reports_control_until_opted_out(monkeypatch):
+    import asyncio
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._board_fans.calls.append("load")
+    plugin._fan_ctrl = types.SimpleNamespace(name="generic-pwm", restore_auto=lambda: {"ok": True})
+
+    assert plugin._board_fan_state()["enabled"] is True
+
+    asyncio.run(plugin.set_board_fan_enabled(False))
+
+    assert plugin._settings["board_fan_control_off"] is True
+    assert plugin._board_fan_state()["enabled"] is False
+
+
+def test_opt_out_selects_no_board_writer_even_when_the_system_keeps_the_driver(monkeypatch):
+    import asyncio
+    import main
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    seen = []
+
+    def select(*args, **kwargs):
+        seen.append(kwargs.get("board_control"))
+        return type(plugin._fan_ctrl)()
+
+    monkeypatch.setattr(main.fan_control, "select_fan_backend", select)
+
+    asyncio.run(plugin.set_board_fan_enabled(False))
+    asyncio.run(plugin.set_board_fan_enabled(True))
+
+    assert seen == [False, True]
+    assert plugin._settings["board_fan_control_off"] is False
+
+
+def test_desktop_backend_is_read_only_without_board_control(tmp_path):
+    from device_profiles import DESKTOP_PC
+    from fans import control
+    _board_chip(str(tmp_path))
+
+    backend = control.select_fan_backend(DESKTOP_PC, root=str(tmp_path), board_control=False)
+
+    assert isinstance(backend, control.NullFanBackend)
+
+
+def test_failed_release_keeps_board_control_instead_of_stranding_the_fan(monkeypatch):
+    import asyncio
+    import main
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._board_fans.release_failed = lambda: plugin._board_fans.state()
+    seen = []
+
+    class Stuck:
+        name = "generic-pwm"
+
+        def restore_auto(self):
+            return {"ok": False}
+
+    plugin._fan_ctrl = Stuck()
+
+    def select(*args, **kwargs):
+        seen.append(kwargs.get("board_control"))
+        return Stuck()
+
+    monkeypatch.setattr(main.fan_control, "select_fan_backend", select)
+
+    asyncio.run(plugin.set_board_fan_enabled(False))
+
+    assert plugin._settings.get("board_fan_control_off") is not True
+    assert seen == [True]
+
+
+def test_no_driven_fans_means_the_toggle_reads_off(monkeypatch):
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._board_fans.calls.append("load")
+
+    assert plugin._board_fan_state()["enabled"] is False
+
+
+def test_opt_out_survives_a_driver_that_could_not_be_unloaded(monkeypatch):
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._settings.update({"board_fan_driver": True, "board_fan_control_off": True})
+    calls = []
+    plugin._offload = lambda fn, done=None: calls.append(fn)
+
+    plugin._restore_board_fans()
+
+    assert calls == []
+
+
+def test_opted_out_state_is_reported_so_the_toggle_stays_reachable(monkeypatch):
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._settings["board_fan_control_off"] = True
+
+    state = plugin._board_fan_state()
+
+    assert state["enabled"] is False
+    assert state["control_off"] is True
+
+
+def test_startup_restore_leaves_fans_alone_while_fan_control_is_off(monkeypatch):
+    import asyncio
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._settings["disabled_modules"] = ["fanControl"]
+    plugin._module_enabled = lambda mid: mid != "fanControl"
+    before = type(plugin._fan_ctrl).released
+
+    asyncio.run(plugin.set_board_fan_enabled(True))
+
+    assert type(plugin._fan_ctrl).released == before

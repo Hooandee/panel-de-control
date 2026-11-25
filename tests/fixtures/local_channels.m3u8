@@ -1,0 +1,15 @@
+#EXTM3U url-tvg="https://epg.example.test/guide.xml"
+#EXTINF:-1 tvg-id="canal1" tvg-logo="https://logos.example.test/canal1.png" group-title="Generalistas",Canal 1
+https://tv.example.test/canal1/main.m3u8
+#EXTINF:-1 tvg-id="canal2" tvg-logo="https://logos.example.test/canal2.png" group-title="Generalistas",Canal 2
+https://tv.example.test/canal2/main.m3u8
+#EXTINF:-1 group-title="Radios",Radio Local
+file://./radio/tema.mp3
+#EXTINF:-1 group-title="Radios",Relativa
+radio/otro.ogg
+#EXTINF:-1 group-title="Fuera",Fuera de la carpeta
+../secreto/clave.mp3
+#EXTINF:-1 group-title="Fuera",Absoluta ajena
+/etc/passwd
+#EXTINF:-1 group-title="Fuera",Enlace simbolico
+radio/escape.mp3

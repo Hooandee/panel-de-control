@@ -47,6 +47,27 @@ def asus_tdp_authoritative_reassert_s(device, root: str = "/") -> float | None:
     return None
 
 
+def xbox_ally_x_20_legacy_rail_floors(device, root: str = "/") -> dict[str, int]:
+    # asus-nb-wmi does not enforce the firmware minimums that asus-armoury publishes
+    # for this board (kernel power_limits: 7/13/19 W). Below them the firmware
+    # keeps its own profile limits while the legacy node echoes the write.
+    if (
+        getattr(device, "key", None) == "rog_xbox_ally_x"
+        and _read_dmi(root, "board_name").casefold() == "rc74xa"
+    ):
+        return {"pl2": 13, "pl3": 19}
+    return {}
+
+
+def asus_legacy_overshoot_guard(device, root: str = "/") -> bool:
+    # ROG Xbox Ally (Z2A, RC73YA): kernels without its asus-armoury power table leave only
+    # asus-nb-wmi, whose readback echoed 5 W while the APU drew 18-22 W in a game.
+    return bool(xbox_ally_x_20_legacy_rail_floors(device, root)) or (
+        getattr(device, "key", None) == "rog_xbox_ally"
+        and _read_dmi(root, "board_name").casefold() == "rc73ya"
+    )
+
+
 def legion_go_2_83n0_firmware_attr_quirks(device, root: str = "/") -> dict:
     if (
         getattr(device, "key", None) != "legion_go_2"
@@ -96,6 +117,7 @@ def legion_go_s_83l3_firmware_attr_quirks(device, root: str = "/") -> dict:
         "readback_settle_delays": (0.05, 0.10, 0.20, 0.40),
         "named_profile_owns_rails": True,
         "rearm_custom_on_ignored_writes": True,
+        "firmware_fallback_rails": {"pl1": 30, "pl2": 15, "pl3": 20},
     }
 
 

@@ -1,0 +1,1721 @@
+"""Assemble a diagnostic report bundle and scrub PII from it.
+
+Split so the tricky parts are pure and unit-testable:
+  - redact_text / redact_obj  - strip home paths, hostname, serial-like values
+  - tail_logs                 - newest Decky log files, size-capped, redacted
+  - build_bundle              - assemble the final dict from already-fetched parts
+
+main.py does the I/O (calls the get_*_state RPCs, reads the stores + log dir) and
+hands the pieces here. The bundle is designed to be *diagnosable*: identity +
+detected capabilities (many "X doesn't work" reports are "X has no write path on
+your device") + a live state snapshot + the persisted stores + the tail of the
+plugin logs where tracebacks land. Never raises: a report must go out even if a
+piece is missing.
+"""
+from __future__ import annotations
+
+import glob
+import json
+import os
+import re
+import stat
+import time
+import urllib.parse
+
+import device_tree
+from pdc_report import connected_devices
+from sysfs import read_str
+
+# Bump when the bundle shape changes so consumers can adapt.
+SCHEMA = 6
+
+_MAX_TEXT = 4000  # user free-text cap (defensive; the UI also limits it)
+
+# Scrub the VALUE of any dict key that looks like a hardware identifier.
+_SCRUB_KEY = re.compile(
+    r"serial|uuid|\bmac\b|mac_?addr|hostname|host_name|^(?:user|username)$",
+    re.I,
+)
+# Wine logs write the same home as Z:\home\<user>.
+_HOME_PATH = re.compile(r"[\\/]home[\\/][^\\/\s:\"']+")
+# Firmware versions are shared by every unit of a model and decide firmware bugs, but
+# look like serials to _SERIAL_RUN ("S0CN27WW"). Their values skip only that rule.
+_FIRMWARE_VERSION_KEYS = frozenset(
+    {"bios_version", "bios_date", "bios_release", "ec_firmware_release"}
+)
+# Public controller enums resemble serials; preserve them only in typed fields.
+_CONTROLLER_ENUMS = frozenset(
+    prefix + name
+    for prefix in ("", "Gamepad:Button:")
+    for name in (
+        "LeftPaddle1", "LeftPaddle2", "LeftPaddle3",
+        "RightPaddle1", "RightPaddle2", "RightPaddle3", "QuickAccess2",
+    )
+)
+_CONTROLLER_ENUM_PATHS = frozenset({
+    ("controller", "gamepad_targets"),
+    ("controller", "buttons", "source"),
+    ("controller", "buttons", "target", "gamepad"),
+    ("controller_diagnostics", "dbus", "capabilities"),
+    ("controller_diagnostics", "mapped_buttons", "source"),
+})
+# Identifiers that can appear inside free text (log lines, dmesg/journal output).
+_MAC = re.compile(r"\b(?:[0-9a-fA-F]{2}[:_-]){5}[0-9a-fA-F]{2}\b")
+_UUID = re.compile(
+    r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+)
+# Serial numbers leak in DMI/dmesg dumps ("board_serial: ...", "Serial Number: ...").
+# Keep the label for context, drop the value.
+_SERIAL_LABELED = re.compile(
+    r"((?:board|product|chassis|system|baseboard)?_?serial(?:\s*number)?)(\s*[:=]\s*)(\S+)",
+    re.I,
+)
+# A standalone long alphanumeric run that mixes letters AND digits (typical serial
+# shape). Pure words ('steamdeck') and pure numbers (timestamps) are left alone.
+_SERIAL_RUN = re.compile(
+    r"\b(?=[A-Za-z0-9]*[A-Za-z])(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{8,}\b"
+)
+
+
+def redact_text(
+    s,
+    *,
+    home: str | None = None,
+    hostname: str | None = None,
+    keep_serial_runs: bool = False,
+):
+    """Scrub PII from a string: home paths, an explicit hostname, MAC/UUID and
+    serial-like values that show up inside log or kernel output. Never touches a
+    bare username token (that would nuke 'Steam Deck' when the user is 'deck')."""
+    if not isinstance(s, str):
+        return s
+    s = _HOME_PATH.sub("~", s)
+    if home:
+        s = s.replace(home.rstrip("/"), "~")
+    if hostname and len(hostname) >= 3:
+        s = re.sub(rf"\b{re.escape(hostname)}\b", "HOST", s)
+    s = _MAC.sub("[mac]", s)
+    s = _UUID.sub("[uuid]", s)
+    s = _SERIAL_LABELED.sub(lambda m: f"{m.group(1)}{m.group(2)}[serial]", s)
+    if not keep_serial_runs:
+        s = _SERIAL_RUN.sub("[serial]", s)
+    return s
+
+
+def redact_obj(obj, *, home: str | None = None, hostname: str | None = None, _path=()):
+    """Recursively redact a JSON-ish structure: scrub serial-like key values and
+    run redact_text on every string. Idempotent."""
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if isinstance(k, str) and _SCRUB_KEY.search(k) and isinstance(v, (str, int, float)):
+                out[k] = "[redacted]"
+            elif k in _FIRMWARE_VERSION_KEYS and isinstance(v, str):
+                out[k] = redact_text(v, home=home, hostname=hostname, keep_serial_runs=True)
+            else:
+                out[k] = redact_obj(v, home=home, hostname=hostname, _path=(*_path, k))
+        return out
+    if isinstance(obj, (list, tuple)):
+        return [redact_obj(x, home=home, hostname=hostname, _path=_path) for x in obj]
+    path = _path[1:] if _path[:1] == ("state",) else _path
+    keep_enum = isinstance(obj, str) and obj in _CONTROLLER_ENUMS and path in _CONTROLLER_ENUM_PATHS
+    return redact_text(obj, home=home, hostname=hostname, keep_serial_runs=keep_enum)
+
+
+def _tail_file(path: str, n: int) -> str:
+    """Last ~n bytes of a file, decoded leniently, with a partial leading line
+    dropped so the excerpt starts on a clean line."""
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        start = max(0, size - n)
+        f.seek(start)
+        raw = f.read()
+    txt = raw.decode("utf-8", "replace")
+    if start > 0:
+        nl = txt.find("\n")
+        if nl != -1:
+            txt = txt[nl + 1:]
+    return txt
+
+
+def tail_logs(
+    log_dir: str,
+    *,
+    max_files: int = 3,
+    max_bytes: int = 200_000,
+    home: str | None = None,
+    hostname: str | None = None,
+) -> list[dict]:
+    """The tail of the newest *.log files in log_dir (newest first), redacted and
+    capped to a shared byte budget. Never raises → returns [] on any problem."""
+    try:
+        files = sorted(
+            glob.glob(os.path.join(log_dir, "*.log")),
+            key=os.path.getmtime,
+            reverse=True,
+        )
+    except Exception:  # noqa: BLE001
+        return []
+    out: list[dict] = []
+    budget = max_bytes
+    for path in files[:max_files]:
+        if budget <= 0:
+            break
+        try:
+            data = _tail_file(path, budget)
+        except Exception:  # noqa: BLE001
+            continue
+        out.append({
+            "name": os.path.basename(path),
+            "text": redact_text(data, home=home, hostname=hostname),
+        })
+        budget -= len(data)
+    return out
+
+
+_PLUGIN_LOAD_ERROR = re.compile(r"Error loading plugin\b", re.I)
+_PLUGIN_LOAD_EXCEPTION = re.compile(
+    r"Error loading plugin\s+(?P<name>.+?)\s+\([^)\r\n]{1,80}\)\s+"
+    r"(?P<error>TypeError|ReferenceError|SyntaxError|Error)\b",
+    re.I,
+)
+_PLUGIN_ERROR_TYPES = {
+    "typeerror": "TypeError",
+    "referenceerror": "ReferenceError",
+    "syntaxerror": "SyntaxError",
+    "error": "Error",
+}
+_DECKY_ORIGIN = re.compile(r"(?:localhost|127\.0\.0\.1):1337(?P<path>/[^\s?#)\"']*)?")
+_FRONTEND_EXCEPTION_TYPE = re.compile(
+    r"Uncaught(?: \(in promise\))? (?P<error>TypeError|ReferenceError|SyntaxError|RangeError|Error)\b"
+)
+# Steam's own UI scripts: an error there takes down the library or a menu, whoever triggered it.
+_STEAM_UI_ORIGIN = re.compile(r"source: https://steamloopback\.host/(?P<path>[^\s?#)\"']*)")
+_STEAM_UI_EXCEPTION = re.compile(r'"(?:Uncaught(?: \(in promise\))? )?(?P<error>TypeError|ReferenceError|RangeError)\b')
+_PANEL_BUNDLE_LINE = re.compile(r"/dist/index\.js(?:\?[^\s)]*)? \((?P<line>\d{1,7})\)")
+_STEAM_UI_READING = re.compile(r"\(reading '(?P<name>[^']{1,64})'\)")
+# A property name can be a user-derived key (obj[name]): only these fixed names leave the device.
+_STEAM_UI_READING_NAMES = frozenset({
+    "values", "keys", "entries", "get", "has", "set", "size", "length", "map", "filter", "find",
+    "forEach", "some", "includes", "push", "then", "appid", "id", "displayName", "allApps",
+    "visibleApps", "window", "document", "props", "children", "type", "current",
+})
+_MAX_STEAM_UI_SIGNALS = 8
+# Plugin folder names are user text: only these fixed slugs leave the device.
+_KNOWN_FRONTEND_ORIGINS = {
+    "paneldecontrol": "panel",
+    "cssloader": "css_loader",
+    "sdhcssloader": "css_loader",
+    "steamgriddb": "steamgriddb",
+    "protondbbadges": "protondb_badges",
+    "protondbdecky": "protondb_badges",
+    "hltbfordeck": "hltb",
+}
+# Private Steam branches can carry arbitrary names: only these slugs leave the device.
+_STEAM_BRANCH_SLUGS = (("preview", "preview"), ("beta", "beta"), ("stable", "stable"))
+_STEAM_MANIFEST_VERSION = re.compile(r'"version"\s+"(?P<version>\d{1,12})"')
+_MAX_STEAM_PACKAGE_BYTES = 4096
+_MAX_DECKY_PLUGINS = 64
+_MAX_PLUGIN_MANIFEST_BYTES = 16384
+_MAX_PLUGIN_FIELD = 80
+_MAX_FRONTEND_SIGNALS = 24
+_MAX_FRONTEND_LOG_BYTES = 64 * 1024
+_CEF_LOG_NAMES = frozenset({"cef_log.txt", "cef_log.previous.txt"})
+# Hooandee themes write their own diagnostics as `[Duo] home-hidden reason path=/x` (PDC-VB97). Only the event name
+# and short, plain tokens leave the device; anything else on the line is dropped.
+_THEME_LINE = re.compile(r'\[(?P<theme>Duo|Vida)\] (?P<event>[a-z][a-z0-9-]{1,40})(?P<rest>[^"\n]*)')
+_THEME_TOKEN = re.compile(r"^[A-Za-z0-9_.:/#=>+-]{1,60}$")
+_MAX_THEME_LINES = 50
+# Steam writes Big Picture's console (where themes log) to webhelper_js, not cef_log.
+_THEME_LOG_NAMES = ("webhelper_js.previous.txt", "webhelper_js.txt")
+_MAX_THEME_LOG_BYTES = 1024 * 1024
+
+
+def _tail_regular_file(path: str, n: int) -> tuple[str, int]:
+    """Read a regular file tail without following a symlink race."""
+    flags = os.O_RDONLY
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("not_regular")
+        size = info.st_size
+        start = max(0, size - n)
+        os.lseek(fd, start, os.SEEK_SET)
+        raw = os.read(fd, n)
+    finally:
+        os.close(fd)
+    text = raw.decode("utf-8", "replace")
+    if start > 0:
+        newline = text.find("\n")
+        if newline != -1:
+            text = text[newline + 1:]
+    return text, len(raw)
+
+
+def _head_regular_file(path: str, n: int) -> str:
+    # O_NONBLOCK keeps a FIFO planted in Steam's package dir from stalling the loop.
+    flags = os.O_RDONLY | os.O_NONBLOCK
+    flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("not_regular")
+        raw = os.read(fd, n)
+    finally:
+        os.close(fd)
+    return raw.decode("utf-8", "replace")
+
+
+def _steam_branch_slug(raw: str) -> str:
+    name = raw.strip().lower()
+    if not name:
+        return "default"
+    for needle, slug in _STEAM_BRANCH_SLUGS:
+        if needle in name:
+            return slug
+    return "other"
+
+
+def _steam_manifest_version(package: str, branch_name: str) -> int | None:
+    try:
+        manifests = [
+            name for name in os.listdir(package)
+            if name.startswith("steam_client_") and name.endswith(".manifest")
+        ]
+    except OSError:
+        return None
+    wanted = f"steam_client_{branch_name}_" if branch_name else None
+    matching = [name for name in manifests if wanted and name.startswith(wanted)]
+    if len(matching) != 1:
+        matching = manifests if len(manifests) == 1 else []
+    if not matching:
+        return None
+    try:
+        text = _head_regular_file(os.path.join(package, matching[0]), _MAX_STEAM_PACKAGE_BYTES)
+    except (OSError, ValueError):
+        return None
+    match = _STEAM_MANIFEST_VERSION.search(text)
+    return int(match.group("version")) if match else None
+
+
+def steam_client_diagnostics(steam_root: str | None) -> dict:
+    """Name the Steam client branch and build that the frontend runs on.
+
+    Third-party Decky plugins break on Steam beta builds before stable, so a
+    frontend failure is only attributable once the client channel is known.
+    """
+    unavailable = {"status": "unavailable", "branch": "unknown", "version": None}
+    if not isinstance(steam_root, str) or not steam_root:
+        return unavailable
+    package = os.path.join(steam_root, "package")
+    if not os.path.isdir(package):
+        return unavailable
+    branch_name = ""
+    branch = "default"
+    try:
+        raw = _head_regular_file(os.path.join(package, "beta"), _MAX_STEAM_PACKAGE_BYTES)
+        branch_name = raw.strip()
+        branch = _steam_branch_slug(raw)
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError):
+        branch = "unknown"
+    return {
+        "status": "captured",
+        "branch": branch,
+        "version": _steam_manifest_version(package, branch_name),
+    }
+
+
+def _plugin_manifest_field(folder: str, filename: str, key: str) -> str | None:
+    try:
+        raw = _head_regular_file(os.path.join(folder, filename), _MAX_PLUGIN_MANIFEST_BYTES)
+        value = json.loads(raw).get(key)
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not isinstance(value, str):
+        return None
+    value = "".join(ch for ch in value if ch.isprintable()).strip()
+    return value[:_MAX_PLUGIN_FIELD] or None
+
+
+def decky_plugins(plugins_dir: str | None) -> dict:
+    empty = {"status": "unavailable", "plugins": [], "truncated": False}
+    if not isinstance(plugins_dir, str) or not plugins_dir:
+        return empty
+    try:
+        entries = sorted(os.scandir(plugins_dir), key=lambda entry: entry.name)
+    except OSError:
+        return empty
+    plugins = []
+    truncated = False
+    for entry in entries:
+        try:
+            if not entry.is_dir(follow_symlinks=False):
+                continue
+        except OSError:
+            continue
+        if len(plugins) >= _MAX_DECKY_PLUGINS:
+            truncated = True
+            break
+        name = _plugin_manifest_field(entry.path, "plugin.json", "name")
+        plugins.append({
+            "name": name or entry.name[:_MAX_PLUGIN_FIELD],
+            "version": _plugin_manifest_field(entry.path, "package.json", "version"),
+        })
+    plugins.sort(key=lambda plugin: plugin["name"].lower())
+    return {"status": "captured", "plugins": plugins, "truncated": truncated}
+
+
+def _frontend_signal(line: str) -> tuple[str | None, bool]:
+    if _PLUGIN_LOAD_ERROR.search(line):
+        return "plugin_load_error", False
+    if "SP died after loading plugin" in line:
+        return "shared_context_crash", True
+    if re.search(
+        r"(?:renderer|render process|steamwebhelper).*"
+        r"(?:crash(?:ed)?|died|terminated unexpectedly)",
+        line,
+        re.I,
+    ):
+        return "renderer_crash", True
+    if (
+        "Minified React error" in line
+        and ("localhost:1337" in line or "Decky PluginLoader" in line)
+    ):
+        return "react_error", False
+    if (
+        _DECKY_ORIGIN.search(line)
+        and re.search(r"Uncaught|TypeError|ReferenceError|SyntaxError", line)
+    ):
+        return "decky_frontend_exception", False
+    if _STEAM_UI_ORIGIN.search(line) and _STEAM_UI_EXCEPTION.search(line):
+        return "steam_ui_exception", False
+    return None, False
+
+
+def _steam_ui_script(path: str) -> str:
+    name = path.rsplit("/", 1)[-1]
+    if path.startswith("libraries/"):
+        return "libraries"
+    if name in ("library.js", "sp.js"):
+        return name[:-3]
+    if name.startswith("chunk"):
+        return "chunk"
+    return "other"
+
+
+def _steam_ui_exception_detail(line: str) -> dict:
+    detail = {
+        "error_type": _STEAM_UI_EXCEPTION.search(line).group("error"),
+        "script": _steam_ui_script(_STEAM_UI_ORIGIN.search(line).group("path")),
+    }
+    reading = _STEAM_UI_READING.search(line)
+    if reading:
+        name = reading.group("name")
+        detail["reading"] = name if name in _STEAM_UI_READING_NAMES else "other"
+    return detail
+
+
+def _frontend_origin(plugin_name: str) -> str:
+    return _KNOWN_FRONTEND_ORIGINS.get(re.sub(r"[^a-z0-9]", "", plugin_name.lower()), "other_plugin")
+
+
+def _frontend_exception_detail(line: str) -> dict:
+    error = _FRONTEND_EXCEPTION_TYPE.search(line)
+    origin = "decky"
+    match = _DECKY_ORIGIN.search(line)
+    path = (match.group("path") if match else None) or ""
+    if path.startswith("/plugins/"):
+        origin = _frontend_origin(urllib.parse.unquote(path[len("/plugins/"):].split("/", 1)[0]))
+    detail = {
+        "error_type": error.group("error") if error else "unknown",
+        "origin": origin,
+    }
+    if origin == "panel":
+        # Panel's bundle isn't minified: with the version, the line is the exact spot.
+        line_number = _PANEL_BUNDLE_LINE.search(line)
+        if line_number:
+            detail["line"] = int(line_number.group("line"))
+        reading = _STEAM_UI_READING.search(line)
+        if reading:
+            name = reading.group("name")
+            detail["reading"] = name if name in _STEAM_UI_READING_NAMES else "other"
+    return detail
+
+
+def _capture_log_tail(path, name: str, quota: int) -> tuple[dict, str | None]:
+    """Read a log's tail without following links; the record says why nothing was read."""
+    record = {"name": name, "status": "unreadable"}
+    if not isinstance(path, str) or not path or quota <= 0:
+        record["status"] = "rejected"
+        return record, None
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        record["status"] = "missing"
+        return record, None
+    except OSError:
+        return record, None
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        record["status"] = "rejected"
+        return record, None
+    try:
+        text, bytes_read = _tail_regular_file(path, quota)
+    except FileNotFoundError:
+        record["status"] = "missing"
+        return record, None
+    except ValueError:
+        record["status"] = "rejected"
+        return record, None
+    except OSError:
+        return record, None
+    record.update({"status": "captured", "bytes_read": bytes_read})
+    return record, text
+
+
+def theme_diagnostic_lines(log_dir, *, max_bytes: int = _MAX_THEME_LOG_BYTES) -> dict:
+    """The last `[Duo]`/`[Vida]` lines from Steam's webhelper_js logs, oldest first.
+
+    Only the theme, the event name and short plain tokens leave the device (PDC-VB97).
+    """
+    files, lines = [], []
+    quota = max_bytes // len(_THEME_LOG_NAMES)
+    for name in _THEME_LOG_NAMES:
+        path = os.path.join(log_dir, name) if isinstance(log_dir, str) and log_dir else ""
+        record, text = _capture_log_tail(path, name, quota)
+        files.append(record)
+        if text is None:
+            continue
+        for raw_line in text.splitlines():
+            match = _THEME_LINE.search(raw_line)
+            if not match:
+                continue
+            tokens = [t for t in match.group("rest").split() if _THEME_TOKEN.match(t)][:8]
+            lines.append({
+                "source": name,
+                "theme": match.group("theme"),
+                "event": match.group("event"),
+                "detail": redact_text(" ".join(tokens), keep_serial_runs=True),
+            })
+    return {"schema": 1, "files": files, "lines": lines[-_MAX_THEME_LINES:]}
+
+
+def frontend_crash_diagnostics(
+    paths,
+    *,
+    max_bytes: int = _MAX_FRONTEND_LOG_BYTES,
+) -> dict:
+    """Extract bounded, redacted crash evidence from Steam's two CEF logs.
+
+    Raw CEF logs can contain account and session data, so reports receive only
+    recognised diagnostic lines. Each requested file keeps an equal quota so a
+    large current log cannot crowd out the rotated log containing the crash.
+    """
+    paths = list(paths or ())
+    quota = max_bytes // len(paths) if paths and max_bytes > 0 else 0
+    files = []
+    signals = []
+    plugin_load_errors = []
+    seen_plugins = set()
+    steam_ui_seen: dict[tuple, dict] = {}
+    crash_detected = False
+    plugin_load_error = False
+
+    for path in paths:
+        basename = os.path.basename(path) if isinstance(path, str) else ""
+        source = basename if basename in _CEF_LOG_NAMES else "invalid"
+        record, text = _capture_log_tail(path if source != "invalid" else None, source, quota)
+        files.append(record)
+        if text is None:
+            continue
+
+        for raw_line in text.splitlines():
+            kind, is_crash = _frontend_signal(raw_line)
+            if not kind:
+                continue
+            crash_detected = crash_detected or is_crash
+            if kind == "plugin_load_error":
+                plugin_load_error = True
+            match = _PLUGIN_LOAD_EXCEPTION.search(raw_line)
+            if match:
+                plugin = {
+                    "error_type": _PLUGIN_ERROR_TYPES[match.group("error").lower()],
+                    "source": source,
+                    "origin": _frontend_origin(match.group("name")),
+                }
+                key = (plugin["error_type"], source, plugin["origin"])
+                if (
+                    key not in seen_plugins
+                    and len(plugin_load_errors) < _MAX_FRONTEND_SIGNALS
+                ):
+                    seen_plugins.add(key)
+                    plugin_load_errors.append(plugin)
+            if kind == "steam_ui_exception":
+                signal = {"source": source, "kind": kind, **_steam_ui_exception_detail(raw_line)}
+                key = tuple(sorted(signal.items()))
+                if key in steam_ui_seen:
+                    steam_ui_seen[key]["count"] += 1
+                elif len(steam_ui_seen) < _MAX_STEAM_UI_SIGNALS and len(signals) < _MAX_FRONTEND_SIGNALS:
+                    signal["count"] = 1
+                    steam_ui_seen[key] = signal
+                    signals.append(signal)
+                continue
+            if len(signals) < _MAX_FRONTEND_SIGNALS:
+                signal = {"source": source, "kind": kind}
+                if kind == "decky_frontend_exception":
+                    signal.update(_frontend_exception_detail(raw_line))
+                signals.append(signal)
+
+    captured = any(entry["status"] == "captured" for entry in files)
+    status = (
+        "crash_detected"
+        if crash_detected
+        else "signals_found"
+        if signals
+        else "no_relevant_signals"
+        if captured
+        else "unavailable"
+    )
+    return {
+        "schema": 1,
+        "status": status,
+        "files": files,
+        "crash_detected": crash_detected,
+        "plugin_load_error": plugin_load_error,
+        "plugin_load_errors": plugin_load_errors,
+        "signals": signals,
+    }
+
+
+# Kernel-side evidence: firmware/hardware write rejections (TDP, fan curves) land
+# in dmesg/journal, NOT the plugin's own log. Captured via an injected runner so
+# this stays testable without spawning processes.
+# Decky stopping, killing and reloading plugins, and earlyoom kills: a reinstall that hangs
+# Panel's unload ends in SIGKILL, a reload burst and possibly a frozen, force-rebooted device.
+_LOADER_LIFECYCLE_GREP = (
+    "(?i)still alive|SIGKILL|has been stopped in|already loaded|Shutting down|"
+    "Loaded Panel|Failed to (start|unload)|Loop exited|socket_guard"
+)
+
+_SLEEP_USERSPACE_MESSAGES = {
+    "[main][INFO]: CEF has disconnected...": {"event": "cef_disconnected"},
+    "[CSS_Loader] Connected to Steam Browser": {"event": "steam_browser_connected"},
+    "[main][INFO]: Loading Decky frontend!": {"event": "decky_frontend_loading"},
+}
+for _rc in (0, 1):
+    for _state, _active in (("0", False), ("1", True), ("unknown", None)):
+        _SLEEP_USERSPACE_MESSAGES[f"pdc-sleep-cores rc={_rc} smt_active={_state}"] = {
+            "event": "sleep_core_guard", "ok": _rc == 0, "smt_active": _active,
+        }
+
+_SLEEP_USERSPACE_LIMIT = 24
+_SLEEP_USERSPACE_ARGS = [
+    "-u", "plugin_loader", "-u", "panel-de-control-sleep-cores.service",
+    "-o", "json", "--output-fields=MESSAGE",
+    "--grep", "^(?:" + "|".join(map(re.escape, _SLEEP_USERSPACE_MESSAGES)) + ")$",
+    "-n", str(_SLEEP_USERSPACE_LIMIT), "--reverse", "--no-pager",
+]
+
+
+def _sleep_userspace_events(text: str | None) -> list[dict] | None:
+    # journalctl --grep with JSON output exits 1 with no stderr for an empty match.
+    if text is not None and text.strip() in ("", "-- No entries --", "[exit 1]"):
+        return []
+    if text is None or text.startswith("[exit "):
+        return None
+    events = []
+    for line in text.splitlines()[:_SLEEP_USERSPACE_LIMIT]:
+        try:
+            row = json.loads(line)
+            event = _SLEEP_USERSPACE_MESSAGES[row["MESSAGE"]]
+            stamp = row["__REALTIME_TIMESTAMP"]
+            if not isinstance(stamp, str) or not re.fullmatch(r"[0-9]{1,18}", stamp):
+                continue
+        except (ValueError, TypeError, KeyError):
+            continue
+        events.append({"t": int(stamp) / 1_000_000, **event})
+    # --reverse selects the newest entries first even if the wall clock moved.
+    events.reverse()
+    return events or None
+
+
+# Split-lock traps from Steam's HTTP threads fill a whole tail on some kernels. journalctl
+# built without PCRE2 rejects --grep: those commands run again unfiltered.
+_KERNEL_NOISE_FREE = "^(?!.*(split lock detection|handle_bus_lock))"
+
+_SLEEP_KERNEL_GREP = (
+    "(?i)PM: (suspend|resume)|PM: Triggering wakeup|wakeup (irq|source)|waking up|"
+    "ACPI: PM:|amd_pmc|Last suspend"
+)
+
+_KERNEL_CMDS = {
+    "dmesg": ["/usr/bin/dmesg", "--ctime", "--level=err,warn"],
+    "journal": ["/usr/bin/journalctl", "-b", "-u", "plugin_loader", "-n", "400", "--no-pager"],
+    # Other writers of the same firmware power rails. steamos-manager serves Steam's
+    # native TDP slider and runs as a user unit, so match by syslog identifier.
+    "power_daemons": [
+        "/usr/bin/journalctl", "-b",
+        "-t", "steamos-manager", "-t", "powerstation",
+        "-t", "power-profiles-daemon", "-t", "tuned", "-t", "tuned-ppd",
+        "-t", "armada-powerd",
+        "-n", "200", "--no-pager",
+    ],
+    # How the previous boot ended: a clean reboot leaves the systemd/logind shutdown
+    # sequence, a thermal trip or panic leaves kernel warnings, a hard reset leaves
+    # neither. The plugin's own log cannot tell these apart.
+    "previous_boot_kernel": [
+        "/usr/bin/journalctl", "-b", "-1", "-k", "-p", "warning",
+        "--grep", _KERNEL_NOISE_FREE, "-n", "150", "--no-pager",
+    ],
+    # The previous boot's last lines from every source, not only kernel warnings: a hard
+    # freeze stops the machine mid-sentence and these show what was running.
+    "previous_boot_tail": [
+        "/usr/bin/journalctl", "-b", "-1", "--grep", _KERNEL_NOISE_FREE,
+        "-n", "120", "--no-pager",
+    ],
+    "previous_boot_end": [
+        "/usr/bin/journalctl", "-b", "-1",
+        "-t", "systemd", "-t", "systemd-logind", "-t", "systemd-shutdown",
+        "-t", "systemd-sleep",
+        "--grep", "(?i)power key|reboot|power-?off|shutdown|suspend|hibernat|(entering|returned from) sleep|lid (opened|closed)",
+        "-n", "60", "--no-pager",
+    ],
+    # Why a suspend ends early or never starts: the kernel wake reason, logind's view
+    # of each cycle and who holds a sleep or power-key inhibitor.
+    "sleep_kernel": [
+        "/usr/bin/journalctl", "-b", "-k",
+        "--grep", _SLEEP_KERNEL_GREP,
+        "-n", "120", "--no-pager",
+    ],
+    "sleep_logind": [
+        "/usr/bin/journalctl", "-b",
+        "-t", "systemd-logind", "-t", "systemd-sleep",
+        "--grep", "(?i)power key|suspend|sleep|inhibit|lid (opened|closed)",
+        "-n", "120", "--no-pager",
+    ],
+    "previous_boot_sleep_kernel": [
+        "/usr/bin/journalctl", "-b", "-1", "-k",
+        "--grep", _SLEEP_KERNEL_GREP,
+        "-n", "80", "--no-pager",
+    ],
+    "loader_lifecycle": [
+        "/usr/bin/journalctl", "-b", "-u", "plugin_loader",
+        "--grep", _LOADER_LIFECYCLE_GREP,
+        "-n", "80", "--no-pager",
+    ],
+    "previous_boot_loader": [
+        "/usr/bin/journalctl", "-b", "-1", "-u", "plugin_loader",
+        "--grep", _LOADER_LIFECYCLE_GREP,
+        "-n", "80", "--no-pager",
+    ],
+    # A Steam/gamescope crash shows in the plugin log only as "CEF has disconnected".
+    "session_crashes": [
+        "/usr/bin/journalctl", "-b", "-t", "systemd-coredump", "-t", "kernel",
+        "--grep", r"(?i)\((steam\w*|gamescope\S*)\) of user \d+ dumped core|(steam\w*|gamescope\S*)\[\d+\]:? (segfault|general protection fault)",
+        "-n", "40", "--no-pager",
+    ],
+    "earlyoom": ["/usr/bin/journalctl", "-b", "-t", "earlyoom", "-n", "30", "--no-pager"],
+    "previous_boot_earlyoom": [
+        "/usr/bin/journalctl", "-b", "-1", "-t", "earlyoom", "-n", "30", "--no-pager",
+    ],
+    "sleep_userspace": ["/usr/bin/journalctl", "-b", *_SLEEP_USERSPACE_ARGS],
+    "previous_boot_sleep_userspace": ["/usr/bin/journalctl", "-b", "-1", *_SLEEP_USERSPACE_ARGS],
+    "sleep_inhibitors": ["/usr/bin/systemd-inhibit", "--list", "--no-pager"],
+    "pm_wakeup_irq": ["/usr/bin/cat", "/sys/power/pm_wakeup_irq"],
+}
+
+
+# The controller daemon (HHD on Bazzite, InputPlumber on SteamOS) owns the gamepad
+# and its own resume/re-grab. Controller failures land in ITS journal, not the
+# plugin log — so a controller report should carry it. Keyed by the manager string
+# reported by controllers.detect (values, not imported, to keep this standalone).
+_CONTROLLER_UNITS = {
+    "hhd": ("hhd.service", "hhd@*.service", "hhd_local@*.service"),
+    "inputplumber": ("inputplumber.service",),
+}
+
+_IP_LIFECYCLE_LINES = 120
+_IP_LIFECYCLE_BYTES = 16_000
+_IP_LIFECYCLE_GREP = (
+    "(?i)loading device profile|setting target devices|setting intercept mode to:"
+    "|device (added|removed):|starting inputplumber|stopp(ing|ed) inputplumber"
+    "|failed running device|found missing input device|disconnected|possible deadlock|channel (is )?closed"
+)
+
+
+def controller_daemon_cmds(manager: str | None) -> dict:
+    """Extra kernel_logs command for the active controller daemon's journal, or an
+    empty dict when no daemon runs the controller (nothing to capture)."""
+    units = _CONTROLLER_UNITS.get(manager or "")
+    if not units:
+        return {}
+    cmd = ["/usr/bin/journalctl", "-b"]
+    for unit in units:
+        cmd.extend(("-u", unit))
+    cmd.extend(("-n", "300", "--no-pager"))
+    commands = {"controller": cmd}
+    if manager == "inputplumber":
+        commands["controller_lifecycle"] = [
+            "/usr/bin/journalctl", "-b", "-u", "inputplumber.service",
+            "--grep", _IP_LIFECYCLE_GREP, "-n", str(_IP_LIFECYCLE_LINES), "--no-pager",
+        ]
+    return commands
+
+
+def capture_command(cmd, *, run=None, env=None) -> str | None:
+    """stdout of a diagnostic command; when it fails with no output, its exit code and
+    stderr, so a report tells "no entries" from "journalctl could not run". Never raises."""
+    try:
+        if run is None:
+            import subprocess
+
+            run = subprocess.run
+        result = run(cmd, capture_output=True, text=True, timeout=5, env=env)  # noqa: S603
+    except Exception:  # noqa: BLE001
+        return None
+    stdout = result.stdout or ""
+    if stdout or result.returncode == 0:
+        return stdout
+    return f"[exit {result.returncode}] {(result.stderr or '').strip()[:500]}"
+
+
+def kernel_logs(
+    run,
+    *,
+    cap: int = 40_000,
+    extra: dict | None = None,
+    home: str | None = None,
+    hostname: str | None = None,
+) -> dict:
+    """Tail of dmesg (errors/warnings) + the plugin_loader journal, plus any `extra`
+    {key: cmd} commands (e.g. the controller daemon journal), via run(cmd)->str|None.
+    Redacted and size-capped. Never raises."""
+    out = {}
+    for key, cmd in {**_KERNEL_CMDS, **(extra or {})}.items():
+        try:
+            text = run(cmd)
+            if _KERNEL_NOISE_FREE in cmd and (text is None or text.startswith("[exit ")):
+                at = cmd.index(_KERNEL_NOISE_FREE)
+                text = run(cmd[:at - 1] + cmd[at + 1:])
+        except Exception:  # noqa: BLE001
+            text = None
+        if key in ("sleep_userspace", "previous_boot_sleep_userspace"):
+            out[key] = _sleep_userspace_events(text)
+        elif key == "controller_lifecycle":
+            redacted = redact_text(text, home=home, hostname=hostname) if text else ""
+            encoded = redacted.encode("utf-8")
+            byte_limit = min(cap, _IP_LIFECYCLE_BYTES)
+            out[key] = encoded[-byte_limit:].decode("utf-8", errors="ignore") if encoded else None
+            out["controller_lifecycle_capture"] = {
+                "status": ("unavailable" if text is None else "command_exit"
+                           if text.startswith("[exit ") else "empty"
+                           if not text.strip() or text.strip() == "-- No entries --" else "captured"),
+                "window": "current_boot_tail",
+                "line_limit": _IP_LIFECYCLE_LINES,
+                "line_limit_reached": len((text or "").splitlines()) >= _IP_LIFECYCLE_LINES,
+                "byte_limit": byte_limit,
+                "byte_truncated": len(encoded) > byte_limit,
+            }
+        else:
+            out[key] = redact_text(text[-cap:], home=home, hostname=hostname) if text else None
+    return out
+
+
+# Raw sysfs surfaces that decide device support. A listing (node/dir NAMES, plus a
+# couple of tiny label values) so a triager can tell "node exists but capability
+# reads false → probe bug" from "node absent → truly unsupported". Bounded to keep
+# the bundle small and to never sweep /sys recursively.
+_SNAP_MAX_CHIPS = 32
+_RAPL_SAMPLE_S = 0.5
+_sleep = time.sleep
+_SNAP_MAX_NAMES = 128
+_SNAP_MAX_FAN_CURVE_CHANNELS = 2
+_SNAP_MAX_FAN_CURVE_POINTS = 8
+_SNAP_MAX_MODULES = 512
+_SNAP_CAP = 60_000
+_HWMON_PATTERNS = (
+    "pwm*", "fan*_input", "temp*_label", "power[12]_label", "power[12]_cap*",
+)
+_DECK_PPT_NODES = tuple(
+    f"power{rail}_{suffix}"
+    for rail in (1, 2)
+    for suffix in ("label", "cap", "cap_min", "cap_max", "average", "input")
+)
+
+
+def _glob(root: str, pattern: str) -> list[str]:
+    try:
+        return glob.glob(os.path.join(root, pattern))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _listdir(path: str) -> list[str]:
+    try:
+        return os.listdir(path)
+    except OSError:
+        return []
+
+
+def _hwmon_nodes(chip_dir: str) -> list[str]:
+    names: set[str] = set()
+    for pat in _HWMON_PATTERNS:
+        for p in _glob(chip_dir, pat):
+            names.add(os.path.basename(p))
+    return sorted(names)[:_SNAP_MAX_NAMES]
+
+
+def _mode_writable(path: str) -> bool:
+    try:
+        return bool(os.stat(path).st_mode & 0o222)
+    except OSError:
+        return False
+
+
+def _hwmon_ppt_nodes(chip_dir: str) -> dict:
+    values = {}
+    for name in _DECK_PPT_NODES:
+        path = os.path.join(chip_dir, name)
+        if os.path.exists(path):
+            values[name] = {
+                "value": read_str(path),
+                "writable": _mode_writable(path),
+            }
+    return values
+
+
+def _hwmon_fan_nodes(chip_dir: str) -> dict:
+    values = {}
+    # Existing single-digit control nodes stay bounded; curve readback is at most
+    # two channels of eight points, independent of requested or active fan mode.
+    paths = [path for pat in ("pwm[0-9]", "pwm[0-9]_enable", "fan[0-9]_input")
+             for path in sorted(_glob(chip_dir, pat))]
+    paths += [
+        path
+        for channel in range(1, _SNAP_MAX_FAN_CURVE_CHANNELS + 1)
+        for point in range(1, _SNAP_MAX_FAN_CURVE_POINTS + 1)
+        for field in ("temp", "pwm")
+        if os.path.exists(path := os.path.join(chip_dir, f"pwm{channel}_auto_point{point}_{field}"))
+    ]
+    for path in paths:
+        raw = read_str(path)
+        value = None
+        if raw is not None and re.fullmatch(r"[+-]?[0-9]{1,10}", raw):
+            numeric = int(raw)
+            if -(2 ** 31) <= numeric < 2 ** 31:
+                value = str(numeric)
+        values[os.path.basename(path)] = {
+            "value": value,
+            "writable": _mode_writable(path),
+        }
+    return values
+
+
+def _snap_hwmon(root: str) -> list[dict]:
+    out: list[dict] = []
+    for chip in sorted(_glob(root, "sys/class/hwmon/hwmon*"))[:_SNAP_MAX_CHIPS]:
+        try:
+            entry = {
+                "name": read_str(os.path.join(chip, "name")),
+                "nodes": _hwmon_nodes(chip),
+            }
+            ppt_nodes = _hwmon_ppt_nodes(chip)
+            if ppt_nodes:
+                entry["ppt_nodes"] = ppt_nodes
+            fan_nodes = _hwmon_fan_nodes(chip)
+            if fan_nodes:
+                entry["fan_nodes"] = fan_nodes
+            out.append(entry)
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
+def _snap_dir_listing(root: str, pattern: str, sub: str = "") -> dict:
+    """Map each matched dir's basename to a sorted listing of the names inside it
+    (optionally a `sub` child dir). Diagnoses WMI attributes / power_supply nodes."""
+    out: dict = {}
+    for d in sorted(_glob(root, pattern))[:_SNAP_MAX_CHIPS]:
+        try:
+            out[os.path.basename(d)] = sorted(_listdir(os.path.join(d, sub) if sub else d))[:_SNAP_MAX_NAMES]
+        except Exception:  # noqa: BLE001
+            out[os.path.basename(d)] = []
+    return out
+
+
+def _snap_platform_profile(root: str) -> dict:
+    """The performance-mode surface: the ACPI single-file interface plus the class
+    interface (Legion's lenovo-wmi-gamezone exposes its firmware modes here). Tells a
+    triager which modes a device offers and which is active."""
+    out: dict = {"acpi": {}, "class": {}}
+    base = os.path.join(root, "sys/firmware/acpi")
+    cur = read_str(os.path.join(base, "platform_profile"))
+    choices = read_str(os.path.join(base, "platform_profile_choices"))
+    if cur is not None:
+        out["acpi"]["current"] = cur
+    if choices is not None:
+        out["acpi"]["choices"] = choices
+    for d in sorted(_glob(root, "sys/class/platform-profile/*"))[:_SNAP_MAX_CHIPS]:
+        try:
+            out["class"][os.path.basename(d)] = {
+                "name": read_str(os.path.join(d, "name")),
+                "profile": read_str(os.path.join(d, "profile")),
+                "choices": read_str(os.path.join(d, "choices")),
+            }
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
+_LEGACY_ASUS_NODES = ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_fppt", "throttle_thermal_policy")
+
+
+def _snap_asus_ppt(root: str) -> dict:
+    """Both ASUS PL1 interfaces WITH their live values: asus-armoury (firmware-attributes,
+    current/min/max triplet) and the legacy asus-nb-wmi (direct value files). Values, not
+    just names — a triager needs to see a bogus firmware ceiling (e.g. 150) and whether
+    the second interface exists and what it holds vs the first."""
+    out: dict = {"asus_armoury": {}, "asus_nb_wmi": {}}
+    fw = os.path.join(root, "sys/class/firmware-attributes/asus-armoury/attributes")
+    for a in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        d = os.path.join(fw, a)
+        if os.path.isdir(d):
+            out["asus_armoury"][a] = {
+                "current": read_str(os.path.join(d, "current_value")),
+                "min": read_str(os.path.join(d, "min_value")),
+                "max": read_str(os.path.join(d, "max_value")),
+            }
+    legacy = os.path.join(root, "sys/devices/platform/asus-nb-wmi")
+    for a in _LEGACY_ASUS_NODES:
+        v = read_str(os.path.join(legacy, a))
+        if v is not None:
+            out["asus_nb_wmi"][a] = v
+    return out
+
+
+def _snap_acpi(root: str) -> dict:
+    path = os.path.join(root, "proc/acpi/call")
+    try:
+        present = os.path.exists(path)
+        writable = bool(present and os.access(path, os.W_OK))
+    except Exception:  # noqa: BLE001
+        present, writable = False, False
+    out = {"call_present": present, "call_writable": writable}
+    lockdown = read_str(os.path.join(root, "sys/kernel/security/lockdown"))
+    if lockdown is not None:
+        out["kernel_lockdown"] = lockdown
+    return out
+
+
+def _snap_modules(root: str) -> list[str]:
+    """Loaded kernel module names from /proc/modules (bounded line read, never
+    lsmod). Makes ALIB-vs-ryzenadj viability obvious (acpi_call present?)."""
+    names: list[str] = []
+    try:
+        with open(os.path.join(root, "proc/modules")) as f:
+            for line in f:
+                name = line.split(" ", 1)[0].strip()
+                if name:
+                    names.append(name)
+                if len(names) >= _SNAP_MAX_MODULES:
+                    break
+    except OSError:
+        return []
+    return sorted(names)
+
+
+def _snap_cpu_gpu_power(root: str) -> dict:
+    out = {"cpufreq": [], "gpu": [], "rapl": []}
+    for policy in sorted(
+        _glob(root, "sys/devices/system/cpu/cpufreq/policy*")
+    )[:_SNAP_MAX_CHIPS]:
+        out["cpufreq"].append({
+            "policy": os.path.basename(policy),
+            "affected_cpus": read_str(os.path.join(policy, "affected_cpus")),
+            "driver": read_str(os.path.join(policy, "scaling_driver")),
+            "hardware_min_khz": read_str(os.path.join(policy, "cpuinfo_min_freq")),
+            "hardware_max_khz": read_str(os.path.join(policy, "cpuinfo_max_freq")),
+            "applied_min_khz": read_str(os.path.join(policy, "scaling_min_freq")),
+            "applied_max_khz": read_str(os.path.join(policy, "scaling_max_freq")),
+            "current_khz": read_str(os.path.join(policy, "scaling_cur_freq")),
+            "governor": read_str(os.path.join(policy, "scaling_governor")),
+            "available_khz": read_str(os.path.join(policy, "scaling_available_frequencies")),
+            "boost_khz": read_str(os.path.join(policy, "scaling_boost_frequencies")),
+        })
+    out["boost"] = read_str(os.path.join(root, "sys/devices/system/cpu/cpufreq/boost"))
+
+    for maximum in sorted(
+        _glob(root, "sys/class/drm/card*/device/tile*/gt*/freq0/max_freq")
+    )[:_SNAP_MAX_CHIPS]:
+        directory = os.path.dirname(maximum)
+        parts = os.path.relpath(
+            directory, os.path.join(root, "sys/class/drm")
+        ).split(os.sep)
+        out["gpu"].append({
+            "backend": "xe",
+            "card": parts[0] if parts else None,
+            "tile": parts[2] if len(parts) > 2 else None,
+            "gt": parts[3] if len(parts) > 3 else None,
+            "min_mhz": read_str(os.path.join(directory, "min_freq")),
+            "max_mhz": read_str(maximum),
+            "hardware_min_mhz": read_str(os.path.join(directory, "rpn_freq")),
+            "hardware_max_mhz": read_str(os.path.join(directory, "rp0_freq")),
+        })
+    for maximum in sorted(
+        _glob(root, "sys/class/drm/card*/gt_max_freq_mhz")
+    )[:_SNAP_MAX_CHIPS]:
+        directory = os.path.dirname(maximum)
+        out["gpu"].append({
+            "backend": "i915",
+            "card": os.path.basename(directory),
+            "min_mhz": read_str(os.path.join(directory, "gt_min_freq_mhz")),
+            "max_mhz": read_str(maximum),
+            "hardware_min_mhz": read_str(os.path.join(directory, "gt_RPn_freq_mhz")),
+            "hardware_max_mhz": read_str(os.path.join(directory, "gt_RP0_freq_mhz")),
+        })
+    for overdrive in sorted(
+        _glob(root, "sys/class/drm/card*/device/pp_od_clk_voltage")
+    )[:_SNAP_MAX_CHIPS]:
+        card = os.path.basename(os.path.dirname(os.path.dirname(overdrive)))
+        contents = read_str(overdrive)
+        match = re.search(
+            r"SCLK:\s*(\d+)\s*Mhz\s+(\d+)\s*Mhz",
+            contents or "",
+            re.IGNORECASE,
+        )
+        level = os.path.join(
+            os.path.dirname(overdrive), "power_dpm_force_performance_level"
+        )
+        out["gpu"].append({
+            "backend": "amdgpu",
+            "card": card,
+            "overdrive_present": True,
+            "overdrive_writable": _mode_writable(overdrive),
+            "performance_level": read_str(level),
+            "performance_level_writable": _mode_writable(level),
+            "od_range": (
+                {"min_mhz": match.group(1), "max_mhz": match.group(2)}
+                if match else None
+            ),
+        })
+
+    directories = {}
+    for surface in sorted(
+        _glob(root, "sys/devices/virtual/powercap/intel-rapl*/*")
+    )[:_SNAP_MAX_CHIPS]:
+        pl1 = read_str(os.path.join(surface, "constraint_0_power_limit_uw"))
+        pl2 = read_str(os.path.join(surface, "constraint_1_power_limit_uw"))
+        if pl1 is None and pl2 is None:
+            continue
+        entry = {
+            "surface": os.path.basename(surface),
+            "name": read_str(os.path.join(surface, "name")),
+            "pl1_uw": pl1,
+            "pl2_uw": pl2,
+        }
+        out["rapl"].append(entry)
+        directories[id(entry)] = surface
+    _measure_rapl_power(out["rapl"], directories)
+    return out
+
+
+def _read_int(path: str) -> int | None:
+    value = read_str(path)
+    return int(value) if value is not None and value.isdigit() else None
+
+
+def _measure_rapl_power(entries: list, directories: dict) -> None:
+    """Average power of each RAPL zone over a short window, to compare with its limits."""
+    energy = {
+        id(entry): _read_int(os.path.join(directories[id(entry)], "energy_uj"))
+        for entry in entries
+    }
+    if all(value is None for value in energy.values()):
+        return
+    _sleep(_RAPL_SAMPLE_S)
+    for entry in entries:
+        directory = directories[id(entry)]
+        before = energy[id(entry)]
+        after = _read_int(os.path.join(directory, "energy_uj"))
+        if before is None or after is None:
+            continue
+        delta = after - before
+        if delta < 0:
+            wrap = _read_int(os.path.join(directory, "max_energy_range_uj"))
+            if wrap is None:
+                continue
+            delta += wrap + 1
+        entry["power_w"] = round(delta / 1_000_000 / _RAPL_SAMPLE_S, 1)
+
+
+def _snap_devfreq(root: str) -> list:
+    return [
+        {
+            "name": os.path.basename(device),
+            "governor": read_str(os.path.join(device, "governor")),
+            "available_governors": read_str(os.path.join(device, "available_governors")),
+            "min_hz": read_str(os.path.join(device, "min_freq")),
+            "max_hz": read_str(os.path.join(device, "max_freq")),
+            "cur_hz": read_str(os.path.join(device, "cur_freq")),
+            "target_hz": read_str(os.path.join(device, "target_freq")),
+            "available_hz": read_str(os.path.join(device, "available_frequencies")),
+        }
+        for device in sorted(_glob(root, "sys/class/devfreq/*"))[:_SNAP_MAX_CHIPS]
+    ]
+
+
+_PLATFORM_MAX_DRIVERS = 64
+_PLATFORM_MAX_DEVICES = 8
+
+
+def _snap_platform_drivers(root: str) -> dict:
+    """Platform drivers with a bound device and misc devices. Vendor kernels (PS5,
+    handheld EC drivers) surface their own controls here before any class does."""
+    drivers = []
+    for driver in sorted(_glob(root, "sys/bus/platform/drivers/*")):
+        bound = sorted(
+            name for name in _listdir(driver)
+            if os.path.islink(os.path.join(driver, name)) and name not in ("module", "subsystem")
+        )
+        if bound:
+            drivers.append({"name": os.path.basename(driver), "devices": bound[:_PLATFORM_MAX_DEVICES]})
+    return {
+        "drivers": drivers[:_PLATFORM_MAX_DRIVERS],
+        "misc": sorted(os.path.basename(path) for path in _glob(root, "sys/class/misc/*"))[:_PLATFORM_MAX_DRIVERS],
+    }
+
+
+def _snap_ps5(root: str) -> dict:
+    fan = os.path.join(root, "sys/bus/platform/devices/ps5-fan")
+    buzzer = os.path.join(root, "sys/class/misc/ps5_buzzer")
+    if not (os.path.isdir(fan) or os.path.isdir(buzzer)):
+        return {}
+    return {
+        # target_temp is a firmware round trip that can stall; the fan state carries it.
+        "fan_node": os.path.isdir(fan),
+        "buzzer": os.path.isdir(buzzer),
+    }
+
+
+def _snap_arm(root: str) -> dict:
+    if not device_tree.is_arm(root):
+        return {"arch": "x86"}
+    tree = device_tree.read_device_tree(root)
+    soc = os.path.join(root, "sys/devices/soc0")
+    cpuinfo = read_str(os.path.join(root, "proc/cpuinfo"))
+    devfreq = _snap_devfreq(root)
+    backlight = [
+        {
+            "name": os.path.basename(device),
+            "brightness": read_str(os.path.join(device, "brightness")),
+            "max_brightness": read_str(os.path.join(device, "max_brightness")),
+        }
+        for device in sorted(_glob(root, "sys/class/backlight/*"))[:_SNAP_MAX_CHIPS]
+    ]
+    return {
+        "arch": "arm",
+        "midr_el1": read_str(
+            os.path.join(root, "sys/devices/system/cpu/cpu0/regs/identification/midr_el1")
+        ),
+        "model": tree.model or None,
+        "compatible": list(tree.compatible[:_SNAP_MAX_NAMES]),
+        "soc": {
+            key: read_str(os.path.join(soc, key))
+            for key in ("family", "machine", "soc_id")
+        },
+        "x86_emulated": bool(re.search(r"GenuineIntel|AuthenticAMD", cpuinfo or "")),
+        "devfreq": devfreq,
+        "backlight": backlight,
+        "power_supplies": _snap_arm_supplies(root),
+        "pwm_fans": _snap_arm_pwm_fans(root),
+    }
+
+
+_ARM_SUPPLY_FIELDS = ("type", "online", "status", "capacity",
+                      "charge_control_start_threshold", "charge_control_end_threshold")
+
+
+def _snap_arm_supplies(root: str) -> dict:
+    out: dict = {}
+    for supply in sorted(_glob(root, "sys/class/power_supply/*"))[:_SNAP_MAX_CHIPS]:
+        out[os.path.basename(supply)] = {
+            field: value
+            for field in _ARM_SUPPLY_FIELDS
+            if (value := read_str(os.path.join(supply, field))) is not None
+        }
+    return out
+
+
+def _snap_arm_pwm_fans(root: str) -> list[dict]:
+    fans = []
+    for chip in sorted(_glob(root, "sys/class/hwmon/hwmon*")):
+        if read_str(os.path.join(chip, "name")) != "pwmfan":
+            continue
+        fans.append({
+            "hwmon": os.path.basename(chip),
+            **{node: read_str(os.path.join(chip, node))
+               for node in ("pwm1", "pwm1_enable", "fan1_input")},
+        })
+    return fans
+
+
+def _snap_desktop(root: str) -> dict:
+    """What a desktop PC can be controlled through: board fan drivers, CPU RAPL
+    bounds, AMD GPU power/overdrive/fan surfaces and the desktop detection inputs.
+    Values and permissions only; no device names that could carry MAC addresses."""
+    from desktop.board_fans import (
+        available_modules, board_fan_channels, loaded_modules,
+    )
+
+    out: dict = {
+        "board_fans": {
+            "available": available_modules(root),
+            "loaded": loaded_modules(root),
+            "channels": board_fan_channels(root),
+        },
+        "power_supplies": [],
+        "rapl": [],
+        "amdgpu": [],
+        "cpu": {},
+    }
+    cmdline = read_str(os.path.join(root, "proc/cmdline")) or ""
+    out["acpi_enforce_resources"] = next(
+        (token.split("=", 1)[1] for token in cmdline.split()
+         if token.startswith("acpi_enforce_resources=")), None)
+    for supply in sorted(_glob(root, "sys/class/power_supply/*"))[:_SNAP_MAX_CHIPS]:
+        out["power_supplies"].append({
+            "type": read_str(os.path.join(supply, "type")),
+            "scope": read_str(os.path.join(supply, "scope")),
+        })
+    for surface in sorted(
+        _glob(root, "sys/devices/virtual/powercap/intel-rapl*/*")
+    )[:_SNAP_MAX_CHIPS]:
+        constraints = []
+        for index in range(4):
+            limit = os.path.join(surface, f"constraint_{index}_power_limit_uw")
+            if not os.path.exists(limit):
+                continue
+            constraints.append({
+                "name": read_str(os.path.join(surface, f"constraint_{index}_name")),
+                "limit_uw": read_str(limit),
+                "max_uw": read_str(os.path.join(surface, f"constraint_{index}_max_power_uw")),
+                "writable": _mode_writable(limit),
+            })
+        if constraints:
+            out["rapl"].append({
+                "surface": os.path.basename(surface),
+                "name": read_str(os.path.join(surface, "name")),
+                "enabled": read_str(os.path.join(surface, "enabled")),
+                "constraints": constraints,
+            })
+    for device in sorted(_glob(root, "sys/class/drm/card[0-9]*/device"))[:_SNAP_MAX_CHIPS]:
+        if read_str(os.path.join(device, "vendor")) != "0x1002":
+            continue
+        hwmon = next(iter(sorted(_glob(device, "hwmon/hwmon*"))), None)
+        out["amdgpu"].append({
+            "card": os.path.basename(os.path.dirname(device)),
+            "boot_vga": read_str(os.path.join(device, "boot_vga")),
+            "power_cap": {
+                leaf: read_str(os.path.join(hwmon, leaf))
+                for leaf in ("power1_cap", "power1_cap_min", "power1_cap_max",
+                             "power1_cap_default")
+            } if hwmon else None,
+            "power_cap_writable": bool(hwmon) and _mode_writable(
+                os.path.join(hwmon, "power1_cap")),
+            "overdrive": os.path.exists(os.path.join(device, "pp_od_clk_voltage")),
+            "fan_ctrl": sorted(_listdir(os.path.join(device, "gpu_od/fan_ctrl"))),
+            "gpu_busy_percent": read_str(os.path.join(device, "gpu_busy_percent")),
+        })
+    out["ppfeaturemask"] = read_str(
+        os.path.join(root, "sys/module/amdgpu/parameters/ppfeaturemask"))
+    cpu = os.path.join(root, "sys/devices/system/cpu")
+    out["cpu"] = {
+        "amd_pstate": read_str(os.path.join(cpu, "amd_pstate/status")),
+        "governors": read_str(os.path.join(
+            cpu, "cpufreq/policy0/scaling_available_governors")),
+        "epp": read_str(os.path.join(
+            cpu, "cpufreq/policy0/energy_performance_available_preferences")),
+    }
+    return out
+
+
+_DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name", "board_version",
+               "product_name", "product_version", "product_family", "chassis_type",
+               "bios_version", "bios_date", "bios_release", "ec_firmware_release")
+_LED_NODES = ("max_brightness", "multi_index", "multi_intensity", "brightness")
+_EC_IO = "sys/kernel/debug/ec/ec0/io"
+_EC_DUMP_BYTES = 256
+
+
+def _snap_dmi(root: str) -> dict:
+    """DMI identity (no serials — those fields aren't read). Tells detection apart
+    on models where product_name and board_name differ."""
+    d = os.path.join(root, "sys/class/dmi/id")
+    out: dict = {}
+    for k in _DMI_FIELDS:
+        v = read_str(os.path.join(d, k))
+        if v is not None:
+            out[k] = v
+    return out
+
+
+def _snap_leds(root: str) -> list[dict]:
+    """LED class nodes, with the multicolor channel map — the surface an RGB feature
+    (the Colores sibling plugin) needs to drive per-device lighting."""
+    out: list[dict] = []
+    for d in sorted(_glob(root, "sys/class/leds/*"))[:_SNAP_MAX_CHIPS]:
+        try:
+            entry = {"name": os.path.basename(d)}
+            for n in _LED_NODES:
+                v = read_str(os.path.join(d, n))
+                if v is not None:
+                    entry[n] = v
+            out.append(entry)
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
+def _module_available(root: str, rel: str, subpath: str) -> bool:
+    base = os.path.join(root, "lib/modules", rel, "kernel", subpath)
+    return any(os.path.exists(base + ext) for ext in (".ko", ".ko.xz", ".ko.zst", ".ko.gz"))
+
+
+def _snap_ec(root: str) -> dict:
+    """EC-access surface: whether ec_sys debugfs is present and write-capable, whether
+    the ec_sys / oxpec modules exist in the kernel tree, and a read-only 256-byte EC
+    dump when the node is readable. Decides the raw-EC fan path on models without an
+    hwmon fan node (OneXPlayer Apex on SteamOS)."""
+    out: dict = {"debugfs_present": False, "ec_sys_loaded": False,
+                 "ec_sys_write_support": None, "ec_sys_module_available": False,
+                 "oxpec_module_available": False, "dump": None}
+    io = os.path.join(root, _EC_IO)
+    try:
+        out["debugfs_present"] = os.path.exists(io)
+    except Exception:  # noqa: BLE001
+        pass
+    out["ec_sys_loaded"] = os.path.exists(os.path.join(root, "sys/module/ec_sys"))
+    ws = read_str(os.path.join(root, "sys/module/ec_sys/parameters/write_support"))
+    if ws is not None:
+        out["ec_sys_write_support"] = ws
+    rel = (read_str(os.path.join(root, "proc/sys/kernel/osrelease")) or "").strip()
+    if rel:
+        out["ec_sys_module_available"] = _module_available(root, rel, "drivers/acpi/ec_sys")
+        out["oxpec_module_available"] = (
+            _module_available(root, rel, "drivers/platform/x86/oxpec")
+            or _module_available(root, rel, "drivers/hwmon/oxp-sensors"))
+    if out["debugfs_present"]:
+        try:
+            with open(io, "rb") as f:
+                data = f.read(_EC_DUMP_BYTES)
+            if data:
+                out["dump"] = data.hex()
+        except OSError:
+            pass
+    return out
+
+
+def _within(obj, cap: int) -> bool:
+    try:
+        return len(json.dumps(obj, default=str)) <= cap
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def sysfs_snapshot(
+    root: str = "/",
+    *,
+    cap: int = _SNAP_CAP,
+    home: str | None = None,
+    hostname: str | None = None,
+) -> dict:
+    """Redacted, size-capped listing of the sysfs surfaces that decide fan/temp,
+    vendor-WMI TDP, charge-limit/battery, and ACPI-call support. Listing only —
+    bounded-depth globs, NEVER a recursive walk of /sys. Never raises: any missing
+    or unreadable path records an absent/empty marker."""
+    snap: dict = {"hwmon": [], "firmware_attributes": {}, "power_supply": {},
+                  "platform_profile": {"acpi": {}, "class": {}}, "acpi": {}, "modules": [],
+                  "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
+                  "dmi": {}, "leds": [],
+                  "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
+                  "desktop": {}, "ec": {}, "pstore": [], "pstore_archive": [],
+                  "arm": {}, "ps5": {}, "platform": {}, "connected_devices": {}}
+    try:
+        snap["hwmon"] = _snap_hwmon(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["firmware_attributes"] = _snap_dir_listing(
+            root, "sys/class/firmware-attributes/*", "attributes"
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["power_supply"] = _snap_dir_listing(root, "sys/class/power_supply/*")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["platform_profile"] = _snap_platform_profile(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["asus_ppt"] = _snap_asus_ppt(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["acpi"] = _snap_acpi(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["modules"] = _snap_modules(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["dmi"] = _snap_dmi(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["pstore"] = sorted(_listdir(os.path.join(root, "sys/fs/pstore")))[:_SNAP_MAX_NAMES]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["pstore_archive"] = sorted(
+            _listdir(os.path.join(root, "var/lib/systemd/pstore"))
+        )[-_SNAP_MAX_NAMES:]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["leds"] = _snap_leds(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["cpu_gpu_power"] = _snap_cpu_gpu_power(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        if not device_tree.is_arm(root):
+            snap["cpu_gpu_power"]["devfreq"] = _snap_devfreq(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["ps5"] = _snap_ps5(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["platform"] = _snap_platform_drivers(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["desktop"] = _snap_desktop(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["ec"] = _snap_ec(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["arm"] = _snap_arm(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["connected_devices"] = connected_devices.snapshot(root)
+    except Exception:  # noqa: BLE001
+        pass
+    # Backstop the count caps: if the listing is still oversized, drop the heaviest
+    # sections and flag it honestly rather than shipping an unbounded blob.
+    if not _within(snap, cap):
+        snap["truncated"] = True
+        # Drop the EC dump first (it's the single largest field), then the heaviest
+        # listings, until the bundle fits.
+        if isinstance(snap.get("ec"), dict):
+            snap["ec"]["dump"] = None
+        for key in ("connected_devices", "modules", "hwmon", "power_supply",
+                    "firmware_attributes", "leds"):
+            if _within(snap, cap):
+                break
+            snap[key] = [] if isinstance(snap[key], list) else {}
+    # The EC dump is raw hardware register bytes as hex (no PII). Exempt it from the
+    # serial-run scrubber, which would otherwise shred a real 512-char hex string.
+    ec_dump = snap["ec"].pop("dump", None) if isinstance(snap.get("ec"), dict) else None
+    # The desktop and ARM sections hold only fixed module names, kernel values and
+    # numbers; the serial-run scrubber would otherwise shred "w83627ehf", a
+    # ppfeaturemask like "0xfff7bfff" or a MIDR register value.
+    desktop = snap.pop("desktop", {})
+    arm = snap.pop("arm", {})
+    result = redact_obj(snap, home=home, hostname=hostname)
+    if isinstance(result.get("ec"), dict):
+        result["ec"]["dump"] = ec_dump
+    result["desktop"] = desktop
+    result["arm"] = arm
+    return result
+
+
+def steam_cleaner_snapshot(diagnostics) -> dict:
+    if not isinstance(diagnostics, dict):
+        return {"error": "diagnostics_unavailable"}
+
+    safe_event_keys = {
+        "event", "operation_id", "phase", "at", "reason", "source",
+        "system_error", "library_id", "entry_id", "plan_id", "scan_id", "count", "complete",
+        "readback", "kind", "time", "errors", "deleted", "vdf_error", "blocked", "activity",
+    }
+
+    def bounded(value):
+        snapshot = {
+            key: value[key]
+            for key in (
+                "schema_version", "phase", "last_operation_id", "interrupted",
+                "persistence_error",
+            )
+            if key in value
+        }
+        events = value.get("events")
+        snapshot["events"] = [
+            {key: event[key] for key in safe_event_keys if key in event}
+            for event in events[-120:]
+            if isinstance(event, dict)
+        ] if isinstance(events, list) else []
+        return snapshot
+
+    snapshot = bounded(diagnostics)
+    for key in ("proton", "media"):
+        if isinstance(diagnostics.get(key), dict):
+            snapshot[key] = bounded(diagnostics[key])
+    try:
+        while len(json.dumps(snapshot).encode("utf-8")) > 48_000:
+            candidates = [snapshot["events"]]
+            for key in ("proton", "media"):
+                if isinstance(snapshot.get(key), dict):
+                    candidates.append(snapshot[key]["events"])
+            longest = max(candidates, key=len)
+            if not longest:
+                return {"error": "diagnostics_unavailable"}
+            longest.pop(0)
+    except (TypeError, ValueError):
+        return {"error": "diagnostics_unavailable"}
+    return snapshot
+
+
+def capabilities_from(states: dict) -> dict:
+    """Distil the per-subsystem detected backends + supported flags from the live
+    state dicts. This is the single most useful section for triage: many reports
+    are 'X doesn't work' when X simply has no write path on that device."""
+    tdp = states.get("tdp") or {}
+    auto_tdp = states.get("auto_tdp")
+    auto_tdp = auto_tdp if isinstance(auto_tdp, dict) else {}
+    fan = states.get("fan_curve") or {}
+    batt = (states.get("battery") or {}).get("charge_limit") or {}
+    gpu = states.get("gpu") or {}
+    color = states.get("color") or {}
+    ctl = states.get("controller") or {}
+    magic_modules = ctl.get("magic_modules") or {}
+    launch = states.get("launch") or {}
+    ltools = launch.get("tools") or {}
+    running = (launch.get("frontend") or {}).get("runningGame")
+    running = running if isinstance(running, dict) else {}
+    cpu_gpu = states.get("cpu_gpu_diagnostics") or {}
+    hud = states.get("hud_diagnostics") or {}
+    hud_steam_overlay = hud.get("steam_overlay") or {}
+    hud_last_activation = hud_steam_overlay.get("last_activation") or {}
+    cpu_frequency = cpu_gpu.get("cpu") or {}
+    gpu_frequency = cpu_gpu.get("gpu") or {}
+    deck_ppt = cpu_gpu.get("steamdeck_ppt") or {}
+    return {
+        "tdp_backend": tdp.get("backend"),
+        "tdp_supported": bool(tdp.get("supported")),
+        "auto_tdp_supported": auto_tdp.get("supported"),
+        "auto_tdp_enabled": auto_tdp.get("enabled"),
+        "auto_tdp_active": auto_tdp.get("active"),
+        "auto_tdp_state": auto_tdp.get("state"),
+        "auto_tdp_reason": auto_tdp.get("reason"),
+        "auto_tdp_target_fps": auto_tdp.get("target_fps"),
+        "auto_tdp_fps": auto_tdp.get("fps"),
+        "auto_tdp_setpoint_w": auto_tdp.get("setpoint_w"),
+        "auto_tdp_applied_w": auto_tdp.get("applied_w"),
+        "fan_source": fan.get("source"),
+        "fan_supported": bool(fan.get("supported")),
+        # Experimental EC fan control (Legion Go S): whether the device offers the
+        # unofficial channel and whether the user opted in. Key for fan reports —
+        # "modes do nothing" reads very differently with this off vs on.
+        "fan_experimental_available": bool(fan.get("experimental_available")),
+        "fan_experimental_enabled": bool(fan.get("experimental_enabled")),
+        "charge_limit_supported": bool(batt.get("supported")),
+        "charge_limit_adjustable": bool(batt.get("adjustable")),
+        "gpu_clock_supported": bool(gpu.get("supported")),
+        "cpu_frequency_backend": cpu_frequency.get("backend"),
+        "cpu_frequency_supported": bool(cpu_frequency.get("supported")),
+        "cpu_frequency_handoff_pending": bool(
+            cpu_frequency.get("handoff_pending")
+        ),
+        "cpu_frequency_durable_state_reason": cpu_frequency.get(
+            "durable_state_reason"
+        ),
+        "gpu_clock_backend": gpu_frequency.get("backend"),
+        "gpu_clock_handoff_pending": bool(
+            gpu_frequency.get("handoff_pending")
+        ),
+        "steamdeck_ppt_supported": bool(deck_ppt.get("supported")),
+        "hud_capability": hud.get("capability"),
+        "hud_apply_status": hud.get("apply_status"),
+        "hud_enabled": bool(hud.get("enabled")),
+        "hud_steam_overlay_master_enabled": hud_steam_overlay.get("master_enabled"),
+        "hud_steam_overlay_read_available": bool(
+            hud_steam_overlay.get("read_available")
+        ),
+        "hud_steam_overlay_last_activation": hud_last_activation.get("outcome"),
+        "color_supported": bool(color.get("supported")),
+        "controller_manager": ctl.get("manager"),
+        "controller_kind": ctl.get("kind"),
+        "magic_modules_supported": bool(magic_modules.get("supported")),
+        "magic_modules_source": magic_modules.get("source"),
+        # Launch options: tools detected + (running game) malformed string / Proton resolved.
+        "launch_lsfg": bool(ltools.get("lsfg")),
+        "launch_makoRun": bool(ltools.get("makoRun")),
+        "launch_mangohud": bool(ltools.get("mangohud")),
+        "launch_distro": ltools.get("distro"),
+        "launch_running_compat": running.get("compatTool"),
+        "launch_running_proton_found": running.get("protonFound"),
+        "launch_running_malformed": running.get("malformed"),
+    }
+
+
+def build_bundle(
+    *,
+    app: str,
+    categories,
+    text,
+    environment: dict,
+    capabilities: dict,
+    state: dict,
+    stores: dict,
+    logs: list,
+    kind: str = "bug",
+    journal: dict | None = None,
+    kernel: dict | None = None,
+    sysfs: dict | None = None,
+    home: str | None = None,
+    hostname: str | None = None,
+) -> dict:
+    """Assemble the final bundle from already-fetched pieces and redact the whole
+    thing again (logs are pre-redacted; this catches the rest)."""
+    bundle = {
+        "schema": SCHEMA,
+        "app": app,
+        "kind": "feature" if kind == "feature" else "bug",
+        "categories": list(categories or []),
+        "text": (text or "")[:_MAX_TEXT],
+        "environment": environment or {},
+        "capabilities": capabilities or {},
+        "state": state or {},
+        "stores": stores or {},
+        "logs": logs or [],
+        "journal": journal or {},
+        "kernel": kernel or {},
+        "sysfs": sysfs or {},
+    }
+    return redact_obj(bundle, home=home, hostname=hostname)

@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { themeSizeOverride } from "../system/themeTokens";
 import { QamAction } from "./QamAction";
 import { ShellHeader } from "./ShellHeader";
 
@@ -23,13 +24,15 @@ export interface TabsModeHeaderProps {
 }
 
 function ShoulderKey({ children }: { children: ReactNode }) {
+  const caption = themeSizeOverride("fontCaption");
   return (
     <span
       aria-hidden="true"
       style={{
         minWidth: 16,
-        height: 14,
-        padding: "0 2px",
+        height: caption === undefined ? 14 : caption * 1.4 + 4,
+        padding: caption === undefined ? "0 2px" : "2px",
+        lineHeight: caption === undefined ? undefined : 1.4,
         borderRadius: 4,
         boxSizing: "border-box",
         display: "inline-flex",
@@ -38,7 +41,7 @@ function ShoulderKey({ children }: { children: ReactNode }) {
         color: theme.color.textMuted,
         background: theme.color.surfaceRaised,
         boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-        fontSize: 7.5,
+        fontSize: caption ?? 7.5,
         fontWeight: 800,
         letterSpacing: 0.2,
       }}
@@ -105,7 +108,7 @@ function SideSection({
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
             color: theme.color.textMuted,
-            fontSize: 9,
+            fontSize: themeSizeOverride("fontCaption") ?? 9,
             fontWeight: 600,
             textAlign: side,
           }}

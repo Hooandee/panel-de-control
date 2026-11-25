@@ -1,0 +1,26 @@
+{
+  "name": "Baldur's Gate 3",
+  "revision": 1,
+  "conditions": {
+    "engine": [
+      "optiscaler"
+    ],
+    "platform": [
+      "linux"
+    ],
+    "arch": [
+      "x86_64"
+    ]
+  },
+  "exe": "bin/bg3_dx11.exe",
+  "args": [
+    "--skip-launcher"
+  ],
+  "ini": {},
+  "dependencies": [],
+  "source_urls": [
+    "https://github.com/optiscaler/OptiScaler/wiki"
+  ],
+  "effective_api": "d3d11",
+  "recommended_input": "dlss"
+}

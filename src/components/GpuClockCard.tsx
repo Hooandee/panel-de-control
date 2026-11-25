@@ -35,6 +35,7 @@ export const GpuClockCard: FC = () => {
   return (
     <Collapsible
       id="gpu-clock"
+      summaryBelow
       icon={<LuMemoryStick size={16} />}
       title={t("gpu.clock.title")}
       summary={summary}
@@ -45,7 +46,8 @@ export const GpuClockCard: FC = () => {
           gameName={game.name}
           hasGameProfile={state.has_game_profile}
           globalLabel={t("tdp.scope.global")}
-          inheritHint={t("tdp.inherit")}
+          inheritHint={t(state.game_power_owner?.supported === true && state.game_power_owner.owner === "steam"
+              ? "steam.performance.profile.game" : "tdp.inherit")}
           onScope={onScope}
         />
       )}
@@ -143,6 +145,11 @@ export const GpuClockCard: FC = () => {
               step={50}
               onChange={(v) => setWindow(lo, clamp(v, lo, state.range_max ?? v))}
             />
+          )}
+          {state.cpu_boost_overrides && (
+            <div style={{ marginTop: theme.space.xs, fontSize: theme.font.caption, color: theme.color.warn, lineHeight: 1.4 }}>
+              {t("gpu.clock.boostOverrides")}
+            </div>
           )}
         </div>
       )}

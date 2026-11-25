@@ -300,3 +300,28 @@ def test_tachless_pwm_on_other_chips_is_not_a_fan(tmp_path):
     root = str(tmp_path)
     _mk_chip(root, 3, "nct6798", {"pwm1": "128", "pwm1_enable": "2"})
     assert FanReader(root=root).read()["fans"] == []
+
+
+def test_ps5_tctl_is_the_whole_apu():
+    out = curate_temps([{"chip": "k10temp", "label": "Tctl", "celsius": 47.0}],
+                       device_key="playstation_5")
+    assert out == [{"label": "APU", "celsius": 47.0}]
+    assert curate_temps([{"chip": "k10temp", "label": "Tctl", "celsius": 47.0}])[0]["label"] == "CPU"
+
+
+def test_ps5_shows_one_apu_temperature_with_amdgpu_and_k10temp():
+    # Kernel 7.3 on the PS5 exposes both k10temp Tctl and an amdgpu edge sensor.
+    temps = [
+        {"chip": "amdgpu", "label": "edge", "celsius": 54.0},
+        {"chip": "k10temp", "label": "Tctl", "celsius": 54.5},
+    ]
+    assert curate_temps(temps, device_key="playstation_5") == [{"label": "APU", "celsius": 54.5}]
+
+
+def test_handheld_keeps_cpu_and_gpu_apart():
+    temps = [
+        {"chip": "amdgpu", "label": "edge", "celsius": 50.0},
+        {"chip": "k10temp", "label": "Tctl", "celsius": 60.0},
+    ]
+    labels = [row["label"] for row in curate_temps(temps)]
+    assert sorted(labels) == ["CPU", "GPU"]

@@ -72,20 +72,121 @@ export function overviewToEntry(ov: Overview): GameEntry {
   };
 }
 
+function isListedInstall(overview: Overview): boolean {
+  return overview.app_type !== APP_TYPE_TOOL &&
+    (isNonSteam(overview) || overview.local_per_client_data?.installed === true);
+}
+
 /** Installed Steam games + non-Steam shortcuts (order applied by the caller). Never throws. */
 export function listInstalledGames(): GameEntry[] {
   try {
     const all: Overview[] = w.collectionStore?.allAppsCollection?.allApps ?? [];
     const out: GameEntry[] = [];
     for (const ov of all) {
-      if (!ov || typeof ov.appid !== "number") continue;
-      // Tools (Proton builds, runtimes, redistributables) aren't games you set
-      // launch options on — never list them.
-      if (ov.app_type === APP_TYPE_TOOL) continue;
-      // Non-Steam shortcuts are inherently local (they don't reliably populate the
-      // installed flag); Steam games are listed only when actually installed.
-      if (!isNonSteam(ov) && ov.local_per_client_data?.installed !== true) continue;
-      out.push(overviewToEntry(ov));
+      if (ov && typeof ov.appid === "number" && isListedInstall(ov)) out.push(overviewToEntry(ov));
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+function isPublicSteamGame(ov: Overview): boolean {
+  return Number.isSafeInteger(ov.appid) && ov.appid > 0 && !isNonSteam(ov) &&
+    (ov.app_type === 1 || ov.app_type === 8);
+}
+
+function lookupOverview(appid: number): Overview | undefined {
+  const ov = w.appStore?.GetAppOverviewByAppID?.(appid);
+  return ov?.appid === appid ? ov : undefined;
+}
+
+export interface SelectorSteamMetadata {
+  appid: number;
+  collection: boolean;
+  manifest: boolean;
+  local: "true" | "false" | "missing" | "unreadable";
+}
+
+/** Complement Steam's installed flags with positive installer evidence for known games. */
+export function readUpscalersSelection(confirmedAppids: readonly number[]) {
+  const collection = new Map<number, Overview>();
+  const unreadableIds = new Set<number>();
+  let unreadableCollection = 0;
+  try {
+    const all: Overview[] = w.collectionStore?.allAppsCollection?.allApps ?? [];
+    for (const ov of all) {
+      try {
+        const appid = ov?.appid;
+        if (typeof appid === "number") collection.set(appid, ov);
+      } catch {
+        unreadableCollection++;
+      }
+    }
+  } catch {
+    unreadableCollection++;
+  }
+  const manifests = new Set(confirmedAppids);
+  const rows = new Map<number, { game: GameEntry; steam?: SelectorSteamMetadata }>();
+  const addRow = (appid: number, ov: Overview, inCollection?: Overview) => {
+    const game = overviewToEntry(ov);
+    let steam: SelectorSteamMetadata | undefined;
+    if (isPublicSteamGame(ov)) {
+      let local: SelectorSteamMetadata["local"] = "missing";
+      try {
+        const installed = (inCollection ?? ov).local_per_client_data?.installed;
+        if (typeof installed === "boolean") local = installed ? "true" : "false";
+      } catch {
+        unreadableIds.add(appid);
+        local = "unreadable";
+      }
+      steam = { appid, collection: inCollection !== undefined, manifest: manifests.has(appid), local };
+    }
+    rows.set(appid, { game, steam });
+  };
+  for (const [appid, ov] of collection) {
+    try {
+      if (isListedInstall(ov)) addRow(appid, ov, ov);
+    } catch {
+      unreadableIds.add(appid);
+    }
+  }
+  const omitted = new Map<number, "no_metadata" | "unreadable">();
+  let no_metadata = 0;
+  let not_game = 0;
+  for (const appid of manifests) {
+    if (!Number.isSafeInteger(appid) || appid <= 0 || appid >= 2 ** 31 || rows.get(appid)?.steam) continue;
+    try {
+      const inCollection = collection.get(appid);
+      const ov = inCollection?.app_type === undefined ? lookupOverview(appid) ?? inCollection : inCollection;
+      if (!ov || ov.app_type === undefined) {
+        no_metadata++;
+        if (!rows.has(appid)) omitted.set(appid, "no_metadata");
+      } else if (!isPublicSteamGame(ov)) {
+        if (ov.app_type === APP_TYPE_TOOL) rows.delete(appid);
+        not_game++;
+      } else {
+        addRow(appid, ov, inCollection);
+      }
+    } catch {
+      unreadableIds.add(appid);
+      if (!rows.has(appid)) omitted.set(appid, "unreadable");
+    }
+  }
+  const entries = [...rows.values()];
+  const steam = entries.flatMap((row) => row.steam ? [row.steam] : []);
+  const unreadable = unreadableCollection + unreadableIds.size;
+  return { games: entries.map((row) => row.game), steam, no_metadata, not_game, unreadable, omitted };
+}
+
+/** Every game in the library, installed or not, plus non-Steam shortcuts; tools excluded. Ids and names only. Never throws. */
+export function listLibraryGames(): { appId: number; name: string }[] {
+  try {
+    const all: Overview[] = w.collectionStore?.allAppsCollection?.allApps ?? [];
+    const out: { appId: number; name: string }[] = [];
+    for (const ov of all) {
+      if (!ov || typeof ov.appid !== "number" || ov.app_type === APP_TYPE_TOOL) continue;
+      out.push({ appId: ov.appid, name: ov.display_name || String(ov.appid) });
     }
     return out;
   } catch {
@@ -168,7 +269,7 @@ export function readAppDetails(appid: number, timeoutMs = 1200): Promise<AppDeta
 /** Write a game's launch-options string. Non-Steam shortcuts have their own setter.
  *  Returns false when no setter exists or the call throws — callers must not report
  *  success (or adopt the new baseline) unless this returns true. */
-export function writeLaunchOptions(appid: number, value: string, isNonSteam = false): boolean {
+export function writeLaunchOptions(appid: number, value: string, isNonSteam = false, redactValue = false): boolean {
   try {
     const apps = w.SteamClient?.Apps;
     const setter =
@@ -180,10 +281,10 @@ export function writeLaunchOptions(appid: number, value: string, isNonSteam = fa
       return false;
     }
     setter.call(apps, appid, value);
-    recordUiEvent("launch", "set_options", { appid, nonSteam: isNonSteam, value: value.slice(0, 300) });
+    recordUiEvent("launch", "set_options", { appid, nonSteam: isNonSteam, ...(redactValue ? { redacted: true } : { value: value.slice(0, 300) }) });
     return true;
   } catch (error) {
-    recordUiEvent("launch", "set_options", { appid, nonSteam: isNonSteam, error: String(error).slice(0, 120) }, false);
+    recordUiEvent("launch", "set_options", { appid, nonSteam: isNonSteam, error: redactValue ? "setter_failed" : String(error).slice(0, 120) }, false);
     return false;
   }
 }

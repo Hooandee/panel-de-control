@@ -11,6 +11,17 @@ vi.mock("../system/pdcStorage", () => ({
 import { translateForLang } from "./index";
 
 describe("report translations", () => {
+  it.each(["es", "en", "it", "de", "pt-BR", "fr"] as const)("uses the Escaladores page name for its report category in %s", (lang) => {
+    expect(translateForLang(lang, "report.cat.upscalers")).toBe(translateForLang(lang, "nav.upscalers"));
+  });
+
+  it.each([
+    ["es", "Ambiente"], ["en", "Ambient"], ["it", "Atmosfera"],
+    ["de", "Ambiente"], ["pt-BR", "Ambiente"], ["fr", "Ambiance"],
+  ] as const)("translates the Ambiente category in %s", (lang, expected) => {
+    expect(translateForLang(lang, "report.cat.ambient")).toBe(expected);
+  });
+
   it.each([
     ["es", "Temas"],
     ["en", "Themes"],

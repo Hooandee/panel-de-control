@@ -36,6 +36,7 @@ export const ValueBar: FC<ValueBarProps> = ({
 
   return (
     <div
+      data-pdc-part="value-card"
       style={{
         ...theme.card,
         padding: theme.space.md,
@@ -51,7 +52,7 @@ export const ValueBar: FC<ValueBarProps> = ({
           gap: theme.space.sm,
         }}
       >
-        <span
+        <span data-pdc-part="value-label"
           style={{
             display: "inline-flex",
             alignItems: "center",

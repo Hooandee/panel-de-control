@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
 import {
   getTdpState, setTdpWatts, setGpuLevel, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode,
-  getPowerDraw, setAutoTdp, setTdpFollowGlobal, setSeenAutotdpNotice,
+  getPowerDraw, setAutoTdp, setSeenAutotdpNotice,
   setLowBatteryTdpHold, getPowerPresets, applyPowerPreset, setAutoTdpConfig,
-  TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState, AutoTdpConfig,
+  GamePowerOwnerState, TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState, AutoTdpConfig,
 } from "../api";
+import { subscribePowerOwnershipChanged } from "./powerOwnershipInvalidation";
 import { PresetItem } from "./powerPresets";
 import { openAutoTdpNoticeModal } from "../components/AutoTdpNoticeModal";
 import { useRunningGame } from "./useRunningGame";
-import { useScopeSync } from "../useScopeSync";
 import { isLevelUnit } from "./unit";
 import { notifyLearningStatusChanged } from "../learning/statusInvalidation";
 import { effectiveAutoRange } from "./autoView";
+
+import { useGamePowerChangeGuard } from "./confirmGamePowerChange";
 
 const RECOVERY_RETRY_DELAYS_MS = [2000, 4000, 8000] as const;
 
@@ -69,7 +71,7 @@ function levelsAtWatts(levels: TdpState["levels"], watts: number, mode: BoostMod
 
 export function useTdp(): TdpControl {
   const game = useRunningGame();
-  const [tdp, setTdp] = useState<TdpState | null>(null);
+  const [tdp, setTdpState] = useState<TdpState | null>(null);
   const [tdpSettled, setTdpSettled] = useState(false);
   const [power, setPower] = useState<PowerDraw | null>(null);
   const [presets, setPresets] = useState<PowerPresetState | null>(null);
@@ -77,10 +79,27 @@ export function useTdp(): TdpControl {
   const commitTimerLevels = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitTimerGpu = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoDrafts = useRef<AutoDrafts>({});
+  const latestOwner = useRef<GamePowerOwnerState | undefined>(undefined);
+  const ownershipRefreshEpoch = useRef(0);
+  const editEpoch = useRef(0);
+  const setTdp = useCallback((update: SetStateAction<TdpState | null>) => {
+    setTdpState((current) => {
+      const next = typeof update === "function" ? update(current) : update;
+      const owner = latestOwner.current;
+      const incoming = next?.game_power_owner;
+      if (owner && incoming?.context_appid === owner.context_appid && incoming.revision < owner.revision) {
+        return { ...next!, game_power_owner: owner };
+      }
+      if (incoming) latestOwner.current = incoming;
+      return next;
+    });
+  }, []);
   const followEpoch = useRef(0);
 
   const reconcileAutoState = useCallback((next: TdpState, confirmed: AutoDrafts): TdpState => {
-    let updated = next;
+    const owner = latestOwner.current;
+    let updated = owner && next.game_power_owner?.context_appid === owner.context_appid
+      && next.game_power_owner.revision < owner.revision ? { ...next, game_power_owner: owner } : next;
     for (const sc of ["global", "game"] as const) {
       if (sc === "game" && next.follows_global) continue;
       const draft = autoDrafts.current[sc];
@@ -101,8 +120,9 @@ export function useTdp(): TdpControl {
   const refresh = useCallback(() => {
     const confirmed = confirmedAutoDrafts(autoDrafts.current);
     const epoch = followEpoch.current;
+    const ownershipEpoch = ownershipRefreshEpoch.current;
     getTdpState().then((next) => {
-      if (epoch !== followEpoch.current) return;
+      if (epoch !== followEpoch.current || ownershipEpoch !== ownershipRefreshEpoch.current) return;
       setTdp(reconcileAutoState(next, confirmed));
       setTdpSettled(true);
     }).catch(() => setTdpSettled(true));
@@ -163,6 +183,32 @@ export function useTdp(): TdpControl {
 
   const appid = game?.appid;
   useEffect(() => {
+    let alive = true;
+    const unsubscribe = subscribePowerOwnershipChanged((owner) => {
+      if (owner.context_appid !== (appid ?? null) || (latestOwner.current?.context_appid === owner.context_appid
+        && latestOwner.current.revision > owner.revision)) return;
+      latestOwner.current = owner;
+      const ownershipEpoch = ++ownershipRefreshEpoch.current;
+      const intentEpoch = editEpoch.current;
+      setTdp((current) => current ? { ...current, game_power_owner: owner } : current);
+      const epoch = followEpoch.current;
+      const pendingEdit = !!commitTimerWatts.current || !!commitTimerLevels.current || !!commitTimerGpu.current
+        || Object.values(autoDrafts.current).some((draft) => !draft.confirmed);
+      getTdpState().then((next) => {
+        if (!alive || epoch !== followEpoch.current || ownershipEpoch !== ownershipRefreshEpoch.current
+          || next.game_power_owner?.context_appid !== owner.context_appid
+          || next.game_power_owner.revision < owner.revision
+          || (latestOwner.current?.context_appid === owner.context_appid
+            && latestOwner.current.revision > next.game_power_owner.revision)) return;
+        setTdp((current) => !pendingEdit && editEpoch.current === intentEpoch ? next : current ? {
+          ...current, game_power_owner: next.game_power_owner,
+          steam_readback_available: next.steam_readback_available,
+        } : current);
+      }).catch(() => {});
+    });
+    return () => { alive = false; unsubscribe(); };
+  }, [appid]);
+  useEffect(() => {
     refresh();
   }, [appid, refresh]);
   useEffect(() => () => {
@@ -179,32 +225,25 @@ export function useTdp(): TdpControl {
     followEpoch.current += 1;
   }, [appid]);
 
-  const applyFollow = useCallback(
-    (f: boolean, a: string) => {
-      if (f && tdp && !tdp.follows_global && !autoDrafts.current.game) {
-        autoDrafts.current.game = { context: a, config: tdp.auto_config, timer: null, confirmed: true };
-      }
-      const epoch = ++followEpoch.current;
-      const confirmed = confirmedAutoDrafts(autoDrafts.current);
-      return setTdpFollowGlobal(f, a, a)
-        .then((next) => {
-          if (epoch !== followEpoch.current) return true;
-          setTdp(reconcileAutoState(next, confirmed));
-          return next.follows_global === f;
-        })
-        .catch(() => false);
-    },
-    [reconcileAutoState, tdp],
-  );
-  const { scope, onScope: switchScope } = useScopeSync(appid, tdp?.follows_global, applyFollow);
-  // A debounced write still aimed at the old scope would detach the game from global again.
+  const [view, setView] = useState<{ appid: string | undefined; scope: TdpScope | null }>({
+    appid, scope: null,
+  });
+  useEffect(() => {
+    setView((current) => current.appid === appid ? current : { appid, scope: null });
+  }, [appid]);
+  const initialScope: TdpScope = appid && tdp?.appid === appid && !tdp.follows_global
+    ? "game" : "global";
+  const scope = appid && view.appid === appid ? view.scope ?? initialScope : "global";
   const onScope = useCallback((next: TdpScope) => {
+    if (next === "global" && tdp && !tdp.follows_global && !autoDrafts.current.game) {
+      autoDrafts.current.game = { context: appid ?? null, config: tdp.auto_config, timer: null, confirmed: true };
+    }
     if (next !== scope && commitTimerGpu.current) {
       clearTimeout(commitTimerGpu.current);
       commitTimerGpu.current = null;
     }
-    switchScope(next);
-  }, [scope, switchScope]);
+    setView({ appid, scope: appid ? next : "global" });
+  }, [appid, scope, tdp]);
 
   const resolveTarget = useCallback((): {
     target: string | null;
@@ -240,9 +279,12 @@ export function useTdp(): TdpControl {
         };
       });
       if (commitTimerWatts.current) clearTimeout(commitTimerWatts.current);
-      commitTimerWatts.current = setTimeout(() => {
-        setTdpWatts(w, sc, target, context).then(() => refresh()).catch(() => {});
+      const timer = setTimeout(() => {
+        setTdpWatts(w, sc, target, context).then(() => refresh()).catch(() => {}).finally(() => {
+          if (commitTimerWatts.current === timer) commitTimerWatts.current = null;
+        });
       }, 200);
+      commitTimerWatts.current = timer;
     },
     [resolveTarget, refresh],
   );
@@ -279,9 +321,12 @@ export function useTdp(): TdpControl {
           : { ...cur, requested_levels: nl, boost_mode: "custom" };
       });
       if (commitTimerLevels.current) clearTimeout(commitTimerLevels.current);
-      commitTimerLevels.current = setTimeout(() => {
-        setTdpLevels(off2, off3, sc, target, context).then(() => refresh()).catch(() => {});
+      const timer = setTimeout(() => {
+        setTdpLevels(off2, off3, sc, target, context).then(() => refresh()).catch(() => {}).finally(() => {
+          if (commitTimerLevels.current === timer) commitTimerLevels.current = null;
+        });
       }, 200);
+      commitTimerLevels.current = timer;
     },
     [resolveTarget, refresh],
   );
@@ -407,10 +452,12 @@ export function useTdp(): TdpControl {
   );
 
   const onFirmwareMode = useCallback((mode: string) => {
+    editEpoch.current += 1;
     setTdpFirmwareMode(mode).then(setTdp).catch(() => {});
   }, []);
 
   const onLowBatteryHold = useCallback((enabled: boolean) => {
+    editEpoch.current += 1;
     return setLowBatteryTdpHold(enabled).then(setTdp).catch(() => {});
   }, []);
 
@@ -439,28 +486,34 @@ export function useTdp(): TdpControl {
     [resolveTarget, refresh],
   );
 
+  const guardChange = useGamePowerChangeGuard(scope, appid ?? null, tdp?.game_power_owner, tdp?.steam_readback_available);
+  const guard = <Args extends unknown[]>(operation: (...args: Args) => void) => guardChange((...args: Args) => {
+    editEpoch.current += 1;
+    operation(...args);
+  });
+  const missingSteamReadback = scope === "game" && tdp?.game_power_owner?.owner === "steam" && tdp.steam_readback_available === false;
   return {
-    tdp,
+    tdp: missingSteamReadback ? { ...tdp!, supported: false } : tdp,
     tdpSettled,
     power,
     scope,
     game,
     refresh,
     onScope,
-    onWatts,
-    onGpuLevel,
-    onSetLevels,
-    onSetMode,
-    onAutoTdpToggle,
-    onAutoTargetFps,
-    onAutoInitialTdp,
-    onAutoMinTdp,
-    onAutoMaxTdp,
+    onWatts: guard(onWatts),
+    onGpuLevel: guard(onGpuLevel),
+    onSetLevels: guard(onSetLevels),
+    onSetMode: guard(onSetMode),
+    onAutoTdpToggle: guard(onAutoTdpToggle),
+    onAutoTargetFps: guard(onAutoTargetFps),
+    onAutoInitialTdp: guard(onAutoInitialTdp),
+    onAutoMinTdp: guard(onAutoMinTdp),
+    onAutoMaxTdp: guard(onAutoMaxTdp),
     onFirmwareMode,
     onLowBatteryHold,
-    onApplySuggestion,
+    onApplySuggestion: guard(onApplySuggestion),
     presets,
     refreshPresets,
-    onApplyPreset,
+    onApplyPreset: guard(onApplyPreset),
   };
 }

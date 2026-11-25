@@ -12,6 +12,7 @@ import lights
 
 UNAVAILABLE = 3
 TOUCHSCREEN = os.environ.get("ARMADA_SECONDARY_TOUCHSCREEN", "bottom_touchscreen")
+ORIENTATION = os.environ.get("ARMADA_PANEL_ORIENTATION", "")
 
 LIVE_S = 0.5
 SESSION_S = 5.0
@@ -197,7 +198,7 @@ class App:
     def __init__(self, url: str, assets: str):
         import dialog
         from deck import FPS_HISTORY, Deck
-        from geometry import HEIGHT, WIDTH, Rect, logical_point, rotation
+        from geometry import HEIGHT, WIDTH, Rect, logical_point, panel_orientation, rotation
         from drm import LeasedPanel
         from paint import Icons
         from rpc import PanelRpc
@@ -206,6 +207,7 @@ class App:
 
         self.cairo = cairo
         self.dialog = dialog
+        self.orientation = panel_orientation(ORIENTATION)
         self.logical_point = logical_point
         with open(os.path.join(assets, "strings.json")) as handle:
             strings = json.load(handle)
@@ -215,7 +217,7 @@ class App:
         self.fps_history = FPS_HISTORY
         self.rpc = PanelRpc(url)
         self.panel = LeasedPanel()
-        self.matrix = cairo.Matrix(*rotation(self.panel.width, self.panel.height))
+        self.matrix = cairo.Matrix(*rotation(self.panel.width, self.panel.height, self.orientation))
         self.surfaces = [
             cairo.ImageSurface.create_for_data(buffer.memory, cairo.FORMAT_RGB24, self.panel.width, self.panel.height, buffer.pitch)
             for buffer in self.panel.buffers
@@ -480,7 +482,7 @@ class App:
             if event.kind == "down":
                 self.worker.act("screen_off", "set_kiosk_screen_off", False)
             return
-        x, y = self.logical_point(event.x, event.y, self.panel.width, self.panel.height)
+        x, y = self.logical_point(event.x, event.y, self.panel.width, self.panel.height, self.orientation)
         if self.deck.open_dialog:
             self._dialog_touch(event.kind, x, y)
             return

@@ -1,0 +1,78 @@
+import { getMakoStatus, getUpscalerLaunchReceipt, setMakoGame, setUpscalerLaunchReceipt, type MakoProfile } from "../api";
+import { getEnv, parse } from "../launch/compose";
+import type { LaunchReceipt } from "./launchOwnership";
+import { readAppDetails } from "../launch/steamApi";
+import { adoptedMakoReceipt, hasMakoLeftover, isMakoWrapper } from "./makoLeftover";
+import { applyManagedLaunch } from "./managedLaunch";
+import { planLaunchOverlay, type LaunchOverlay } from "./launchOwnership";
+import { recordUiEvent } from "../system/uiEvents";
+
+const writing = new Set<string>();
+const EMPTY_RECEIPT: LaunchReceipt = { version: 1, env: [], wrappers: { before: [], applied: [], added: [] } };
+
+/** A receipt that claims options none of which are in the launch options any more. */
+function staleReceipt(launch: string, receipt: LaunchReceipt): boolean {
+  if (receipt.pending || (!receipt.env.length && !receipt.wrappers.added.length)) return false;
+  const parsed = parse(launch);
+  if (parsed.malformed) return false;
+  return receipt.env.every((entry) => getEnv(parsed, entry.name) === null) && receipt.wrappers.added.every((token) => !parsed.wrappers.includes(token));
+}
+const token = (value: string) => /^[A-Za-z0-9_./:-]+$/.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
+
+/** Takes back Panel's own Mako options when its receipt no longer matches them. */
+async function adoptOwnMako(appid: string, liveAppid: number, desired: LaunchOverlay): Promise<void> {
+  const [details, receipt] = await Promise.all([readAppDetails(liveAppid), getUpscalerLaunchReceipt(appid, "mako")]);
+  if (!details) return;
+  const plan = planLaunchOverlay(details.launch, desired, receipt);
+  if (!plan || (!plan.preserved.env.length && !plan.preserved.wrappers.length)) return;
+  if (!plan.preserved.env.every((name) => name.startsWith("MAKO_")) || !plan.preserved.wrappers.every(isMakoWrapper)) return;
+  const adopted = adoptedMakoReceipt(details.launch);
+  if (!adopted) return;
+  const ok = await setUpscalerLaunchReceipt(appid, "mako", adopted).catch(() => false);
+  recordUiEvent("upscalers", "mako_adopt", { appid: liveAppid, env: adopted.env.length, hadReceipt: !!receipt }, ok);
+}
+
+/** `reclaim`: the user asked for Mako here, so options that vanished from the launch options go back in. */
+export async function saveMakoProfile(appid: string, liveAppid: number, config: Partial<MakoProfile> | null, isNonSteam = false, reclaim = false) {
+  if (writing.has(appid)) throw new Error("mako_busy");
+  writing.add(appid);
+  try {
+    const status = await getMakoStatus(appid);
+    const previous = status?.profiles[appid] ?? null;
+    let dropped: LaunchReceipt | null = null;
+    if (config) {
+      const [details, receipt] = await Promise.all([readAppDetails(liveAppid), getUpscalerLaunchReceipt(appid, "mako")]);
+      if (!details && !previous) throw new Error("launch_failed");
+      if (details && !previous && hasMakoLeftover(details.launch, receipt)) throw new Error("mako_foreign");
+      // Panel's Mako options left the launch options outside Panel (by hand, or Steam reset them): the old receipt
+      // would read that as the user's wish and refuse to put them back, even though they are saving Mako again.
+      if (details && receipt && (reclaim || !previous) && staleReceipt(details.launch, receipt)) {
+        await setUpscalerLaunchReceipt(appid, "mako", EMPTY_RECEIPT);
+        dropped = receipt;
+      }
+    }
+    const patch = config?.scaling_enabled && !previous ? { enabled: false, ...config } : config;
+    const result = await setMakoGame(appid, patch);
+    let pending = false;
+    try {
+      const desired: LaunchOverlay = {
+        env: Object.fromEntries(Object.entries(result.env).map(([name, value]) => [name, token(value)])),
+        wrappers: result.wrappers.map(token),
+      };
+      if (previous) await adoptOwnMako(appid, liveAppid, desired);
+      const applied = await applyManagedLaunch(appid, liveAppid, "mako", desired, { isNonSteam, requireComplete: result.profile !== null });
+      pending = !!applied.pending;
+      if (!applied.ok) throw new Error("launch_failed");
+    } catch (error) {
+      if (!pending || config === null || result.profile === null || (config.enabled === false && !previous?.scaling_enabled)) {
+        await setMakoGame(appid, previous);
+        if (dropped) await setUpscalerLaunchReceipt(appid, "mako", dropped).catch(() => false);
+      }
+      throw error;
+    }
+    return result.profile;
+  } finally {
+    writing.delete(appid);
+    window.dispatchEvent(new Event("pdc-mako-changed"));
+  }
+}

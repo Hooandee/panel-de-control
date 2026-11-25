@@ -34,7 +34,6 @@ const Field: FC<{ label: string; value: string; placeholder: string; onChange: (
     <TextField
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      // @ts-expect-error Decky TextField forwards input attrs; placeholder is valid.
       placeholder={placeholder}
     />
   </div>
@@ -101,10 +100,10 @@ const ManagerBody: FC = () => {
                 <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.name}</div>
                 <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summaryOf(v)}</div>
               </div>
-              <Focusable onActivate={() => setDraft({ ...emptyDraft(v.id), ...v })} onClick={() => setDraft({ ...emptyDraft(v.id), ...v })} style={{ padding: 6, cursor: "pointer", flexShrink: 0 }}>
+              <Focusable data-pdc-part="icon-action" onActivate={() => setDraft({ ...emptyDraft(v.id), ...v })} onClick={() => setDraft({ ...emptyDraft(v.id), ...v })} style={{ padding: 6, cursor: "pointer", flexShrink: 0 }}>
                 <LuPencil size={16} color={theme.color.textMuted} />
               </Focusable>
-              <Focusable onActivate={() => onDelete(v.id)} onClick={() => onDelete(v.id)} style={{ padding: 6, cursor: "pointer", flexShrink: 0 }}>
+              <Focusable data-pdc-part="icon-action" onActivate={() => onDelete(v.id)} onClick={() => onDelete(v.id)} style={{ padding: 6, cursor: "pointer", flexShrink: 0 }}>
                 <LuTrash2 size={16} color={theme.color.danger} />
               </Focusable>
             </RemovableRow>

@@ -1,5 +1,5 @@
 export type MetricId =
-  | "fps" | "fps_metrics" | "frametime" | "frame_count" | "show_fps_limit" | "time"
+  | "fps" | "fps_metrics" | "frametime" | "frame_timing" | "frame_count" | "show_fps_limit" | "time"
   | "gpu" | "gpu_temp" | "gpu_junction_temp" | "gpu_clock" | "gpu_mem_clock"
   | "gpu_mem_temp" | "gpu_power" | "gpu_voltage" | "gpu_fan" | "gpu_efficiency"
   | "vram" | "proc_vram" | "gpu_name"
@@ -13,7 +13,7 @@ export type MetricId =
   // the backend at apply time; see py_modules/mangohud/pdc_metrics.py).
   | "pdc_tdp" | "pdc_tdp_learn" | "pdc_auto_tdp" | "pdc_fan" | "pdc_fan_rpm"
   | "pdc_eco" | "pdc_profile" | "pdc_power" | "pdc_charge" | "pdc_bat_health"
-  | "pdc_smt" | "pdc_boost" | "pdc_cores" | "pdc_gpu_clock" | "pdc_model";
+  | "pdc_bat_power" | "pdc_bat_time" | "pdc_smt" | "pdc_boost" | "pdc_cores" | "pdc_gpu_clock" | "pdc_model";
 
 // Colour keys mirror config.py. MangoHud colours by CATEGORY, not per element:
 // gpu/cpu/vram/ram/battery tint that category's LABEL word; `text` tints every
@@ -40,8 +40,8 @@ export const isBlockGroup = (group: string): group is BlockGroup =>
 // labellable — they render as a custom_text line whose label we emit ourselves.
 const PDC_IDS: MetricId[] = [
   "pdc_tdp", "pdc_tdp_learn", "pdc_auto_tdp", "pdc_fan", "pdc_fan_rpm", "pdc_eco",
-  "pdc_profile", "pdc_power", "pdc_charge", "pdc_bat_health", "pdc_smt", "pdc_boost",
-  "pdc_cores", "pdc_gpu_clock", "pdc_model",
+  "pdc_profile", "pdc_power", "pdc_charge", "pdc_bat_health", "pdc_bat_power", "pdc_bat_time",
+  "pdc_smt", "pdc_boost", "pdc_cores", "pdc_gpu_clock", "pdc_model",
 ];
 const PDC_ID_SET = new Set<MetricId>(PDC_IDS);
 const PDC_LABEL_EN: Partial<Record<MetricId, string>> = {
@@ -55,6 +55,8 @@ const PDC_LABEL_EN: Partial<Record<MetricId, string>> = {
   pdc_power: "Power",
   pdc_charge: "Limit",
   pdc_bat_health: "Health",
+  pdc_bat_power: "Battery",
+  pdc_bat_time: "Left",
   pdc_smt: "SMT",
   pdc_boost: "Boost",
   pdc_cores: "Cores",
@@ -131,6 +133,13 @@ export interface HudState {
   conflict: HudConflict | null;
   model: HudModel;
   values: Partial<Record<MetricId, string>>;
+  /** Metrics this machine cannot read (MangoHud would draw a constant 0). */
+  unavailableMetrics?: MetricId[];
+  /** Running game this model belongs to; null on the desktop. */
+  appid: string | null;
+  /** True while that game applies the global HUD (also true without a game). */
+  followsGlobal: boolean;
+  hasGameProfile: boolean;
 }
 
 interface MetricMeta {
@@ -155,6 +164,7 @@ export const METRICS: MetricMeta[] = [
   { id: "fps", category: "fps", group: "fps", label: "FPS", value: "60" },
   { id: "fps_metrics", category: "fps", group: "fps", label: "FPS AVG", value: "58" },
   { id: "frametime", category: "frametime", group: "fps", label: "FRAME", value: "16.6ms" },
+  { id: "frame_timing", category: "frametime", group: "fps", label: "Frametime", value: "" },
   { id: "frame_count", category: "text", group: "fps", label: "FRAMES", value: "12042" },
   { id: "show_fps_limit", category: "text", group: "fps", label: "LIMIT", value: "60" },
   { id: "time", category: "text", group: "fps", label: "TIME", value: "22:14" },
@@ -215,6 +225,8 @@ export const METRICS: MetricMeta[] = [
   { id: "pdc_power", category: "text", group: "pdc", label: "Consumo", value: "-" },
   { id: "pdc_charge", category: "text", group: "pdc", label: "Limite", value: "-" },
   { id: "pdc_bat_health", category: "text", group: "pdc", label: "Salud", value: "-" },
+  { id: "pdc_bat_power", category: "text", group: "pdc", label: "Bateria", value: "-" },
+  { id: "pdc_bat_time", category: "text", group: "pdc", label: "Restante", value: "-" },
   { id: "pdc_smt", category: "text", group: "pdc", label: "SMT", value: "-" },
   { id: "pdc_boost", category: "text", group: "pdc", label: "Boost", value: "-" },
   { id: "pdc_cores", category: "text", group: "pdc", label: "Nucleos", value: "-" },
@@ -338,6 +350,7 @@ const GROUP_COLOR: Record<BlockGroup, ColorKey> = { gpu: "gpu", cpu: "cpu", batt
 type PreviewFontRole = "main" | "auxiliary" | "media";
 
 type PreviewRow =
+  | { kind: "graph"; key: string; color: string }
   | { kind: "group"; key: string; group: BlockGroup; label: string; labelColor: string; valueColor: string; cells: string[] }
   | { kind: "line"; key: string; label: string; value: string; labelColor: string; valueColor: string; fontRole: PreviewFontRole }
   | { kind: "separator"; key: string }
@@ -392,6 +405,7 @@ function previewValue(id: MetricId, model: HudModel): string {
 export function previewRows(
   model: HudModel,
   values: Partial<Record<MetricId, string>> = {},
+  unavailable: readonly MetricId[] = [],
 ): PreviewRow[] {
   const rows: PreviewRow[] = [];
   const c = (key: ColorKey) => `#${model.colors[key]}`;
@@ -406,6 +420,11 @@ export function previewRows(
     }
     if (it.kind === "text") {
       rows.push({ kind: "line", key: `t:${it.id}:${i}`, label: "", value: it.text, labelColor: c("text"), valueColor: c("text"), fontRole: "auxiliary" });
+      return;
+    }
+    if (unavailable.includes(it.id)) return;
+    if (it.id === "frame_timing") {
+      rows.push({ kind: "graph", key: `m:${it.id}`, color: c("frametime") });
       return;
     }
     const meta = META[it.id];
@@ -464,6 +483,7 @@ export function previewWouldClip(
     if (row.kind === "spacer") {
       return total + SPACER_LINES[row.size] * lineHeight;
     }
+    if (row.kind === "graph") return total + 25 + (model.compact ? 0 : fonts.small * 1.35);
     if (row.kind === "line") return total + fonts[row.fontRole] * 1.35;
     if (row.kind === "separator") return total + fonts.auxiliary * 1.35;
     return total + lineHeight;

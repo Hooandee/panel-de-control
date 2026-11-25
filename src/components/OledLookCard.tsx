@@ -25,7 +25,7 @@ export const OledLookCard: FC<Props> = ({ active, onApply, onReset }) => {
       <div
         style={{
           borderRadius: theme.radius.md,
-          padding: theme.space.md,
+          padding: "var(--pdc-display-padding, 12px)",
           overflow: "hidden",
           // Accent-tinted gradient so the hero card stands apart from the plain cards.
           background: `linear-gradient(135deg, rgba(${theme.color.accentRgb},0.18), rgba(${theme.color.accentRgb},0.04))`,
@@ -35,10 +35,10 @@ export const OledLookCard: FC<Props> = ({ active, onApply, onReset }) => {
         <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
           <LuSparkles size={20} color={theme.color.accent} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
+            <div style={{ fontSize: "var(--pdc-display-label, 13px)", fontWeight: 700, color: theme.color.textPrimary }}>
               {t("display.oled.title")}
             </div>
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            <div style={{ fontSize: "var(--pdc-display-caption, 11px)", color: theme.color.textMuted }}>
               {t("display.oled.desc")}
             </div>
           </div>
@@ -49,7 +49,7 @@ export const OledLookCard: FC<Props> = ({ active, onApply, onReset }) => {
               flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
               padding: "9px 10px", borderRadius: theme.radius.sm,
               background: theme.color.accent, color: "#ffffff", fontWeight: 700,
-              fontSize: theme.font.body, cursor: "pointer",
+              fontSize: "var(--pdc-display-label, 13px)", cursor: "pointer",
             }}
             onActivate={onApply}
             onClick={onApply}
@@ -63,7 +63,7 @@ export const OledLookCard: FC<Props> = ({ active, onApply, onReset }) => {
               display: "flex", alignItems: "center", justifyContent: "center",
               padding: "9px 14px", borderRadius: theme.radius.sm,
               background: "rgba(255,255,255,0.06)", color: theme.color.textPrimary,
-              fontSize: theme.font.body, cursor: active ? "pointer" : "default", opacity: active ? 1 : 0.45,
+              fontSize: "var(--pdc-display-label, 13px)", cursor: active ? "pointer" : "default", opacity: active ? 1 : 0.45,
             }}
             onActivate={() => { if (active) onReset(); }}
             onClick={() => { if (active) onReset(); }}

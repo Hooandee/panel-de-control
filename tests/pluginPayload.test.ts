@@ -49,6 +49,7 @@ function fixture({ symlink = false }: { symlink?: boolean } = {}): string {
     "README.en.md",
     "LICENSE",
     "py_modules/module.py",
+    "game-recipes/1462040.json",
     "assets/icon.png",
     "bin/tool",
   ]) write(resolve(root, file));
@@ -57,6 +58,8 @@ function fixture({ symlink = false }: { symlink?: boolean } = {}): string {
     "/Users/private/worktree/py_modules/module.py\n",
   );
   write(resolve(root, "py_modules/module.pyo"), "compiled\n");
+  write(resolve(root, "game-recipes/.DS_Store"), "finder metadata\n");
+  write(resolve(root, "game-recipes/.drafts/1.json"), "{}\n");
   if (symlink) symlinkSync("tool", resolve(root, "bin/tool-link"));
   return root;
 }
@@ -102,6 +105,16 @@ describe("plugin release payload", () => {
     expect(files(output).some((path) => readFileSync(resolve(output, path)).includes("/Users/")))
       .toBe(false);
     expect(existsSync(resolve(output, "py_modules/__pycache__"))).toBe(false);
+  });
+
+  it("ships the game recipe catalog without hidden files", () => {
+    const source = fixture();
+    const output = resolve(workspace(), "Panel de Control");
+
+    const result = spawnSync(process.execPath, [copier, source, output], { encoding: "utf8" });
+
+    expect(result).toMatchObject({ status: 0, stderr: "" });
+    expect(files(output, "game-recipes")).toEqual(["game-recipes/1462040.json"]);
   });
 
   it("rejects symlinks instead of copying content from an unreviewed target", () => {

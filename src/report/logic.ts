@@ -1,5 +1,6 @@
 import type { SteamOverlayDiagnostics } from "../mangohud/steamOverlay";
 import { steamPerformanceDiagnostics } from "../steam/performanceDiagnostics";
+import { steamClientLayoutReport } from "./steamClientLayout";
 
 export const REPORT_CATEGORIES = [
   "tdp",
@@ -13,7 +14,9 @@ export const REPORT_CATEGORIES = [
   "system",
   "audio",
   "launch",
+  "upscalers",
   "themes",
+  "ambient",
   "other",
 ] as const;
 
@@ -63,10 +66,12 @@ export function buildReportContext(
   kind: ReportKind = "bug",
   steamOverlay?: SteamOverlayDiagnostics,
   themeDisplay?: Record<string, unknown>,
+  themeSurface?: Record<string, unknown>,
 ): Record<string, unknown> {
   const steamPerformance = steamPerformanceDiagnostics();
   return {
     ...(themeDisplay ? { theme_display: themeDisplay } : {}),
+    ...(themeSurface ? { theme_surface: themeSurface } : {}),
     ...launch,
     ...displayReportContext(selected, display),
     ...(selected.includes("hud") && steamOverlay
@@ -74,6 +79,7 @@ export function buildReportContext(
       : {}),
     qam,
     ...(steamPerformance ? { steam_performance: steamPerformance } : {}),
+    steam_client_layout: steamClientLayoutReport(),
     report_kind: kind,
   };
 }

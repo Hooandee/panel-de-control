@@ -137,3 +137,17 @@ def test_rejects_unknown_tampered_incompatible_or_unreadable_archives(tmp_path: 
         with pytest.raises(ThemeRemoteError) as error:
             service(Transport(early_json())).prepare_early_install(path, tmp_path / "themes", tmp_path / "r.json")
         assert error.value.code == "invalid_archive"
+
+
+def test_rejects_published_archive_for_another_theme_before_preparing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(theme_packages, "prepare_theme_archive", lambda *a, **k: pytest.fail("must not install"))
+    picked = tmp_path / "example.zip"
+    picked.write_bytes(ARCHIVE)
+    remote = service(Transport(early_json()))
+
+    with pytest.raises(ThemeRemoteError) as error:
+        remote.prepare_early_install(
+            str(picked), tmp_path / "themes", tmp_path / "r.json", catalog_id="other-theme",
+        )
+    assert error.value.code == "identity_mismatch"
+    assert not (tmp_path / "themes").exists()

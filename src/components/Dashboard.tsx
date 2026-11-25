@@ -2,6 +2,7 @@ import { Focusable, NavEntryPositionPreferences } from "@decky/ui";
 import { type CSSProperties, type ReactNode, useEffect, useRef } from "react";
 import { useI18n } from "../i18n";
 import type { SectionDef } from "../sections/types";
+import { SectionGlyph, sectionGlyphStyles } from "./SectionGlyph";
 import { theme } from "../theme";
 
 export interface DashboardProps {
@@ -14,20 +15,20 @@ export interface DashboardProps {
 const gridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: theme.space.sm,
+  gap: "var(--pdc-dashboard-gap, 8px)",
 };
 
 const cardStyle: CSSProperties = {
   minWidth: 0,
-  minHeight: 104,
-  padding: `${theme.space.sm}px 6px ${theme.space.md}px`,
+  minHeight: "var(--pdc-dashboard-height, 104px)",
+  padding: "var(--pdc-dashboard-padding, 8px 6px 12px)",
   borderRadius: "inherit",
   background: "transparent",
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
   justifyContent: "flex-start",
-  gap: theme.space.xs,
+  gap: "var(--pdc-dashboard-inner-gap, 4px)",
   textAlign: "center",
   cursor: "pointer",
   boxSizing: "border-box",
@@ -51,6 +52,7 @@ function useIdempotentAction() {
 
 export function Dashboard({ sections, activeId, settingsBadge, onOpenSection }: DashboardProps) {
   const { t } = useI18n();
+  const grid = useRef<HTMLDivElement>(null);
   const activeCard = useRef<HTMLDivElement>(null);
   const idempotentAction = useIdempotentAction();
 
@@ -60,7 +62,9 @@ export function Dashboard({ sections, activeId, settingsBadge, onOpenSection }: 
 
   return (
     <div>
+      <style>{sectionGlyphStyles}</style>
       <Focusable
+        ref={grid}
         data-testid="dashboard-grid"
         navEntryPreferPosition={NavEntryPositionPreferences.PREFERRED_CHILD}
         style={gridStyle}
@@ -68,7 +72,7 @@ export function Dashboard({ sections, activeId, settingsBadge, onOpenSection }: 
         {sections.map((section, index) => {
           const label = section.label || t(section.labelKey);
           const description = t(section.descriptionKey);
-          const openSection = idempotentAction(`section:${section.id}`, () => onOpenSection(section.id));
+          const openSection = idempotentAction(`section:${section.id}`, () => { grid.current?.ownerDocument.dispatchEvent(new CustomEvent("pdc-section-feedback", { detail: { id: section.id, kind: "open" } })); onOpenSection(section.id); });
 
           return (
             <Focusable
@@ -84,7 +88,7 @@ export function Dashboard({ sections, activeId, settingsBadge, onOpenSection }: 
               aria-label={`${label}. ${description}`}
               onActivate={openSection}
               onClick={openSection}
-              onFocus={(event) => event.currentTarget.scrollIntoView({ block: "nearest" })}
+              onFocus={(event) => { event.currentTarget.scrollIntoView({ block: "nearest" }); event.currentTarget.ownerDocument.dispatchEvent(new CustomEvent("pdc-section-feedback", { detail: { id: section.id, kind: "move" } })); }}
               style={{
                 minWidth: 0,
                 display: "flex",
@@ -97,8 +101,8 @@ export function Dashboard({ sections, activeId, settingsBadge, onOpenSection }: 
                   className="pdc-dashboard-card-icon"
                   aria-hidden="true"
                   style={{
-                    width: 42,
-                    height: 42,
+                    width: "var(--pdc-dashboard-icon, 42px)",
+                    height: "var(--pdc-dashboard-icon, 42px)",
                     borderRadius: 11,
                     background: section.accent,
                     color: "white",
@@ -109,7 +113,7 @@ export function Dashboard({ sections, activeId, settingsBadge, onOpenSection }: 
                     position: "relative",
                   }}
                 >
-                  {section.icon(24)}
+                  <SectionGlyph id={section.id} fallback={section.icon(24)} />
                   {section.id === "settings" && settingsBadge ? (
                     <span
                       style={{
@@ -125,7 +129,7 @@ export function Dashboard({ sections, activeId, settingsBadge, onOpenSection }: 
                 </span>
                 <span
                   className="pdc-dashboard-card-label"
-                  style={{ color: theme.color.textPrimary, fontSize: theme.font.body, fontWeight: 700 }}
+                  style={{ color: theme.color.textPrimary, fontSize: "var(--pdc-dashboard-label, 13px)", fontWeight: 700 }}
                 >
                   {label}
                 </span>
@@ -133,9 +137,9 @@ export function Dashboard({ sections, activeId, settingsBadge, onOpenSection }: 
                   className="pdc-dashboard-card-description"
                   style={{
                     color: theme.color.textMuted,
-                    fontSize: theme.font.caption,
+                    fontSize: "var(--pdc-dashboard-caption, 11px)",
                     lineHeight: 1.35,
-                    maxHeight: 30,
+                    maxHeight: "var(--pdc-dashboard-description-height, 30px)",
                     display: "-webkit-box",
                     WebkitBoxOrient: "vertical",
                     WebkitLineClamp: 2,

@@ -247,3 +247,40 @@ def test_ip_odin3_paddles_are_fine_when_remapped_or_carried(tmp_path):
 def test_ip_other_models_never_read_the_target(tmp_path):
     cfg = inputplumber.get_config(_store(tmp_path), OdinDbus([]), "legion_go_s")
     assert "unmapped_dropped" not in cfg
+
+
+def test_ip_get_config_console_says_it_has_no_builtin_controls(tmp_path):
+    # The PS5 has no composite device; every pad is external.
+    cfg = inputplumber.get_config(_store(tmp_path), FakeDbus(caps=[]), "playstation_5")
+    assert cfg["builtin_controls"] is False
+    assert cfg["device_known"] is True
+    assert cfg["buttons"] == []
+    assert inputplumber.get_config(_store(tmp_path), FakeDbus(), CLAW)["builtin_controls"] is True
+
+
+GO1_NEW_CAPS = [
+    "Gamepad:Button:LeftPaddle1", "Gamepad:Button:LeftPaddle2",
+    "Gamepad:Button:RightPaddle1", "Gamepad:Button:RightPaddle2",
+    "Gamepad:Button:RightStickTouch",
+]
+
+
+def test_ip_m2_remap_survives_the_inputplumber_capability_change(tmp_path):
+    store = _store(tmp_path, {"LeftStickTouch": [{"key": "KeyEsc"}]})
+    dbus = FakeDbus(caps=GO1_NEW_CAPS)
+    cfg = inputplumber.get_config(store, dbus, "legion_go")
+    m2 = next(b for b in cfg["buttons"] if b["label"] == "M2")
+    assert m2 == {"source": "RightStickTouch", "label": "M2", "target": [{"key": "KeyEsc"}]}
+
+
+def test_ip_apply_effective_migrates_before_loading(tmp_path):
+    store = _store(tmp_path, {"LeftStickTouch": [{"key": "KeyEsc"}]})
+    seen = {}
+
+    def merge(baseline, overrides):
+        seen.update(overrides)
+        return "merged-yaml"
+
+    dbus = FakeDbus(caps=GO1_NEW_CAPS)
+    assert inputplumber.apply_effective(store, dbus, None, merge=merge, device_key="legion_go") is True
+    assert seen == {"RightStickTouch": [{"key": "KeyEsc"}]}

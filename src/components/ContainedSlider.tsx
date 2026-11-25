@@ -1,5 +1,5 @@
 import { FC, ReactNode } from "react";
-import { SliderField } from "@decky/ui";
+import { SliderField, type NotchLabel } from "@decky/ui";
 
 interface Props {
   value: number;
@@ -14,6 +14,11 @@ interface Props {
   /** Uniform shrink factor. Default 0.80; use a smaller value in tighter cards
    *  (e.g. the Pantalla cards) where 0.80 still bleeds past the right edge. */
   scale?: number;
+  bottomSeparator?: "standard" | "thick" | "none";
+  /** Text under the track (e.g. what each end gives the user). Needs notchCount. */
+  notchLabels?: NotchLabel[];
+  notchCount?: number;
+  notchTicksVisible?: boolean;
   onChange: (value: number) => void;
 }
 
@@ -23,8 +28,8 @@ interface Props {
  * uniform scale (keeps the knob round) inside an overflow:hidden box. This wraps
  * that containment so call sites don't re-hand-roll it.
  */
-export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, disabled, label, scale = 0.8, onChange }) => (
-  <div style={{ overflow: "hidden", width: "100%" }}>
+export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, disabled, label, scale = 0.8, bottomSeparator, notchLabels, notchCount, notchTicksVisible, onChange }) => (
+  <div data-pdc-part="contained-slider" style={{ overflow: "hidden", width: "100%", boxSizing: "border-box", ...(notchLabels ? { padding: "0 20px 4px" } : null) }}>
     <div style={{ transform: `scale(${scale})`, transformOrigin: "center" }}>
       <SliderField
         value={value}
@@ -34,6 +39,10 @@ export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, d
         showValue={showValue}
         disabled={disabled}
         label={label}
+        bottomSeparator={bottomSeparator}
+        notchLabels={notchLabels}
+        notchCount={notchCount}
+        notchTicksVisible={notchTicksVisible}
         onChange={onChange}
       />
     </div>

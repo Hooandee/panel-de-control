@@ -1,5 +1,6 @@
 import glob
 import os
+import time
 
 from sysfs import read_int, read_str, write_str
 
@@ -215,11 +216,75 @@ class LenovoConservationMode(ChargeLimitBackend):
         return write_str(self._path, 0) and read_int(self._path) == 0
 
 
+class LenovoChargeTypes(ChargeLimitBackend):
+    """Lenovo `charge_types`: Long_Life is the firmware's fixed 80 % cap (on/off)."""
+
+    adjustable = False
+    name = "lenovo-charge-types"
+    _ON = "Long_Life"
+    _OFF = "Standard"
+
+    _ACTIVE_TTL = 30.0
+
+    def __init__(self, root="/", clock=time.monotonic):
+        self._path = self._find(root)
+        self.supported = self._path is not None
+        self._clock = clock
+        self._cached = None  # (timestamp, value)
+        self._generation = 0  # bumped on every write: a read that straddles one is not cached
+
+    @classmethod
+    def _find(cls, root):
+        for d in sorted(glob.glob(os.path.join(root, _SUPPLY, "*"))):
+            path = os.path.join(d, "charge_types")
+            modes = {token.strip("[]") for token in (read_str(path) or "").split()}
+            if {cls._ON, cls._OFF} <= modes:
+                return path
+        return None
+
+    def _read(self):
+        tokens = (read_str(self._path) or "").split() if self.supported else []
+        selected = [t.strip("[]") for t in tokens if t.startswith("[")]
+        return selected[0] if selected else (tokens[0] if len(tokens) == 1 else None)
+
+    def active(self):
+        # The ideapad_acpi read can take ~12 s on the Legion Go S and runs off the serial
+        # executor: cache it, but never store a value read across a concurrent write.
+        now = self._clock()
+        cached = self._cached
+        if cached is not None and now - cached[0] < self._ACTIVE_TTL:
+            return cached[1]
+        generation = self._generation
+        value = self._read()
+        if generation == self._generation:
+            self._cached = (now, value)
+        return value
+
+    def get(self):
+        return None  # firmware-fixed threshold; percent unknown
+
+    def _select(self, mode):
+        if not self.supported:
+            return False
+        self._generation += 1
+        self._cached = None
+        ok = write_str(self._path, mode)
+        self._generation += 1
+        self._cached = None
+        return ok and self._read() == mode
+
+    def set(self, percent):
+        return self._select(self._ON)
+
+    def disable(self):
+        return self._select(self._OFF)
+
+
 def select_charge_limit(device, root="/"):
     """Pick the charge-limit strategy for the detected device (mirrors
     tdp.factory). Steam Deck uses its hwmon level; Legion falls back to Lenovo
-    conservation mode (on/off) when the standard threshold is absent; ASUS uses
-    the standard threshold. MSI Claw is probed via the standard path. Falls back
+    charge_types Long_Life, then conservation mode (both on/off) when the standard
+    threshold is absent; ASUS uses the standard threshold. MSI Claw is probed via the standard path. Falls back
     to Null (honest) when nothing is present."""
     key = getattr(device, "key", "")
     if key == "steam_machine":
@@ -234,7 +299,7 @@ def select_charge_limit(device, root="/"):
         # mistake an accessory Deck hwmon or unrelated Lenovo ACPI node for support.
         candidates = [SysfsChargeLimit]
     elif key.startswith("legion"):
-        candidates = [SysfsChargeLimit, LenovoConservationMode]
+        candidates = [SysfsChargeLimit, LenovoChargeTypes, LenovoConservationMode]
     else:
         # Unrecognised / other: probe every known interface, standard threshold first.
         candidates = [SysfsChargeLimit, SteamDeckChargeLimit, LenovoConservationMode]

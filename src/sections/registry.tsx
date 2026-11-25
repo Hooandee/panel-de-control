@@ -11,10 +11,12 @@ import { MandosSection } from "./MandosSection";
 import { HudSection } from "./HudSection";
 import { ParametrosSection } from "./ParametrosSection";
 import { LimpiezaSection } from "./LimpiezaSection";
-import { AmbienteSection } from "./AmbienteSection";
+import { EscaladoresSection } from "./EscaladoresSection";
 import { TemasSection } from "./TemasSection";
 import { AjustesSection } from "./AjustesSection";
 import { AccesoriosSection } from "./AccesoriosSection";
+import { AmbienteSection, AmbientPlayerBlock } from "../ambient";
+import { registerBlock } from "../customize/blocks";
 import { buildSections } from "./registryModel";
 import { registerSystemBlocks } from "./systemBlocks";
 import { registerFanBlocks } from "./fanBlocks";
@@ -28,6 +30,7 @@ registerFanBlocks();
 registerDisplayBlocks();
 registerMandosBlocks();
 registerPowerBlocks();
+registerBlock("ambientPlayer", { sectionId: "ambient", Component: AmbientPlayerBlock });
 
 const COMPONENTS: Record<string, FC> = {
   power: PotenciaSection,
@@ -38,6 +41,7 @@ const COMPONENTS: Record<string, FC> = {
   mandos: MandosSection,
   hud: HudSection,
   params: ParametrosSection,
+  upscalers: EscaladoresSection,
   cleaner: LimpiezaSection,
   accessories: AccesoriosSection,
   ambient: AmbienteSection,

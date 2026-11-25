@@ -3,12 +3,18 @@
 import os
 
 POWERD_UNIT = "armada-powerd.service"
+# Pocknix (Arch Linux ARM for the AYN Odin 3) drives the pwm-fan with its own daemon.
+POCKNIX_FAN_UNIT = "pocknix-fancontrol.service"
 _UNIT_PATHS = ("usr/lib/systemd/system", "etc/systemd/system")
 _BUSCTL = ("/usr/bin/busctl", "/bin/busctl")
 
 
+def unit_present(unit: str, root: str = "/") -> bool:
+    return any(os.path.exists(os.path.join(root, base, unit)) for base in _UNIT_PATHS)
+
+
 def powerd_present(root: str = "/") -> bool:
-    return any(os.path.exists(os.path.join(root, base, POWERD_UNIT)) for base in _UNIT_PATHS)
+    return unit_present(POWERD_UNIT, root)
 
 
 def reload_powerd() -> bool:

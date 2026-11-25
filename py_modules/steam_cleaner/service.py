@@ -26,6 +26,7 @@ class SteamCleanerError(Exception):
 
 KINDS = ("shadercache", "compatdata")
 MAX_ENTRIES = 10_000
+FORCEABLE_REASONS = {"activity_unknown", "active_game", "active_download", "unknown_identity", "runtime", "coverage_incomplete"}
 REASONS = {
     "coverage_incomplete", "library_unavailable", "library_disconnected", "symlink", "unsafe_path",
     "path_changed", "mount_point", "runtime", "activity_unknown", "active_game",
@@ -317,6 +318,7 @@ class SteamCleanerService:
                 target = self._targets.get(entry["id"])
                 if target and any(str(other).startswith(str(target["path"]) + os.sep) for other in roots):
                     entry["blocked_reason"] = "unsafe_path"
+                entry["can_force"] = bool(target and entry["blocked_reason"] in FORCEABLE_REASONS)
                 if entry["blocked_reason"]:
                     self._scan_issue("measure", entry["blocked_reason"], library_id=entry["library_id"], appid=entry["appid"])
             with self._state_lock:
@@ -331,7 +333,7 @@ class SteamCleanerService:
             self._event("completed", operation_id, "scan", scan_id=self._state["scan_id"], count=len(entries), duration_ms=int((time.monotonic() - started) * 1000), reason="cancelled" if self._cancelled.is_set() else None, blocked=dict(blocked) or None, activity=activity["causes"] or None)
             return self.get_state()
 
-    def prepare(self, scan_id, entry_ids):
+    def prepare(self, scan_id, entry_ids, force_entry_ids=None):
         with self._operation("prepare") as operation_id:
             with self._state_lock:
                 if not isinstance(scan_id, str) or scan_id != self._state["scan_id"]:
@@ -339,9 +341,15 @@ class SteamCleanerService:
                 entries = {entry["id"]: entry for entry in self._state["entries"]}
             if not isinstance(entry_ids, list) or not entry_ids or len(entry_ids) > 5000 or any(not isinstance(value, str) or value not in entries for value in entry_ids) or len(set(entry_ids)) != len(entry_ids):
                 raise SteamCleanerError("invalid_selection")
+            force_entry_ids = [] if force_entry_ids is None else force_entry_ids
+            if not isinstance(force_entry_ids, list) or any(not isinstance(value, str) or value not in entry_ids for value in force_entry_ids) or len(set(force_entry_ids)) != len(force_entry_ids):
+                raise SteamCleanerError("invalid_selection")
+            forced = set(force_entry_ids)
+            if any(not entries[value].get("can_force") or value not in self._targets or entries[value]["blocked_reason"] not in FORCEABLE_REASONS for value in forced):
+                raise SteamCleanerError("invalid_selection")
             selected = [copy.deepcopy(entries[value]) for value in entry_ids]
             for entry in selected:
-                if entry["blocked_reason"]:
+                if entry["blocked_reason"] and not (entry["id"] in forced and entry["blocked_reason"] in FORCEABLE_REASONS):
                     raise SteamCleanerError(entry["blocked_reason"])
             self._check_sources()
             activity = self._activity()
@@ -349,7 +357,7 @@ class SteamCleanerService:
             targets = {}
             for entry in selected:
                 reason = self._activity_reason(entry, activity)
-                if reason:
+                if reason and not (entry["id"] in forced and reason in FORCEABLE_REASONS):
                     raise SteamCleanerError(reason)
                 target = self._targets[entry["id"]]
                 current = filesystem.inspect_tree(target["path"], mounts, self._cancelled)
@@ -365,8 +373,8 @@ class SteamCleanerService:
             if self._cancelled.is_set():
                 raise SteamCleanerError("cancelled")
             with self._state_lock:
-                self._plans = {plan["id"]: {"public": plan, "targets": targets, "deadline": time.monotonic() + 300}}
-            self._event("prepared", operation_id, "prepare", scan_id=scan_id, plan_id=plan["id"], count=len(selected))
+                self._plans = {plan["id"]: {"public": plan, "targets": targets, "forced": forced, "deadline": time.monotonic() + 300}}
+            self._event("prepared", operation_id, "prepare", scan_id=scan_id, plan_id=plan["id"], count=len(selected), forced_count=len(forced))
             return copy.deepcopy(plan)
 
     def execute(self, plan_id, confirm_compatdata=False):
@@ -393,7 +401,7 @@ class SteamCleanerService:
                         raise SteamCleanerError("cancelled")
                     self._check_sources()
                     reason = self._activity_reason(entry, self._activity())
-                    if reason:
+                    if reason and not (entry["id"] in stored["forced"] and reason in FORCEABLE_REASONS):
                         raise SteamCleanerError(reason)
                     if self._cancelled.is_set():
                         raise SteamCleanerError("cancelled")
@@ -403,7 +411,7 @@ class SteamCleanerService:
                     if filesystem.tree_summary(current) != target["tree"]:
                         raise SteamCleanerError("path_changed")
                     reason = self._activity_reason(entry, self._activity())
-                    if reason:
+                    if reason and not (entry["id"] in stored["forced"] and reason in FORCEABLE_REASONS):
                         raise SteamCleanerError(reason)
                     self._check_sources()
                     if self._cancelled.is_set():
@@ -424,7 +432,7 @@ class SteamCleanerService:
                 result["estimated_bytes_removed"] += item["bytes_removed"]
                 result["items"].append(item)
                 result["cancelled"] = result["cancelled"] or item["reason"] == "cancelled"
-                self._event(item["status"], operation_id, "execute", entry_id=entry["id"], library_id=entry["library_id"], appid=entry["appid"], kind=entry["kind"], reason=item["reason"], system_error=system_code, readback="absent" if item["status"] == "deleted" else "unverified")
+                self._event(item["status"], operation_id, "execute", entry_id=entry["id"], library_id=entry["library_id"], appid=entry["appid"], kind=entry["kind"], reason=item["reason"], system_error=system_code, readback="absent" if item["status"] == "deleted" else "unverified", forced=entry["id"] in stored["forced"])
                 with self._state_lock:
                     self._state["progress"]["processed"] = len(result["items"])
                     self._state["last_result"] = copy.deepcopy(result)
@@ -434,7 +442,7 @@ class SteamCleanerService:
                 self._state["entries"] = [entry for entry in self._state["entries"] if outcomes.get(entry["id"], {}).get("status") != "deleted"]
                 for entry in self._state["entries"]:
                     if outcomes.get(entry["id"], {}).get("status") == "error":
-                        entry.update(bytes=None, blocked_reason="path_changed")
+                        entry.update(bytes=None, blocked_reason="path_changed", can_force=False)
                 totals = {kind: sum(entry["bytes"] or 0 for entry in self._state["entries"] if entry["kind"] == kind) for kind in KINDS}
                 totals["unknown"] = sum(entry["bytes"] is None for entry in self._state["entries"])
                 self._state.update(status="cancelled" if result["cancelled"] else "ready", last_result=result, scan_id=None, totals=totals)
@@ -449,7 +457,7 @@ class SteamCleanerService:
             "library_id": library["id"], "library_label": library["label"],
             "library_internal": library["internal"],
             "bytes": None, "installation": "unknown", "blocked_reason": reason,
-            "requires_manual_selection": False,
+            "requires_manual_selection": False, "can_force": False,
             "warnings": ["prefix_data"] if kind == "compatdata" else [],
         }
 
@@ -723,7 +731,9 @@ class SteamCleanerService:
                     result["vdf_error"] = item["vdf_error"]
                 if item.get("readback") in ("absent", "unverified"):
                     result["readback"] = item["readback"]
-                for key in ("count", "duration_ms"):
+                if type(item.get("forced")) is bool:
+                    result["forced"] = item["forced"]
+                for key in ("count", "duration_ms", "forced_count"):
                     if type(item.get(key)) is int and 0 <= item[key] <= 10**12:
                         result[key] = item[key]
                 if isinstance(item.get("blocked"), dict):

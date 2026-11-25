@@ -578,6 +578,7 @@ def test_conflict_reports_hhd_managing(Plugin, fake_hhd):
         "hhd_present": True,
         "hhd_managing": True,
         "powerstation_active": False,
+        "steamos_manager_active": False,
     }
 
 
@@ -1182,6 +1183,47 @@ def test_set_control_enabled_on_reapplies(Plugin):
     assert p._tdp_backend.set_levels_calls == 1
 
 
+def test_report_961_external_setpoint_respects_existing_master_switch(Plugin):
+    """Synthetic report semantics; fake backend does not validate Ally hardware."""
+    from test_tdp_guard_rpc import FakeBackend as ObservedBackend
+    plugin = Plugin()
+    plugin._init()
+    plugin._tdp_backend = ObservedBackend()
+    plugin._os_id = "bazzite"
+    plugin._settings["tdp_control_enabled"] = True
+    plugin._tdp_profiles.set_auto_tdp("global", False)
+    plugin._tdp_profiles.set_pl1("global", 15)
+    plugin._reapply_tdp()
+    backend = plugin._tdp_backend
+    assert backend.read_applied() == 15
+
+    # Model the external manager's 30 W write without going through Panel's RPC.
+    backend._levels = {"pl1": 30, "pl2": 31, "pl3": 32}
+    before = backend.set_levels_calls
+    now = importlib.import_module("main").time.monotonic() + 10
+    plugin._tdp_guard_tick(now=now)
+    plugin._tdp_guard_tick(now=now + 1)
+    assert backend.set_levels_calls == before + 1
+    assert backend.read_applied() == 15
+
+    assert asyncio.run(plugin.set_tdp_control_enabled(False)) is False
+    backend._levels = {"pl1": 30, "pl2": 31, "pl3": 32}
+    before = backend.set_levels_calls
+    plugin._tdp_guard_tick(now=now + 10)
+    plugin._tdp_guard_tick(now=now + 11)
+    result = asyncio.run(plugin.set_tdp_watts(20, "global"))
+    assert result["ok"] is False
+    plugin._reapply_tdp()
+    assert backend.set_levels_calls == before
+    assert backend.read_applied() == 30
+    assert plugin._tdp_profiles.effective(None)["pl1"] == 15
+    assert not plugin._tdp_profiles.auto_tdp(None)
+
+    assert asyncio.run(plugin.set_tdp_control_enabled(True)) is True
+    assert backend.read_applied() == 15
+    assert backend.set_levels_calls == before + 1
+
+
 def test_get_control_enabled_default_true(Plugin):
     p = Plugin()
     assert asyncio.run(p.get_tdp_control_enabled()) is True
@@ -1411,6 +1453,23 @@ def test_unstable_charger_notice_shows_and_dismiss_snoozes_it(Plugin, monkeypatc
     week = 7 * 24 * 3600
     later = _flap_charger(p, last + week, 6)
     assert p._charger_unstable_state(now=later + 1)["visible"] is True
+
+
+def test_kernel_support_notice_follows_the_backend_and_stays_dismissed(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_backend.kernel_power_limits_missing = False
+    assert p._kernel_support_state() is None
+
+    p._tdp_backend.kernel_power_limits_missing = True
+    assert p._kernel_support_state() == {"visible": True}
+    assert asyncio.run(p.dismiss_kernel_support_notice()) is True
+    assert p._kernel_support_state() == {"visible": False}
+
+    p2 = Plugin()
+    p2._init()
+    p2._tdp_backend.kernel_power_limits_missing = True
+    assert p2._kernel_support_state() == {"visible": False}
 
 
 def test_unstable_charger_notice_expires_after_a_quiet_day(Plugin):
@@ -1761,3 +1820,98 @@ def test_backend_swapped_during_the_power_read_is_never_marked(
     assert plugin._tdp_backend is other
     assert not list((tmp_path / "run/panel-de-control").glob("route-*.not-honored"))
 
+
+
+@pytest.mark.parametrize("presence", [True, False, None])
+def test_ally_conflict_reports_steamos_service_without_changing_control(Plugin, presence):
+    plugin = Plugin()
+    plugin._init()
+    plugin._device = next(item for item in DEVICE_TABLE if item.key == "rog_ally")
+    plugin._steamos_manager_detector.active = lambda: presence
+    settings_before = dict(plugin._settings)
+    owner_before = getattr(plugin, "_tdp_external_owner", None)
+    result = asyncio.run(plugin.get_tdp_conflict())
+    assert result["steamos_manager_active"] is presence
+    assert plugin._settings == settings_before
+    assert getattr(plugin, "_tdp_external_owner", None) == owner_before
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+@pytest.mark.parametrize("device", ["steam_deck_lcd", "steam_deck_oled", "rog_ally_x"])
+def test_other_devices_do_not_probe_steamos_service(Plugin, device):
+    plugin = Plugin()
+    plugin._init()
+    plugin._device = next(item for item in DEVICE_TABLE if item.key == device)
+
+    def unexpected_probe():
+        pytest.fail("SteamOS Manager probe escaped RC71L scope")
+
+    plugin._steamos_manager_detector.active = unexpected_probe
+    result = asyncio.run(plugin.get_tdp_conflict())
+    assert result["steamos_manager_active"] is False
+
+
+def test_report_environment_records_steam_layout_settings_redacted(Plugin):
+    """A theme broke for many users with Home → «Fondo ampliado» on and the bundle never
+    said so: the layout-affecting Steam settings ride in environment, booleans/enums only."""
+    plugin = Plugin()
+    plugin._init()
+
+    env = plugin._report_environment({
+        "steam_client_layout": {
+            "status": "captured",
+            "settings": {
+                "library_home_big_art": True,
+                "library_low_perf_mode": False,
+                "library_display_size": 2,
+                "show_store_content_on_home": "secret text",
+                "unlisted_setting": True,
+                "library_low_bandwidth_mode": float("nan"),
+            },
+        },
+    })
+
+    assert env["steam_client_layout"] == {
+        "status": "captured",
+        "settings": {
+            "library_home_big_art": True,
+            "library_low_perf_mode": False,
+            "library_display_size": 2,
+            "show_store_content_on_home": None,
+            "library_low_bandwidth_mode": None,
+        },
+    }
+
+
+@pytest.mark.parametrize("context", [None, {}, {"steam_client_layout": "junk"},
+                                     {"steam_client_layout": {"status": "x" * 200}}])
+def test_report_environment_marks_missing_steam_layout(Plugin, context):
+    plugin = Plugin()
+    plugin._init()
+
+    layout = plugin._report_environment(context)["steam_client_layout"]
+
+    assert layout["status"] in {"not_provided", "unavailable"}
+    assert layout["settings"] == {}
+
+
+def test_launch_frontend_does_not_duplicate_steam_layout(Plugin):
+    plugin = Plugin()
+    plugin._init()
+
+    frontend = plugin._launch_report_state({"steam_client_layout": {"status": "captured"}})["frontend"]
+
+    assert "steam_client_layout" not in frontend
+
+
+def test_hide_steamos_card_persists_and_reaches_the_state(Plugin):
+    p = Plugin()
+    p._init()
+    assert asyncio.run(p.get_tdp_state())["hide_tdp_steamos_card"] is False
+    assert asyncio.run(p.set_hide_tdp_steamos_card(True)) is True
+    assert asyncio.run(p.get_tdp_state())["hide_tdp_steamos_card"] is True
+    p2 = Plugin()
+    p2._init()
+    assert p2._settings["hide_tdp_steamos_card"] is True
+    assert asyncio.run(p2.get_tdp_state())["tdp_control_enabled"] is True
+    assert asyncio.run(p2.set_hide_tdp_steamos_card(False)) is False

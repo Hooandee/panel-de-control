@@ -1,7 +1,7 @@
 import json
 import os
 
-from report.client import parse_response, save_local
+from pdc_report.client import parse_response, save_local
 
 
 def test_parse_response_success():
@@ -60,7 +60,7 @@ def test_encode_payload_wraps_the_bundle_in_the_gzip_envelope():
     import gzip
     import json
 
-    from report.client import encode_payload
+    from pdc_report.client import encode_payload
 
     bundle = {"app": "panel-de-control", "schema": 6, "journal": {"recent": [{"m": "x" * 1000}]}}
     envelope = encode_payload(bundle)

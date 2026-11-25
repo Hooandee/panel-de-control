@@ -1,0 +1,274 @@
+import type { CssLoaderSnapshot } from "../themes/cssLoaderTypes";
+import { evaluateThemeExtensionBundle, type ThemeExtensionExport } from "../themes/runtime/extensionHost";
+import { startThemesRuntime } from "../themes/runtime/start";
+import {
+  configureThemeExtensionRpcHost,
+  parseThemeExtensionPayload,
+  type ThemeExtensionPayload,
+} from "../themes/themeExtensionClient";
+import { installHostClassMaps } from "./classMaps";
+import { installHostGameAudio } from "./gameAudio";
+import { installHostGamePause } from "./gamePause";
+import { applyQamGeometry, measureQamGeometry, type QamGeometry } from "./qamGeometry";
+import { installOverlayToastPosition } from "./notificationPosition";
+import { installSteamButtonHome } from "./steamButton";
+import { createThemeStorage } from "../themes/runtime/themeStorage";
+import {
+  createWindowsThemeStorage,
+  type WindowsStorageSettlement,
+  type WindowsStorageStatus,
+  type WindowsStorageWrite,
+} from "./storage";
+
+export const WINDOWS_THEME_HOST_VERSION = 13;
+
+export interface WindowsThemeHostState {
+  revision: number;
+  snapshot: CssLoaderSnapshot;
+  extensions: readonly ThemeExtensionPayload[];
+  /** Resolved by the signed-in user companion; absent means unavailable. */
+  picturesDirectory?: string | null;
+}
+
+export interface WindowsThemeHostStatus {
+  hostVersion: number;
+  revision: number;
+  steamDocument: boolean;
+  qamDocument: boolean;
+  mounted: readonly string[];
+  errors: readonly string[];
+  gameSilenced: boolean;
+  /** The game a theme holds frozen while its lease lasts (gamePause.ts), or null. */
+  gamePaused: string | null;
+  /** Steam runs a game behind its UI. */
+  gameRunning: boolean;
+  storage: WindowsStorageStatus;
+  picturesDirectory: string | null;
+}
+
+export interface WindowsThemeHost {
+  readonly hostVersion: number;
+  update(state: WindowsThemeHostState): WindowsThemeHostStatus;
+  status(): WindowsThemeHostStatus;
+  /** Writes theme runtimes made since the last settlement, oldest first; the companion persists them. */
+  storageTake(): WindowsStorageWrite[];
+  storageSettle(settlement: WindowsStorageSettlement): WindowsStorageStatus;
+  /** The Xbox button Game Bar kept from Steam (the companion calls these); see steamButton.ts. */
+  gameBarShown(foregroundWasSteam: boolean): string;
+  gameHome(): string;
+  dispose(): void;
+}
+
+interface NavigationTree {
+  m_ID?: string;
+  Root?: { Element?: { ownerDocument?: Document | null } | null } | null;
+}
+
+interface NavigationContext {
+  m_rgGamepadNavigationTrees?: readonly NavigationTree[];
+}
+
+interface FocusNavigationController {
+  m_ActiveContext?: NavigationContext | null;
+  m_LastActiveContext?: NavigationContext | null;
+  m_rgAllContexts?: readonly NavigationContext[];
+}
+
+const MAX_ERRORS = 20;
+const QAM_POLL_MS = 2_000;
+const DOCUMENT_POLL_MS = 2_000;
+const QAM_GEOMETRY_POLL_MS = 1_000;
+
+// With a game running the active context is the game's overlay (GamepadUI_Overlay_<appid>_Root); Big Picture's own
+// tree stays in another context, so every context is searched, the active one first.
+function navigationTrees(scope: typeof globalThis): readonly NavigationTree[] {
+  const global = scope as typeof globalThis & {
+    GamepadNavTree?: { m_context?: { m_controller?: FocusNavigationController } };
+    FocusNavController?: FocusNavigationController;
+  };
+  const controller = global.GamepadNavTree?.m_context?.m_controller ?? global.FocusNavController;
+  const contexts = [controller?.m_ActiveContext, controller?.m_LastActiveContext, ...(controller?.m_rgAllContexts ?? [])];
+  return contexts.flatMap((context) => context?.m_rgGamepadNavigationTrees ?? []);
+}
+
+function treeDocument(scope: typeof globalThis, matches: (id: string) => boolean): Document | null {
+  const tree = navigationTrees(scope).find((candidate) => matches(candidate.m_ID ?? ""));
+  return tree?.Root?.Element?.ownerDocument ?? null;
+}
+
+export function findBigPictureDocument(scope: typeof globalThis = globalThis): Document | null {
+  return treeDocument(scope, (id) => id === "GamepadUI_Full_Root" || id === "root_1_");
+}
+
+export function findQuickAccessDocument(scope: typeof globalThis = globalThis): Document | null {
+  return treeDocument(scope, (id) => id.startsWith("QuickAccess"));
+}
+
+function extensionKey(payload: Pick<ThemeExtensionPayload, "catalogId" | "version">): string {
+  return `${payload.catalogId}@${payload.version}`;
+}
+
+export function createWindowsThemeHost(scope: typeof globalThis = globalThis): WindowsThemeHost {
+  let state: WindowsThemeHostState = {
+    revision: 0,
+    snapshot: { status: "missing", themes: [] },
+    extensions: [],
+  };
+  const listeners = new Set<() => void>();
+  const mounted = new Set<string>();
+  const errors: string[] = [];
+  const recordError = (code: string) => {
+    errors.push(code);
+    if (errors.length > MAX_ERRORS) errors.shift();
+  };
+
+  const releaseRpcHost = configureThemeExtensionRpcHost({
+    list: async () => state.extensions.map(({ source: _source, ...descriptor }) => descriptor),
+    load: async (catalogId, version) => {
+      const payload = state.extensions.find(
+        (candidate) => candidate.catalogId === catalogId && candidate.version === version,
+      );
+      if (!payload) throw new Error("Theme extension is not installed");
+      return payload;
+    },
+  });
+
+  const trackMounts = (source: string): ThemeExtensionExport => {
+    const extension = evaluateThemeExtensionBundle(source);
+    const payload = state.extensions.find((candidate) => candidate.source === source);
+    const key = payload ? extensionKey(payload) : "unknown";
+    return Object.freeze({
+      ...extension,
+      mount: (context: never) => {
+        const stop = extension.mount(context);
+        mounted.add(key);
+        return () => {
+          mounted.delete(key);
+          stop();
+        };
+      },
+    }) as ThemeExtensionExport;
+  };
+
+  let qamTimer: ReturnType<typeof setInterval> | undefined;
+  const qamListeners = new Set<(doc: Document) => void>();
+  let lastQamDocument: Document | null = null;
+  const pollQam = () => {
+    const doc = findQuickAccessDocument(scope);
+    if (!doc || doc === lastQamDocument) return;
+    lastQamDocument = doc;
+    for (const listener of [...qamListeners]) listener(doc);
+  };
+
+  const storage = createWindowsThemeStorage();
+  const gameAudio = installHostGameAudio(scope);
+  const gamePause = installHostGamePause(scope);
+  const releaseClassMaps = installHostClassMaps(scope);
+
+  let qamGeometry: QamGeometry | null = null;
+  let geometryDocument: Document | null = null;
+  let watchedQam: Document | null = null;
+  const syncQamGeometry = () => {
+    const steamDocument = findBigPictureDocument(scope);
+    const qamDocument = findQuickAccessDocument(scope);
+    if (qamDocument !== watchedQam) {
+      watchedQam?.removeEventListener("visibilitychange", syncQamGeometry);
+      watchedQam = qamDocument;
+      watchedQam?.addEventListener("visibilitychange", syncQamGeometry);
+    }
+    const qamWindow = qamDocument?.defaultView;
+    const steamWindow = steamDocument?.defaultView;
+    if (qamDocument?.visibilityState === "visible" && qamWindow && steamWindow) {
+      qamGeometry = measureQamGeometry(qamWindow, steamWindow) ?? qamGeometry;
+    }
+    if (steamDocument && qamGeometry) applyQamGeometry(steamDocument, qamGeometry);
+    geometryDocument = steamDocument;
+  };
+  const geometryTimer = setInterval(syncQamGeometry, QAM_GEOMETRY_POLL_MS);
+  syncQamGeometry();
+
+  const stopSteamButton = installSteamButtonHome(scope, () => mounted.size > 0, recordError, globalThis, gamePause.thawForRaise);
+  const stopToastPosition = installOverlayToastPosition(scope, () => mounted.size > 0);
+
+  const stopRuntime = startThemesRuntime({
+    client: {
+      getSnapshot: () => ({ snapshot: state.snapshot }),
+      subscribe: (listener) => {
+        listeners.add(listener);
+        const documentPoll = setInterval(listener, DOCUMENT_POLL_MS);
+        return () => {
+          clearInterval(documentPoll);
+          listeners.delete(listener);
+        };
+      },
+      refresh: async () => {},
+    },
+    getSteamDocument: () => findBigPictureDocument(scope),
+    getQamDocument: () => findQuickAccessDocument(scope),
+    subscribeQamDocument: (listener) => {
+      qamListeners.add(listener);
+      qamTimer ??= setInterval(pollQam, QAM_POLL_MS);
+      return () => {
+        qamListeners.delete(listener);
+        if (qamListeners.size === 0 && qamTimer !== undefined) {
+          clearInterval(qamTimer);
+          qamTimer = undefined;
+        }
+      };
+    },
+    storage: createThemeStorage(storage.backend),
+    games: gamePause.games,
+    evaluate: trackMounts,
+    log: recordError,
+  });
+
+  const status = (): WindowsThemeHostStatus => ({
+    hostVersion: WINDOWS_THEME_HOST_VERSION,
+    revision: state.revision,
+    steamDocument: findBigPictureDocument(scope) !== null,
+    qamDocument: findQuickAccessDocument(scope) !== null,
+    mounted: [...mounted].sort(),
+    errors: [...errors],
+    gameSilenced: gameAudio.silenced(),
+    gamePaused: gamePause.paused(),
+    gameRunning: stopSteamButton.gameRunning(),
+    storage: storage.status(),
+    picturesDirectory: state.picturesDirectory ?? null,
+  });
+
+  return Object.freeze({
+    hostVersion: WINDOWS_THEME_HOST_VERSION,
+    update(next: WindowsThemeHostState) {
+      if (next.revision <= state.revision) return status();
+      state = {
+        revision: next.revision,
+        snapshot: next.snapshot,
+        extensions: next.extensions.map(parseThemeExtensionPayload),
+        picturesDirectory: typeof next.picturesDirectory === "string" && next.picturesDirectory.trim() ? next.picturesDirectory : null,
+      };
+      for (const listener of [...listeners]) listener();
+      return status();
+    },
+    status,
+    storageTake: storage.take,
+    storageSettle: storage.settle,
+    gameBarShown: (foregroundWasSteam: boolean) => stopSteamButton.gameBarShown(foregroundWasSteam === true),
+    gameHome: () => stopSteamButton.gameHome(),
+    dispose() {
+      stopRuntime();
+      storage.dispose();
+      gameAudio.dispose();
+      gamePause.dispose();
+      stopSteamButton();
+      stopToastPosition();
+      releaseClassMaps();
+      clearInterval(geometryTimer);
+      watchedQam?.removeEventListener("visibilitychange", syncQamGeometry);
+      if (geometryDocument) applyQamGeometry(geometryDocument, null);
+      releaseRpcHost();
+      if (qamTimer !== undefined) clearInterval(qamTimer);
+      listeners.clear();
+      qamListeners.clear();
+    },
+  });
+}

@@ -501,3 +501,55 @@ def test_sanitize_raises_below_minimum(tmp_path):
     s = ProfileStore(path, default_watts=15)
     assert s.sanitize(7, 35) is True
     assert s.effective(None)["pl1"] == 7
+
+
+def test_fresh_install_waits_to_seed_from_hardware(tmp_path):
+    assert _store(tmp_path).seed_pending is True
+
+
+def test_existing_install_never_seeds(tmp_path):
+    path = tmp_path / "tdp_profiles.json"
+    path.write_text(json.dumps({"global": {"pl1": 12, "mode": "estable"}, "games": {}}))
+    assert _store(tmp_path).seed_pending is False
+
+
+def test_seed_keeps_hardware_boost_and_clears_pending(tmp_path):
+    s = _store(tmp_path)
+    s.seed_global(22, 22, 35)
+    eff = s.effective(None)
+    assert (eff["pl1"], eff["pl2"], eff["pl3"], eff["mode"]) == (22, 22, 35, "custom")
+    assert s.seed_pending is False
+    reloaded = _store(tmp_path)
+    assert reloaded.seed_pending is False
+    assert reloaded.effective(None)["pl3"] == 35
+
+
+def test_seed_with_flat_hardware_stays_estable(tmp_path):
+    s = _store(tmp_path)
+    s.seed_global(33, 33, 33)
+    eff = s.effective(None)
+    assert (eff["pl1"], eff["mode"]) == (33, "estable")
+    assert s.auto_config(None)["initial_tdp"] == 33
+
+
+def test_seed_orders_rails_a_firmware_reports_out_of_order(tmp_path):
+    s = _store(tmp_path)
+    s.seed_global(21, 17, 36)
+    eff = s.effective(None)
+    assert (eff["pl1"], eff["pl2"], eff["pl3"]) == (21, 21, 36)
+
+
+def test_pending_seed_survives_restart_until_hardware_is_read(tmp_path):
+    s = _store(tmp_path)
+    s.sanitize(5, 12)
+    assert (tmp_path / "tdp_profiles.json").exists()
+    assert _store(tmp_path).seed_pending is True
+
+
+def test_user_change_cancels_pending_seed(tmp_path):
+    s = _store(tmp_path)
+    s.set_pl1("global", 10)
+    assert s.seed_pending is False
+    assert _store(tmp_path).seed_pending is False
+    s.seed_global(30, 30, 30)
+    assert s.effective(None)["pl1"] == 10

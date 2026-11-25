@@ -161,6 +161,9 @@ class NullFanBackend:
     def apply_curve_all(self, points: list) -> dict:
         return {"ok": False, "detail": "fan control not supported on this device"}
 
+    def apply_curves(self, curves: dict) -> dict:
+        return {"ok": False, "detail": "fan control not supported on this device"}
+
     def restore_auto(self) -> dict:
         return self.set_auto(None)
 
@@ -203,6 +206,25 @@ class HwmonCurveBackend:
                     return d
         return None
 
+    def _present_fans(self) -> dict:
+        """fan key → pwm index for the fans this chip actually exposes."""
+        if not self.supported:
+            return {}
+        return {key: index for key, index in self._fan_keys.items()
+                if os.path.exists(os.path.join(self._dir, f"pwm{index}_enable"))}
+
+    @property
+    def split_available(self) -> bool:
+        """Independent per-channel curves: free-temperature tables (ASUS) on a chip that
+        exposes two writable channels. Fixed-anchor chips (MSI) and backends that override
+        ``set_curve`` (Legion WMI) keep one curve for every fan."""
+        return (
+            self.supported
+            and self._fixed_temps is None
+            and type(self).set_curve is HwmonCurveBackend.set_curve
+            and len(self._present_fans()) >= 2
+        )
+
     def _writable_points(self, points: list) -> list:
         """Resolve the incoming canonical curve to this chip's writable points.
 
@@ -235,7 +257,46 @@ class HwmonCurveBackend:
                 points.append({"temp": temp, "pwm": pwm})
             fans.append({"key": fan_key, "enable": enable, "points": points})
 
-        return {"supported": True, "source": self.name, "pwm_max": 255, "fans": fans}
+        return {"supported": True, "source": self.name, "pwm_max": 255, "fans": fans,
+                "split_available": self.split_available,
+                "channels": [fan["key"] for fan in fans] if self.split_available else []}
+
+    def _table_matches(self, fan_index: int, expected: list) -> bool:
+        for point, (temp, pwm) in enumerate(expected, start=1):
+            if _read_int(os.path.join(self._dir, f"pwm{fan_index}_auto_point{point}_temp")) != temp:
+                return False
+            if _read_int(os.path.join(self._dir, f"pwm{fan_index}_auto_point{point}_pwm")) != pwm:
+                return False
+        return _read_int(os.path.join(self._dir, f"pwm{fan_index}_enable")) == 1
+
+    def apply_curves(self, curves: dict) -> dict:
+        """Write a DIFFERENT curve per channel ({"cpu": pts, "gpu": pts}) and verify each
+        channel's whole table. If any channel fails, every fan returns to firmware auto.
+        Never raises."""
+        if not self.supported:
+            return {"ok": False, "detail": f"{self._chip_name} chip not found"}
+        if not self.split_available:
+            return {"ok": False, "detail": "per-channel curves not available on this chip"}
+        present = self._present_fans()
+        failed: list = []
+        for fan_key, fan_index in present.items():
+            points = curves.get(fan_key) if isinstance(curves, dict) else None
+            if not points:
+                failed.append(fan_key)
+                break
+            if not self.set_curve(fan_key, points).get("ok"):
+                failed.append(fan_key)
+                break
+            if not self._table_matches(fan_index, self._writable_points(points)):
+                failed.append(fan_key)
+                break
+        if failed:
+            released = self.set_auto(None)
+            return {"ok": False, "failed_channels": failed,
+                    "released": bool(released.get("ok")),
+                    "detail": f"per-channel curve failed for: {failed}; fans returned to firmware auto"}
+        return {"ok": True, "channels": list(present),
+                "detail": f"per-channel curves applied to {list(present)}"}
 
     def set_curve(self, fan_key: str, points: list) -> dict:
         """Write a sanitized fan curve and switch the fan to manual mode. Never raises."""
@@ -422,7 +483,8 @@ def experimental_ec_backends(temp_fn=None, root: str = "/") -> list:
 _DESKTOP_MIN_DUTY = 77
 
 
-def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimental=False):
+def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimental=False,
+                       board_control=True):
     """Return the best available fan-control backend for this device.
 
     Chip/attr based (not device-name based) so it's robust across the matrix:
@@ -432,7 +494,8 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
     3. ``legion_wmi_fan`` (Legion Go original) — hardware curve table, present
        only when the kernel ships the lenovo/legion WMI fan driver.
     4. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
-    5. Legion Go 2 raw-EC software loop.
+    5. Legion Go 2 raw-EC software loop, then the Legion Go original's software loop
+       through its firmware fan table (EC window over /dev/mem).
     6. Legion Go S raw-EC software loop — ONLY when ``experimental`` is on (its
        EC interface is unofficial; off = read-only monitor via NullFanBackend).
     7. ``NullFanBackend`` when nothing supported is found (read-only safety).
@@ -446,6 +509,8 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
     if getattr(device, "key", None) == "zotac_gaming_zone":
         return ZotacFanReadOnlyBackend()
     if getattr(device, "key", None) == "desktop_pc":
+        if not board_control:
+            return NullFanBackend()
         from fans.generic_pwm import GenericPwmFanBackend
         board = GenericPwmFanBackend(temp_fn=temp_fn, root=root,
                                      min_duty=_DESKTOP_MIN_DUTY, spinning_only=True)
@@ -461,9 +526,10 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
             return backend
     # Software-loop backends (lazy import avoids a circular dependency).
     from fans.software_loop import SteamDeckFanBackend
-    from fans.legion_ec import LegionGo2FanBackend
+    from fans.legion_ec import LegionGo2FanBackend, LegionGoFanTableBackend
     for backend in (SteamDeckFanBackend(temp_fn=temp_fn, root=root),
-                    LegionGo2FanBackend(temp_fn=temp_fn, root=root)):
+                    LegionGo2FanBackend(temp_fn=temp_fn, root=root),
+                    LegionGoFanTableBackend(temp_fn=temp_fn, root=root)):
         if backend.supported:
             return backend
     # Raw-EC control on devices with no hardware curve table is opt-in (unofficial
@@ -474,11 +540,18 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
             if backend.eligible:
                 return backend
     if getattr(device, "arch", "x86") == "arm":
-        from fans.armada import ArmadaFanBackend, powerd_present
+        from fans.armada import (ArmadaFanBackend, PocknixFanBackend, pocknix_fan_in_use,
+                                 pocknix_fan_present, powerd_present)
         if powerd_present(root):
-            armada = ArmadaFanBackend(temp_fn=temp_fn, root=root)
-            if armada.supported:
-                return armada
+            daemon_backend = ArmadaFanBackend
+        elif pocknix_fan_present(root) and pocknix_fan_in_use():
+            daemon_backend = PocknixFanBackend
+        else:
+            daemon_backend = None
+        if daemon_backend is not None:
+            backend = daemon_backend(temp_fn=temp_fn, root=root)
+            if backend.supported:
+                return backend
     # Last resort for unrecognised hardware: the standard hwmon manual-PWM interface.
     from fans.generic_pwm import GenericPwmFanBackend
     generic = GenericPwmFanBackend(temp_fn=temp_fn, root=root)

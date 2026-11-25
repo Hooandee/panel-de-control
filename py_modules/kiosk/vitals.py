@@ -23,8 +23,10 @@ def cpu_mhz(root: str = "/") -> int | None:
 
 
 def gpu_mhz(root: str = "/") -> int | None:
-    # ARM (Adreno/Mali) devfreq in Hz, then amdgpu hwmon in Hz, then Intel gt in MHz.
-    for path in sorted(glob.glob(os.path.join(root, "sys/class/devfreq/*.gpu/cur_freq"))):
+    # GPU devfreq (Adreno/Mali, PS5) in Hz, then amdgpu hwmon in Hz, then Intel gt in MHz.
+    devfreq = sorted(glob.glob(os.path.join(root, "sys/class/devfreq/*.gpu/cur_freq")))
+    devfreq += glob.glob(os.path.join(root, "sys/class/devfreq/ps5-gpufreq/cur_freq"))
+    for path in devfreq:
         if (hz := _read_int(path)) is not None:
             return round(hz / 1_000_000)
     for path in sorted(glob.glob(os.path.join(root, "sys/class/drm/card*/device/hwmon/hwmon*/freq1_input"))):

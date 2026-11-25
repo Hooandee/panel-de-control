@@ -1,7 +1,13 @@
 import { FC, ReactNode, useCallback, useEffect, useRef } from "react";
 import { Focusable, PanelSectionRow } from "@decky/ui";
+import { LuCpu, LuPlugZap } from "react-icons/lu";
 
-import { dismissChargerNotice, setSeenTdpConflictTakeover } from "../api";
+import {
+  dismissChargerNotice,
+  dismissKernelSupportNotice,
+  setHideTdpSteamosCard,
+  setSeenTdpConflictTakeover,
+} from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useColor } from "../display/useColor";
@@ -13,11 +19,12 @@ import { useController } from "../mandos/useController";
 import { MandosProvider } from "../mandos/mandosContext";
 import { useTdp } from "../tdp/useTdp";
 import { useTdpConflict } from "../tdp/useTdpConflict";
+import { conflictCardVisible, steamOnlyConflict } from "../tdp/conflict";
 import { PotenciaProvider } from "../tdp/potenciaContext";
 import { useModules, setModuleDisabled } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { TdpConflictCard } from "../components/TdpConflictCard";
-import { ChargerUnstableCard } from "../components/ChargerUnstableCard";
+import { NoticeCard } from "../components/NoticeCard";
 import { openTdpConflictModal } from "../components/TdpConflictModal";
 import { ColorPreviewConfirm } from "../components/ColorPreviewConfirm";
 import { ProfileSelector } from "../components/ProfileSelector";
@@ -97,8 +104,16 @@ export const PotenciaProviderMount: FC<{
     () => setModuleDisabled("power", true).then(() => refresh()),
     [refresh],
   );
+  const onHideSteamCard = useCallback(
+    () => setHideTdpSteamosCard(true).then(() => refresh()).catch(() => {}),
+    [refresh],
+  );
   const onDismissCharger = useCallback(
     () => dismissChargerNotice().then(() => refresh()).catch(() => {}),
+    [refresh],
+  );
+  const onDismissKernelSupport = useCallback(
+    () => dismissKernelSupportNotice().then(() => refresh()).catch(() => {}),
     [refresh],
   );
 
@@ -119,21 +134,45 @@ export const PotenciaProviderMount: FC<{
   }, [conflict.conflict, conflict.takeoverAvailable, tdp, refresh]);
 
   return (
-    <PotenciaProvider value={{ ...tdpCtl, monitorOnly: conflict.monitorOnly, autoTdpEnabled, onReactivate }}>
-      {conflict.conflict && (
+    <PotenciaProvider value={{
+      ...tdpCtl,
+      monitorOnly: conflict.monitorOnly,
+      autoTdpEnabled,
+      onReactivate,
+      steamOsManagerActive: conflict.steamOsManagerActive,
+      onReleaseControl: onDisablePdcTdp,
+    }}>
+      {conflictCardVisible(conflict, tdp?.hide_tdp_steamos_card === true) && (
         <PanelSectionRow>
           <TdpConflictCard
             rivals={conflict.rivals}
             onDisableSdtdp={() => void conflict.disableSdtdp()}
             onTakeHhd={() => void conflict.takeHhd()}
             onDisablePdcTdp={() => void onDisablePdcTdp()}
+            onHide={steamOnlyConflict(conflict.rivals) ? () => void onHideSteamCard() : undefined}
+          />
+        </PanelSectionRow>
+      )}
+      {tdp?.kernel_support?.visible && (
+        <PanelSectionRow>
+          <NoticeCard
+            icon={<LuCpu size={16} color={theme.color.accent} />}
+            tone={theme.color.accent}
+            title={t("tdp.kernelSupport.title")}
+            description={t("tdp.kernelSupport.desc")}
+            dismissLabel={t("tdp.kernelSupport.dismiss")}
+            onDismiss={() => void onDismissKernelSupport()}
           />
         </PanelSectionRow>
       )}
       {tdp?.charger_unstable?.visible && (
         <PanelSectionRow>
-          <ChargerUnstableCard
-            transitions={tdp.charger_unstable.transitions}
+          <NoticeCard
+            icon={<LuPlugZap size={16} color={theme.color.warn} />}
+            tone={theme.color.warn}
+            title={t("tdp.charger.title")}
+            description={t("tdp.charger.desc", { n: tdp.charger_unstable.transitions })}
+            dismissLabel={t("tdp.charger.dismiss")}
             onDismiss={() => void onDismissCharger()}
           />
         </PanelSectionRow>
@@ -145,7 +184,8 @@ export const PotenciaProviderMount: FC<{
             gameName={tdpCtl.game?.name ?? null}
             hasGameProfile={tdp.has_game_profile}
             globalLabel={t("tdp.scope.global")}
-            inheritHint={t("tdp.inherit")}
+            inheritHint={t(tdp.game_power_owner?.supported === true && tdp.game_power_owner.owner === "steam"
+              ? "steam.performance.profile.game" : "tdp.inherit")}
             onScope={tdpCtl.onScope}
           />
         </PanelSectionRow>

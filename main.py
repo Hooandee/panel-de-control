@@ -5,8 +5,10 @@ import json
 import math
 import os
 import re
+import secrets
 import subprocess
 import sys
+import threading
 import time
 from collections import deque
 from concurrent.futures import (
@@ -22,33 +24,53 @@ from typing import Literal
 import decky
 
 # py_modules/ is on sys.path → import TOP-LEVEL (never `from py_modules.x import`).
+# First plugin import: puts py_modules ahead of system packages with the same name.
+import pdc_import_paths  # noqa: F401
 import auto_tdp
 from auto_tdp_learning import AutoTdpLearningStore
 import decky_socket_guard
 import device_registry
+import device_tree
+import game_freeze
+import theme_hltb
+import theme_protondb
 from gamescope_perf import GamescopePerf
-from user_session import spawn_args
+from user_session import UserSession, spawn_args
+from pdc_platform.user_session import find_session
 from gamescope_stats import GamescopeStats
 import osinfo
 import pdc_platform as platform_support
 import journal
+import game_force_close
 import journal_context
+import pulse
 import self_updater
 import theme_activation
 import theme_health
 import theme_packages
 import theme_remote
+import theme_storage
 import theme_transport
 from version import read_version
 from json_store import atomic_json_save
 from accessories.jsaux_pixel.runtime import Runtime as PixelRuntime
 from settings_store import SettingsStore
+import theme_artwork
+import theme_groups
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
+from tdp.diagnostics import run_operation as trace_tdp_operation
 from tdp.extra_range import extra_tdp_max_ac, is_strix_halo, with_extra
 from tdp.low_battery_hold import LOW_BATTERY_PERCENT, decide_hold
 from tdp.measured_power import MeasuredLimitWatch
 from tdp import powerstation as powerstation_conflict
+from tdp import steamos_manager as steamos_manager_conflict
+from tdp.steam_download_mode import (
+    SteamDownloadModeHold,
+    download_mode_handles,
+    read_download_mode_limit,
+)
+from fans.software_loop import jupiter_fan_control_active
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
     CONFIRM_S,
@@ -61,9 +83,11 @@ from tdp.reconcile import (
 )
 from tdp.overshoot import (
     NUDGE,
+    POLICY,
     HiddenOvershootMonitor,
     PlatformProfileWatch,
     nudged_target,
+    read_platform_profiles,
 )
 from tdp.types import (
     TDP_REQUEST_MIN_W,
@@ -73,8 +97,9 @@ from tdp.types import (
     TdpResult,
 )
 from tdp_profiles import AUTO_RANGE_UNSET, ProfileStore
+from power_ownership import OwnershipConflict, PowerOwnershipStore, validate_steam_settings
 from power_presets import PowerPresetStore
-from lifecycle import LifecycleManager, read_on_ac
+from lifecycle import MIN_SUSPEND_S, LifecycleManager, read_on_ac, read_suspend_time
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
 from fans import control as fan_control
 from fans import legion_ec
@@ -83,6 +108,7 @@ from fans import expose as fan_expose
 from fans import gpd_recovery
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
+import fan_curves
 from fan_curves import FanCurveStore
 from launch import tools as launch_tools
 from launch import proton_caps
@@ -101,6 +127,7 @@ from gpu.clock import select_gpu_clock
 from gpu.profiles import GpuProfileStore
 from gpu.power_cap import AmdGpuPowerCap
 from power.reader import PowerReader
+from power.rapl import RaplPackagePower, package_energy_user_readable as rapl_user_readable
 from desktop.mode import (
     effective_desktop_mode,
     migrate_desktop_defaults,
@@ -111,7 +138,13 @@ from desktop.power import DesktopPowerCoordinator, handoff_cpu_ceiling_w
 from desktop.fan_store import DesktopFanStore
 from desktop.cpu_policy import DesktopCpuPolicy
 from desktop.board_fans import BoardFanDriver
+from fans.ps5_target import FIRMWARE_DEFAULT_C as PS5_FAN_DEFAULT_C, MIN_C as PS5_FAN_MIN_C, Ps5FanTarget, clamp_target
+from ps5.console import Ps5Console
+from ps5.firmware_io import FirmwareIo
+from ps5.led import is_animated as ps5_led_animated
+from ps5.thermal import THRESHOLD_DEFAULT_C as PS5_GUARD_DEFAULT_C, clamp_threshold
 from battery.reader import BatteryReader
+from battery.observation import observe_before_apply, worth_logging
 from battery.charge_limit import (
     NullChargeLimit,
     SteamDeckChargeLimit,
@@ -129,6 +162,7 @@ from cpu.controls import CoreControl, SmtControl, select_boost
 from cpu.coordinator import CpuCoordinator, CpuCoordinatorResult
 from cpu.frequency import NullCpuFrequency, select_cpu_frequency
 from cpu.profiles import CpuProfileStore
+from cpu.sleep_guard import SleepCoreGuard
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
 from controllers import detect as controller_detect
@@ -137,7 +171,7 @@ from controllers import conflict as controller_conflict
 from controllers import factory as controller_factory
 from controllers.store import RemapStore
 from controllers.dbus import IpDbus
-from sysfs import read_str
+from sysfs import read_int, read_str
 from mangohud.store import HudStore
 from mangohud import detect as mangohud_detect
 from mangohud import config as mangohud_config
@@ -146,12 +180,18 @@ from mangohud import ownership as mangohud_ownership
 from mangohud.apply import apply_hud, clear_presets, reload_sessions
 from mangohud.coordinator import HudClosed, HudCoordinator, HudStale
 from mangohud.observations import TimedValue, fresh_value
-from report import collector as report_collector
-from report import client as report_client
+from pdc_report import collector as report_collector
+from pdc_report import client as report_client
+from ambient.rpc import AmbientRpc
 from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
+from upscalers import UpscalerError, UpscalerService
+from upscalers import diagnostics as upscaler_diagnostics
+from upscalers import games as upscaler_games
+from upscalers.service import REPORT_BUDGET_S as UPSCALER_REPORT_BUDGET_S
 from kiosk.controller import KioskController
 from remote_access import RemoteAccess
+from steam_inventory_compat import SteamInventoryCompat
 from kiosk.rpc import plugin_dispatch, public_rpc_methods
 from kiosk import steam_game as kiosk_steam_game
 from kiosk import vitals as kiosk_vitals
@@ -183,14 +223,17 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
             "tdp_control_enabled", "backend", "firmware_mode", "boost_mode", "watts",
             "global_watts", "has_game_profile", "follows_global", "auto_config",
             "global_auto_config", "low_battery_hold.enabled", "charger_unstable.visible",
-            "gpu_level", "global_gpu_level",
+            "kernel_support.visible",
+            "gpu_level", "global_gpu_level", "game_power_owner",
         )),
+        ("get_tdp_conflict", ("hhd_present", "hhd_managing", "powerstation_active", "steamos_manager_active")),
     ),
     "system": (
         ("get_cpu_state", ("smt", "boost", "active_cores", "has_game_profile")),
-        ("get_gpu_clock", ("manual", "configured_min", "configured_max", "status", "has_game_profile")),
+        ("get_gpu_clock", ("manual", "configured_min", "configured_max", "status", "has_game_profile", "game_power_owner")),
         ("get_eco_state", ("enabled", "tdp_min_w", "screen_off", "screen_asleep")),
         ("get_battery_state", ("charge_limit",)),
+        ("get_console_state", ("led.active", "guard.enabled", "guard.threshold", "guard.alarm", "guard.active")),
     ),
     "display": (
         ("get_color_state", (
@@ -201,6 +244,10 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "fans": (
         ("get_fan_curve_state", (
             "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
+            "split", "split_available", "split_preset", "channels", "points_by_channel",
+            "target_temp.target", "target_temp.other_controller", "backend_diagnostics",
+            "board_fans.enabled", "board_fans.control_off", "board_fans.loaded",
+            "board_fans.loaded_by_panel",
         )),
     ),
     "audio": (
@@ -212,11 +259,12 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "hud": (
         ("get_hud_state", (
             "capability", "applyStatus", "conflict", "model.enabled", "model.layout",
-            "model.position", "model.items",
+            "model.position", "model.items", "unavailableMetrics",
         )),
     ),
     "params": (("_support_launch_state", None),),
     "cleaner": (("_steam_cleaner_diagnostics", ("phase", "interrupted", "persistence_error")),),
+    "upscalers": (("_support_upscalers_state", None),),
     "ambient": (("_support_ambient_state", None),),
     "accessories": (
         ("get_accessories_state", (
@@ -226,10 +274,16 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     ),
     "themes": (
         ("_theme_report_diagnostics", (
-            "early_themes", "installed", "other_active_themes", "activation_phase", "activation_quarantined",
-            "recent_failures", "health",
+            "early_themes", "installed", "other_active_themes", "other_active_targets", "activation_phase",
+            "activation_quarantined",
+            "recent_failures", "health", "catalog",
         )),
         ("_support_custom_artwork", None),
+        ("_support_duo_artwork", None),
+        ("_support_vida_artwork", None),
+        ("_support_theme_groups", None),
+        ("_support_theme_storage", None),
+        ("_support_steam_inventory", None),
     ),
     "settings": (("_support_settings_state", None),),
 }
@@ -254,10 +308,29 @@ _RPC_CONTEXT_UNSET = object()
 _monotonic = time.monotonic
 _HUD_OBSERVATION_MAX_AGE_S = 3.0
 _MIN_HUD_REFRESH_S = 1.0
+# Every value refresh is a mangohudctl reload, and mangoapp re-parses its whole config
+# on a control thread while the render thread draws it. Continuous sensor readings
+# (power draw, fan speed, battery) are therefore republished far less often than
+# applied state (TDP, profile, toggles) or a reading that just became available.
+_MIN_HUD_SENSOR_REFRESH_S = 10.0
+_HUD_SENSOR_METRICS = frozenset((
+    "pdc_power", "pdc_fan_rpm", "pdc_bat_power", "pdc_bat_time",
+))
+_HUD_REDETECT_S = 15.0
+_HUD_UNOBSERVED_BACKOFF_S = 60.0
+_HUD_BATTERY_METRICS = frozenset(("pdc_bat_health", "pdc_bat_power", "pdc_bat_time"))
 _HUD_RELOAD_MAX_ATTEMPTS = 4
 _TDP_BACKEND_REPROBE_S = 30.0
 _TDP_STORAGE_MIGRATION_RETRY_S = 30.0
 _AUTO_APPLY_RETRY_DELAYS_S = (2.0, 8.0, 30.0)
+_PS5_RIVAL_PLUGINS = ("PS5 Hardware Control",)
+_PS5_RIVAL_RECHECK_S = 60.0
+_PS5_CONSOLE_TICK_S = 3.0
+# Firmware light animations play once; replay them so they keep moving.
+_PS5_LED_REPLAY_S = 6.0
+_PS5_LED_RETRY_MAX_S = 300.0
+_PS5_GPU_SAMPLE_S = 30.0
+_PS5_GPU_LOG_GAP_S = 600.0
 _CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
 _FULL_CHARGE_ONCE_SECONDS = 24 * 60 * 60
 _FULL_CHARGE_ONCE_POLL_S = 30.0
@@ -267,9 +340,25 @@ _ROG_CHARGE_LIMIT_PROFILES = frozenset({
     "rog_xbox_ally",
     "rog_xbox_ally_x",
 })
+# After a resume: pulse samples every 2 s and marks each re-apply step for this long.
+_RESUME_WINDOW_S = 60.0
+# Switching cores off or pinning the GPU clock seconds after a resume can freeze the
+# machine; both wait this long after waking.
+_RESUME_HOLD_S = 30.0
+
 _STEAM_DECK_PROFILES = frozenset({
     "steam_deck_lcd",
     "steam_deck_oled",
+})
+
+# A TDP change the user makes here wins over Steam's download mode.
+_USER_TDP_REASONS = frozenset({
+    "manual-watts", "manual-levels", "preset", "boost-mode", "firmware-mode",
+    "follow-global", "auto-toggle", "take-control", "control-enabled",
+    "battery-ceiling", "cooler-ceiling", "experimental-ac-ceiling",
+    "low-battery-hold-toggle", "low-battery-hold-toggle-off",
+    "manual-gpu-link", "manual-gpu-level", "manual-auto-restore", "auto-config",
+    "firmware-mode-rollback",
 })
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
@@ -283,7 +372,9 @@ _OFFICIAL_THEME_CHANNEL = theme_remote.OfficialThemeChannel(
     catalog_path="themes/v1/catalog.json",
 )
 _THEME_CATALOG_CACHE_FILE = "theme-catalog-cache.json"
+_THEME_EARLY_CACHE_FILE = "theme-early-cache.json"
 _THEME_EXTENSION_RECEIPTS_FILE = "theme-extension-receipts.json"
+_THEME_STORAGE_DIR = "theme-storage"
 _THEME_EARLY_INSTALLS_FILE = "theme-early-installs.json"
 _THEME_ACTIVATION_RECOVERY_FILE = "theme-activation-recovery.json"
 _THEME_FAILURE_OPERATIONS = frozenset({
@@ -291,13 +382,28 @@ _THEME_FAILURE_OPERATIONS = frozenset({
     "cleaning", "restoring",
 })
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
+# CSS Loader's own target categories; anything else a theme author typed is counted as "other".
+_THEME_TARGETS = frozenset({
+    "system-wide", "home", "library", "store", "keyboard", "preset", "snippet", "background",
+    "font", "fonts", "desktop", "hero", "friends", "settings", "quick access", "downloads",
+    "lock screen", "notifications", "game page", "other",
+})
 _THEME_FAILURE_MESSAGE_CHARS = 240
 _THEME_FAILURE_HISTORY = 5
-_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media|frontend)$")
+_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media|frontend|themes)$")
 _UI_DIAGNOSTIC_HISTORY = 20
 _UI_EVENT_NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 _THEME_FOLDER_SCAN_LIMIT = 200
 _THEME_MANIFEST_SCAN_BYTES = 256 * 1024
+
+
+_THEME_PACKAGE_REASON = re.compile(r"[A-Za-z][A-Za-z ,'-]{2,79}")
+
+
+def _theme_package_reason(error: Exception) -> str:
+    """The package check's fixed sentence, cut before any detail such as a file name."""
+    text = str(error).split(":", 1)[0].strip()
+    return text if _THEME_PACKAGE_REASON.fullmatch(text) else ""
 
 
 @dataclass(frozen=True)
@@ -383,8 +489,36 @@ def _current_boot_id():
         return None
 
 
+def _rail_live_max(observation, surface):
+    """Live maxima of all three rails, or None: a partial reading is unknown."""
+    rails = (getattr(observation, "surfaces", None) or {}).get(surface, {})
+    maxima = {
+        rail: int(reading.max_w)
+        for rail in ("pl1", "pl2", "pl3")
+        if (reading := rails.get(rail)) is not None and reading.max_w is not None
+    }
+    return maxima if len(maxima) == 3 else None
+
+
 def _user_home() -> str:
     return getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+
+
+_UPSCALERS_LOCK = threading.Lock()
+
+
+def _snapshot_partial(partial: dict) -> dict:
+    """What the upscaler report read before its wait ran out; the reading thread may still be adding to it."""
+    snapshot = dict(partial)
+    if isinstance(snapshot.get("games"), list):
+        snapshot["games"] = list(snapshot["games"])
+    return snapshot
+
+
+def _upscalers_journal(level: str, event: str, **fields) -> None:
+    diary = journal.active
+    if diary is not None:
+        diary.write(level, "upscalers", event, **fields)
 
 
 def _kiosk_journal(level: str, event: str, **fields) -> None:
@@ -404,6 +538,8 @@ DEFAULTS = {
     "tdp_unit": "W",
     "kiosk_enabled": False,
     "kiosk_brightness": None,
+    "duo_artwork": {},
+    "vida_artwork": {},
     "developer_options": False,
     "remote_access_enabled": False,
     # Persisted settings keys go here; SettingsStore merges these over stored values.
@@ -446,8 +582,10 @@ DEFAULTS = {
     "disabled_modules": [],
     # One-time notices (SettingsStore drops keys not in DEFAULTS).
     "seen_tdp_conflict_takeover": False,
+    "hide_tdp_steamos_card": False,
     "seen_autotdp_notice": False,
     "charger_notice_dismissed_at": None,
+    "kernel_support_notice_dismissed": False,
     # HHD's tdp_enable saved when we take control, to restore later. None = never took it.
     "hhd_tdp_prev": None,
     # Unload hands TDP back to HHD, so the player's choice of Panel is kept apart.
@@ -486,6 +624,17 @@ DEFAULTS = {
     "fan_experimental": False,
     "board_fan_driver": False,
     "board_fan_module": None,
+    "board_fan_control_off": False,
+    "fan_release_pending": False,
+    # PlayStation 5 fan target (°C) for the firmware autoservo; None = untouched.
+    "ps5_fan_target_c": None,
+    # PlayStation 5 light preset (None = untouched) and thermal guard / overheat beep.
+    "ps5_led_preset": None,
+    "ps5_guard_enabled": True,
+    "ps5_guard_threshold": PS5_GUARD_DEFAULT_C,
+    "ps5_alarm_enabled": False,
+    # Set while the thermal guard holds the fan, so a crash cannot leave it pinned.
+    "ps5_guard_holding": False,
     # Firmware performance mode (Legion Go original). "custom" = our TDP; a named mode
     # hands power+fan+LED to the firmware. Device-global; ignored where unsupported.
     "firmware_mode": "custom",
@@ -506,7 +655,7 @@ DEFAULTS = {
 }
 
 
-class Plugin:
+class Plugin(AmbientRpc):
     # Re-fit + re-apply the learned fan curve every this-many collected in-game
     # samples. The sampler ticks every 5 s only while in-game, so 360 × 5 s ≈ 30 min
     # of ACTUAL play — matching the telemetry histogram's ~30 min decay half-life so
@@ -575,6 +724,9 @@ class Plugin:
         self._tdp_profiles = ProfileStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "tdp_profiles.json"),
             default_watts=self._device.tdp_default or 15,
+        )
+        self._power_ownership = PowerOwnershipStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "power_ownership.json")
         )
         self._auto_learning = AutoTdpLearningStore(
             os.path.join(
@@ -645,6 +797,8 @@ class Plugin:
         self._low_battery_below = None
         self._low_battery_hold_cached_reassert_s = None
         self._low_battery_hold_last_failure = None
+        self._primary_tdp_live_max_seen = None
+        self._tdp_rewrite_after_hold_release = False
         self._low_battery_hold_recovery_pending = bool(
             getattr(self._low_battery_hold_backend, "safety_locked", False)
         )
@@ -674,6 +828,7 @@ class Plugin:
             ),
         )
         self._powerstation_detector = powerstation_conflict.Detector()
+        self._steamos_manager_detector = steamos_manager_conflict.Detector(self._run_capture)
         self._tdp_profile_sanitize_pending = False
         self._tdp_profile_sanitize_max = None
         self._tdp_storage_migration_retry_at = 0.0
@@ -706,14 +861,23 @@ class Plugin:
             desktop=self._desktop_mode_on(), device_key=self._device.key)
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
-        self._fan_ctrl = fan_control.select_fan_backend(
-            self._device, temp_fn=self._driving_temp,
-            experimental=bool(self._settings.get("fan_experimental", False)))
+        self._fan_ctrl = self._select_fan_backend()
         board_module = self._settings.get("board_fan_module")
         self._board_fans = (
             BoardFanDriver(owned=(board_module,) if isinstance(board_module, str) else ())
             if self._device.key == "desktop_pc" else None
         )
+        ps5_io = FirmwareIo() if self._device.key == "playstation_5" else None
+        self._ps5_fan = Ps5FanTarget(io=ps5_io) if ps5_io else None
+        self._ps5_console = Ps5Console(io=ps5_io) if ps5_io else None
+        self._ps5_console_task = None
+        self._ps5_led_replayed_at = 0.0
+        self._ps5_gpu_sampled_at = 0.0
+        self._ps5_guard_release_pending = False
+        self._ps5_led_retry_at = 0.0
+        self._ps5_led_attempts = 0
+        self._ps5_gpu_logged_at = -_PS5_GPU_LOG_GAP_S
+        self._ps5_gpu_limit = {"samples": 0, "over_limit": 0, "last_over": None}
         # True only on a device with an opt-in experimental EC fan channel (Legion
         # Go S / OneXPlayer Apex). DMI-only check (no EC I/O) → the UI shows the
         # experimental toggle.
@@ -807,6 +971,7 @@ class Plugin:
             self._settings.get("hud_managed_path")
         )
         self._power_reader = PowerReader()
+        self._rapl_power = RaplPackagePower()
         self._gamescope_stats = GamescopeStats()
         self._gamescope_perf = GamescopePerf(
             app_id=self._gamescope_focus_app,
@@ -822,6 +987,7 @@ class Plugin:
         self._charge_limit_failures = 0
         self._charge_limit_verify_delays = _CHARGE_LIMIT_VERIFY_DELAYS
         self._charge_limit_generation = 0
+        self._charge_limit_resume_current = None
         self._charge_limit_reconcile_task = None
         self._charge_limit_apply_tasks = set()
         self._charge_limit_candidate = None
@@ -910,6 +1076,15 @@ class Plugin:
         self._hud_reload_retry_at = 0.0
         self._hud_conflict = None
         self._hud_last_publish_at = float("-inf")
+        self._hud_redetect_at = float("-inf")
+        self._hud_value_publish_count = 0
+        self._hud_redetect_count = 0
+        self._hud_redetect_recovered = 0
+        self._hud_last_delivery = "unknown"
+        self._hud_unobserved_reloads = 0
+        self._hud_reload_via_proc_cwd = False
+        self._hud_observe_after = float("-inf")
+        self._hud_power_source = None
         self._pdc_active_ids = []
         self._pdc_locale = "es"
         self._pdc_written = {}
@@ -929,6 +1104,12 @@ class Plugin:
         )
         self._tdp_observation_at = float("-inf")
         self._tdp_reconcile_memory = ReconcileMemory()
+        self._tdp_last_written = None
+        self._steam_download_hold = SteamDownloadModeHold(
+            read_download_mode_limit()
+            if self._device.key in _STEAM_DECK_PROFILES
+            else None
+        )
         self._tdp_overshoot = HiddenOvershootMonitor()
         self._tdp_status = (
             "settling" if self._tdp_supported() else "unsupported"
@@ -1134,9 +1315,9 @@ class Plugin:
         self._init()
         return await self._offload_steam_cleaner("inventory")
 
-    async def prepare_steam_cleaner(self, scan_id: str, entry_ids: list[str]) -> dict:
+    async def prepare_steam_cleaner(self, scan_id: str, entry_ids: list[str], force_entry_ids: list[str] | None = None) -> dict:
         self._init()
-        return await self._offload_steam_cleaner("prepare", scan_id, entry_ids)
+        return await self._offload_steam_cleaner("prepare", scan_id, entry_ids, force_entry_ids)
 
     async def execute_steam_cleaner(self, plan_id: str, confirm_compatdata: bool = False) -> dict:
         self._init()
@@ -1213,6 +1394,337 @@ class Plugin:
             if executor is not None:
                 executor.shutdown(wait=True, cancel_futures=True)
                 self._steam_cleaner_executor = None
+
+    def _upscalers(self) -> UpscalerService:
+        if getattr(self, "_upscalers_closed", False):
+            raise RuntimeError("closed")
+        with _UPSCALERS_LOCK:
+            return getattr(self, "_upscaler_service", None) or self._create_upscalers()
+
+    def _create_upscalers(self) -> UpscalerService:
+        chip = self._chip or self._device.chip
+        service = UpscalerService(
+            _user_home(),
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "upscalers"),
+            device_registry.gpu_generation(self._device.vendor, chip, "/"),
+            logger=decky.logger, device=self._device.key,
+        )
+        service.engine_game_running = lambda: bool(getattr(self, "_current_appid", None))
+        self._upscaler_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upscalers")
+        self._upscaler_service = service
+        return service
+
+    async def _upscalers_call(self, method: str, *args):
+        self._init()
+        loop = asyncio.get_running_loop()
+        service = await loop.run_in_executor(None, self._upscalers)
+        actions = {"configure", "set_identity", "set_exe", "record_added_args", "refresh_wiki", "set_ini",
+                   "verify", "capture_frame", "add_mod", "remove_mod", "lsfg_install", "lsfg_adopt_foreign", "lsfg_restore_foreign",
+                   "adopt_foreign", "restore_foreign", "lsfg_uninstall", "lsfg_game", "mako_install", "mako5_install", "mako_game", "press_key", "set_image_settings", "restore_image_settings", "begin_scaler_transition", "finish_scaler_transition"}
+        tracked = method in actions
+        appid = str(args[0]) if args and args[0] is not None else "global"
+        requested = upscaler_diagnostics.fields(args[1] if len(args) > 1 else None, upscaler_diagnostics.REQUEST_KEYS)
+        if method == "set_ini" and len(args) > 2:
+            requested = await loop.run_in_executor(None, lambda: service.diagnostic_ini_request(appid, args[1], args[2]))
+        elif method == "lsfg_game":
+            requested["enabled"] = len(args) > 1 and args[1] is not None
+        elif method == "mako_game" and (len(args) <= 1 or args[1] is None):
+            requested.update(enabled=False, scaling_enabled=False)
+        elif method == "set_image_settings" and len(args) > 1 and isinstance(args[1], dict):
+            requested = {}
+            if args[1].get("int8") in ("auto", "on", "off"):
+                requested["int8"] = args[1]["int8"]
+            sharpness = args[1].get("sharpness")
+            if isinstance(sharpness, dict):
+                if type(sharpness.get("enabled")) is bool:
+                    requested["enabled"] = sharpness["enabled"]
+                value = sharpness.get("value")
+                if type(value) in (int, float) and math.isfinite(value) and 0 <= value <= 1:
+                    requested["value"] = value
+        elif method == "press_key" and len(args) > 1:
+            requested = {"key_action": str(args[1])[:40]}
+        if tracked:
+            await loop.run_in_executor(None, lambda: service.record_action(appid, method, "started", requested))
+        try:
+            result = await loop.run_in_executor(None, lambda: getattr(service, method)(*args))
+        except Exception as error:
+            code = error.code if isinstance(error, UpscalerError) else type(error).__name__
+            if tracked:
+                await loop.run_in_executor(None, lambda: service.record_action(appid, method, "error", requested, code))
+            lookup = getattr(error, "lookup", None)
+            _upscalers_journal("WARNING", "refused", action=method, appid=appid, code=code,
+                               **({"lookup": lookup} if lookup else {}))
+            if isinstance(error, UpscalerError):
+                raise RuntimeError(error.code) from None
+            raise
+        if tracked:
+            await loop.run_in_executor(None, lambda: service.record_action(appid, method, "done", requested))
+            _upscalers_journal("INFO", "action_done", action=method, appid=appid)
+        return result
+
+    async def _upscalers_job(self, kind: str, appid: str, method: str, *args) -> dict:
+        self._init()
+        loop = asyncio.get_running_loop()
+        service = await loop.run_in_executor(None, self._upscalers)
+        try:
+            service.begin(kind, appid)
+        except UpscalerError as error:
+            code = error.code
+            await loop.run_in_executor(None, lambda: service.record_action(appid, kind, "refused", args[0] if args else None, code))
+            _upscalers_journal("WARNING", "refused", action=kind, appid=appid, code=code)
+            raise RuntimeError(code) from None
+        _upscalers_journal("INFO", "job_started", action=kind, appid=appid, job_id=(service.job() or {}).get("id"))
+
+        def work() -> None:
+            service.run(getattr(service, method), appid, *args)
+            job = service.job() or {}
+            level = "INFO" if job.get("state") == "done" else "WARNING"
+            _upscalers_journal(level, kind, appid=appid, state=job.get("state"), error=job.get("error"),
+                               job_id=job.get("id"), requested=upscaler_diagnostics.fields(args[0] if args else None, upscaler_diagnostics.REQUEST_KEYS))
+
+        self._upscaler_executor.submit(work)
+        return service.job() or {}
+
+    async def get_upscalers_overview(self) -> dict:
+        return await self._upscalers_call("overview")
+
+    async def get_upscalers_selector_installs(self, libraries: list | None = None) -> dict:
+        folders = tuple(path for path in (libraries[:32] if isinstance(libraries, list) else ()) if isinstance(path, str))
+        pending = getattr(self, "_selector_inventory", None)
+        if pending is None or pending[1].done():
+            loop = asyncio.get_running_loop()
+            confirmed: set[int] = set()
+            task = loop.run_in_executor(None, upscaler_games.selector_installs, _user_home(), folders,
+                                        lambda appid: loop.call_soon_threadsafe(confirmed.add, appid))
+            self._selector_inventory = (folders, task, confirmed)
+        else:
+            previous_folders, task, confirmed = pending
+            if previous_folders != folders:
+                return {"appids": [], "complete": False}
+        # A disconnected mount can stall a filesystem call in the kernel. Never queue a second scan behind it.
+        done, _ = await asyncio.wait({task}, timeout=0.6)
+        return task.result() if done else {"appids": sorted(confirmed), "complete": False}
+
+    async def get_upscalers_compat(self, appids: list[str], libraries: list | None = None) -> dict:
+        folders = libraries if isinstance(libraries, list) else None
+        return await self._upscalers_call("compatibility", [str(a) for a in (appids or [])], folders)
+
+    async def search_upscaler_games(self, term: str) -> list:
+        return await self._upscalers_call("search_games", str(term)[:120])
+
+    async def set_upscaler_identity(self, appid: str, steam_appid: int | None = None, name: str | None = None) -> dict:
+        result = await self._upscalers_call("set_identity", str(appid), steam_appid, name)
+        _upscalers_journal("INFO", "identity", appid=str(appid), steam_appid=steam_appid)
+        return result
+
+    async def get_upscalers_game(self, appid: str, hint: dict | None = None) -> dict:
+        return await self._upscalers_call("game", str(appid), hint if isinstance(hint, dict) else None)
+
+    async def get_upscaler_user_file_candidates(self, dependency_id: str) -> dict:
+        return await self._upscalers_call("user_file_candidates", str(dependency_id))
+
+    async def add_upscaler_user_file(self, appid: str, dependency_id: str, path: str) -> dict:
+        result = await self._upscalers_call("add_user_file", str(appid), str(dependency_id), str(path))
+        _upscalers_journal("INFO", "user_file", appid=str(appid), dependency=str(dependency_id))
+        return result
+
+    async def remove_upscaler_user_file(self, appid: str, dependency_id: str) -> dict:
+        result = await self._upscalers_call("remove_user_file", str(appid), str(dependency_id))
+        _upscalers_journal("INFO", "user_file_removed", appid=str(appid), dependency=str(dependency_id))
+        return result
+
+    async def get_upscaler_mod_candidates(self, appid: str) -> dict:
+        return await self._upscalers_call("mod_candidates", str(appid))
+
+    async def add_upscaler_mod(self, appid: str, path: str, password: str | None = None) -> dict:
+        result = await self._upscalers_call("add_mod", str(appid), str(path), str(password) if password else None)
+        _upscalers_journal("INFO", "mod", appid=str(appid), files=(result.get("mod") or {}).get("count"))
+        return result
+
+    async def remove_upscaler_mod(self, appid: str) -> dict:
+        result = await self._upscalers_call("remove_mod", str(appid))
+        _upscalers_journal("INFO", "mod_removed", appid=str(appid))
+        return result
+
+    async def set_upscalers_exe(self, appid: str, exe: str | None = None) -> dict:
+        result = await self._upscalers_call("set_exe", str(appid), exe)
+        _upscalers_journal("INFO", "exe", appid=str(appid), manual=exe is not None)
+        return result
+
+    async def install_upscaler(self, appid: str, choice: dict) -> dict:
+        return await self._upscalers_job("install", str(appid), "install", dict(choice or {}))
+
+    async def record_upscaler_args(self, appid: str, args: list[str], overrides: list[str] | None = None,
+                                   env: list[str] | None = None) -> dict:
+        return await self._upscalers_call("record_added_args", str(appid), [str(a) for a in (args or [])],
+                                          None if overrides is None else [str(o) for o in overrides],
+                                          None if env is None else [str(k) for k in env])
+
+    async def begin_scaler_transition(self, appid: str) -> dict:
+        return await self._upscalers_call("begin_scaler_transition", str(appid))
+
+    async def finish_scaler_transition(self, appid: str, token: str, rollback: bool = False) -> dict | None:
+        return await self._upscalers_call("finish_scaler_transition", str(appid), str(token), bool(rollback))
+
+    async def uninstall_upscaler(self, appid: str) -> dict:
+        return await self._upscalers_job("uninstall", str(appid), "uninstall")
+
+    async def configure_upscaler(self, appid: str, choice: dict) -> dict:
+        result = await self._upscalers_call("configure", str(appid), dict(choice or {}))
+        _upscalers_journal("INFO", "configure", appid=str(appid), **result.get("options", {}))
+        return result
+
+    async def refresh_upscaler_wiki(self, appid: str | None = None) -> dict:
+        result = await self._upscalers_call("refresh_wiki", str(appid) if appid else None)
+        if result.get("updated") or not result.get("fresh"):
+            _upscalers_journal("INFO", "wiki_refresh", **result)
+        return result
+
+    async def get_upscaler_image_settings(self, appid: str) -> dict:
+        return await self._upscalers_call("image_settings", str(appid))
+
+    async def set_upscaler_image_settings(self, appid: str, values: dict) -> dict:
+        result = await self._upscalers_call("set_image_settings", str(appid), values)
+        _upscalers_journal("INFO", "image_settings", appid=str(appid), settings=result)
+        return result
+
+    async def restore_upscaler_image_settings(self, appid: str) -> dict:
+        result = await self._upscalers_call("restore_image_settings", str(appid))
+        _upscalers_journal("INFO", "image_settings_restored", appid=str(appid), settings=result)
+        return result
+
+    async def get_upscaler_ini(self, appid: str) -> dict:
+        return await self._upscalers_call("ini_schema", str(appid))
+
+    async def set_upscaler_ini(self, appid: str, key: str, value: str) -> dict:
+        result = await self._upscalers_call("set_ini", str(appid), str(key), str(value))
+        _upscalers_journal("INFO", "ini_set", appid=str(appid), key=result["key"])
+        return result
+
+    async def verify_upscaler(self, appid: str) -> dict:
+        result = await self._upscalers_call("verify", str(appid))
+        _upscalers_journal("INFO", "verify", appid=str(appid), result=result.get("result"))
+        return result
+
+    async def capture_upscaler_frame(self, appid: str) -> dict:
+        result = await self._upscalers_call("capture_frame", str(appid))
+        _upscalers_journal("INFO", "capture", appid=str(appid), build=result.get("build"))
+        return result
+
+    async def get_upscaler_live(self, appid: str) -> dict:
+        result = await self._upscalers_call("live", str(appid))
+        self._kiosk_fps_at = time.monotonic()
+        await self._apply_stats_reader()
+        fps = self._gamescope_perf.fps()
+        return {**result, "fps": round(fps, 1) if fps is not None else None}
+
+    async def refresh_framegen_engine(self, engine: str, apply: bool = False) -> dict:
+        return await self._upscalers_call("refresh_engine", engine, apply)
+
+    async def get_lsfg_status(self) -> dict:
+        return await self._upscalers_call("lsfg_status")
+
+    async def install_lsfg(self) -> dict:
+        result = await self._upscalers_call("lsfg_install")
+        _upscalers_journal("INFO", "lsfg_install", installed=result.get("installed"), dll=bool(result.get("dll")))
+        return result
+
+    async def adopt_foreign_lsfg(self) -> dict:
+        result = await self._upscalers_call("lsfg_adopt_foreign")
+        _upscalers_journal("INFO", "lsfg_adopt_foreign", installed=result.get("installed"))
+        return result
+
+    async def restore_foreign_lsfg(self) -> dict:
+        result = await self._upscalers_call("lsfg_restore_foreign")
+        _upscalers_journal("INFO", "lsfg_restore_foreign", foreign=result.get("foreign"))
+        return result
+
+    async def adopt_foreign_upscaler(self, appid: str) -> dict:
+        result = await self._upscalers_call("adopt_foreign", str(appid))
+        _upscalers_journal("INFO", "adopt_foreign", appid=str(appid), moved=",".join(result["moved"])[:300])
+        return result
+
+    async def restore_foreign_upscaler(self, appid: str) -> dict:
+        result = await self._upscalers_call("restore_foreign", str(appid))
+        _upscalers_journal("INFO", "restore_foreign", appid=str(appid), restored=",".join(result["restored"])[:300])
+        return result
+
+    async def uninstall_lsfg(self) -> dict:
+        result = await self._upscalers_call("lsfg_uninstall")
+        _upscalers_journal("INFO", "lsfg_uninstall")
+        return result
+
+    async def set_lsfg_game(self, appid: str, config: dict | None = None) -> dict:
+        result = await self._upscalers_call("lsfg_game", str(appid), config)
+        _upscalers_journal("INFO", "lsfg_game", appid=str(appid), profile=result.get("profile"))
+        return result
+
+    async def get_mako_status(self, appid: str | None = None) -> dict:
+        return await self._upscalers_call("mako_status", str(appid) if appid is not None else None)
+
+    async def install_mako(self, line: int = 4) -> dict:
+        return await self._upscalers_call("mako5_install" if line == 5 else "mako_install")
+
+    async def dismiss_mako_notice(self) -> dict:
+        return await self._upscalers_call("mako_dismiss_notice")
+
+    async def set_mako_game(self, appid: str, config: dict | None = None) -> dict:
+        return await self._upscalers_call("mako_game", str(appid), config)
+
+    async def get_mako_runtime(self, appid: str) -> dict:
+        return await self._upscalers_call("mako_runtime", str(appid))
+
+    async def get_upscaler_launch_receipt(self, appid: str, owner: str) -> dict | None:
+        return await self._upscalers_call("get_launch_receipt", str(appid), owner)
+
+    async def set_upscaler_launch_receipt(self, appid: str, owner: str, receipt: dict | None = None) -> bool:
+        return await self._upscalers_call("set_launch_receipt", str(appid), owner, receipt)
+
+    async def press_upscaler_key(self, appid: str, action: str) -> dict:
+        result = await self._upscalers_call("press_key", str(appid), str(action))
+        _upscalers_journal("INFO", "key", appid=str(appid), action=str(action))
+        return result
+
+    async def get_upscalers_job(self) -> dict | None:
+        service = getattr(self, "_upscaler_service", None)
+        return service.job() if service is not None else None
+
+    async def cancel_upscalers_job(self) -> dict | None:
+        service = getattr(self, "_upscaler_service", None)
+        job = service.cancel() if service is not None else None
+        if job:
+            await asyncio.get_running_loop().run_in_executor(None, lambda: service.record_action(str(job.get("appid")), "cancel", "requested"))
+            _upscalers_journal("INFO", "cancel_requested", appid=job.get("appid"), job_id=job.get("id"))
+        return job
+
+    async def _upscalers_report(self, context=None) -> dict:
+        frontend = upscaler_diagnostics.frontend_context(context.get("upscalers") if isinstance(context, dict) else None)
+        backend = {"source": "current_game", "stable_appid": str(getattr(self, "_current_appid", "") or "")[:160],
+                   "name": str(getattr(self, "_current_game_name", "") or "")[:160]}
+        partial: dict = {}
+        try:
+            result = await asyncio.wait_for(self._upscalers_call("report", frontend, UPSCALER_REPORT_BUDGET_S, partial), timeout=4)
+        except Exception as error:  # noqa: BLE001
+            result = {**_snapshot_partial(partial), "error": "diagnostics_unavailable", "reason": type(error).__name__, "frontend": frontend}
+        return {**result, "backend_running": backend}
+
+    async def diagnose_upscaler(self, appid: str) -> dict:
+        return await self._upscalers_call("diagnose", str(appid))
+
+    async def _support_upscalers_state(self) -> dict:
+        service = getattr(self, "_upscaler_service", None)
+        return await asyncio.to_thread(service.support_state) if service is not None else {"loaded": False}
+
+    def _close_upscalers_sync(self) -> None:
+        self._upscalers_closed = True
+        service = getattr(self, "_upscaler_service", None)
+        if service is not None:
+            service.cancel()
+            service.lsfg.close()
+        executor = getattr(self, "_upscaler_executor", None)
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
+            self._upscaler_executor = None
 
     async def get_launch_tools(self) -> dict:
         self._init()
@@ -1304,6 +1816,89 @@ class Plugin:
     def _developer_options_on(self) -> bool:
         return bool(self._settings.get("developer_options"))
 
+    def _artwork_support(self, store: str) -> dict:
+        records = theme_artwork.records(self._settings.get(theme_artwork.STORES[store]))
+        return {"configured_games": sum(key != "0" for key in records), "general_configured": "0" in records}
+
+    def _support_duo_artwork(self) -> dict:
+        return self._artwork_support("duo")
+
+    def _support_vida_artwork(self) -> dict:
+        return self._artwork_support("vida")
+
+    async def get_duo_artwork(self) -> dict:
+        return await self.get_theme_artwork("duo")
+
+    async def set_duo_artwork(self, app_id: int, artwork: dict | None) -> dict:
+        return await self.set_theme_artwork("duo", app_id, artwork)
+
+    async def get_theme_artwork(self, store: str) -> dict:
+        self._init()
+        if store not in theme_artwork.STORES:
+            return {}
+        return theme_artwork.records(self._settings.get(theme_artwork.STORES[store]))
+
+    async def set_theme_artwork(self, store: str, app_id: int, artwork: dict | None) -> dict:
+        self._init()
+        if store not in theme_artwork.STORES:
+            return {"ok": False, "error": "invalid_store"}
+        if isinstance(app_id, bool) or not isinstance(app_id, int) or not 0 <= app_id < 2**32:
+            return {"ok": False, "error": "invalid_app"}
+        try:
+            value = theme_artwork.normalize(artwork, general=app_id == 0) if artwork is not None else None
+        except ValueError as error:
+            return {"ok": False, "error": str(error)}
+        key = theme_artwork.STORES[store]
+        previous = self._settings.get(key, {})
+        updated = theme_artwork.records(previous)
+        if value is None:
+            updated.pop(str(app_id), None)
+        else:
+            if str(app_id) not in updated and len(updated) >= 4096:
+                return {"ok": False, "error": "limit_reached"}
+            updated[str(app_id)] = value
+        self._settings[key] = updated
+        try:
+            self._save()
+        except Exception:
+            self._settings[key] = previous
+            decky.logger.exception("Theme artwork persistence failed (%s)", store)
+            return {"ok": False, "error": "save_failed"}
+        return {"ok": True}
+
+    def _support_theme_groups(self) -> dict:
+        return theme_groups.summary(self._settings.get("theme_groups"))
+
+    async def get_theme_groups(self, account: str) -> list:
+        self._init()
+        if not theme_groups.valid_account(account):
+            return []
+        return theme_groups.store(self._settings.get("theme_groups")).get(account, [])
+
+    async def set_theme_groups(self, account: str, groups: list) -> dict:
+        self._init()
+        if not theme_groups.valid_account(account) or not isinstance(groups, list):
+            return {"ok": False, "error": "invalid_request"}
+        previous = self._settings.get("theme_groups", {})
+        updated = theme_groups.store(previous)
+        if account not in updated and len(updated) >= theme_groups.MAX_ACCOUNTS:
+            return {"ok": False, "error": "limit_reached"}
+        updated[account] = theme_groups.records(groups)
+        self._settings["theme_groups"] = updated
+        try:
+            self._save()
+        except Exception:
+            self._settings["theme_groups"] = previous
+            decky.logger.exception("Theme groups persistence failed")
+            return {"ok": False, "error": "save_failed"}
+        return {"ok": True, "groups": updated[account]}
+
+    async def get_tab_master_tabs(self, account: str) -> list:
+        self._init()
+        if not theme_groups.valid_account(account):
+            return []
+        return theme_groups.read_tab_master(Path(decky.DECKY_PLUGIN_SETTINGS_DIR).parent, account)
+
     async def get_developer_options(self) -> bool:
         self._init()
         return self._developer_options_on()
@@ -1365,11 +1960,90 @@ class Plugin:
         except Exception as error:  # noqa: BLE001
             decky.logger.warning("Kiosk shutdown incomplete: %s", error)
 
+    def _game_freezer(self) -> game_freeze.GameFreezer:
+        freezer = getattr(self, "_freezer", None)
+        if freezer is None:
+            freezer = game_freeze.GameFreezer(
+                schedule=asyncio.get_running_loop().call_later,
+                cancel=lambda handle: handle.cancel(),
+                on_change=self._game_freeze_changed,
+            )
+            self._freezer = freezer
+        return freezer
+
+    def _game_freeze_changed(self, event: str, fields: dict) -> None:
+        decky.logger.info("Game %s (%s, %s processes)", event, fields.get("appid"), fields.get("processes"))
+        diary = journal.active
+        if diary is not None:
+            diary.write("INFO", "games", event, **fields)
+
+    async def pause_theme_game(self, appid, ms) -> bool:
+        """A theme's menus are over the running game: it freezes until `ms` from now (game_freeze), renewed by
+        calling again. Shortcut ids come as decimal strings."""
+        self._init()
+        # Validated on x86 handhelds only: on ARM the game runs under FEX and its process tree is unverified.
+        if getattr(self, "_freeze_on_arm", None) is None:
+            self._freeze_on_arm = device_tree.is_arm()
+        if self._freeze_on_arm:
+            return False
+        try:
+            return self._game_freezer().pause(appid, ms)
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Game freeze failed (%s)", type(error).__name__)
+            return False
+
+    async def resume_theme_game(self) -> None:
+        freezer = getattr(self, "_freezer", None)
+        if freezer is not None:
+            freezer.resume()
+
+    async def get_theme_protondb(self, appid) -> dict:
+        """ProtonDB's rating for a theme's details: its API answers only its own site (CORS)."""
+        self._init()
+        lookup = getattr(self, "_protondb", None)
+        if lookup is None:
+            lookup = theme_protondb.ProtonDbLookup(theme_protondb.cache_path(decky.DECKY_PLUGIN_SETTINGS_DIR))
+            self._protondb = lookup
+        try:
+            result = await asyncio.to_thread(lookup.lookup, appid)
+        except Exception as error:  # noqa: BLE001
+            result = {"result": "unavailable", "code": type(error).__name__}
+        if result.get("result") == "unavailable":
+            decky.logger.warning("ProtonDB lookup failed (%s)", result.get("code"))
+            diary = journal.active
+            if diary is not None:
+                diary.write("WARNING", "themes", "protondb_unavailable", code=result.get("code"))
+        return result
+
+    async def get_theme_hltb(self, appid, name) -> dict:
+        """How Long to Beat for a theme's details: Steam's client cannot reach howlongtobeat.com (CORS)."""
+        self._init()
+        lookup = getattr(self, "_hltb", None)
+        if lookup is None:
+            lookup = theme_hltb.HltbLookup(theme_hltb.cache_path(decky.DECKY_PLUGIN_SETTINGS_DIR))
+            self._hltb = lookup
+        try:
+            result = await asyncio.to_thread(lookup.lookup, appid, name)
+        except Exception as error:  # noqa: BLE001
+            result = {"result": "unavailable", "code": type(error).__name__}
+        if result.get("result") == "unavailable":
+            decky.logger.warning("HLTB lookup failed (%s)", result.get("code"))
+            diary = journal.active
+            if diary is not None:
+                diary.write("WARNING", "themes", "hltb_unavailable", code=result.get("code"))
+        return result
+
     async def get_proton_caps(self, compat_name: str = "") -> dict:
         """Which launch-option vars the installed Proton build supports."""
         self._init()
         home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
-        return proton_caps.detect_capabilities(compat_name, home=home)
+        capabilities = proton_caps.detect_capabilities(compat_name, home=home)
+        fsr_envs = [env for env in capabilities["envs"] if "FSR4" in env]
+        decky.logger.info(
+            "Proton capabilities: tool=%r found=%s fsr4=%s",
+            compat_name, capabilities["found"], fsr_envs,
+        )
+        return capabilities
 
     async def get_launch_usage(self) -> dict:
         self._init()
@@ -1432,6 +2106,7 @@ class Plugin:
         """Persist a module state and reconcile affected runtime ownership."""
         self._init()
         disabled = bool(disabled)
+        fans_were_on = self._module_enabled("fanControl")
         charge_generation = None
         if module_id in self._MODULE_SETTING:
             charge_generation = self._cancel_charge_limit_reconcile(
@@ -1455,6 +2130,8 @@ class Plugin:
             return {"disabled": self._user_disabled_all()}  # unknown id → no-op
         if disabled and module_id in ("system", "chargeLimit"):
             self._clear_charge_limit_full_once()
+        if fans_were_on and not self._module_enabled("fanControl"):
+            self._settings["fan_release_pending"] = True
         release_requested = (
             dict(targets.requested)
             if module_id == "power"
@@ -1557,6 +2234,16 @@ class Plugin:
     def _theme_receipts_path(self) -> Path:
         return Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_EXTENSION_RECEIPTS_FILE
 
+    def _theme_storage(self) -> theme_storage.ThemeStorage:
+        store = getattr(self, "_theme_storage_store", None)
+        if store is None:
+            store = theme_storage.ThemeStorage(Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_STORAGE_DIR)
+            self._theme_storage_store = store
+        return store
+
+    def _support_theme_storage(self) -> dict:
+        return {"storage": self._theme_storage().summary()}
+
     def _theme_activation_recovery_path(self) -> Path:
         return Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_ACTIVATION_RECOVERY_FILE
 
@@ -1576,7 +2263,14 @@ class Plugin:
             "unreadable_theme_folders": self._unreadable_theme_folders(),
             **inventory,
             "health": self._theme_health_summary(),
+            "catalog": self._theme_catalog_summary(),
         }
+
+    def _theme_catalog_summary(self) -> dict:
+        try:
+            return self._remote_themes().diagnostics()
+        except Exception as error:  # noqa: BLE001
+            return {"unavailable": type(error).__name__}
 
     def _theme_health_summary(self) -> dict:
         try:
@@ -1590,9 +2284,10 @@ class Plugin:
 
     def _installed_theme_inventory(self) -> dict:
         """Hooandee themes by name; other themes and CSS Loader profiles can carry personal names,
-        so they are only counted."""
+        so they are only counted, grouped by the CSS Loader target they declare."""
         installed = []
         other_active = 0
+        other_targets: dict[str, int] = {}
         early_installs = self._theme_early_installs()
         try:
             folders = sorted(entry for entry in self._themes_root().iterdir() if entry.is_dir())
@@ -1616,6 +2311,11 @@ class Plugin:
             active = config.get("active") is True
             if not (folder / "panel-theme.json").is_file():
                 other_active += active
+                if active:
+                    target = manifest.get("target")
+                    key = target.strip().lower() if isinstance(target, str) else ""
+                    key = key if key in _THEME_TARGETS else "other"
+                    other_targets[key] = other_targets.get(key, 0) + 1
                 continue
             installed.append({
                 "name": str(manifest.get("name", ""))[:80],
@@ -1629,7 +2329,11 @@ class Plugin:
                     if isinstance(key, str) and key.startswith("Estilizar ") and isinstance(value, str)
                 },
             })
-        return {"installed": installed, "other_active_themes": other_active}
+        return {
+            "installed": installed,
+            "other_active_themes": other_active,
+            "other_active_targets": other_targets,
+        }
 
     def _theme_early_installs(self) -> dict[str, str]:
         """Installed theme name to the early version it was installed as."""
@@ -1765,6 +2469,9 @@ class Plugin:
                 panel=read_version(),
             ),
             cache=cache,
+            early_cache=theme_remote.ThemeCatalogCacheStore(
+                os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, _THEME_EARLY_CACHE_FILE)
+            ),
             cache_error_logger=lambda error_name: decky.logger.warning(
                 "Theme catalog cache unavailable (%s)",
                 error_name,
@@ -1835,7 +2542,12 @@ class Plugin:
             result = await self._offload_theme_call(prepare)
             self._remember_prepared_theme(result, early=False)
             return result
-        except (theme_remote.ThemeRemoteError, theme_packages.ThemePackageError) as error:
+        except theme_packages.ThemePackageError as error:
+            # The package checks' own sentence names the cause (PDC-TM74: a bare unsafe_archive did not).
+            reason = _theme_package_reason(error)
+            decky.logger.warning("Remote theme prepare rejected (%s: %s)", error.code, reason)
+            return {"ok": False, "code": error.code, "theme_id": theme_id, "reason": reason}
+        except theme_remote.ThemeRemoteError as error:
             decky.logger.warning("Remote theme prepare rejected (%s)", error.code)
             return {"ok": False, "code": error.code, "theme_id": theme_id}
         except Exception as error:  # noqa: BLE001
@@ -1858,17 +2570,22 @@ class Plugin:
         downloads = os.path.join(home, "Downloads")
         return downloads if os.path.isdir(downloads) else home
 
-    async def prepare_early_theme_install(self, archive_path: str) -> dict:
+    async def prepare_early_theme_install(self, archive_path: str, catalog_id: str | None = None) -> dict:
         """Installs a theme zip the user picked, only if it is byte for byte a published early build."""
         self._init()
         if not isinstance(archive_path, str) or not archive_path or len(archive_path) > 4096:
             return {"ok": False, "code": "invalid_archive"}
+        if catalog_id is not None and (
+            not isinstance(catalog_id, str) or _SAFE_THEME_ID.fullmatch(catalog_id) is None
+        ):
+            return {"ok": False, "code": "unsupported_theme"}
 
         def prepare() -> dict:
             return self._remote_themes().prepare_early_install(
                 archive_path,
                 self._themes_root(),
                 self._theme_receipts_path(),
+                catalog_id=catalog_id,
             )
 
         try:
@@ -1876,7 +2593,11 @@ class Plugin:
             decky.logger.info("Early theme prepared (%s %s)", result.get("catalogId"), result.get("version"))
             self._remember_prepared_theme(result, early=True)
             return result
-        except (theme_remote.ThemeRemoteError, theme_packages.ThemePackageError) as error:
+        except theme_packages.ThemePackageError as error:
+            reason = _theme_package_reason(error)
+            decky.logger.warning("Early theme install rejected (%s: %s)", error.code, reason)
+            return {"ok": False, "code": error.code, "reason": reason}
+        except theme_remote.ThemeRemoteError as error:
             decky.logger.warning("Early theme install rejected (%s)", error.code)
             return {"ok": False, "code": error.code}
         except Exception as error:  # noqa: BLE001
@@ -2082,6 +2803,23 @@ class Plugin:
             )
             return {}
 
+    async def get_theme_actions(self, catalog_id: str, css_loader_name: str) -> list:
+        self._init()
+        try:
+            return await self._offload_theme_call(
+                lambda: theme_packages.theme_actions(
+                    self._themes_root(),
+                    catalog_id,
+                    css_loader_name,
+                )
+            )
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning(
+                "Theme actions unavailable (%s)",
+                type(error).__name__,
+            )
+            return []
+
     async def load_theme_extension(self, catalog_id: str, version: str) -> dict:
         self._init()
         if (
@@ -2106,6 +2844,45 @@ class Plugin:
                 type(error).__name__,
             )
             raise RuntimeError("extension_unavailable") from None
+
+    async def get_theme_storage(self, catalog_id: str, key: str) -> dict:
+        """A theme runtime's durable value; a failed read is an error, never an empty value."""
+        self._init()
+        try:
+            value = await self._offload_theme_call(lambda: self._theme_storage().get(catalog_id, key))
+            return {"ok": True, "value": value}
+        except theme_storage.ThemeStorageError as error:
+            decky.logger.warning("Theme storage read failed (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Theme storage read failed (%s)", type(error).__name__)
+            return {"ok": False, "code": "read_failed"}
+
+    async def set_theme_storage(self, catalog_id: str, key: str, value: str) -> dict:
+        self._init()
+        try:
+            await self._offload_theme_call(lambda: self._theme_storage().set(catalog_id, key, value))
+            return {"ok": True}
+        except theme_storage.ThemeStorageError as error:
+            decky.logger.warning("Theme storage write rejected (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Theme storage write failed (%s)", type(error).__name__)
+            return {"ok": False, "code": "write_failed"}
+
+    async def force_close_game(self, appid) -> dict:
+        """Last resort after Steam's TerminateApp left a game running: TERM, then KILL, its reaper tree only."""
+        self._init()
+        try:
+            result = await asyncio.to_thread(game_force_close.force_close, appid)
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Force close failed (%s)", type(error).__name__)
+            result = {"result": "failed", "code": type(error).__name__}
+        diary = journal.active
+        if diary is not None:
+            level = "INFO" if result.get("result") in ("terminated", "not_found") else "WARNING"
+            diary.write(level, "games", "force_close", **result)
+        return result
 
     async def get_theme_health(self) -> dict:
         self._init()
@@ -2165,7 +2942,10 @@ class Plugin:
         if self._chip:
             d["chip"] = self._chip
         # GPU generation for upscaler gating in Parámetros (FSR4 = rdna3/rdna4).
-        d["gpu_gen"] = device_registry.gpu_generation(self._device.vendor, d["chip"])
+        gpu = device_registry.gpu_facts(self._device.vendor, d["chip"], "/")
+        d["gpu_gen"] = gpu["generation"]
+        d["gpu_source"] = gpu["source"]
+        d["gpu_pci"] = gpu["pci"]
         return d
 
     def _desktop_mode_on(self) -> bool:
@@ -2497,6 +3277,7 @@ class Plugin:
                 self._offload_call(lambda: self._display_diagnostics(context))
             ),
             "gpu": await _safe(self.get_gpu_clock()),
+            "console": await _safe(self.get_console_state()),
             "cpu_gpu_diagnostics": self._cpu_gpu_diagnostics(),
             # get_controller_config can block (HHD localhost HTTP / busctl spawn) →
             # run it off the event loop, unlike the cheap sysfs reads above.
@@ -2510,6 +3291,8 @@ class Plugin:
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
+            "upscalers": await self._upscalers_report(context),
+            "ambient": self.ambient_diagnostics(),
             "themes": self._with_theme_display(
                 await _safe(self._offload_theme_call(self._theme_report_diagnostics)), context
             ),
@@ -2525,6 +3308,14 @@ class Plugin:
                 os.path.join(steam_home, ".local", "share", "Steam", "logs", name)
                 for name in ("cef_log.txt", "cef_log.previous.txt")
             ] if steam_home else []
+            if steam_home:
+                theme_log_dir = os.path.join(steam_home, ".local", "share", "Steam", "logs")
+                try:
+                    states["theme_lines"] = await loop.run_in_executor(
+                        None, lambda: report_collector.theme_diagnostic_lines(theme_log_dir)
+                    )
+                except Exception:  # noqa: BLE001
+                    states["theme_lines"] = {"schema": 1, "files": [], "lines": []}
             try:
                 states["frontend_crash"] = await loop.run_in_executor(
                     None,
@@ -2564,7 +3355,7 @@ class Plugin:
             categories=categories,
             text=text,
             kind=self._report_kind(context),
-            environment=self._report_environment(),
+            environment=self._report_environment(context),
             capabilities=report_collector.capabilities_from(states),
             state=states,
             stores=self._report_stores(),
@@ -2623,6 +3414,19 @@ class Plugin:
             "readback_mismatch",
         }:
             outcome = "unavailable"
+        deactivation = overlay.get("last_deactivation")
+        deactivation = deactivation if isinstance(deactivation, dict) else {}
+        hide_outcome = deactivation.get("outcome")
+        if hide_outcome not in {
+            "not_attempted",
+            "already_hidden",
+            "confirmed",
+            "unavailable",
+            "exception",
+            "readback_timeout",
+            "readback_mismatch",
+        }:
+            hide_outcome = "not_attempted"
         return {
             "snapshot_status": "available" if raw_level is not None else "unavailable",
             "resolver": resolver,
@@ -2639,6 +3443,11 @@ class Plugin:
                 "before_level": level(activation.get("before_level")),
                 "requested_level": level(activation.get("requested_level")),
                 "observed_level": level(activation.get("observed_level")),
+            },
+            "last_deactivation": {
+                "outcome": hide_outcome,
+                "before_level": level(deactivation.get("before_level")),
+                "observed_level": level(deactivation.get("observed_level")),
             },
         }
 
@@ -2690,6 +3499,12 @@ class Plugin:
             "managed_session_count": len(getattr(self, "_hud_sessions", ())),
             "reload_pending_count": len(getattr(self, "_hud_reload_pending", ())),
             "reload_attempt": int(getattr(self, "_hud_reload_attempt", 0)),
+            "value_publish_count": int(getattr(self, "_hud_value_publish_count", 0)),
+            "redetect_count": int(getattr(self, "_hud_redetect_count", 0)),
+            "redetect_recovered": int(getattr(self, "_hud_redetect_recovered", 0)),
+            "reload_delivery": getattr(self, "_hud_last_delivery", "unknown"),
+            "unobserved_reloads": int(getattr(self, "_hud_unobserved_reloads", 0)),
+            "power_source": getattr(self, "_hud_power_source", None),
             "conflict": bool(state.get("conflict") or conflict),
             "conflict_reason": conflict.get("reason"),
             "shutdown": bool(getattr(self, "_hud_shutdown", False)),
@@ -2730,20 +3545,50 @@ class Plugin:
 
     @staticmethod
     def _with_theme_display(themes, context):
-        display = context.get("theme_display") if isinstance(context, dict) else None
-        if not isinstance(themes, dict) or not isinstance(display, dict):
+        if not isinstance(themes, dict) or not isinstance(context, dict):
             return themes
-        sanitized = {}
-        for key, value in display.items():
-            if not isinstance(key, str) or len(key) > 32:
+        result = dict(themes)
+        for source, target, limit in (("theme_display", "display", 16), ("theme_surface", "surface", 24)):
+            values = context.get(source)
+            if not isinstance(values, dict):
                 continue
-            if isinstance(value, bool) or value is None:
-                sanitized[key] = value
-            elif isinstance(value, (int, float)) and math.isfinite(value):
-                sanitized[key] = round(float(value), 3)
-            if len(sanitized) >= 16:
-                break
-        return {**themes, "display": sanitized}
+            sanitized = {}
+            for key, value in values.items():
+                if source == "theme_surface" and key == "navigation":
+                    continue
+                if not isinstance(key, str) or len(key) > 32:
+                    continue
+                if isinstance(value, bool) or value is None:
+                    sanitized[key] = value
+                elif isinstance(value, (int, float)) and math.isfinite(value):
+                    sanitized[key] = round(float(value), 3)
+                if len(sanitized) >= limit:
+                    break
+            if source == "theme_surface" and isinstance(values.get("navigation"), dict):
+                navigation = values["navigation"]
+                allowed = {
+                    "route": {"home", "steamweb", "externalweb", "store", "other"},
+                    "expected": {"blank", "store", "community", "http", "other"},
+                    "requested": {"blank", "store", "community", "http", "other"},
+                    "loaded": {"blank", "store", "community", "http", "other"},
+                    "browser": {"missing", "unready", "ready", "unknown"},
+                }
+                snapshot = {
+                    key: value if isinstance(value := navigation.get(key), str) and value in choices else None
+                    for key, choices in allowed.items()
+                }
+                snapshot["loading"] = navigation.get("loading") if isinstance(navigation.get("loading"), bool) else None
+                history = navigation.get("history")
+                history = history if isinstance(history, dict) else {}
+                snapshot["history"] = {
+                    key: value if type(value := history.get(key)) is int and 0 <= value <= 2147483647 else None
+                    for key in ("index", "entries", "initial", "final")
+                }
+                error = navigation.get("error")
+                snapshot["error"] = error if type(error) is int and -2147483648 <= error <= 2147483647 else None
+                sanitized["navigation"] = snapshot
+            result[target] = sanitized
+        return result
 
     def _launch_report_state(self, context) -> dict:
         """Launch-options triage: tools, current game, custom-var count, and the
@@ -2759,6 +3604,9 @@ class Plugin:
         frontend = dict(context) if isinstance(context, dict) else {}
         frontend.pop("hud", None)
         frontend.pop("theme_display", None)
+        frontend.pop("theme_surface", None)
+        frontend.pop("upscalers", None)
+        frontend.pop("steam_client_layout", None)
         return {
             "tools": tools,
             "current_appid": self._current_appid,
@@ -2777,7 +3625,43 @@ class Plugin:
         env (the frozen runtime's LD_LIBRARY_PATH breaks system binaries). Guarded."""
         return report_collector.capture_command(cmd, env=controller_detect.clean_env())
 
-    def _report_environment(self) -> dict:
+    # Steam client settings that change Big Picture's layout (a Home theme broke for
+    # many users with Home → «Fondo ampliado» = `library_home_big_art` on, and no
+    # bundle said so). Mirrors `src/report/steamClientLayout.ts`.
+    _STEAM_LAYOUT_SETTINGS = (
+        "library_home_big_art",
+        "library_display_size",
+        "library_low_perf_mode",
+        "library_low_bandwidth_mode",
+        "library_disable_community_content",
+        "show_store_content_on_home",
+    )
+
+    @classmethod
+    def _steam_client_layout(cls, context) -> dict:
+        """Allowlisted layout settings from the frontend, booleans/finite ints only;
+        anything else (text, NaN, unknown keys) is dropped or nulled."""
+        raw = context.get("steam_client_layout") if isinstance(context, dict) else None
+        if not isinstance(raw, dict):
+            return {"status": "not_provided", "settings": {}}
+        settings = raw.get("settings")
+        if raw.get("status") != "captured" or not isinstance(settings, dict):
+            return {"status": "unavailable", "settings": {}}
+        result = {}
+        for key in cls._STEAM_LAYOUT_SETTINGS:
+            if key not in settings:
+                continue
+            value = settings[key]
+            if isinstance(value, bool):
+                result[key] = value
+            elif isinstance(value, (int, float)) and math.isfinite(value) and float(value).is_integer() \
+                    and abs(value) < 1000:
+                result[key] = int(value)
+            else:
+                result[key] = None
+        return {"status": "captured", "settings": result}
+
+    def _report_environment(self, context=None) -> dict:
         """Host identity + versions. Serials are deliberately NOT read (and any
         serial-like field is scrubbed downstream)."""
         os_name = self._os_name
@@ -2809,6 +3693,7 @@ class Plugin:
             "platform": dict(self._platform),
             "kernel": kernel,
             "steam_client": steam_client,
+            "steam_client_layout": self._steam_client_layout(context),
             "decky_plugins": plugins,
         }
 
@@ -2832,6 +3717,7 @@ class Plugin:
             "settings": report_settings,
             "tdp_profiles": _rj("tdp_profiles.json"),
             "gpu_profiles": _rj("gpu_profiles.json"),
+            "cpu_profiles": _rj("cpu_profiles.json"),
             "fan_curves": _rj("fan_curves.json"),
             "desktop_fans": _rj("desktop_fans.json"),
             "color": _rj("color.json"),
@@ -2955,7 +3841,8 @@ class Plugin:
     # ---- Ajustes: per-game profile overview --------------------------------
     def _scoped_stores(self):
         """Every store that keeps per-game profiles, all sharing list_games/forget_game
-        (the controller backend no-ops when it's not InputPlumber)."""
+        (the controller backend no-ops when it's not InputPlumber). HudStore is
+        left out: it belongs to the HUD worker and goes through _hud_call."""
         return (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles,
                 self._gpu_profiles,
                 self._audio_eq, self._controller_backend)
@@ -3012,6 +3899,15 @@ class Plugin:
             row["audio"] = {"follows_global": self._audio_eq.is_following_global(appid)}
         return row
 
+    def _hud_profile_rows(self) -> dict:
+        """HudStore is owned by the HUD worker: only call this through _hud_call."""
+        rows = {}
+        for appid in self._hud.list_games():
+            if self._hud.differs_from_global(appid):
+                rows[appid] = {"enabled": bool(self._hud.game_profile(appid).get("enabled")),
+                               "follows_global": self._hud.is_following_global(appid)}
+        return rows
+
     async def list_game_profiles(self) -> list:
         """Every game with a per-game profile that differs from global in ANY section, for
         the Ajustes overview. The frontend resolves names + formats the summaries (i18n)."""
@@ -3019,7 +3915,17 @@ class Plugin:
         appids = set()
         for store in self._scoped_stores():
             appids.update(store.list_games())
-        rows = (self._game_profile_row(a) for a in sorted(appids))
+        try:
+            hud_rows = await self._hud_call(self._hud_profile_rows)
+        except RuntimeError:  # HUD worker restarting: list the other sections
+            hud_rows = {}
+        appids.update(hud_rows)
+        rows = []
+        for appid in sorted(appids):
+            row = self._game_profile_row(appid)
+            if appid in hud_rows:
+                row["hud"] = hud_rows[appid]
+            rows.append(row)
         return [r for r in rows if len(r) > 1]  # drop games whose every section == global
 
     async def reset_game_profiles(self, appid) -> list:
@@ -3027,6 +3933,8 @@ class Plugin:
         global. Re-applies if it's the running game. Returns the refreshed list."""
         self._init()
         appid = str(appid)
+        # HUD first: if its worker is restarting, nothing has been forgotten yet.
+        await self._hud_call(lambda: self._hud.forget_game(appid))
         for store in self._scoped_stores():
             store.forget_game(appid)
         if appid == self._current_appid:
@@ -3223,7 +4131,9 @@ class Plugin:
             return None
         release = getattr(backend, "release", None)
         try:
-            backend_released = bool(release()) if callable(release) else True
+            backend_released = bool(trace_tdp_operation(
+                backend, "release", release,
+            )) if callable(release) else True
         except Exception:  # noqa: BLE001
             backend_released = False
         if not backend_released:
@@ -3245,10 +4155,335 @@ class Plugin:
         )
 
     # ---- TDP conflict + master switch --------------------------------------
+    def _game_power_ownership_supported(self):
+        return (
+            getattr(getattr(self, "_device", None), "key", None)
+            in ("steam_deck_lcd", "steam_deck_oled")
+            and getattr(getattr(self, "_tdp_backend", None), "name", None) == "steamdeck-hwmon"
+            and getattr(getattr(self, "_gpu_clock", None), "backend", None) == "amdgpu"
+            and bool(getattr(getattr(self, "_gpu_clock", None), "supported", False))
+        )
+
+    def _game_power_ownership_has_context(self):
+        store = getattr(self, "_power_ownership", None)
+        if store is None or getattr(getattr(self, "_device", None), "key", None) not in (
+            "steam_deck_lcd", "steam_deck_oled",
+        ):
+            return False
+        state = store.state()
+        return state["observed"] or state["explicit_owner"] is not None
+
+    def _game_power_owner_state(self):
+        store = getattr(self, "_power_ownership", None)
+        state = store.state() if store is not None else {
+            "context_appid": getattr(self, "_current_appid", None),
+            "revision": 0, "observed": False, "steam_profile": None,
+            "explicit_owner": None, "owner": "pdc",
+            "write_allowed": True, "reason": "unobserved_legacy",
+        }
+        supported = self._game_power_ownership_supported()
+        if not supported:
+            if self._game_power_ownership_has_context():
+                state.update(write_allowed=False, reason="ownership_capability_lost")
+            else:
+                state.update(owner="pdc", write_allowed=True, reason="unsupported_ownership")
+        return {**state, "supported": supported,
+                "reset_pending": getattr(self, "_game_power_reset", None) is not None}
+
+    def _game_power_write_allowed(self):
+        return (
+            not getattr(self, "_game_power_context_transition", False)
+            and getattr(self, "_game_power_reset", None) is None
+            and self._game_power_owner_state()["write_allowed"]
+        )
+
+    def _game_power_owned_by_steam(self):
+        state = self._game_power_owner_state()
+        return (
+            self._current_appid is not None
+            and state["supported"] and state["owner"] == "steam"
+        )
+
+    async def get_game_power_owner(self):
+        self._init()
+        return self._game_power_owner_state()
+
+    def _clear_game_power_reset(self):
+        pending = getattr(self, "_game_power_reset", None)
+        self._game_power_reset = None
+        if pending is not None:
+            pending["timer"].cancel()
+        return pending
+
+    async def abort_game_power_reset(self, token):
+        self._init()
+        pending = getattr(self, "_game_power_reset", None)
+        if pending is None or pending["token"] != token:
+            return {**self._game_power_owner_state(), "ok": True, "detail": "reset_inactive"}
+        self._clear_game_power_reset()
+        if pending["appid"] == self._current_appid and self._game_power_write_allowed():
+            try:
+                tdp_result = await self._apply_tdp_now("game-power-reset-abort")
+                if pending["appid"] != self._current_appid:
+                    return {**self._game_power_owner_state(), "ok": False, "detail": "stale_context"}
+                profile = (
+                    self._gpu_profiles.clock(self._current_appid)
+                    if self._module_enabled("system") and not self._frequency_managed_by_power()
+                    else {"manual": False, "min": None, "max": None}
+                )
+                manual = bool(profile.get("manual"))
+                requested = {"mode": "manual" if manual else "auto",
+                             "min_mhz": profile.get("min"), "max_mhz": profile.get("max")}
+                generation = self._next_gpu_generation()
+                gpu_result = await self._offload_call(
+                    lambda: self._run_gpu_clock(requested, auto=not manual, generation=generation)
+                )
+                self._record_gpu_clock_transition(gpu_result, "reset_abort")
+                if not getattr(tdp_result, "ok", False) or not gpu_result.get("ok"):
+                    return {**self._game_power_owner_state(), "ok": False, "detail": "reset_restore_failed"}
+            except Exception as error:
+                decky.logger.warning("Game power reset restoration failed: %s", type(error).__name__)
+                return {**self._game_power_owner_state(), "ok": False, "detail": "reset_restore_failed"}
+        self._record_tdp_transition("game-power-reset-abort", action="reset_abort")
+        return {**self._game_power_owner_state(), "ok": True, "detail": ""}
+
+    async def _expire_game_power_reset(self, token):
+        pending = getattr(self, "_game_power_reset", None)
+        if pending is not None and pending["token"] == token:
+            decky.logger.warning("Game power reset timed out appid=%s", pending["appid"])
+            await self.abort_game_power_reset(token)
+
+    async def begin_game_power_reset(self, appid, expected_revision):
+        self._init()
+        appid = str(appid) if appid is not None else None
+        state = self._game_power_owner_state()
+        detail = (
+            "reset_in_progress" if state["reset_pending"] or getattr(self, "_game_power_context_transition", False) else
+            "unsupported_ownership" if not state["supported"] else
+            "stale_context" if appid != self._current_appid else
+            "stale_revision" if type(expected_revision) is not int or expected_revision != state["revision"] else
+            "unresolved_owner" if state["owner"] not in ("pdc", "steam") else ""
+        )
+        if detail:
+            return {**state, "ok": False, "detail": detail}
+        token = secrets.token_urlsafe(24)
+        timer = asyncio.get_running_loop().call_later(
+            15, lambda: asyncio.create_task(self._expire_game_power_reset(token))
+        )
+        pending = {"token": token, "timer": timer, "appid": appid,
+                   "revision": expected_revision, "owner": state["owner"],
+                   "explicit_owner": state["explicit_owner"], "deadline": time.monotonic() + 15}
+        self._game_power_reset = pending
+        self._advance_tdp_generation()
+        self._next_gpu_generation()
+        self._reset_auto_session("power_reset")
+        try:
+            await self._drain_offloaded()
+        except Exception:
+            await self.abort_game_power_reset(token)
+            raise
+        if getattr(self, "_game_power_reset", None) is not pending:
+            return {**self._game_power_owner_state(), "ok": False, "detail": "stale_context"}
+        self._record_tdp_transition("game-power-reset-begin", action="reset_begin")
+        return {**self._game_power_owner_state(), "ok": True, "detail": "", "token": token}
+
+    async def finish_game_power_reset(self, token, steam_settings):
+        self._init()
+        pending = getattr(self, "_game_power_reset", None)
+        if pending is None or pending["token"] != token:
+            return {**self._game_power_owner_state(), "ok": False, "detail": "reset_inactive"}
+        snapshots = []
+        try:
+            snapshot = validate_steam_settings(steam_settings)
+            baseline = await self._offload_call(self._capture_game_power_baseline)
+            current = self._game_power_owner_state()
+            if (
+                getattr(self, "_game_power_reset", None) is not pending
+                or self._current_appid != pending["appid"]
+                or current["revision"] != pending["revision"]
+                or time.monotonic() >= pending["deadline"]
+            ):
+                raise OwnershipConflict("stale_context")
+            if baseline is None or not current["supported"]:
+                raise ValueError("baseline-required")
+            if pending["owner"] == "pdc":
+                snapshots = [(store, copy.deepcopy(store._data))
+                             for store in (self._tdp_profiles, self._gpu_profiles)]
+                self._save_game_power_baseline(pending["appid"], baseline)
+                if pending["explicit_owner"] == "pdc":
+                    self._power_ownership.set_owner(
+                        pending["appid"], "pdc", pending["revision"], steam_settings=snapshot
+                    )
+        except Exception as error:  # Hardware readback failures must release the reset gate.
+            rollback_ok = self._restore_game_power_profiles(snapshots)
+            restored = await self.abort_game_power_reset(token)
+            decky.logger.warning("Game power reset failed: %s", type(error).__name__)
+            return {**self._game_power_owner_state(), "ok": False,
+                    "detail": getattr(error, "reason", str(error)), "rollback_ok": rollback_ok,
+                    "restore_ok": restored["ok"]}
+        self._clear_game_power_reset()
+        self._tdp_targets = None
+        self._tdp_reconcile_memory = ReconcileMemory()
+        self._record_tdp_transition("game-power-reset-finish", action="reset_finish")
+        return {**self._game_power_owner_state(), "ok": True, "detail": ""}
+
+    def _capture_game_power_baseline(self):
+        if (
+            self._device.key not in ("steam_deck_lcd", "steam_deck_oled")
+            or self._tdp_backend.name != "steamdeck-hwmon"
+            or getattr(self._gpu_clock, "backend", None) != "amdgpu"
+            or self._settings.get("eco_enabled")
+        ):
+            return None
+        ppt = self._tdp_backend.capture_ppt()
+        gpu = self._gpu_clock.capture_state()
+        if not isinstance(ppt, dict) or not isinstance(gpu, dict):
+            return None
+        slow, fast = ppt.get("slow"), ppt.get("fast")
+        window = gpu.get("window")
+        if (
+            type(slow) is not int or type(fast) is not int
+            or not 3 <= slow <= 29 or not slow <= fast <= 30
+            or gpu.get("level") not in ("auto", "manual")
+            or not isinstance(window, (tuple, list)) or len(window) != 2
+            or any(type(value) is not int for value in window)
+            or not 0 < window[0] <= window[1]
+        ):
+            return None
+        return {"slow": slow, "fast": fast, "gpu": dict(gpu)}
+
+    def _save_game_power_baseline(self, appid, baseline):
+        scope = "global" if appid is None else "game"
+        profile = copy.deepcopy(
+            (self._tdp_profiles.game_profile(appid) if appid is not None else None)
+            or self._tdp_profiles._data["global"]
+        )
+        profile.update(
+            pl1=baseline["slow"], mode="custom", off2=0,
+            off3=baseline["fast"] - baseline["slow"], auto_tdp=False,
+        )
+        profile.pop("follow_global", None)
+        self._tdp_profiles._set_profile(scope, appid, profile)
+        gpu = baseline["gpu"]
+        self._gpu_profiles.set_clock(
+            scope, gpu["level"] == "manual", *gpu["window"], appid=appid
+        )
+
+    def _restore_game_power_profiles(self, snapshots):
+        restored = True
+        for store, snapshot in snapshots:
+            store._data = snapshot
+            try:
+                store._save()
+            except OSError:
+                restored = False
+                decky.logger.warning("Power ownership baseline rollback failed")
+        return restored
+
+    async def set_game_power_owner(self, appid, owner, expected_revision, steam_settings=None):
+        self._init()
+        state = self._game_power_owner_state()
+        if state["reset_pending"]:
+            return {**state, "ok": False, "detail": "reset_in_progress"}
+        if not state["supported"]:
+            return {**state, "ok": False, "detail": "unsupported_ownership"}
+        if appid is None or str(appid) != self._current_appid:
+            return {**state, "ok": False, "detail": "stale_context"}
+        if type(expected_revision) is not int or expected_revision != state["revision"]:
+            return {**state, "ok": False, "detail": "stale_revision"}
+        if owner not in ("steam", "pdc"):
+            return {**state, "ok": False, "detail": "invalid_owner"}
+        if steam_settings is not None:
+            try:
+                steam_settings = validate_steam_settings(steam_settings)
+            except ValueError:
+                return {**state, "ok": False, "detail": "invalid_steam_settings"}
+        capture_baseline = owner == "pdc" and state["explicit_owner"] != "pdc"
+        self._game_power_context_transition = True
+        self._advance_tdp_generation()
+        self._next_gpu_generation()
+        self._reset_auto_session("power_owner_changed")
+        snapshots = []
+        try:
+            await self._drain_offloaded()
+            if capture_baseline:
+                baseline = await self._offload_call(self._capture_game_power_baseline)
+                if baseline is None:
+                    return {**self._game_power_owner_state(), "ok": False,
+                            "detail": "baseline-required"}
+                current = self._game_power_owner_state()
+                if current["context_appid"] != str(appid) or current["revision"] != expected_revision:
+                    return {**current, "ok": False, "detail": "stale_context"}
+                snapshots = [
+                    (store, copy.deepcopy(store._data))
+                    for store in (self._tdp_profiles, self._gpu_profiles)
+                ]
+                self._save_game_power_baseline(str(appid), baseline)
+            if steam_settings is None:
+                state = self._power_ownership.set_owner(appid, owner, expected_revision)
+            else:
+                state = self._power_ownership.set_owner(
+                    appid, owner, expected_revision, steam_settings=steam_settings
+                )
+            if owner == "steam" and self._gpu_release_required():
+                previous_marker = self._settings.get("gpu_handoff_pending", False)
+                self._settings["gpu_handoff_pending"] = False
+                try:
+                    self._save()
+                except OSError:
+                    self._settings["gpu_handoff_pending"] = previous_marker
+                    raise
+                self._gpu_owned = False
+        except (OwnershipConflict, OSError, ValueError) as error:
+            rollback_ok = self._restore_game_power_profiles(snapshots)
+            decky.logger.warning("Power ownership change failed: %s", type(error).__name__)
+            return {**self._game_power_owner_state(), "ok": False,
+                    "detail": getattr(error, "reason", "ownership_save_failed"),
+                    "rollback_ok": rollback_ok}
+        finally:
+            self._game_power_context_transition = False
+        self._tdp_targets = None
+        self._tdp_reconcile_memory = ReconcileMemory()
+        self._tdp_status, self._tdp_reason = "unverifiable", "game_power_owner"
+        self._record_tdp_transition("game-power-owner", action="ownership")
+        return {**self._game_power_owner_state(), "ok": True, "detail": ""}
+
+    async def update_game_steam_setting(self, appid, expected_revision, control_id, value):
+        self._init()
+        if getattr(self, "_game_power_reset", None) is not None:
+            return {**self._game_power_owner_state(), "ok": False, "detail": "reset_in_progress"}
+        if not self._game_power_ownership_supported():
+            return {**self._game_power_owner_state(), "ok": False, "detail": "unsupported_ownership"}
+        if appid is None or str(appid) != self._current_appid:
+            return {**self._game_power_owner_state(), "ok": False, "detail": "stale_context"}
+        try:
+            self._power_ownership.set_steam_setting(
+                appid, expected_revision, control_id, value
+            )
+        except (OwnershipConflict, OSError, ValueError) as error:
+            decky.logger.warning("Steam setting intent save failed: %s", type(error).__name__)
+            return {**self._game_power_owner_state(), "ok": False,
+                    "detail": getattr(error, "reason", "steam_setting_save_failed")}
+        self._record_tdp_transition("game-steam-setting", action="intent_saved")
+        return {**self._game_power_owner_state(), "ok": True, "detail": ""}
+
+    def _steam_download_mode_active(self) -> bool:
+        hold = getattr(self, "_steam_download_hold", None)
+        return bool(hold is not None and hold.holding)
+
+    def _tdp_owner_reason(self) -> str:
+        return (
+            "steam_download_mode"
+            if self._steam_download_mode_active()
+            else "external_owner"
+        )
+
     def _tdp_write_authorized(self) -> bool:
         return (
-            getattr(self, "_os_id", None) != "anatase"
-            or self._tdp_external_owner is False
+            not self._steam_download_mode_active()
+            and self._game_power_write_allowed()
+            and (getattr(self, "_os_id", None) != "anatase"
+                 or self._tdp_external_owner is False)
         )
 
     async def _prime_tdp_ownership(self) -> bool | None:
@@ -3296,7 +4531,11 @@ class Plugin:
             relinquish = getattr(self._tdp_backend, "relinquish_ownership", None)
             if callable(relinquish):
                 try:
-                    result = await self._offload_call(relinquish)
+                    result = await self._offload_call(
+                        lambda: trace_tdp_operation(
+                            self._tdp_backend, "relinquish", relinquish,
+                        )
+                    )
                 except Exception as error:  # noqa: BLE001
                     decky.logger.warning(
                         "Interrupted TDP ownership relinquish failed: %s",
@@ -3332,7 +4571,7 @@ class Plugin:
         if not callable(recover):
             return False
         try:
-            result = recover()
+            result = trace_tdp_operation(backend, "recover_hold", recover)
         except Exception as error:  # noqa: BLE001
             decky.logger.error(
                 "Interrupted low-battery TDP hold recovery failed: %s",
@@ -3346,7 +4585,7 @@ class Plugin:
         return ok
 
     async def get_tdp_conflict(self) -> dict:
-        """Which external managers can currently write the power rails."""
+        """External managers and observed service presence, not exclusive ownership."""
         self._init()
         hhd_present = self._controller_backend.manager == controller_detect.HHD
         hhd_call = (
@@ -3354,9 +4593,12 @@ class Plugin:
             if hhd_present
             else asyncio.sleep(0, result=False)
         )
-        managing, powerstation = await asyncio.gather(
+        managing, powerstation, steamos_manager = await asyncio.gather(
             hhd_call,
             self._offload_call(self._powerstation_detector.tdp_active),
+            self._offload_call(self._steamos_manager_detector.active)
+            if self._device.key == "rog_ally"
+            else asyncio.sleep(0, result=False),
         )
         if self._os_id == "anatase":
             self._tdp_external_owner = (
@@ -3366,6 +4608,7 @@ class Plugin:
             "hhd_present": hhd_present,
             "hhd_managing": bool(managing),
             "powerstation_active": bool(powerstation),
+            "steamos_manager_active": steamos_manager,
         }
 
     async def take_tdp_control(self) -> dict:
@@ -3581,6 +4824,16 @@ class Plugin:
             await self._ensure_recognised_desktop_migration()
             if getattr(self, "_desktop_recognition_migration_pending", False):
                 return False
+            if callable(getattr(self._tdp_backend, "resume_ownership", None)):
+                resume_cancelled = threading.Event()
+                try:
+                    await self._offload_call(
+                        lambda: self._recover_tdp_runtime_transaction(
+                            resume_control=True, resume_cancelled=resume_cancelled,
+                        )
+                    )
+                finally:
+                    resume_cancelled.set()
             if not await self._probe_tdp_backend(force=True):
                 return False
             if self._low_battery_hold_recovery_pending:
@@ -3649,6 +4902,25 @@ class Plugin:
         self._settings["seen_tdp_conflict_takeover"] = bool(seen)
         self._save()
         return bool(seen)
+
+    async def set_hide_tdp_steamos_card(self, hidden: bool) -> bool:
+        self._init()
+        self._settings["hide_tdp_steamos_card"] = bool(hidden)
+        self._save()
+        return bool(hidden)
+
+    async def dismiss_kernel_support_notice(self) -> bool:
+        self._init()
+        self._settings["kernel_support_notice_dismissed"] = True
+        self._save()
+        return True
+
+    def _kernel_support_state(self) -> dict | None:
+        if not getattr(self._tdp_backend, "kernel_power_limits_missing", False):
+            return None
+        return {
+            "visible": not self._settings.get("kernel_support_notice_dismissed", False),
+        }
 
     async def dismiss_charger_notice(self) -> bool:
         self._init()
@@ -3728,13 +5000,7 @@ class Plugin:
         outcome = gpd_recovery.ensure_gpd_fan(self._device)
         if outcome["eligible"] and outcome["abi_after"]:
             try:
-                self._fan_ctrl = fan_control.select_fan_backend(
-                    self._device,
-                    temp_fn=self._driving_temp,
-                    experimental=bool(
-                        self._settings.get("fan_experimental", False)
-                    ),
-                )
+                self._fan_ctrl = self._select_fan_backend()
             except Exception as exc:  # noqa: BLE001 — retain firmware-auto/null
                 outcome["error"] = type(exc).__name__
 
@@ -3761,23 +5027,52 @@ class Plugin:
         log = decky.logger.info if outcome["supported"] else decky.logger.warning
         log("GPD fan recovery %s", encoded)
 
+    def _fans_owned_by_panel(self) -> bool:
+        # With fan control off, another tool may own the fans; only a release still
+        # pending from the switch-off may write them.
+        settings = getattr(self, "_settings", None)
+        return (
+            settings is None
+            or self._module_enabled("fanControl")
+            or settings.get("fan_release_pending") is True
+        )
+
+    def _select_fan_backend(self, experimental=None):
+        if experimental is None:
+            experimental = bool(self._settings.get("fan_experimental", False))
+        return fan_control.select_fan_backend(
+            self._device, temp_fn=self._driving_temp, experimental=experimental,
+            board_control=self._settings.get("board_fan_control_off") is not True)
+
     def _board_fan_state(self) -> dict:
         driver = getattr(self, "_board_fans", None)
         if driver is None:
             return {"supported": False}
-        return {**driver.state(), "supported": True,
-                "enabled": self._settings.get("board_fan_driver") is True}
+        # A driver the system loads itself is driven by the curve until the user turns the
+        # toggle off, so the toggle follows the fan backend actually in use.
+        opted_out = self._settings.get("board_fan_control_off") is True
+        controlled = not opted_out and (
+            self._settings.get("board_fan_driver") is True
+            or getattr(getattr(self, "_fan_ctrl", None), "name", None) == "generic-pwm"
+        )
+        return {**driver.state(), "supported": True, "enabled": controlled,
+                "control_off": opted_out}
 
     def _set_board_fans_sync(self, enabled: bool, only: str | None = None) -> dict:
         driver = self._board_fans
-        try:
-            released = self._fan_ctrl.restore_auto()
-            released_ok = not isinstance(released, dict) or bool(released.get("ok", True))
-        except Exception:  # noqa: BLE001
-            released_ok = False
+        if self._fans_owned_by_panel():
+            try:
+                released = self._fan_ctrl.restore_auto()
+                released_ok = not isinstance(released, dict) or bool(released.get("ok", True))
+            except Exception:  # noqa: BLE001
+                released_ok = False
+        else:
+            released_ok = True
         if enabled:
+            self._settings["board_fan_control_off"] = False
             state = driver.load(only)
         elif released_ok:
+            self._settings["board_fan_control_off"] = True
             state = driver.unload()
         else:
             # Unloading under a fan still in manual mode would strand it at its
@@ -3786,9 +5081,7 @@ class Plugin:
         reader = getattr(self, "_fan_reader", None)
         if reader is not None:
             reader.invalidate()
-        self._fan_ctrl = fan_control.select_fan_backend(
-            self._device, temp_fn=self._driving_temp,
-            experimental=bool(self._settings.get("fan_experimental", False)))
+        self._fan_ctrl = self._select_fan_backend()
         self._reapply_fans_sync()
         decky.logger.info("Board fan driver %s", json.dumps(
             {**state, "backend": getattr(self._fan_ctrl, "name", "null")},
@@ -3841,9 +5134,384 @@ class Plugin:
         self._ensure_fan_loop()
         return await self._offload_call(self._board_fan_state)
 
+    def _ps5_fan_state(self) -> dict:
+        return {
+            **self._ps5_fan.state(),
+            "target": self._settings.get("ps5_fan_target_c"),
+            "other_controller": self._ps5_rival_plugin(),
+            "guard_active": bool(getattr(self, "_ps5_console", None) and self._ps5_console.guard.active),
+            "diagnostics": self._ps5_fan.diagnostics(),
+        }
+
+    def _ps5_rival_plugin(self) -> str | None:
+        """Another Decky plugin that also writes the PS5 fan target and GPU clock."""
+        now = _monotonic()
+        cached = getattr(self, "_ps5_rival_cache", None)
+        if cached is not None and now - cached[0] < _PS5_RIVAL_RECHECK_S:
+            return cached[1]
+        names = {
+            plugin["name"]
+            for plugin in report_collector.decky_plugins(str(self._decky_plugins_root()))["plugins"]
+        }
+        rival = next((name for name in _PS5_RIVAL_PLUGINS if name in names), None)
+        self._ps5_rival_cache = (now, rival)
+        return rival
+
+    def _log_ps5_fan(self, reason: str, target, result: dict) -> None:
+        log = decky.logger.info if result["ok"] else decky.logger.warning
+        log("PS5 fan target %s", json.dumps(
+            {"reason": reason, "target": target, **result}, sort_keys=True, separators=(",", ":")))
+
+    def _reapply_ps5_fan_sync(self) -> None:
+        target = self._settings.get("ps5_fan_target_c")
+        self._ps5_fan_pending = False
+        self._ps5_led_pending = not self._reapply_ps5_led_sync()
+        if getattr(self, "_ps5_fan", None) is None:
+            return
+        console = getattr(self, "_ps5_console", None)
+        guarding = bool(console and console.guard.active)
+        if target is None and self._settings.get("ps5_guard_holding") is True and not guarding:
+            result = self._ps5_fan.release()
+            self._log_ps5_console("guard_recovered", {"ok": result["ok"], "fan": result})
+            if result["ok"]:
+                self._set_ps5_guard_holding(False)
+            self._ps5_fan_pending = not result["ok"]
+            return
+        if target is None:
+            return
+        if self._module_enabled("fanControl") and not guarding:
+            result = self._ps5_fan.apply(target)
+            self._log_ps5_fan("reapply", target, result)
+            self._ps5_fan_pending = not result["ok"]
+            if result["ok"]:
+                self._set_ps5_guard_holding(False)
+
+    def _apply_user_ps5_fan_target_sync(self, target) -> dict:
+        # Runs on the executor after any queued console tick, so the guard state it
+        # sees is the one the fan write races against.
+        console = getattr(self, "_ps5_console", None)
+        if console is not None and console.guard.active:
+            self._settings["ps5_fan_target_c"] = target
+            self._save()
+            result = {"ok": True, "detail": "deferred_guard"}
+            self._log_ps5_fan("user_deferred", target, result)
+            return result
+        result = self._ps5_fan.release() if target is None else self._ps5_fan.apply(target)
+        self._log_ps5_fan("user", target, result)
+        if result["ok"]:
+            self._settings["ps5_fan_target_c"] = target
+            self._settings["ps5_guard_holding"] = False
+            self._save()
+        return result
+
+    def _set_ps5_guard_holding(self, holding: bool) -> None:
+        if self._settings.get("ps5_guard_holding") is not holding:
+            self._settings["ps5_guard_holding"] = holding
+            self._save()
+
+    def _reapply_ps5_led_sync(self) -> bool:
+        console = getattr(self, "_ps5_console", None)
+        preset = self._settings.get("ps5_led_preset")
+        if console is None or preset is None or not self._module_enabled("system"):
+            return True
+        result = console.led.apply(preset)
+        self._log_ps5_led_change("led_reapply", result)
+        if result["detail"] == "not_ready":
+            return False
+        if result["detail"] == "unknown_preset":
+            # The driver may still be registering its presets: forget only on a second miss.
+            self._ps5_led_missing = getattr(self, "_ps5_led_missing", 0) + 1
+            if self._ps5_led_missing < 2:
+                return False
+            self._ps5_led_missing = 0
+            self._forget_ps5_led_preset()
+            return True
+        self._ps5_led_missing = 0
+        return result["ok"]
+
+    def _log_ps5_led_change(self, event: str, result: dict) -> None:
+        # Retries repeat the same outcome; log only when it changes.
+        key = (event, result["ok"], result["detail"], result.get("preset"))
+        if key != getattr(self, "_ps5_led_logged", None):
+            self._ps5_led_logged = key
+            self._log_ps5_console(event, result)
+
+    def _forget_ps5_led_preset(self) -> None:
+        # A kernel update can rename or drop presets; keep the light as it is.
+        self._settings["ps5_led_preset"] = None
+        self._save()
+
+    def _log_ps5_console(self, event: str, fields: dict) -> None:
+        log = decky.logger.info if fields.get("ok", True) else decky.logger.warning
+        log("PS5 console %s %s", event, json.dumps(fields, sort_keys=True, separators=(",", ":"), default=str))
+
+    def _ps5_console_state(self) -> dict:
+        console = self._ps5_console
+        temps = self._ps5_console_temps()
+        return {
+            "supported": True,
+            "temps": temps,
+            "led": {
+                "supported": console.led.supported,
+                "presets": [
+                    {"id": preset, "animated": ps5_led_animated(preset)}
+                    for preset in console.led.presets()
+                ],
+                "active": self._settings.get("ps5_led_preset"),
+                "pending": getattr(self, "_ps5_led_pending", False),
+                "last": getattr(self, "_ps5_led_user_result", None),
+            },
+            "guard": {
+                "enabled": self._settings.get("ps5_guard_enabled") is True,
+                "threshold": self._settings.get("ps5_guard_threshold", PS5_GUARD_DEFAULT_C),
+                "effective_threshold": self._ps5_guard_threshold(),
+                "blocked": None if self._module_enabled("fanControl") else "fan_module_off",
+                "alarm": self._settings.get("ps5_alarm_enabled") is True,
+                "alarm_supported": console.buzzer_supported,
+                "active": console.guard.active,
+                "fan_held": bool(console.guard.active and self._ps5_fan and self._ps5_fan.read() == PS5_FAN_MIN_C),
+                "fan_supported": bool(self._ps5_fan and self._ps5_fan.supported),
+                "last_beep": console.last_beep,
+            },
+            "io": console.io.diagnostics(),
+            "diagnostics": {
+                "guard_episodes": list(console.guard.episodes),
+                "peak_c": console.guard.peak_celsius,
+                "gpu_limit": dict(self._ps5_gpu_limit),
+                "fan_retries": getattr(self, "_ps5_fan_retries", 0),
+                "fan_pending": getattr(self, "_ps5_fan_pending", False),
+                "guard_release_pending": getattr(self, "_ps5_guard_release_pending", False),
+                "light_pending": getattr(self, "_ps5_led_pending", False),
+                "other_controller": self._ps5_rival_plugin(),
+            },
+        }
+
+    def _ps5_console_temps(self) -> dict:
+        try:
+            apu = self._driving_temp()
+        except Exception:  # noqa: BLE001
+            apu = None
+        return {"apu": apu, "ssd": self._ps5_console.ssd_celsius()}
+
+    async def get_console_state(self) -> dict:
+        """PlayStation 5 extras for Sistema: light, temperatures and thermal guard."""
+        self._init()
+        if getattr(self, "_ps5_console", None) is None:
+            return {"supported": False}
+        return await self._offload_call(self._ps5_console_state)
+
+    async def set_console_led(self, preset) -> dict:
+        self._init()
+        console = getattr(self, "_ps5_console", None)
+        if console is None:
+            return {"supported": False}
+        if not isinstance(preset, str):
+            return {**await self._offload_call(self._ps5_console_state), "ok": False, "detail": "invalid_value"}
+        def apply():
+            outcome = console.led.apply(preset)
+            self._ps5_led_user_result = outcome
+            if outcome["ok"]:
+                self._ps5_led_pending = False
+                self._ps5_led_attempts = 0
+                self._ps5_led_missing = 0
+                self._settings["ps5_led_preset"] = preset
+                self._ps5_led_replayed_at = _monotonic()
+            return outcome
+
+        result = await self._offload_call(apply)
+        self._log_ps5_console("led", result)
+        if result["ok"]:
+            self._save()
+        return {**await self._offload_call(self._ps5_console_state), "ok": result["ok"], "detail": result["detail"]}
+
+    async def set_thermal_guard(self, enabled=None, threshold=None, alarm=None) -> dict:
+        self._init()
+        if getattr(self, "_ps5_console", None) is None:
+            return {"supported": False}
+        if isinstance(enabled, bool):
+            self._settings["ps5_guard_enabled"] = enabled
+        if isinstance(threshold, (int, float)) and not isinstance(threshold, bool):
+            self._settings["ps5_guard_threshold"] = clamp_threshold(threshold)
+        if isinstance(alarm, bool):
+            self._settings["ps5_alarm_enabled"] = alarm
+        self._save()
+        self._log_ps5_console("guard_settings", {
+            "enabled": self._settings["ps5_guard_enabled"],
+            "threshold": self._settings["ps5_guard_threshold"],
+            "alarm": self._settings["ps5_alarm_enabled"],
+        })
+        self._start_ps5_console_loop()
+        return await self._offload_call(self._ps5_console_state)
+
+    def _start_ps5_console_loop(self) -> None:
+        if getattr(self, "_ps5_console", None) is None or getattr(self, "_shutting_down", False):
+            return
+        task = getattr(self, "_ps5_console_task", None)
+        if task is not None and not task.done():
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._ps5_console_task = asyncio.create_task(self._ps5_console_loop())
+
+    def _stop_ps5_console_loop(self) -> None:
+        task = getattr(self, "_ps5_console_task", None)
+        self._ps5_console_task = None
+        if task is not None:
+            task.cancel()
+
+    async def _ps5_console_loop(self) -> None:
+        failures = 0
+        while True:
+            await asyncio.sleep(_PS5_CONSOLE_TICK_S)
+            try:
+                await self._offload_call(self._ps5_console_tick)
+                failures = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:  # noqa: BLE001
+                failures += 1
+                if failures in (1, 10, 100):
+                    decky.logger.warning(
+                        "PS5 console tick failed error=%s count=%d", type(error).__name__, failures)
+
+    def _ps5_guard_threshold(self) -> int:
+        # A fan target at or above the guard limit would keep the APU there, so the
+        # guard would engage and release forever: it starts above the target instead.
+        threshold = self._settings.get("ps5_guard_threshold", PS5_GUARD_DEFAULT_C)
+        target = self._settings.get("ps5_fan_target_c") or PS5_FAN_DEFAULT_C
+        return max(threshold, target + 5)
+
+    def _sample_ps5_gpu_limit(self, now: float) -> None:
+        """With a manual GPU limit on, record whether the live clock stays under it
+        and what the CPU was doing, so a report shows if the boost override happens."""
+        if not getattr(self._gpu_clock, "supported", False):
+            return
+        diagnostics = self._gpu_clock.diagnostics()
+        applied, hardware = diagnostics.get("applied") or {}, diagnostics.get("range") or {}
+        limit, ceiling = applied.get("max_mhz"), hardware.get("max_mhz")
+        current = diagnostics.get("current_mhz")
+        if limit is None or ceiling is None or current is None or limit >= ceiling:
+            return
+        stats = self._ps5_gpu_limit
+        stats["samples"] += 1
+        if current <= limit:
+            return
+        stats["over_limit"] += 1
+        stats["last_over"] = {
+            "gpu_mhz": current,
+            "limit_mhz": limit,
+            "cpu_khz": read_int("/sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq"),
+            "boost": self._gpu_limit_overridden_by_boost(),
+        }
+        if now - self._ps5_gpu_logged_at >= _PS5_GPU_LOG_GAP_S:
+            self._ps5_gpu_logged_at = now
+            self._log_ps5_console("gpu_over_limit", {"ok": False, **stats["last_over"]})
+
+    def _ps5_console_tick(self) -> None:
+        console = self._ps5_console
+        fan = self._ps5_fan
+        settings = self._settings
+        fan_ready = bool(fan and fan.supported and self._module_enabled("fanControl"))
+        threshold = self._ps5_guard_threshold()
+        step = console.guard.step(
+            self._ps5_console_temps()["apu"],
+            threshold=threshold,
+            guard=fan_ready and settings.get("ps5_guard_enabled") is True,
+            alarm=settings.get("ps5_alarm_enabled") is True,
+        )
+        if step.engage:
+            self._set_ps5_guard_holding(True)
+            self._ps5_rehold_logged = None
+            result = fan.apply(PS5_FAN_MIN_C)
+            self._log_ps5_console("guard_engaged", {
+                "ok": result["ok"], "apu_c": console.guard.last_celsius, "threshold": threshold, "fan": result,
+            })
+        elif console.guard.active and (held := fan.read()) != PS5_FAN_MIN_C:
+            self._set_ps5_guard_holding(True)
+            result = fan.apply(PS5_FAN_MIN_C)
+            key = ("guard_rehold", result["ok"], result["detail"], held)
+            if key != getattr(self, "_ps5_rehold_logged", None):
+                self._ps5_rehold_logged = key
+                self._log_ps5_console("guard_rehold", {"ok": result["ok"], "found_c": held, "fan": result})
+        if step.release or (self._ps5_guard_release_pending and not console.guard.active):
+            target = settings.get("ps5_fan_target_c")
+            result = fan.apply(target) if target is not None and fan_ready else fan.release()
+            if step.release or result["ok"]:
+                self._log_ps5_console("guard_released", {
+                    "ok": result["ok"], "apu_c": console.guard.last_celsius, "fan": result,
+                })
+            self._ps5_guard_release_pending = not result["ok"]
+            self._ps5_rehold_logged = None
+            if result["ok"]:
+                self._set_ps5_guard_holding(False)
+        system_on = self._module_enabled("system")
+        if step.beep and system_on:
+            self._log_ps5_console("overheat_beep", {
+                "ok": console.beep(), "apu_c": console.guard.last_celsius, "threshold": threshold,
+            })
+        now = _monotonic()
+        if now - self._ps5_gpu_sampled_at >= _PS5_GPU_SAMPLE_S:
+            self._ps5_gpu_sampled_at = now
+            self._sample_ps5_gpu_limit(now)
+        if system_on and getattr(self, "_ps5_led_pending", False) and now >= self._ps5_led_retry_at:
+            self._ps5_led_pending = not self._reapply_ps5_led_sync()
+            self._ps5_led_attempts = 0 if not self._ps5_led_pending else min(self._ps5_led_attempts + 1, 8)
+            self._ps5_led_retry_at = now + min(_PS5_LED_RETRY_MAX_S, _PS5_CONSOLE_TICK_S * 2 ** self._ps5_led_attempts)
+        preset = settings.get("ps5_led_preset")
+        if system_on and preset and ps5_led_animated(preset) and not console.guard.active and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:
+            self._ps5_led_replayed_at = now
+            result = console.led.replay(preset)
+            if result["detail"] == "not_ready":
+                pass
+            elif result["detail"] == "unknown_preset":
+                self._log_ps5_led_change("led_replay", result)
+                self._ps5_led_pending = True
+            else:
+                self._log_ps5_led_change("led_replay", result)
+
+    def _schedule_ps5_fan_retry(self) -> None:
+        # The ICC link may not be up when Panel starts or resumes, and the driver probe
+        # resets the target to 80 °C: retry until the console confirms the saved one.
+        if not getattr(self, "_ps5_fan_pending", False):
+            self._ps5_fan_retries = 0
+            return
+        attempt = getattr(self, "_ps5_fan_retries", 0)
+        if attempt >= len(_AUTO_APPLY_RETRY_DELAYS_S):
+            return
+        self._ps5_fan_retries = attempt + 1
+        previous = getattr(self, "_ps5_fan_retry_handle", None)
+        if previous is not None:
+            previous.cancel()
+        self._ps5_fan_retry_handle = asyncio.get_running_loop().call_later(
+            _AUTO_APPLY_RETRY_DELAYS_S[attempt],
+            lambda: self._offload(self._reapply_ps5_fan_sync, done=self._schedule_ps5_fan_retry),
+        )
+
+    async def set_fan_target_temp(self, celsius) -> dict:
+        """PlayStation 5: firmware autoservo target (°C); None returns the firmware default."""
+        self._init()
+        fan = getattr(self, "_ps5_fan", None)
+        if fan is None:
+            return {"supported": False}
+        if celsius is not None and (isinstance(celsius, bool) or not isinstance(celsius, (int, float))):
+            result = {"ok": False, "detail": "invalid_value"}
+        elif not self._module_enabled("fanControl"):
+            result = {"ok": False, "detail": "module_disabled"}
+        else:
+            target = None if celsius is None else clamp_target(celsius)
+            result = await self._offload_call(lambda: self._apply_user_ps5_fan_target_sync(target))
+        return {
+            **await self._offload_call(self._ps5_fan_state),
+            "ok": result["ok"],
+            "detail": result["detail"],
+        }
+
     def _restore_board_fans(self) -> None:
         if (getattr(self, "_board_fans", None) is None
-                or self._settings.get("board_fan_driver") is not True):
+                or self._settings.get("board_fan_driver") is not True
+                or self._settings.get("board_fan_control_off") is True):
             return
         module = self._settings.get("board_fan_module")
         self._offload(
@@ -3855,7 +5523,12 @@ class Plugin:
         """Push the effective fan curve off the event loop (Steam Deck's software-loop
         backend spawns a blocking systemctl). `done` (re)starts the curve loop on the
         event loop after the apply took ownership — race-free (see _ensure_fan_loop)."""
-        self._offload(self._reapply_fans_sync, done=self._ensure_fan_loop)
+        self._offload(self._reapply_fans_sync, done=self._after_fan_reapply)
+
+    def _after_fan_reapply(self) -> None:
+        self._ensure_fan_loop()
+        self._ps5_fan_retries = 0
+        self._schedule_ps5_fan_retry()
 
     def _ensure_fan_loop(self) -> None:
         """Start a software-loop backend's periodic curve loop ON the event loop.
@@ -3886,9 +5559,19 @@ class Plugin:
 
         Guarded: a bad fan apply must never brick load.
         """
+        try:
+            self._reapply_ps5_fan_sync()
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("PS5 fan target reapply error=%s", type(error).__name__)
         if not self._module_enabled("fanControl"):
-            # Fan control disabled: hand the fans back to firmware auto, never drive.
+            # Fan control disabled: hand the fans back once and stop writing, so another
+            # tool (CoolerControl, fancontrol) keeps what it sets afterwards.
+            if self._settings.get("fan_release_pending") is not True:
+                return True
             released = self._restore_fans_safe()
+            if released:
+                self._settings["fan_release_pending"] = False
+                self._save()
             self._fan_apply_confirmed = False
             self._log_fan_transition("module_disabled", ok=bool(released))
             return released
@@ -3914,6 +5597,8 @@ class Plugin:
                 self._log_fan_transition("desktop_channels", ok=ok, profile=profile)
                 return ok and self._sync_fremont_fan_handoff_marker()
             profile = self._fan_curves.effective(self._current_appid)
+            if profile.get("split") and self._fan_split_available():
+                return self._reapply_split_fans_sync(profile)
             preset = profile["preset"]
             points = None
             if preset == "adaptive":
@@ -3954,6 +5639,34 @@ class Plugin:
             self._sync_fremont_fan_handoff_marker()
             self._log_fan_transition("apply_failed", ok=False, error=type(error).__name__)
             return False
+
+    def _fan_split_available(self) -> bool:
+        return getattr(self._fan_ctrl, "split_available", False) is True
+
+    def _reapply_split_fans_sync(self, profile: dict) -> bool:
+        """Per-channel ("por separado") apply: each fan gets its own table, verified whole.
+        Any channel failing returns BOTH fans to firmware auto (done by the backend)."""
+        split_preset = profile.get("split_preset", "auto")
+        by_channel = profile.get("points_by_channel")
+        if split_preset == "auto" or not by_channel:
+            mode = "split_auto"
+            res = self._fan_ctrl.set_auto(None)
+            by_channel = None
+        else:
+            mode = "split_curve"
+            res = self._fan_ctrl.apply_curves(by_channel)
+        confirmed = bool(res.get("ok")) if isinstance(res, dict) else False
+        self._fan_apply_confirmed = confirmed
+        self._log_fan_transition(
+            mode,
+            ok=confirmed,
+            preset=split_preset,
+            points_by_channel=by_channel,
+            channels=list(by_channel) if by_channel else None,
+            failed_channels=res.get("failed_channels") if isinstance(res, dict) else None,
+            detail=res.get("detail") if isinstance(res, dict) else "invalid_response",
+        )
+        return confirmed and self._sync_fremont_fan_handoff_marker()
 
     def _log_fan_transition(self, mode: str, *, ok: bool, **fields) -> None:
         if getattr(self._fan_ctrl, "supported", True) is False:
@@ -4001,6 +5714,7 @@ class Plugin:
             "pwm_max": hw_state.get("pwm_max", 255),
             "preset": effective["preset"],
             "points": effective["points"],
+            "custom_points": effective.get("custom_points"),
             "bias": effective.get("bias", 0),
             "global_preset": global_curve["preset"],
             "global_points": global_curve["points"],
@@ -4026,6 +5740,14 @@ class Plugin:
         }
         if getattr(self, "_board_fans", None) is not None:
             state["board_fans"] = self._board_fan_state()
+        backend_diagnostics = getattr(self._fan_ctrl, "diagnostics", None)
+        if callable(backend_diagnostics):
+            try:
+                state["backend_diagnostics"] = backend_diagnostics() or None
+            except Exception as error:  # noqa: BLE001
+                state["backend_diagnostics"] = {"error": type(error).__name__}
+        if getattr(self, "_ps5_fan", None) is not None:
+            state["target_temp"] = self._ps5_fan_state()
         if self._desktop_mode_on() and hw_state.get("independent"):
             profile = self._desktop_fans.effective(self._current_appid)
             hardware = {fan.get("key"): fan for fan in hw_state.get("fans", [])}
@@ -4046,6 +5768,23 @@ class Plugin:
         else:
             state["independent"] = False
             state["channels"] = []
+            split_available = self._fan_split_available()
+            state["split_available"] = split_available
+            state["split"] = False
+            if split_available:
+                split = self._fan_curves.split_state(self._current_appid)
+                state["split"] = split is not None
+                if split is not None:
+                    split_preset, by_channel = split
+                    state["preset"] = split_preset
+                    state["split_preset"] = split_preset
+                    state["points_by_channel"] = by_channel
+                    state["custom_points_by_channel"] = effective.get("custom_points_by_channel")
+                    state["channels"] = [
+                        {"key": key, "preset": split_preset,
+                         "points": (by_channel or {}).get(key)}
+                        for key in fan_curves.CHANNELS
+                    ]
         return state
 
     def _fan_kernel_pending(self) -> bool:
@@ -4143,8 +5882,7 @@ class Plugin:
                 not isinstance(released, dict) or not bool(released.get("ok"))
             ):
                 return False
-        self._fan_ctrl = fan_control.select_fan_backend(
-            self._device, temp_fn=self._driving_temp, experimental=enabled)
+        self._fan_ctrl = self._select_fan_backend(experimental=enabled)
         self._reapply_fans_sync()
         return True
 
@@ -4169,7 +5907,10 @@ class Plugin:
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._fan_curve_state_offloop()
-        self._fan_curves.set_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
+        if self._fan_split_scope(resolved, appid):
+            self._fan_curves.set_split_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
+        else:
+            self._fan_curves.set_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
@@ -4178,8 +5919,8 @@ class Plugin:
         auto-learning for this scope: the learner now drives + re-fits the curve."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
-        if resolved is None:
-            return await self._fan_curve_state_offloop()
+        if resolved is None or self._fan_split_scope(resolved, appid):
+            return await self._fan_curve_state_offloop()  # adaptive only exists joined
         self._fan_curves.set_adaptive(resolved, appid)
         # Re-arm the mid-session drive, then drive the learned curve now (also sets the
         # anti-churn baseline so the periodic re-fit doesn't needlessly re-drive).
@@ -4194,7 +5935,7 @@ class Plugin:
         the biased learned curve so the hardware reflects the dial immediately."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
-        if resolved is None:
+        if resolved is None or self._fan_split_scope(resolved, appid):
             return await self._fan_curve_state_offloop()
         self._fan_curves.set_adaptive_bias(resolved, bias, appid)
         # A new bias changes the target curve → reset the anti-churn baseline and drive.
@@ -4203,7 +5944,27 @@ class Plugin:
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
-    async def set_fan_curve_points(self, points: list, scope: str, appid=None) -> dict:
+    def _fan_split_scope(self, resolved_scope, appid) -> bool:
+        """Whether a write to this scope is per-channel (profile split AND the hardware can)."""
+        return self._fan_split_available() and self._fan_curves.is_split_scope(resolved_scope, appid)
+
+    async def set_fan_split(self, split: bool, scope: str, appid=None) -> dict:
+        """Joined <-> per-channel ("Juntos / Por separado"). Only where the backend exposes
+        independent channels; both channels start from the current curve, and going back keeps
+        the joined curve untouched."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None or not self._fan_split_available():
+            return await self._fan_curve_state_offloop()
+        seed = None
+        if split and self._fan_curves.effective(appid if resolved == "game" else None).get("preset") == "adaptive":
+            seed = self._adaptive_curve_points(appid if resolved == "game" else None) \
+                or [list(p) for p in fan_presets.RESOLVED["balanced"]]
+        self._fan_curves.set_split(resolved, bool(split), seed, appid)
+        self._reapply_fans()
+        return await self._fan_curve_state_offloop()
+
+    async def set_fan_curve_points(self, points: list, scope: str, appid=None, channel=None) -> dict:
         self._init()
         if not isinstance(points, list) or not points:
             return await self._fan_curve_state_offloop()
@@ -4214,7 +5975,13 @@ class Plugin:
         # the same transform applied at write time — so the persisted/returned state
         # reflects what the hardware will actually run. Never show a curve we override.
         safe_points = [list(p) for p in fan_control.sanitize_curve(points)]
-        self._fan_curves.set_custom(resolved, safe_points, appid)
+        if self._fan_split_scope(resolved, appid):
+            if channel in fan_curves.CHANNELS:
+                self._fan_curves.set_split_custom(resolved, channel, safe_points, appid)
+            else:
+                self._fan_curves.set_split_custom_both(resolved, safe_points, appid)
+        else:
+            self._fan_curves.set_custom(resolved, safe_points, appid)
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
@@ -4223,7 +5990,10 @@ class Plugin:
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._fan_curve_state_offloop()
-        self._fan_curves.set_auto(resolved, appid)
+        if self._fan_split_scope(resolved, appid):
+            self._fan_curves.set_split_auto(resolved, appid)
+        else:
+            self._fan_curves.set_auto(resolved, appid)
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
@@ -5196,7 +6966,7 @@ class Plugin:
         if not self._tdp_control_on():
             return await inactive("control_disabled")
         if not self._tdp_write_authorized():
-            return await inactive("external_owner")
+            return await inactive(self._tdp_owner_reason())
 
         await self._sync_auto_stats_reader(True)
 
@@ -5420,6 +7190,10 @@ class Plugin:
             return {"auto_tdp": False}
         if not self._tdp_control_on():
             return {"auto_tdp": auto_tdp}
+        if not self._game_power_write_allowed():
+            if scope == "global":
+                self._tdp_profiles.set_auto_tdp("global", bool(enabled))
+            return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
         self._clear_eco()
         before = self._tdp_profiles.auto_tdp(self._current_appid)
         self._tdp_profiles.set_auto_tdp(scope, bool(enabled), appid=appid)
@@ -5457,6 +7231,8 @@ class Plugin:
             and not self._scope_context_is_current(scope, appid, context_appid)
         ):
             return self._tdp_state(await self._read_tdp_observation())
+        if scope == "game" and not self._game_power_write_allowed():
+            return await self._read_tdp_state()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return self._tdp_state(await self._read_tdp_observation())
@@ -5517,7 +7293,7 @@ class Plugin:
             and appid is not None
             and str(appid) == self._current_appid
         )
-        if applies_to_current:
+        if applies_to_current and self._game_power_write_allowed():
             self._reset_auto_session("config_changed")
             if (
                 self._current_appid is not None
@@ -6158,6 +7934,69 @@ class Plugin:
             self._settings["firmware_mode"] = _CUSTOM_MODE
             self._save()
 
+    def _seed_tdp_from_hardware(self) -> None:
+        """A fresh install takes the power the machine already runs as its starting
+        profile: Panel shows the dial without changing performance until it is moved."""
+        try:
+            self._seed_tdp_profile()
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("TDP seed skipped: %s", type(error).__name__)
+
+    def _seed_tdp_profile(self) -> None:
+        store = self._tdp_profiles
+        backend = self._tdp_backend
+        if (
+            not store.seed_pending
+            or not getattr(backend, "seeds_from_readback", False)
+            or not self._tdp_supported()
+            or getattr(backend, "unit", "W") != "W"
+            or not getattr(backend, "readback", True)
+            or self._desktop_mode_on()
+            or self._settings.get("eco_enabled")
+            or self._low_battery_sidecar_active()
+            or read_on_ac()
+        ):
+            return
+        # The firmware caps power on low battery and may keep that cap after the
+        # battery recovers; neither is the machine's own power.
+        percent = (self._battery.read() or {}).get("percent")
+        latched = self._settings.get("low_battery_hold_latched_boot")
+        if (
+            not isinstance(percent, (int, float))
+            or percent <= LOW_BATTERY_PERCENT
+            or (latched and latched == _current_boot_id())
+        ):
+            return
+        rails = self._observe_tdp_sync().surfaces.get(backend.name, {})
+
+        def applied(rail):
+            reading = rails.get(rail)
+            value = reading.applied_w if reading is not None else None
+            return value if isinstance(value, int) and value > 0 else None
+
+        sustained = applied("pl1") or applied(getattr(backend, "primary_rail", "pl1"))
+        if sustained is None:
+            return
+        limits = self._limits()
+        pl1 = max(limits.min_w, min(sustained, self._active_max(limits, False)))
+        rail_limits = backend.level_limits() or {}
+
+        def within_rail(rail, value):
+            ceiling = (rail_limits.get(rail) or {}).get("max")
+            return min(value, ceiling) if isinstance(ceiling, int) else value
+
+        pl2 = within_rail("pl2", applied("pl2") or pl1)
+        pl3 = within_rail("pl3", applied("pl3") or pl2)
+        if store.seed_global(pl1, pl2, pl3):
+            decky.logger.info(
+                "TDP profile seeded from hardware %s",
+                json.dumps({
+                    "backend": backend.name, "battery": percent,
+                    "read": {rail: applied(rail) for rail in ("pl1", "pl2", "pl3")},
+                    "seeded": store.effective(None),
+                }, sort_keys=True, separators=(",", ":")),
+            )
+
     def _tdp_control_on(self) -> bool:
         """Master switch: whether we're allowed to write the TDP rails at all."""
         return bool(self._settings.get("tdp_control_enabled", True))
@@ -6445,9 +8284,12 @@ class Plugin:
     def _remember_tdp_observation(self, observation):
         self._tdp_observation = observation
         self._tdp_observation_at = _monotonic()
+        self._remember_primary_tdp_live_max(observation)
         return observation
 
     def _apply_tdp_targets(self, target, on_ac, auto_tdp):
+        if not self._game_power_write_allowed():
+            return TdpResult(target.get("pl1", 0), None, False, "game-power-owner")
         self._tdp_backend_used = True
         apply_targets = getattr(
             self._tdp_backend,
@@ -6456,16 +8298,28 @@ class Plugin:
         )
         if auto_tdp and not callable(apply_targets):
             apply_targets = getattr(self._tdp_backend, "apply_targets", None)
-        if callable(apply_targets):
-            return apply_targets(target, on_ac)
-        primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
-        primary = target[primary_rail]
-        return self._tdp_backend.set_levels(
-            target.get("pl1", primary),
-            target.get("pl2", primary),
-            target.get("pl3", target.get("pl2", primary)),
-            on_ac,
+        self._tdp_last_written = dict(target)
+
+        def apply():
+            if callable(apply_targets):
+                return apply_targets(target, on_ac)
+            primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+            primary = target[primary_rail]
+            return self._tdp_backend.set_levels(
+                target.get("pl1", primary),
+                target.get("pl2", primary),
+                target.get("pl3", target.get("pl2", primary)),
+                on_ac,
+            )
+
+        result = trace_tdp_operation(
+            self._tdp_backend, "apply", apply,
+            target=target, on_ac=on_ac, auto_tdp=auto_tdp,
+            observation_before=self._tdp_observation.as_dict(),
         )
+        if getattr(result, "ok", False):
+            self._tdp_rewrite_after_hold_release = False
+        return result
 
     @staticmethod
     def _probe_tdp_live_max(command):
@@ -6483,7 +8337,7 @@ class Plugin:
             in ("target_not_applied", "live_max_rejected")
             and not getattr(self._tdp_backend, "safety_locked", False)
             and detail.startswith("write not confirmed")
-            and "; rollback confirmed" in detail
+            and ("; rollback confirmed" in detail or "; firmware holds rails" in detail)
         )
 
     def _apply_within_rejected_live_max(self, command, probe_live_max, result):
@@ -6502,6 +8356,17 @@ class Plugin:
 
     def _execute_tdp_command(self, command):
         logical_watts = command.logical_requested["pl1"]
+        if not self._game_power_write_allowed():
+            return TdpResult(logical_watts, None, False, "game-power-owner")
+        released = (
+            self._steam_download_hold.release(_monotonic())
+            if command.reason in _USER_TDP_REASONS
+            else None
+        )
+        if released is not None:
+            self._journal_steam_download_mode(released, self._tdp_observation, {})
+        elif command.reason not in _USER_TDP_REASONS:
+            self._hold_for_steam_download_mode(command, _monotonic())
         if self._tdp_shutdown:
             return TdpResult(
                 logical_watts,
@@ -6583,7 +8448,7 @@ class Plugin:
             return result
         if not self._tdp_write_authorized():
             self._tdp_status = "unverifiable"
-            self._tdp_reason = "external_owner"
+            self._tdp_reason = self._tdp_owner_reason()
             self._tdp_targets = None
             self._remember_tdp_observation(self._observe_tdp_sync())
             result = TdpResult(
@@ -6613,7 +8478,10 @@ class Plugin:
                     "low-battery-hold-restore-failed",
                 )
             self._tdp_backend_used = True
-            if not self._tdp_backend.set_profile(mode):
+            if not trace_tdp_operation(
+                self._tdp_backend, "set_profile",
+                lambda: self._tdp_backend.set_profile(mode), target={"profile": mode},
+            ):
                 self._tdp_status = "rejected"
                 self._tdp_reason = "firmware_mode_rejected"
                 self._tdp_targets = None
@@ -6651,6 +8519,7 @@ class Plugin:
             )
             return result
         if sidecar is not None:
+            self._refresh_primary_tdp_live_max()
             hold = self._low_battery_hold_decision(command.on_ac)
             if hold.active:
                 result = self._apply_low_battery_sidecar(
@@ -6871,8 +8740,14 @@ class Plugin:
             and self._tdp_reconcile_memory.live_limit_signature is not None
         ):
             return
+        current = self._resume_work_current() if reason in ("lifecycle", "settle-retry") else None
         command = self._capture_tdp_command(reason, on_ac)
-        self._offload(lambda: self._execute_tdp_command(command))
+
+        def apply():
+            if current is None or current():
+                self._execute_tdp_command(command)
+
+        self._offload(apply)
 
     def _low_battery_hold_strategy(self):
         sidecar = getattr(self, "_low_battery_hold_backend", None)
@@ -6966,19 +8841,33 @@ class Plugin:
         requested = self._effective_levels(self._current_appid, on_ac)[0]
         if int(requested.get("pl1", 0)) <= cap["pl1"]:
             return False
+        live_max = self._primary_tdp_live_max_seen
+        if live_max:
+            # The firmware may lift its low-battery cap within the same boot: the last
+            # live maxima it reported decide; only without them does the latch decide.
+            return all(live_max[rail] <= int(watts) for rail, watts in cap.items())
         boot = _current_boot_id()
-        # The firmware keeps its low-battery cap until the next boot, even on the charger.
-        if boot and self._settings.get("low_battery_hold_latched_boot") == boot:
-            return True
-        observation = getattr(self, "_tdp_observation", None)
-        surfaces = getattr(observation, "surfaces", None) or {}
-        rails = surfaces.get(self._tdp_backend.name, {})
-        return bool(rails) and all(
-            (reading := rails.get(rail)) is not None
-            and reading.max_w is not None
-            and int(reading.max_w) <= int(watts)
-            for rail, watts in cap.items()
-        )
+        return bool(boot and self._settings.get("low_battery_hold_latched_boot") == boot)
+
+    def _remember_primary_tdp_live_max(self, observation):
+        live_max = _rail_live_max(observation, self._tdp_backend.name)
+        if live_max:
+            self._primary_tdp_live_max_seen = live_max
+
+    def _refresh_primary_tdp_live_max(self):
+        # While the ryzenadj hold drives the SoC, only the firmware attributes still
+        # show whether the low-battery cap is in force. Worker threads only.
+        if not (
+            self._settings.get("low_battery_tdp_hold") is True
+            and getattr(self._low_battery_hold_backend, "unverified_hold_restore", None)
+            and getattr(self._tdp_backend, "reports_live_max", False)
+        ):
+            return
+        try:
+            observation = self._tdp_backend.observe()
+        except Exception:  # noqa: BLE001
+            return
+        self._remember_primary_tdp_live_max(observation)
 
     def _remember_low_battery_primary_result(self, hold, result):
         if hold is None:
@@ -7005,9 +8894,9 @@ class Plugin:
 
     def _release_low_battery_hold(self):
         backend = getattr(self, "_low_battery_hold_backend", None)
+        was_active = self._low_battery_sidecar_active()
         needs_release = backend is not None and (
-            self._low_battery_sidecar_active()
-            or getattr(backend, "safety_locked", False)
+            was_active or getattr(backend, "safety_locked", False)
         )
         if not needs_release:
             self._low_battery_hold_last_write_at = None
@@ -7018,13 +8907,19 @@ class Plugin:
             return False
         release = getattr(backend, "release_hold", None)
         try:
-            restored = bool(release()) if callable(release) else False
+            restored = bool(trace_tdp_operation(
+                backend, "release_hold", release,
+            )) if callable(release) else False
         except Exception:  # noqa: BLE001
             restored = False
         if restored:
             self._low_battery_hold_last_write_at = None
             self._low_battery_hold_recovery_pending = False
             self._low_battery_hold_last_failure = None
+            if was_active:
+                # The hold's limits stay in the SoC while the firmware attributes it
+                # never touched may already read the target: rewrite them once.
+                self._tdp_rewrite_after_hold_release = True
         else:
             self._low_battery_hold_recovery_pending = True
             self._low_battery_hold_last_failure = "restore_failed"
@@ -7092,7 +8987,10 @@ class Plugin:
             bounds,
             TdpObservation(readable=False),
         )
-        result = sidecar.hold_levels(targets.target)
+        result = trace_tdp_operation(
+            sidecar, "hold", lambda: sidecar.hold_levels(targets.target),
+            target=targets.target, on_ac=command.on_ac,
+        )
         self._tdp_targets = targets
         if result.ok:
             observe_hold = getattr(sidecar, "observe_hold", None)
@@ -7219,12 +9117,39 @@ class Plugin:
             and not hold.active
             and not self._device.is_generic
             and self._device.key not in ("desktop_pc", "steam_machine")
-            and getattr(backend, "name", None) in _OVERSHOOT_BACKENDS
+            and (
+                getattr(backend, "name", None) in _OVERSHOOT_BACKENDS
+                or getattr(backend, "hidden_overshoot_guard", False)
+            )
             and getattr(backend, "readback", True)
             and not getattr(backend, "rearms_on_ignored_writes", False)
         )
 
+    def _overshoot_context(self, observation):
+        backend = self._tdp_backend
+        read_policy = getattr(backend, "read_thermal_policy", None)
+        return {
+            "applied": {
+                surface: {rail: reading.applied_w for rail, reading in rails.items()}
+                for surface, rails in observation.surfaces.items()
+            },
+            "thermal_policy": read_policy() if callable(read_policy) else None,
+            "platform_profiles": [value for _path, value in read_platform_profiles() or ()],
+            "kernel_power_limits_missing": bool(
+                getattr(backend, "kernel_power_limits_missing", False)
+            ),
+        }
+
     def _apply_overshoot_correction(self, method, command, targets, observation):
+        if method == POLICY:
+            decky.logger.info(
+                "TDP overshoot policy %s",
+                json.dumps(
+                    self._tdp_backend.reassert_thermal_policy(),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
         if method == NUDGE:
             nudged = nudged_target(
                 targets.target,
@@ -7252,6 +9177,9 @@ class Plugin:
             watts,
             targets.target,
             eligible,
+            policy_capable=bool(
+                getattr(self._tdp_backend, "thermal_policy_reassert", False)
+            ),
         )
         if monitor.last != before and monitor.last is not None:
             decky.logger.info(
@@ -7263,6 +9191,7 @@ class Plugin:
                         "measured_w": watts,
                         "backend": getattr(self._tdp_backend, "name", None),
                         "on_ac": command.on_ac,
+                        **self._overshoot_context(observation),
                     },
                     sort_keys=True,
                     separators=(",", ":"),
@@ -7280,6 +9209,10 @@ class Plugin:
         )
 
     def _tdp_guard_tick(self, now=None):
+        if not self._game_power_write_allowed():
+            self._tdp_status, self._tdp_reason = "unverifiable", "game_power_owner"
+            self._tdp_reconcile_memory = ReconcileMemory()
+            return
         now = time.monotonic() if now is None else float(now)
         self._tdp_overshoot_clock = now
         profile_reassert_due = (
@@ -7298,6 +9231,8 @@ class Plugin:
             self._tdp_reconcile_memory = ReconcileMemory()
             return
         command = self._capture_tdp_command("guard", bump=False)
+        if self._low_battery_sidecar_active():
+            self._refresh_primary_tdp_live_max()
         hold = self._low_battery_hold_decision()
         self._low_battery_hold_cached_reassert_s = hold.reassert_s
         self._watch_low_battery_threshold(now, command, hold)
@@ -7314,12 +9249,15 @@ class Plugin:
             self._tdp_targets = None
             self._tdp_reconcile_memory = ReconcileMemory()
             return
+        deck_observation = self._hold_for_steam_download_mode(command, now)
+        if deck_observation is True:
+            return
         if not self._tdp_write_authorized():
             self._tdp_status = "unverifiable"
             self._tdp_reason = "external_owner"
             self._tdp_targets = None
             self._tdp_reconcile_memory = ReconcileMemory()
-            self._remember_tdp_observation(self._observe_tdp_sync())
+            self._remember_tdp_observation(deck_observation or self._observe_tdp_sync())
             return
         if self._firmware_mode() != _CUSTOM_MODE:
             self._tdp_status = "unverifiable"
@@ -7332,7 +9270,7 @@ class Plugin:
             )
             self._remember_tdp_observation(self._observe_tdp_sync())
             return
-        observation = self._observe_tdp_sync()
+        observation = deck_observation or self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return
         probe_live_max = self._probe_tdp_live_max(command)
@@ -7373,6 +9311,9 @@ class Plugin:
             return
         if outcome.action != "apply" and self._consume_powerd_restart():
             action = "powerd-restart-reassert"
+            outcome = replace(outcome, action="apply")
+        if outcome.action != "apply" and self._tdp_rewrite_after_hold_release:
+            action = "low-battery-hold-released"
             outcome = replace(outcome, action="apply")
         if outcome.action != "apply" and self._gpu_split_reassert_due(now):
             action = "gpu-split-reassert"
@@ -7473,6 +9414,70 @@ class Plugin:
             on_ac=command.on_ac,
             requested=command.requested,
         )
+
+    def _hold_for_steam_download_mode(self, command, now):
+        """True while Steam's download mode owns the TDP (this tick writes nothing);
+        otherwise the observation it read on the Deck, or None elsewhere."""
+        hold = self._steam_download_hold
+        if hold.limit_w is None or self._tdp_backend.name != "steamdeck-hwmon":
+            return None
+        if not hold.holding and not self._tdp_write_authorized():
+            return None
+        observation = self._observe_tdp_sync()
+        if command.generation != self._tdp_generation:
+            return True
+        target = build_targets(
+            command.requested, command.safe_bounds, observation,
+        ).target
+        transition = hold.step(
+            observation, target, self._tdp_last_written, now,
+            self._steam_download_signal,
+        )
+        if transition is not None:
+            self._journal_steam_download_mode(transition, observation, target)
+        if not hold.holding:
+            return observation
+        self._tdp_status = "unverifiable" if hold.active else "settling"
+        self._tdp_reason = "steam_download_mode"
+        self._tdp_targets = None
+        self._tdp_reconcile_memory = ReconcileMemory()
+        self._remember_tdp_observation(observation)
+        return True
+
+    def _steam_download_signal(self) -> tuple[bool | None, str | None]:
+        """Whether Steam's download mode is on: steamos-manager's open handles first,
+        then SteamOS's fan service, which it stops for the mode (our own fan curve
+        stops it too, which proves nothing)."""
+        session = find_session()
+        handles = download_mode_handles(UserSession(*session) if session else None)
+        if handles is not None:
+            return handles > 0, "handles"
+        if getattr(self._fan_ctrl, "owns_jupiter", False):
+            return None, None
+        running = jupiter_fan_control_active()
+        return (None if running is None else not running), "fan_service"
+
+    def _journal_steam_download_mode(self, transition, observation, target):
+        details = {
+            "transition": transition,
+            "observation": observation.as_dict(),
+            "target": dict(target),
+            "game": self._current_appid,
+            **self._steam_download_hold.diagnostics(),
+        }
+        decky.logger.info(
+            "Steam download mode %s",
+            json.dumps(details, sort_keys=True, separators=(",", ":")),
+        )
+        diary = journal.active
+        if diary is not None:
+            diary.write(
+                "WARNING" if transition == "unconfirmed" else "INFO",
+                "tdp", f"steam_download_mode_{transition}",
+                observation=journal.compact_event(details["observation"]),
+                target=details["target"], game=details["game"],
+                source=details["source"], last=details["last"],
+            )
 
     def _tdp_guard_delay(self):
         if not self._tdp_backend.supported:
@@ -7614,6 +9619,7 @@ class Plugin:
                     "ok": bool(result.ok),
                     "applied": result.applied_w,
                     "detail": result.detail,
+                    "failure_kind": getattr(result, "failure_kind", None),
                 }
             ),
         }
@@ -7696,6 +9702,7 @@ class Plugin:
         charge_generation = self._cancel_charge_limit_reconcile(
             "reapply",
             preserve_candidate=not getattr(self, "_shutting_down", False),
+            resume_current=self._resume_work_current(),
         )
         charge_limit_candidate_pending = (
             getattr(self, "_charge_limit_candidate", None) is not None
@@ -7726,20 +9733,31 @@ class Plugin:
             and self._charge_limit_late_probe_eligible()
         ):
             schedule_charge_limit_reconcile()
+        # After a resume, every hardware step goes through the serial executor behind a
+        # synced pulse mark: a freeze names the step that was running.
+        mark = self._resume_step_marker()
+        mark("cpu")
         self._apply_cpu()
+        mark("gpu")
         self._apply_gpu_clock()
+        mark("tdp")
         self._schedule_tdp_apply(tdp_reason, on_ac)
         if self._desktop_mode_on():
             self._offload(self._reapply_desktop_power)
         # Stepped aside: retry a pending HHD hand-back (no-op while we control / no marker).
         if not self._tdp_control_on() and not self._desktop_power_active():
             self._offload(self._restore_power_handoff)
+        mark("fans")
         self._reapply_fans()   # self-offloading
         # HDR before color: switching the HDR mode can drop the loaded LUT, so re-assert
         # HDR first and load the color look after (both self-offloading, FIFO executor).
+        mark("hdr")
         self._reapply_hdr()
+        mark("color")
         self._reapply_color()
+        mark("audio")
         self._reapply_audio()  # self-offloading; no-op when the EQ is disabled
+        mark("done")
         self._reapply_controller()  # diff-gated; no-op unless the effective remap changed
         # Re-assert the overlay when mangoapp comes up on its independent serial worker.
         self._schedule_hud_apply()
@@ -7761,7 +9779,9 @@ class Plugin:
             self._desktop_power.apply(mode)
 
     # ---- Battery + charge limit --------------------------------------------
-    def _record_charge_limit_apply(self, action, requested, ok, attempts) -> None:
+    def _record_charge_limit_apply(
+        self, action, requested, ok, attempts, before=None
+    ) -> None:
         try:
             readback = self._charge_limit.get()
         except Exception:  # noqa: BLE001
@@ -7775,13 +9795,20 @@ class Plugin:
         }
         previous = getattr(self, "_charge_limit_last_apply", None)
         self._charge_limit_last_apply = event
+        notable = before is not None and worth_logging(
+            before,
+            requested,
+            bool(getattr(self._charge_limit, "adjustable", True)),
+        )
+        if before is not None:
+            event = {**event, "before": before}
         if action == "full_once":
             self._charge_limit_full_once_status = (
                 "active" if ok else "failed"
             )
         if ok:
             self._charge_limit_failures = 0
-            if event != previous:
+            if notable or self._charge_limit_last_apply != previous:
                 decky.logger.info(
                     "Charge limit transition %s",
                     json.dumps(event, sort_keys=True, separators=(",", ":")),
@@ -7801,18 +9828,22 @@ class Plugin:
             )
 
     def _charge_limit_apply_current(self, generation) -> bool:
+        current = getattr(self, "_charge_limit_resume_current", None)
         return (
             self._module_enabled("chargeLimit")
             and not getattr(self, "_shutting_down", False)
             and (
                 generation is None
-                or generation == self._charge_limit_generation
+                or (generation == self._charge_limit_generation and (current is None or current()))
             )
         )
 
     def _apply_charge_limit_operation(
         self, action, requested, operation, generation=None
     ) -> None:
+        if not self._charge_limit_apply_current(generation):
+            return
+        before = observe_before_apply(self._charge_limit, self._battery, read_on_ac)
         if not self._charge_limit_apply_current(generation):
             return
         attempts = 1
@@ -7829,6 +9860,7 @@ class Plugin:
             requested,
             bool(result),
             attempts,
+            before,
         )
 
     def _apply_charge_limit(self, generation=None) -> None:
@@ -8131,6 +10163,8 @@ class Plugin:
             if not getattr(candidate, "supported", False):
                 return
             _, _, operation = self._charge_limit_operation_for(candidate)
+            if not self._charge_limit_apply_current(generation):
+                return
             applied = operation()
             if (
                 applied is False
@@ -8151,11 +10185,7 @@ class Plugin:
         )
 
     def _charge_limit_intent_current(self, generation) -> bool:
-        return (
-            generation == self._charge_limit_generation
-            and not getattr(self, "_shutting_down", False)
-            and self._module_enabled("chargeLimit")
-        )
+        return generation is not None and self._charge_limit_apply_current(generation)
 
     def _charge_limit_late_probe_eligible(self) -> bool:
         key = getattr(self._device, "key", "")
@@ -8165,11 +10195,12 @@ class Plugin:
         )
 
     def _cancel_charge_limit_reconcile(
-        self, reason, preserve_candidate=False
+        self, reason, preserve_candidate=False, resume_current=None
     ) -> int:
         self._charge_limit_generation = int(
             getattr(self, "_charge_limit_generation", 0)
         ) + 1
+        self._charge_limit_resume_current = resume_current
         if not preserve_candidate:
             self._charge_limit_candidate = None
         task = getattr(self, "_charge_limit_reconcile_task", None)
@@ -8225,7 +10256,9 @@ class Plugin:
         await self._offload_call(lambda: None)
 
     def _schedule_charge_limit_reconcile(self, trigger) -> None:
-        generation = self._cancel_charge_limit_reconcile("rescheduled")
+        generation = self._cancel_charge_limit_reconcile(
+            "rescheduled", resume_current=getattr(self, "_charge_limit_resume_current", None),
+        )
         active = (
             self._module_enabled("chargeLimit")
             and bool(self._settings.get("charge_limit_enabled", False))
@@ -8497,8 +10530,10 @@ class Plugin:
             if actual is not None:
                 applied_percent = actual
         full_charge_once_active = self._charge_limit_full_once_active()
+        firmware_mode = getattr(self._charge_limit, "active", None)
         return {
             "backend": getattr(self._charge_limit, "name", "unsupported"),
+            "firmware_mode": firmware_mode() if callable(firmware_mode) else None,
             "supported": supported,
             "adjustable": self._charge_limit.adjustable,
             "managed": managed,
@@ -8538,7 +10573,12 @@ class Plugin:
         battery = await asyncio.to_thread(self._battery.read)
         # Single AC-online source (same one every TDP clamp uses).
         battery["ac_online"] = await asyncio.to_thread(read_on_ac)
-        return {"battery": battery, "charge_limit": self._charge_limit_state()}
+        return {
+            "battery": battery,
+            # Not the serial apply executor: a slow charge_types read would
+            # queue TDP, fan and CPU writes behind it.
+            "charge_limit": await asyncio.to_thread(self._charge_limit_state),
+        }
 
     def _build_cpu_frequency_control(self):
         return select_cpu_frequency(
@@ -8624,12 +10664,24 @@ class Plugin:
             "error_type": result.error_type,
             "rollback": result.rollback,
         }
-        if not result.ok and (result.error_code or "").startswith("frequency_"):
+        recovery = getattr(result, "recovery", None)
+        if recovery:
+            event["recovery"] = {
+                key: recovery[key]
+                for key in ("attempted", "recovered", "boost", "delay_ms", "retry_reason", "retry")
+                if recovery.get(key) is not None
+            }
+        if recovery or (
+            not result.ok and (result.error_code or "").startswith("frequency_")
+        ):
             try:
                 failure = self._cpu_frequency_failure_diagnostic(
-                    self._cpu_frequency.diagnostics().get("last_failure")
+                    recovery["first_failure"] if recovery
+                    else self._cpu_frequency.diagnostics().get("last_failure")
                 )
-                if failure and result.error_code == f"frequency_{failure['reason']}":
+                if failure and (
+                    recovery or result.error_code == f"frequency_{failure['reason']}"
+                ):
                     event["frequency_failure"] = failure
             except Exception:  # noqa: BLE001
                 pass
@@ -8639,7 +10691,7 @@ class Plugin:
 
     def _run_cpu_apply(
         self, intent, generation, enabled=None,
-        preserve_frequency_ownership=False,
+        preserve_frequency_ownership=False, resume_current=None,
     ):
         if generation != getattr(self, "_cpu_generation", 0):
             return CpuCoordinatorResult(
@@ -8653,17 +10705,49 @@ class Plugin:
             enabled = self._module_enabled("system")
         coordinator = self._ensure_cpu_coordinator()
         self._cpu_recovery_reapply_pending = False
-        return coordinator.apply(
+        result = coordinator.apply(
             intent,
             generation,
             enabled=bool(enabled),
             eco=bool(self._settings.get("eco_enabled", False)),
             preserve_frequency_ownership=preserve_frequency_ownership,
+            resume_current=resume_current,
         )
+        self._guard_sleep_with_cores_off()
+        return result
+
+    def _guard_sleep_with_cores_off(self) -> None:
+        """Keep offline physical cores or SMT siblings safe before sleep."""
+        if getattr(self, "_cpu_shutdown", False):
+            return
+        cores = getattr(self, "_cores", None)
+        smt = getattr(self, "_smt", None)
+        limited = smt_off = False
+        try:
+            if getattr(cores, "supported", False):
+                limited = cores.active() < cores.max_cores
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            if getattr(smt, "supported", False):
+                smt_off = not smt.enabled()
+        except Exception:  # noqa: BLE001
+            pass
+        if not (limited or smt_off):
+            return
+        guard = getattr(self, "_sleep_core_guard", None)
+        if guard is None:
+            guard = SleepCoreGuard()
+            self._sleep_core_guard = guard
+        if not guard.ready and not guard.ensure():
+            decky.logger.warning("Sleep core guard not installed: %s", guard.last_error)
 
     async def _apply_cpu_awaited(self, intent=None, enabled=None, trigger="rpc"):
         generation = self._next_cpu_generation()
         selected = intent if intent is not None else self._cpu_intent()
+        selected = self._hold_cores_after_resume(
+            selected, allow_cores=trigger == "set_cores", allow_smt=trigger == "set_smt",
+        )
         result = await self._offload_call(
             lambda: self._run_cpu_apply(selected, generation, enabled)
         )
@@ -8722,15 +10806,17 @@ class Plugin:
         if getattr(self, "_cpu_shutdown", False):
             return
         generation = self._next_cpu_generation()
-        intent = self._cpu_intent()
+        current = self._resume_work_current()
+        intent = self._hold_cores_after_resume(self._cpu_intent())
         holder = {}
 
         def apply():
-            holder["result"] = self._run_cpu_apply(intent, generation)
+            if current():
+                holder["result"] = self._run_cpu_apply(intent, generation, resume_current=current)
 
         def record():
             result = holder.get("result")
-            if result is not None:
+            if result is not None and current():
                 self._record_cpu_result(result, "reapply")
 
         self._offload(apply, done=record)
@@ -8739,6 +10825,7 @@ class Plugin:
         """Manual control taken → exit download mode and restore the normal TDP/boost
         state. Brightness is NOT touched here (FE-only; the persistent controller
         stops driving it and the user keeps whatever they set)."""
+        self._eco_request_generation = getattr(self, "_eco_request_generation", 0) + 1
         if self._settings.get("eco_enabled"):
             self._settings["eco_enabled"] = False
             self._save()
@@ -8830,6 +10917,12 @@ class Plugin:
         finally:
             await asyncio.to_thread(watch.close)
 
+    async def _eco_performance_readback(self) -> dict:
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(pulse.performance_sample), timeout=0.5)
+        except Exception as error:  # noqa: BLE001
+            return {"error": type(error).__name__}
+
     async def set_eco(self, enabled: bool, current_brightness: int) -> dict:
         """Toggle download mode. On enable, snapshot the current brightness (to wake
         back to) and apply the override (TDP min + boost off) via _reapply_all; on
@@ -8840,6 +10933,13 @@ class Plugin:
         # to black on exit (unrecoverable from the card). Keep the previous value then.
         if enabled and int(current_brightness) > 0:
             self._settings["eco_brightness"] = int(current_brightness)
+        diary = journal.active
+        generation = getattr(self, "_eco_request_generation", 0) + 1
+        self._eco_request_generation = generation
+        before_enabled = bool(self._settings.get("eco_enabled", False))
+        before = await self._eco_performance_readback() if diary is not None else None
+        if generation != self._eco_request_generation:
+            return self._eco_state()
         self._settings["eco_enabled"] = bool(enabled)
         self._save()
         self._reapply_all()
@@ -8848,6 +10948,14 @@ class Plugin:
         else:
             await self._apply_screen(False, "eco_disabled")
         await self._drain_offloaded()
+        if diary is not None:
+            after = await self._eco_performance_readback()
+            try:
+                diary.write("INFO", "eco", "transition_readback", before_enabled=before_enabled,
+                            enabled=bool(self._settings.get("eco_enabled", False)),
+                            before=before, after=after)
+            except Exception:  # noqa: BLE001
+                pass
         return self._eco_state()
 
     # ---- HUD (MangoHud overlay) --------------------------------------------
@@ -8910,9 +11018,25 @@ class Plugin:
             raise OSError("Could not persist the managed MangoHud presets path") from exc
         self._hud_managed_path = safe_path
 
+    def _hud_model(self) -> dict:
+        """The HUD model the running game applies: its own, or the global one."""
+        return self._hud.effective(self._current_appid)
+
+    def _hud_unavailable_metrics(self) -> tuple:
+        """MangoHud rows that would read a constant 0 W on this machine: Intel handhelds have
+        no GPU power sensor, and their CPU power needs the root-only RAPL counter. Generic
+        and desktop hosts may carry a discrete GPU MangoHud does read, so they keep both."""
+        device = self._device
+        if getattr(device, "vendor", "amd") != "intel" or getattr(device, "is_generic", False) \
+                or getattr(device, "key", "") == "desktop_pc":
+            return ()
+        if rapl_user_readable():
+            return ("gpu_power",)
+        return ("gpu_power", "cpu_power")
+
     def _hud_state(self, *, cap=None, model=None) -> dict:
         cap = self._detect_hud() if cap is None else cap
-        model = self._hud.load() if model is None else model
+        model = self._hud_model() if model is None else model
         capability = (
             "ambiguous" if cap.get("ambiguous")
             else "ready" if cap["supported"]
@@ -8947,6 +11071,13 @@ class Plugin:
             ),
             "model": model,
             "values": dict(self._pdc_preview_values),
+            "unavailableMetrics": list(self._hud_unavailable_metrics()),
+            "appid": self._current_appid,
+            "followsGlobal": self._hud.is_following_global(self._current_appid),
+            "hasGameProfile": (
+                self._current_appid is not None
+                and self._hud.has_game(self._current_appid)
+            ),
         }
 
     def _record_hud_conflict(self, path, conflict) -> None:
@@ -8965,7 +11096,7 @@ class Plugin:
         }
         self._hud_apply_status = "conflict"
 
-    def _request_hud_reload(self, snapshot, *, reset_backoff) -> bool:
+    def _request_hud_reload(self, snapshot, *, reset_backoff, confirm=True) -> bool:
         snapshot = tuple(snapshot)
         if reset_backoff:
             self._hud_reload_attempt = 0
@@ -8973,7 +11104,16 @@ class Plugin:
             self._hud_reload_pending = ()
             self._hud_reload_retry_at = 0.0
             return False
-        result = reload_sessions(snapshot)
+        result = reload_sessions(
+            snapshot,
+            observe=(
+                confirm
+                and not self._hud_shutdown
+                and _monotonic() >= self._hud_observe_after
+            ),
+            via_proc_cwd=self._hud_reload_via_proc_cwd,
+        )
+        self._note_hud_delivery(getattr(result, "delivery", "unknown"))
         pending = set(result.pending)
         self._hud_reload_pending = tuple(
             session
@@ -9001,9 +11141,35 @@ class Plugin:
                 self._hud_reload_retry_at = _monotonic() + delay
         return False
 
-    def _reload_mangoapp(self, sessions=None) -> bool:
+    def _note_hud_delivery(self, delivery) -> None:
+        if delivery == "unknown":
+            return
+        previous = self._hud_last_delivery
+        self._hud_last_delivery = delivery
+        if delivery == "observed_proc_cwd":
+            self._hud_reload_via_proc_cwd = True
+        elif delivery == "observed":
+            self._hud_reload_via_proc_cwd = False
+        if delivery != "unobserved":
+            if previous == "unobserved":
+                decky.logger.info("HUD reload delivery recovered: %s", delivery)
+            return
+        self._hud_unobserved_reloads += 1
+        # Stop paying the confirmation wait on every publish; check again later.
+        self._hud_observe_after = _monotonic() + _HUD_UNOBSERVED_BACKOFF_S
+        if previous != "unobserved":
+            decky.logger.warning(
+                "HUD reload delivery: %s",
+                json.dumps({
+                    "delivery": delivery,
+                    "unobserved": self._hud_unobserved_reloads,
+                    "sessions": len(self._hud_sessions),
+                }),
+            )
+
+    def _reload_mangoapp(self, sessions=None, *, confirm=True) -> bool:
         snapshot = tuple(self._hud_sessions if sessions is None else sessions)
-        return self._request_hud_reload(snapshot, reset_backoff=True)
+        return self._request_hud_reload(snapshot, reset_backoff=True, confirm=confirm)
 
     def _retry_pending_hud_reload(self) -> bool:
         if not self._hud_reload_pending:
@@ -9013,6 +11179,7 @@ class Plugin:
         return self._request_hud_reload(
             self._hud_reload_pending,
             reset_backoff=False,
+            confirm=False,
         )
 
     def _apply_hud(self, *, cap=None, model=None, replace_conflict=False) -> None:
@@ -9023,9 +11190,10 @@ class Plugin:
         auto loop, then reloaded through mangohudctl). We never write Steam's own live
         config. When off: clear presets.conf. No-op when the overlay isn't supported."""
         cap = self._detect_hud() if cap is None else cap
-        model = self._hud.load() if model is None else model
+        model = self._hud_model() if model is None else model
         if not model["enabled"]:
             managed_path = self._hud_managed_path or cap["presetsPath"]
+            self._hud_power_source = None
             self._pdc_presets_path = None
             self._pdc_active_ids = []
             self._pdc_written = {}
@@ -9052,7 +11220,7 @@ class Plugin:
             if (
                 cap["supported"]
                 and cap["running"]
-                and not self._reload_mangoapp(cap["sessions"])
+                and not self._reload_mangoapp(cap["sessions"], confirm=False)
             ):
                 self._hud_apply_status = "pending"
             else:
@@ -9103,6 +11271,8 @@ class Plugin:
         self._hud_sessions = tuple(cap["sessions"])
         self._pdc_locale = model.get("locale", "es")
         self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model)
+        if "pdc_power" not in self._pdc_active_ids:
+            self._hud_power_source = None
         values = self._pdc_values()
         self._pdc_preview_values = values
         try:
@@ -9113,6 +11283,7 @@ class Plugin:
                 owner=self._hud_owner,
                 replace_conflict=replace_conflict,
                 trusted_root=self._hud_home,
+                omit=self._hud_unavailable_metrics(),
             )
         except mangohud_ownership.HudOwnershipConflict as conflict:
             self._record_hud_conflict(cap["presetsPath"], conflict)
@@ -9158,7 +11329,7 @@ class Plugin:
 
         if "pdc_power" in active:
             src["power"] = observed(
-                self._power_reader.read,
+                self._hud_package_power,
                 lambda value: isinstance(value.get("watts"), (int, float)),
             )
         if "pdc_fan_rpm" in active:
@@ -9169,10 +11340,10 @@ class Plugin:
                     for fan in value.get("fans", [])
                 ),
             )
-        if "pdc_bat_health" in active:
+        if active & _HUD_BATTERY_METRICS:
             src["battery"] = observed(
                 self._battery.read,
-                lambda value: isinstance(value.get("health_percent"), (int, float)),
+                lambda value: bool(value.get("present")),
             )
         if "pdc_charge" in active:
             src["charge"] = observed(
@@ -9221,6 +11392,15 @@ class Plugin:
         )
         return {} if value is None else value
 
+    def _hud_package_power(self) -> dict:
+        reading = self._power_reader.read()
+        if isinstance(reading.get("watts"), (int, float)):
+            self._hud_power_source = "amdgpu"
+            return reading
+        watts = self._rapl_power.read()
+        self._hud_power_source = "rapl" if watts is not None else None
+        return {**reading, "watts": watts}
+
     def _pdc_snapshot(self, active_ids, extras=None) -> dict:
         """Gather the live plugin state the active pdc metrics need. Only computes what
         the shown metrics require; the sysfs-backed sources come pre-read in `extras`
@@ -9263,9 +11443,9 @@ class Plugin:
                 snap["learn"] = self._tdp_learned_info(appid)
         if self._fan_ctrl.supported and "pdc_fan" in active_ids:
             prof = self._fan_curves.effective(appid)
-            snap["fan_mode"] = prof.get("preset")
+            snap["fan_mode"] = prof.get("split_preset") if prof.get("split") else prof.get("preset")
             snap["fan_confirmed"] = self._fan_apply_confirmed
-            snap["fan_learning"] = (prof.get("preset") == "adaptive"
+            snap["fan_learning"] = (self._fan_curves.is_adaptive(appid)
                                     and not self._fan_suggestion(appid)["available"])
         if "pdc_fan_rpm" in active_ids:
             fans = self._fresh_pdc_source(extras, "fans", self._read_fans)
@@ -9279,7 +11459,7 @@ class Plugin:
             power = self._fresh_pdc_source(
                 extras,
                 "power",
-                self._power_reader.read,
+                self._hud_package_power,
             )
             snap["watts"] = power.get("watts")
         if "pdc_charge" in active_ids:
@@ -9295,13 +11475,16 @@ class Plugin:
                 (int, float),
             )
             snap["charge_percent"] = cl.get("applied_percent")
-        if "pdc_bat_health" in active_ids:
+        if _HUD_BATTERY_METRICS.intersection(active_ids):
             bat = self._fresh_pdc_source(
                 extras,
                 "battery",
                 self._battery.read,
             )
             snap["bat_health"] = bat.get("health_percent")
+            snap["bat_status"] = bat.get("status")
+            snap["bat_watts"] = bat.get("power_now_w")
+            snap["bat_eta_s"] = bat.get("eta_seconds")
         if "pdc_smt" in active_ids:
             snap["smt_supported"] = self._smt.supported
             snap["smt_on"] = self._smt.enabled() if self._smt.supported else None
@@ -9346,7 +11529,59 @@ class Plugin:
             for mid in active
         }
 
+    def _hud_redetect_due(self) -> bool:
+        return (
+            self._hud_apply_status == "pending"
+            and _monotonic() >= self._hud_redetect_at
+        )
+
+    def _hud_sessions_gone(self) -> bool:
+        return bool(self._hud_sessions) and not any(
+            mangohud_detect.session_alive(session) for session in self._hud_sessions
+        )
+
+    def _redetect_hud_sessions(self) -> bool:
+        """Find a mangoapp that started after the last apply (late session start or a
+        restarted mangoapp) and re-apply to it. Returns True when a re-apply ran."""
+        self._hud_redetect_at = _monotonic() + _HUD_REDETECT_S
+        model = self._hud_model()
+        if not model["enabled"]:
+            return False
+        self._hud_redetect_count += 1
+        cap = self._detect_hud()
+        if not cap["supported"]:
+            return False
+        self._apply_hud(cap=cap, model=model)
+        if self._hud_apply_status == "reload_requested":
+            self._hud_redetect_recovered += 1
+            decky.logger.info(
+                "HUD reattached to mangoapp: %s",
+                json.dumps({
+                    "status": self._hud_apply_status,
+                    "sessions": len(self._hud_sessions),
+                    "attempts": self._hud_redetect_count,
+                }),
+            )
+        return True
+
+    def _hud_values_due(self, values, now) -> bool:
+        elapsed = now - self._hud_last_publish_at
+        changed = {
+            metric_id
+            for metric_id in set(values) | set(self._pdc_written)
+            if values.get(metric_id) != self._pdc_written.get(metric_id)
+        }
+        appeared = any(
+            self._pdc_written.get(metric_id) in (None, mangohud_pdc.DASH)
+            for metric_id in changed
+        )
+        if changed - _HUD_SENSOR_METRICS or appeared:
+            return elapsed >= _MIN_HUD_REFRESH_S
+        return elapsed >= _MIN_HUD_SENSOR_REFRESH_S
+
     def _refresh_pdc_metrics_sync(self) -> None:
+        if self._hud_redetect_due() and self._redetect_hud_sessions():
+            return
         if self._hud_reload_pending:
             self._hud_apply_status = (
                 "reload_requested"
@@ -9355,14 +11590,20 @@ class Plugin:
             )
         if not self._pdc_active_ids or not self._pdc_presets_path:
             return
+        if (
+            _monotonic() >= self._hud_redetect_at
+            and self._hud_sessions_gone()
+            and self._redetect_hud_sessions()
+        ):
+            return
         extras = self._read_pdc_sources()
         values = self._pdc_values(extras)
         if values == self._pdc_written:
             return
         now = _monotonic()
-        if now - self._hud_last_publish_at < _MIN_HUD_REFRESH_S:
+        if not self._hud_values_due(values, now):
             return
-        model = self._hud.load()
+        model = self._hud_model()
         if model["enabled"]:
             self._pdc_preview_values = values
             try:
@@ -9372,6 +11613,7 @@ class Plugin:
                     values,
                     owner=self._hud_owner,
                     trusted_root=self._hud_home,
+                    omit=self._hud_unavailable_metrics(),
                 )
             except mangohud_ownership.HudOwnershipConflict as conflict:
                 self._record_hud_conflict(self._pdc_presets_path, conflict)
@@ -9379,6 +11621,7 @@ class Plugin:
             except OSError:
                 self._hud_apply_status = "failed"
                 raise
+            self._hud_value_publish_count += 1
             if self._reload_mangoapp():
                 self._pdc_written = values
                 self._hud_last_publish_at = now
@@ -9429,6 +11672,7 @@ class Plugin:
             self._hud_shutdown
             or (
                 not self._hud_reload_pending
+                and not self._hud_redetect_due()
                 and (not self._pdc_active_ids or not self._pdc_presets_path)
             )
         ):
@@ -9626,7 +11870,7 @@ class Plugin:
     async def get_hud_state(self) -> dict:
         self._init()
         def refresh_pending_state():
-            model = self._hud.load()
+            model = self._hud_model()
             if model["enabled"] and self._hud_apply_status in (
                 "pending",
                 "unavailable",
@@ -9645,32 +11889,86 @@ class Plugin:
         self._apply_hud(cap=cap, model=model)
         return self._hud_state(cap=cap, model=model)
 
-    def _save_apply_hud_state(self, model) -> dict:
-        return self._apply_hud_state(self._hud.save(model))
+    def _save_apply_hud_state(self, model, scope="global", appid=None) -> dict:
+        self._hud.set_model(scope, appid, model)
+        return self._apply_hud_state(self._hud_model())
 
-    async def set_hud_config(self, model: dict) -> dict:
+    def _hud_scope_is_current(self, scope, appid, context_appid) -> bool:
+        return self._scope_context_is_current(scope, appid, context_appid)
+
+    async def set_hud_config(
+        self, model: dict, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
-        return await self._hud_call(lambda: self._save_apply_hud_state(model))
+        def save():
+            if self._is_late_own_hud_edit(scope, appid):
+                # The user edited this game's own HUD and the game closed before
+                # the debounced write landed: keep the edit, apply nothing.
+                self._hud.set_model("game", appid, model)
+                return self._hud_state()
+            if not self._hud_scope_is_current(scope, appid, context_appid):
+                return self._hud_state()
+            return self._save_apply_hud_state(model, scope, appid)
+        return await self._hud_call(save)
+
+    def _is_late_own_hud_edit(self, scope, appid) -> bool:
+        return (
+            scope == "game"
+            and appid is not None
+            and str(appid) != self._current_appid
+            and self._hud.has_game(str(appid))
+            and not self._hud.is_following_global(str(appid))
+        )
 
     async def set_hud_enabled(self, enabled: bool) -> dict:
+        """Turn the HUD of the scope the running game applies on or off."""
         self._init()
         def save_apply_state():
-            model = self._hud.load()
+            model = self._hud_model()
             model["enabled"] = bool(enabled)
-            return self._save_apply_hud_state(model)
+            own = not self._hud.is_following_global(self._current_appid)
+            return self._save_apply_hud_state(
+                model, "game" if own else "global", self._current_appid if own else None
+            )
         return await self._hud_call(save_apply_state)
 
-    async def reset_hud(self) -> dict:
+    async def reset_hud(
+        self, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
-        return await self._hud_call(
-            lambda: self._save_apply_hud_state(mangohud_config.DEFAULT_MODEL)
-        )
+        def reset():
+            if not self._hud_scope_is_current(scope, appid, context_appid):
+                return self._hud_state()
+            return self._save_apply_hud_state(
+                mangohud_config.DEFAULT_MODEL, scope, appid
+            )
+        return await self._hud_call(reset)
+
+    async def set_hud_follow_global(
+        self, follow: bool, appid, context_appid=_RPC_CONTEXT_UNSET
+    ) -> dict:
+        """Toggle a game between its own HUD and the global one, keeping its stored
+        model. Seeds from global the first time it uses its own."""
+        self._init()
+        def toggle():
+            if appid is None or not self._hud_scope_is_current("game", appid, context_appid):
+                return self._hud_state()
+            self._hud.set_follow(str(appid), bool(follow))
+            return self._apply_hud_state(self._hud_model())
+        return await self._hud_call(toggle)
+
+    async def list_hud_games(self) -> list:
+        """Games that apply their own HUD (for the "HUD" badge in Parámetros)."""
+        self._init()
+        return await self._hud_call(lambda: sorted(self._hud.own_hud_games()))
 
     async def reload_hud(self) -> dict:
         """Re-bake presets.conf now with fresh pdc values and reload mangoapp."""
         self._init()
         return await self._hud_call(
-            lambda: self._apply_hud_state(self._hud.load())
+            lambda: self._apply_hud_state(self._hud_model())
         )
 
     def _resolve_hud_conflict_sync(self, action) -> dict:
@@ -9681,9 +11979,7 @@ class Plugin:
             return self._hud_state()
         path = conflict["managedPath"]
         if action == "keep_external":
-            model = self._hud.load()
-            model["enabled"] = False
-            model = self._hud.save(model)
+            model = self._hud.disable_all()
             mangohud_ownership.relinquish_managed(
                 path,
                 trusted_root=self._hud_home,
@@ -9697,7 +11993,7 @@ class Plugin:
             self._pdc_preview_values = {}
             self._hud_conflict = None
             self._hud_apply_status = "disabled"
-            return self._hud_state(model=model)
+            return self._hud_state(model=self._hud_model())
 
         cap = self._detect_hud()
         if not cap["supported"] or cap["presetsPath"] != path:
@@ -9705,7 +12001,7 @@ class Plugin:
                 "ambiguous" if cap.get("ambiguous") else "pending"
             )
             return self._hud_state(cap=cap)
-        model = self._hud.load()
+        model = self._hud_model()
         self._apply_hud(cap=cap, model=model, replace_conflict=True)
         return self._hud_state(cap=cap, model=model)
 
@@ -9837,9 +12133,18 @@ class Plugin:
         current = str(appid) if appid is not None else None
         if current == getattr(self, "_current_appid", None):
             return
+        self._clear_game_power_reset()
         stats = getattr(self, "_gamescope_stats", None)
         if stats is not None:
             stats.clear()
+        ownership = getattr(self, "_power_ownership", None)
+        if ownership is not None:
+            was_observed = ownership.state()["observed"]
+            if was_observed:
+                ownership.observe(current, "unknown")
+            else:
+                ownership.set_context(current)
+            self._advance_tdp_generation()
         self._current_appid = current
         self._current_appid_at = time.monotonic()
         if getattr(self, "_auto_controller", None) is not None:
@@ -9852,6 +12157,7 @@ class Plugin:
         return self._scope_context_is_current(scope, appid, context_appid)
 
     def _exit_eco_for_cpu(self) -> None:
+        self._eco_request_generation = getattr(self, "_eco_request_generation", 0) + 1
         if self._settings.get("eco_enabled"):
             self._settings["eco_enabled"] = False
             self._save()
@@ -10020,7 +12326,10 @@ class Plugin:
         marker_acquired = False
         previous_applied = None
         try:
-            if generation != self._gpu_generation:
+            if not self._game_power_write_allowed():
+                ok = False
+                error_code = "game_power_owner"
+            elif generation != self._gpu_generation:
                 ok = False
                 error_code = "stale_context"
             elif not self._gpu_clock.supported:
@@ -10125,6 +12434,8 @@ class Plugin:
     def _apply_gpu_clock(self) -> None:
         """Re-assert the GPU clock window when manual (cleared to auto after suspend).
         When not manual we leave the GPU alone (don't fight other tools). Guarded."""
+        if not self._game_power_write_allowed():
+            return
         if getattr(self, "_gpu_shutdown", False):
             return
         if getattr(self, "_gpu_rpc_pending", 0) > 0:
@@ -10167,6 +12478,9 @@ class Plugin:
             lo, hi = g.get("min"), g.get("max")
             if lo is not None and hi is not None:
                 requested = {"mode": "manual", "min_mhz": int(lo), "max_mhz": int(hi)}
+                if self._resume_hold_active():
+                    self._note_resume_hold("gpu", requested=f"{lo}-{hi}")
+                    return
                 self._gpu_requested = requested
                 holder = {}
                 self._gpu_manual_inflight += 1
@@ -10195,6 +12509,136 @@ class Plugin:
                 "error_type": type(exc).__name__,
             }
             self._record_gpu_clock_transition(result, "reapply")
+
+    # ---- After a resume ----------------------------------------------------------
+    def _resume_work_current(self):
+        """A worker can run on wake before the lifecycle poll updates the token."""
+        token = getattr(self, "_resume_token", None)
+        baseline = read_suspend_time()
+
+        def current():
+            now = read_suspend_time()
+            return token == getattr(self, "_resume_token", None) and (
+                baseline is None or (now is not None and now - baseline < MIN_SUSPEND_S)
+            )
+
+        return current
+
+    def _in_resume_window(self) -> bool:
+        resumed = getattr(self, "_resume_at", None)
+        return resumed is not None and time.monotonic() - resumed < _RESUME_WINDOW_S
+
+    def _resume_step_marker(self):
+        if not self._in_resume_window():
+            return lambda step: None
+        token = getattr(self, "_resume_token", 0)
+        return lambda step: self._queue_pulse_mark(f"reapply:{step}", token)
+
+    def _queue_pulse_mark(self, step, token) -> None:
+        """Synced on the serial executor, so it lands on disk before the write queued next."""
+        self._offload(lambda: self._pulse_mark(step, token=token))
+
+    def _on_resume_detected(self, suspend_seconds) -> None:
+        self._resume_token = int(getattr(self, "_resume_token", 0)) + 1
+        self._resume_at = time.monotonic()
+        beat = getattr(self, "_pulse", None)
+        if beat is not None:
+            try:
+                beat.burst(_RESUME_WINDOW_S)
+            except Exception:  # noqa: BLE001
+                pass
+        self._pulse_mark("resume", sync=False, suspend_s=suspend_seconds, token=self._resume_token)
+        self._start_resume_hold(self._resume_token)
+
+    def _hold_cores_after_resume(
+        self, intent: dict, *, allow_cores=False, allow_smt=False,
+    ) -> dict:
+        """Hold automatic restrictions; an explicit choice overrides only its field."""
+        if not self._resume_hold_active():
+            return intent
+        context = (getattr(self, "_current_appid", None), self._cpu_scope_label())
+        if getattr(self, "_resume_hold_override_context", None) != context:
+            self._resume_hold_overrides = set()
+            self._resume_hold_override_context = context
+        overrides = self._resume_hold_overrides
+        if allow_cores:
+            overrides.add("cores")
+        if allow_smt:
+            overrides.add("smt")
+        selected = dict(intent)
+        if intent.get("cores") is not None and "cores" not in overrides:
+            self._note_resume_hold("cores", requested=intent["cores"])
+            selected["cores"] = None
+        if intent.get("smt") is False and "smt" not in overrides:
+            self._note_resume_hold("smt", requested=False)
+            selected["smt"] = True
+        return selected
+
+    def _resume_hold_active(self) -> bool:
+        return getattr(self, "_resume_hold_token", None) is not None
+
+    def _start_resume_hold(self, token) -> None:
+        """Automatic CPU restrictions and manual GPU clocks wait after resume."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._resume_hold_token = token
+        self._resume_hold_noted = set()
+        self._resume_hold_overrides = set()
+        self._resume_hold_override_context = None
+        loop.call_later(_RESUME_HOLD_S, self._release_resume_hold, token)
+
+    def _note_resume_hold(self, what, **detail) -> None:
+        noted = getattr(self, "_resume_hold_noted", None)
+        if noted is None or what in noted:
+            return
+        noted.add(what)
+        self._log_resume_hold("held", what=what, **detail)
+        self._pulse_mark(f"hold:{what}", sync=False, token=self._resume_hold_token)
+
+    def _log_resume_hold(self, action, **detail) -> None:
+        event = {"action": action, "token": getattr(self, "_resume_token", 0), **detail}
+        history = getattr(self, "_resume_hold_history", None)
+        if history is None:
+            history = deque(maxlen=8)
+            self._resume_hold_history = history
+        history.append({"at": round(time.time(), 1), **event})
+        decky.logger.info("Resume hold %s", json.dumps(event, sort_keys=True, separators=(",", ":")))
+
+    def _release_resume_hold(self, token) -> None:
+        if getattr(self, "_resume_hold_token", None) != token:
+            return
+        overrides = getattr(self, "_resume_hold_overrides", None) or set()
+        held = sorted(set(getattr(self, "_resume_hold_noted", None) or ()) - overrides)
+        self._resume_hold_token = None
+        self._resume_hold_noted = None
+        self._resume_hold_overrides = None
+        self._resume_hold_override_context = None
+        if getattr(self, "_shutting_down", False):
+            return
+        self._log_resume_hold("released", held=held)
+        if not held:
+            return
+        cpu_fields = [field for field in ("cores", "smt") if field in held]
+        if cpu_fields:
+            for field in cpu_fields:
+                self._queue_pulse_mark(f"release:{field}", token)
+            self._apply_cpu()
+        if "gpu" in held:
+            self._queue_pulse_mark("release:gpu", token)
+            self._apply_gpu_clock()
+        self._queue_pulse_mark("release:done", token)
+
+    def _resume_hold_diagnostics(self) -> dict:
+        guard = getattr(self, "_sleep_core_guard", None)
+        return {
+            "active": self._resume_hold_active(),
+            "hold_s": _RESUME_HOLD_S,
+            "overridden": sorted(getattr(self, "_resume_hold_overrides", None) or ()),
+            "history": list(getattr(self, "_resume_hold_history", ())),
+            "sleep_core_guard": guard.diagnostics() if guard is not None else None,
+        }
 
     async def _release_gpu_clock(self, trigger) -> bool:
         self._init()
@@ -10329,16 +12773,53 @@ class Plugin:
         self._gpu_requested = requested
         self._record_gpu_clock_transition(failure, trigger, scope)
 
+    def _gpu_limit_overridden_by_boost(self) -> bool:
+        # ps5-gpufreq: while ps5-cpufreq runs a boost clock the SMU takes the GPU clock
+        # back to its 2230 MHz ceiling, ignoring the devfreq window.
+        if getattr(self._device, "key", None) != "playstation_5":
+            return False
+        try:
+            return bool(self._boost.supported and self._boost.enabled())
+        except Exception:  # noqa: BLE001
+            return False
+
     def _gpu_clock_state(self) -> dict:
         g = self._gpu_profiles.clock(self._current_appid)
+        global_clock = self._gpu_profiles.clock(None)
         rng = self._gpu_clock.get_range()
         cur = self._gpu_clock.get()
+        steam_owned = self._game_power_owned_by_steam()
+        steam_readback_available = False
+        if steam_owned:
+            snapshot = self._capture_gpu_hardware_state()
+            snapshot = snapshot if isinstance(snapshot, dict) else {}
+            window = snapshot.get("window")
+            valid_window = (
+                isinstance(window, (tuple, list)) and len(window) == 2
+                and all(type(value) is int for value in window)
+                and 0 < window[0] <= window[1]
+            )
+            level = snapshot.get("level")
+            steam_readback_available = valid_window and level in ("auto", "manual")
+            if steam_readback_available:
+                cur = tuple(window)
+                g = {"manual": level == "manual", "min": cur[0], "max": cur[1]}
         gmin, gmax = g.get("min"), g.get("max")
         requested = getattr(self, "_gpu_requested", None)
         last = getattr(self, "_gpu_last_result", None)
+        if steam_owned:
+            requested = None
+            last = {"status": "unverifiable", "error_code": "steam_owned"}
         applied_min, applied_max = cur if cur else (None, None)
         managed = self._frequency_managed_by_power()
         return {
+            "game_power_owner": self._game_power_owner_state(),
+            "display_source": "steam_live" if steam_readback_available else "saved",
+            "steam_readback_available": steam_readback_available,
+            "appid": self._current_appid,
+            "global_manual": bool(global_clock.get("manual")),
+            "global_min": global_clock.get("min"),
+            "global_max": global_clock.get("max"),
             "supported": self._gpu_clock.supported,
             "managed_by_power": managed,
             "power_level": self._power_gpu_level() if managed else None,
@@ -10346,6 +12827,7 @@ class Plugin:
                 managed and getattr(self._tdp_backend, "applied_split_gpu_level", None) is not None
             ),
             "manual": bool(g.get("manual")),
+            "cpu_boost_overrides": self._gpu_limit_overridden_by_boost(),
             "range_min": rng[0] if rng else None,
             "range_max": rng[1] if rng else None,
             "levels": (
@@ -10365,7 +12847,9 @@ class Plugin:
                 "auto" if self._gpu_clock.supported else "unsupported"
             ),
             "reason": last.get("error_code") if last else None,
-            "follows_global": self._gpu_profiles.is_following_global(self._current_appid),
+            "follows_global": (
+                False if steam_owned else self._gpu_profiles.is_following_global(self._current_appid)
+            ),
             "has_game_profile": (
                 self._current_appid is not None
                 and self._gpu_profiles.has_game(self._current_appid)
@@ -10392,10 +12876,15 @@ class Plugin:
         policies = value.get("policies") or []
         return {
             "reason": value.get("reason"),
+            **({"boost": value["boost"]} if value.get("boost") is not None else {}),
             "requested": list(value["requested"]) if value.get("requested") else None,
             "policies": [{
                 "name": policy.get("name"),
                 "driver": policy.get("driver"),
+                **{
+                    key: policy[key] for key in ("amd_pstate_max", "writes")
+                    if policy.get(key) is not None
+                },
                 **{
                     key: list(policy[key]) if policy.get(key) else None
                     for key in ("hardware_bounds", "target", "applied")
@@ -10543,14 +13032,30 @@ class Plugin:
                 "pending": getattr(self._tdp_reconcile_memory, "pending_since", None) is not None,
             },
         }
-        return {"cpu": cpu, "gpu": gpu, "steamdeck_ppt": deck_ppt, "reapply": reapply}
+        try:
+            resume_hold = self._resume_hold_diagnostics()
+        except Exception as exc:  # noqa: BLE001
+            resume_hold = {"error_type": type(exc).__name__}
+        return {
+            "cpu": cpu, "gpu": gpu, "steamdeck_ppt": deck_ppt, "reapply": reapply,
+            "resume_hold": resume_hold,
+        }
 
     async def get_gpu_clock(self) -> dict:
         self._init()
         return self._gpu_clock_state()
 
+    def _gpu_global_profile_is_inactive(self, scope):
+        return (
+            scope == "global"
+            and self._current_appid is not None
+            and not self._gpu_profiles.is_following_global(self._current_appid)
+        )
+
     async def set_gpu_follow_global(self, follow: bool, appid) -> dict:
         self._init()
+        if not self._game_power_write_allowed():
+            return self._gpu_clock_state()
         if self._gpu_shutdown or not self._module_enabled("system"):
             return self._gpu_clock_state()
         async with self._gpu_mutation_lock:
@@ -10643,6 +13148,12 @@ class Plugin:
                 return self._gpu_clock_state()
             if not self._scope_context_is_current(scope, appid, context_appid):
                 return self._gpu_clock_state()
+            if getattr(self, "_game_power_reset", None) is not None:
+                return self._gpu_clock_state()
+            if not self._game_power_write_allowed() or self._gpu_global_profile_is_inactive(scope):
+                if scope == "global":
+                    self._gpu_profiles.set_clock("global", True, min_mhz, max_mhz)
+                return self._gpu_clock_state()
             return await self._set_gpu_clock_unlocked(min_mhz, max_mhz, scope, appid)
 
     async def _set_gpu_clock_unlocked(
@@ -10705,6 +13216,12 @@ class Plugin:
             if self._gpu_shutdown or not self._module_enabled("system"):
                 return self._gpu_clock_state()
             if not self._scope_context_is_current(scope, appid, context_appid):
+                return self._gpu_clock_state()
+            if getattr(self, "_game_power_reset", None) is not None:
+                return self._gpu_clock_state()
+            if not self._game_power_write_allowed() or self._gpu_global_profile_is_inactive(scope):
+                if scope == "global":
+                    self._gpu_profiles.set_clock("global", False, 0, 0)
                 return self._gpu_clock_state()
             return await self._set_gpu_clock_auto_unlocked(scope, appid)
 
@@ -11410,6 +13927,16 @@ class Plugin:
         primary_rail = getattr(observation_backend, "primary_rail", "pl1")
         primary_reading = primary.get(primary_rail)
         applied_w = primary_reading.applied_w if primary_reading is not None else None
+        steam_owned = self._game_power_owned_by_steam()
+        steam_readback_available = steam_owned and applied_w is not None
+        if steam_owned:
+            slow, fast = primary.get("pl2"), primary.get("pl3")
+            live_slow = slow.applied_w if slow is not None else None
+            live_fast = fast.applied_w if fast is not None else None
+            if live_slow is not None and live_fast is not None:
+                levels = {"pl1": live_slow, "pl2": live_slow, "pl3": live_fast}
+                requested_levels = dict(levels)
+                eff = {**eff, "mode": "estable" if live_slow == live_fast else "custom"}
         ppt_capability = getattr(self._tdp_backend, "ppt_capability", None)
         ppt = ppt_capability() if callable(ppt_capability) else None
         if ppt is not None:
@@ -11484,8 +14011,12 @@ class Plugin:
                                  and self._tdp_profiles.has_game(self._current_appid)),
             # Whether this game is applying the global profile (no own value, or its own
             # is toggled to follow global). Powers the "usa el global / usa el propio" UI.
-            "follows_global": self._tdp_profiles.is_following_global(self._current_appid),
-            "watts": self._clamp_tdp_request(eff["watts"], active),
+            "follows_global": (
+                False if steam_owned else self._tdp_profiles.is_following_global(self._current_appid)
+            ),
+            "watts": applied_w if steam_readback_available else self._clamp_tdp_request(eff["watts"], active),
+            "display_source": "steam_live" if steam_readback_available else "saved",
+            "steam_readback_available": steam_readback_available,
             "global_watts": self._clamp_tdp_request(
                 geff["watts"],
                 active,
@@ -11548,11 +14079,15 @@ class Plugin:
             "ownership": self._tdp_ownership_state(observation),
             # Master switch + one-time-notice flags (durable across reboot; the
             # frontend gates monitor-only mode + the first-run modals off these).
+            "game_power_owner": self._game_power_owner_state(),
             "tdp_control_enabled": self._tdp_control_on(),
             "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
             "seen_tdp_conflict_takeover": bool(
                 self._settings.get("seen_tdp_conflict_takeover", False)),
+            "hide_tdp_steamos_card": bool(
+                self._settings.get("hide_tdp_steamos_card", False)),
             "charger_unstable": self._charger_unstable_state(),
+            "kernel_support": self._kernel_support_state(),
         }
 
     def _tdp_ownership_state(self, observation):
@@ -11580,6 +14115,7 @@ class Plugin:
             "surfaces": observation.as_dict()["surfaces"],
             "conflict_persistent": self._tdp_conflict_persistent,
             "failures": self._tdp_reconcile_memory.failures,
+            "game_owner": self._game_power_owner_state(),
             "handoff_required": self._os_id == "anatase",
             "external_owner": self._tdp_external_owner,
             "overshoot": self._overshoot_view(),
@@ -11866,6 +14402,7 @@ class Plugin:
                 "status": dict(self._auto_status),
                 "history": list(self._auto_history),
             },
+            "steam_download_mode": self._steam_download_hold.diagnostics(),
             "steamdeck_ppt": {
                 "previous": self._settings.get("steamdeck_ppt_previous"),
                 "overclock": self._steamdeck_overclock_state(),
@@ -12010,7 +14547,7 @@ class Plugin:
         release_error = None
         if callable(release):
             try:
-                released = bool(release())
+                released = bool(trace_tdp_operation(previous, "release_replace", release))
             except Exception as error:  # noqa: BLE001
                 released = False
                 release_error = type(error).__name__
@@ -12165,14 +14702,60 @@ class Plugin:
             self._start_tdp_guard_loop()
         return recovered
 
-    def _recover_tdp_runtime_transaction(self) -> bool:
+    def _recover_tdp_runtime_transaction(
+        self, resume_control=False, resume_cancelled=None,
+    ) -> bool:
         if not getattr(self._tdp_backend, "safety_locked", False):
             return True
         recover = getattr(self._tdp_backend, "recover_runtime_transaction", None)
         if not callable(recover):
             return True
         try:
-            result = recover()
+            backend = self._tdp_backend
+            generation = getattr(self, "_tdp_generation", None)
+            resume = getattr(backend, "resume_ownership", None)
+            resume_ready = getattr(backend, "ownership_resume_ready", None)
+
+            def authorized():
+                return (
+                    self._tdp_backend is backend
+                    and getattr(self, "_tdp_generation", None) == generation
+                    and not getattr(self, "_shutting_down", False)
+                    and (resume_cancelled is None or not resume_cancelled.is_set())
+                    and (self._tdp_control_on() or resume_control)
+                    and self._tdp_write_authorized()
+                    and self._tdp_external_owner is False
+                    and self._firmware_mode() == _CUSTOM_MODE
+                )
+
+            if (
+                callable(resume) and callable(resume_ready) and resume_ready()
+                and authorized()
+                and self._powerstation_detector.tdp_active() is False
+                and (
+                    self._controller_backend.manager != controller_detect.HHD
+                    or self._hhd_tdp_client.current_tdp_enable() is False
+                )
+                and authorized()
+            ):
+                resumed = trace_tdp_operation(
+                    self._tdp_backend, "resume_ownership",
+                    lambda: resume(write_authorized=True),
+                )
+                if isinstance(resumed, dict) and resumed.get("ok"):
+                    decky.logger.info("TDP ownership: %s", resumed.get("detail"))
+                    return True
+            result = trace_tdp_operation(
+                self._tdp_backend, "recover", recover,
+                recovery_owner={
+                    "status": "unknown",
+                    "source": "not_observed_for_recovery",
+                    "runtime_external_owner": self._tdp_external_owner,
+                } if (
+                    self._device.key == "legion_go_2"
+                    and backend.name == "firmware-attr:lenovo-wmi-other"
+                ) else None,
+            )
         except Exception as error:  # noqa: BLE001
             decky.logger.error(
                 "Interrupted TDP transaction recovery failed: %s",
@@ -12518,12 +15101,16 @@ class Plugin:
         if not self._tdp_control_on():
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
+        if scope == "game" and not self._game_power_write_allowed():
+            return {"requested_w": watts, "applied_w": None, "ok": False, "detail": "game-power-owner"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
-        self._clear_eco()  # manual TDP change exits download mode (after scope is valid)
-        self._exit_firmware_mode()  # moving the slider means "I want custom"
+        if self._game_power_write_allowed():
+            self._clear_eco()  # manual TDP change exits download mode (after scope is valid)
+        if self._game_power_write_allowed():
+            self._exit_firmware_mode()  # moving the slider means "I want custom"
         limits = self._limits()
         active = self._active_max(limits, read_on_ac())
         clamped = self._clamp_tdp_request(watts, active)
@@ -12549,12 +15136,16 @@ class Plugin:
         if not self._tdp_control_on():
             return {"requested_w": level, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
+        if scope == "game" and not self._game_power_write_allowed():
+            return {"requested_w": level, "applied_w": None, "ok": False, "detail": "game-power-owner"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": level, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
-        self._clear_eco()
-        self._exit_firmware_mode()
+        if self._game_power_write_allowed():
+            self._clear_eco()
+        if self._game_power_write_allowed():
+            self._exit_firmware_mode()
         clamped = None
         if level is not None:
             active = self._active_max(self._limits(), read_on_ac())
@@ -12574,6 +15165,8 @@ class Plugin:
         """Toggle a game between its own TDP profile and following the global one,
         keeping its stored values (never deletes). Re-applies and returns full state."""
         self._init()
+        if not self._game_power_write_allowed():
+            return await self._read_tdp_state()
         if (
             context_appid is not _RPC_CONTEXT_UNSET
             and not self._scope_context_is_current(
@@ -12609,6 +15202,8 @@ class Plugin:
         'balanced' / 'performance' hand power + fan + LED to the firmware; 'custom'
         returns control to our TDP slider. Device-global. Returns the fresh TDP state."""
         self._init()
+        if not self._game_power_write_allowed():
+            return await self.get_tdp_state()
         if not self._device.firmware_modes:
             return await self.get_tdp_state()
         valid = set(self._firmware_choices()) | {_CUSTOM_MODE}
@@ -12641,12 +15236,16 @@ class Plugin:
         if not self._tdp_control_on():
             return {"requested_w": 0, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
+        if scope == "game" and not self._game_power_write_allowed():
+            return {"requested_w": 0, "applied_w": None, "ok": False, "detail": "game-power-owner"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": 0, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
-        self._clear_eco()
-        self._exit_firmware_mode()
+        if self._game_power_write_allowed():
+            self._clear_eco()
+        if self._game_power_write_allowed():
+            self._exit_firmware_mode()
         self._tdp_profiles.set_offsets(resolved, off2, off3, appid=appid)
         res = await self._apply_tdp_now("manual-levels")
         # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
@@ -12666,9 +15265,12 @@ class Plugin:
             and not self._scope_context_is_current(scope, appid, context_appid)
         ):
             return await self._read_tdp_state()
+        if scope == "game" and not self._game_power_write_allowed():
+            return await self._read_tdp_state()
         resolved = self._resolve_scope(scope, appid)
         if resolved is not None:  # invalid scope → no-op (never from the UI)
-            self._clear_eco()
+            if self._game_power_write_allowed():
+                self._clear_eco()
             self._tdp_profiles.set_boost_mode(resolved, mode, appid=appid)
             await self._apply_tdp_now("boost-mode")
         return await self._read_tdp_state()
@@ -12733,12 +15335,16 @@ class Plugin:
         if not self._tdp_control_on():
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
+        if scope == "game" and not self._game_power_write_allowed():
+            return {"requested_w": watts, "applied_w": None, "ok": False, "detail": "game-power-owner"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
-        self._clear_eco()
-        self._exit_firmware_mode()
+        if self._game_power_write_allowed():
+            self._clear_eco()
+        if self._game_power_write_allowed():
+            self._exit_firmware_mode()
         limits = self._automatic_limits()
         active = self._active_max(limits, read_on_ac())
         requested = self._clamp_tdp_request(watts, active)
@@ -12751,19 +15357,38 @@ class Plugin:
         self._tdp_profiles.create_game_from_global(appid)
         self._set_current_appid(appid)
 
-    async def set_current_game(self, appid, name=None) -> dict:
+    async def set_current_game(
+        self, appid, name=None, steam_profile=_RPC_CONTEXT_UNSET
+    ) -> dict:
         self._init()
         next_appid = str(appid) if appid is not None else None
         next_name = str(name) if (appid is not None and name) else None
+        leaving_game = self._current_appid is not None and next_appid is None
+        if not self._game_power_ownership_supported() and not self._game_power_ownership_has_context():
+            steam_profile = _RPC_CONTEXT_UNSET
+        if steam_profile is not _RPC_CONTEXT_UNSET:
+            if steam_profile not in ("active", "inactive", "unknown"):
+                raise ValueError("invalid_steam_profile")
+            before = self._power_ownership.state()
+            self._game_power_context_transition = True
+            try:
+                self._set_current_appid(next_appid)
+                after = self._power_ownership.observe(next_appid, steam_profile)
+                if before != after:
+                    self._advance_tdp_generation()
+                    self._next_gpu_generation()
+                    self._reset_auto_session("power_observation_changed")
+            finally:
+                self._game_power_context_transition = False
         if (
             next_appid is not None
             and next_appid == self._current_appid
             and next_name != self._current_game_name
+            and steam_profile is _RPC_CONTEXT_UNSET
         ):
             self._current_game_name = next_name
             await self._refresh_pdc_metrics()
             return await self.get_tdp_state()
-        leaving_game = self._current_appid is not None and next_appid is None
         self._set_current_appid(next_appid)
         self._current_game_name = next_name
         self._reset_auto_session("context_changed")
@@ -12843,9 +15468,24 @@ class Plugin:
             return self._recover_fremont_fan_handoff()
         released = True
         try:
-            if getattr(self, "_fan_ctrl", None) is not None:
+            console = getattr(self, "_ps5_console", None)
+            if getattr(self, "_ps5_fan", None) is not None and (
+                self._settings.get("ps5_fan_target_c") is not None
+                or getattr(self, "_ps5_guard_release_pending", False)
+                or (console is not None and console.guard.active)
+            ):
+                released = bool(self._ps5_fan.release()["ok"])
+                if console is not None and released:
+                    console.guard.force_release("handoff")
+                    self._ps5_guard_release_pending = False
+                    self._set_ps5_guard_holding(False)
+        except Exception:  # noqa: BLE001
+            released = False
+        try:
+            # NullFanBackend never held a fan, so there is nothing for it to hand back.
+            if getattr(getattr(self, "_fan_ctrl", None), "supported", False):
                 result = self._fan_ctrl.restore_auto()
-                released = bool(
+                released = released and bool(
                     isinstance(result, dict) and result.get("ok")
                 )
         except Exception:  # noqa: BLE001
@@ -13312,7 +15952,11 @@ class Plugin:
         log("Controller transition %s", encoded)
 
     def _log_lifecycle_event(self, event) -> None:
+        # The black box keeps the last transitions' names: a freeze right after a resume.
+        recent = getattr(self, "_lifecycle_recent", None) or []
+        self._lifecycle_recent = [*recent, {"t": round(time.time(), 1), "event": event.get("event")}][-4:]
         if event.get("event") == "resume_detected":
+            self._on_resume_detected(event.get("suspend_seconds"))
             self._reset_auto_session("resume")
         if event.get("event") in ("resume_detected", "ac_changed"):
             expedite = getattr(self._tdp_backend, "expedite_handoff_retry", None)
@@ -13326,7 +15970,36 @@ class Plugin:
         )
         log("Lifecycle transition %s", encoded)
 
+    def _support_steam_inventory(self) -> dict:
+        service = getattr(self, "_steam_inventory_compat", None)
+        return service.state() if service is not None else {"status": "stopped"}
+
+    def _start_steam_inventory_compat(self) -> None:
+        if getattr(self, "_shutting_down", False) or getattr(self, "_steam_inventory_compat", None) is not None:
+            return
+
+        def report(event: dict) -> None:
+            if journal.active is not None:
+                journal.active.write("INFO", "steam_inventory", "compatibility", **event)
+
+        self._steam_inventory_compat = SteamInventoryCompat(journal=report)
+        self._steam_inventory_compat.start()
+
+    async def _stop_steam_inventory_compat(self) -> None:
+        service = getattr(self, "_steam_inventory_compat", None)
+        if service is not None:
+            await service.stop()
+
     async def _main(self) -> None:
+        try:
+            await self._startup()
+        except RuntimeError as error:
+            # Decky can stop a second instance while it is still starting.
+            if str(error) != "plugin_shutting_down" or not getattr(self, "_shutting_down", False):
+                raise
+            decky.logger.info("Startup stopped: plugin is shutting down")
+
+    async def _startup(self) -> None:
         self._start_journal()
         self._init()
         # Single-worker executor for subprocess-backed applies (gamescopectl /
@@ -13336,6 +16009,7 @@ class Plugin:
         await self._offload_call(self._recover_recognised_desktop_migration)
         await self._recover_tdp_startup_state()
         await self._probe_tdp_backend(force=True)
+        await self._offload_call(self._seed_tdp_from_hardware)
         if self._tdp_control_on() and self._retired_experimental_tdp_unlock():
             retired = await self._retire_experimental_tdp_unlock_or_disable()
             if not retired.get("ok"):
@@ -13382,6 +16056,11 @@ class Plugin:
         if fan_expose.ensure_fan_sensor():
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
+        if getattr(self, "_ps5_console", None) is not None:
+            rival = await self._offload_call(self._ps5_rival_plugin)
+            if rival:
+                self._log_ps5_console("other_controller", {"ok": False, "plugin": rival})
+        self._start_ps5_console_loop()
         self._restore_board_fans()
         if getattr(self, "_fan_reader", None) is not None:
             self._fan_reader.invalidate()
@@ -13408,6 +16087,7 @@ class Plugin:
             self._pixel_runtime().start()
             if self._pixel_runtime().supported:
                 self._start_pixel_fps_keeper()
+            self._start_steam_inventory_compat()
             self._kiosk_task = asyncio.create_task(self._kiosk.supervise())
             if self._developer_options_on() and self._settings.get("remote_access_enabled"):
                 await self._remote_access.set_enabled(True)
@@ -13425,8 +16105,12 @@ class Plugin:
             )
 
         decky.logger.info("Shutdown stage unload:begin")
+        self._stop_pulse()
         self._prepare_shutdown()
         stage("prepared")
+        # A frozen game never outlives Panel.
+        if getattr(self, "_freezer", None) is not None:
+            self._freezer.resume()
         if getattr(self, "_screen_sleep", None) is not None:
             if self._eco_watch_task is not None:
                 self._eco_watch_task.cancel()
@@ -13450,6 +16134,8 @@ class Plugin:
         finally:
             self._shutdown_controller_action_executor()
             self._finish_theme_shutdown_sync()
+        await self._stop_steam_inventory_compat()
+        stage("inventory")
         decky.logger.info("Panel de Control unloaded")
         self._stop_journal()
 
@@ -13480,6 +16166,44 @@ class Plugin:
             version=read_version(),
             decky=os.environ.get("DECKY_VERSION"),
         )
+        self._pulse = pulse.Pulse(
+            diary.directory,
+            context=self._pulse_context,
+            recent=diary.latest,
+            lifecycle=lambda: getattr(self, "_lifecycle_recent", None) or [],
+            on_unclean=lambda end: diary.write("WARNING", "session", "previous_unclean_end", **end),
+        )
+        self._pulse.start()
+
+    def _pulse_mark(self, step, *, sync=True, **detail) -> None:
+        beat = getattr(self, "_pulse", None)
+        if beat is None:
+            return
+        try:
+            beat.mark(step, sync=sync, **detail)
+        except Exception:  # noqa: BLE001 - diagnostics never block an apply
+            pass
+
+    def _stop_pulse(self) -> None:
+        beat, self._pulse = getattr(self, "_pulse", None), None
+        if beat is not None:
+            beat.stop()
+
+    def _pulse_context(self) -> dict:
+        sample = getattr(self, "_support_last_sample", None) or {}
+        return {
+            "game": self._current_appid,
+            "themes": getattr(self, "_support_active_themes", None),
+            "eco_enabled": bool(self._settings.get("eco_enabled", False)),
+            "support_sample_age_s": (
+                round(max(0.0, time.monotonic() - sample["sampled_at_monotonic"]), 1)
+                if sample.get("sampled_at_monotonic") is not None else None
+            ),
+            # Panel's own eco screen-off; the sample's `screen` is the kernel's DPMS readback.
+            "screen_asleep": getattr(getattr(self, "_screen_sleep", None), "asleep", None),
+            "tdp_reason": getattr(self, "_tdp_reason", None) or None,
+            **{key: sample.get(key) for key in ("tdp_w", "w", "cpu_c", "gpu_c", "rpm", "ac")},
+        }
 
     @staticmethod
     def _journal_report() -> dict | None:
@@ -13492,6 +16216,10 @@ class Plugin:
             return {"schema": 1, "error": type(error).__name__}
         report["dropped"] = diary.dropped
         report["write_failures"] = diary.write_failures
+        try:
+            report["pulse"] = pulse.report(diary.directory)
+        except Exception as error:  # noqa: BLE001
+            report["pulse"] = {"schema": 1, "error": type(error).__name__}
         return report
 
     def _start_support_watch(self) -> None:
@@ -13548,13 +16276,16 @@ class Plugin:
         diary = journal.active
         if diary is None:
             return
-        last_context, last_sections = await loop.run_in_executor(
+        last_context, last_sections, last_themes = await loop.run_in_executor(
             None,
             lambda: (
                 journal.last_record(diary.directory, "context"),
                 journal.merged_sections(diary.directory),
+                journal.last_record(diary.directory, "themes"),
             ),
         )
+        theme_folders = journal_context.ThemeFolderWatcher(last_themes)
+        rescan_themes = True
         while not self._shutting_down:
             diary = journal.active
             if diary is None:
@@ -13573,6 +16304,8 @@ class Plugin:
                         diary.write("INFO", "context", "snapshot", **context, **({"changes": changes} if changes else {}))
                         last_context = {"t": time.time(), **context}
                     sections = await self._support_section_states()
+                    self._support_active_themes = journal_context.active_themes(sections)
+                    rescan_themes = True
                     if journal_context.needs_snapshot(last_sections, {}, (), now=time.time()):
                         diary.write("INFO", "sections", "snapshot", sections=sections)
                         last_sections = {"t": time.time(), "sections": sections}
@@ -13586,7 +16319,10 @@ class Plugin:
                         if changed:
                             diary.write("INFO", "sections", "changed", sections=changed)
                             last_sections = {"t": time.time(), "sections": {**last_sections["sections"], **changed}}
+                await self._journal_theme_folders(diary, theme_folders, rescan_themes)
+                rescan_themes = False
                 sample = await self._support_sample()
+                self._support_last_sample = {**sample, "sampled_at_monotonic": time.monotonic()}
                 reason = watcher.observe(sample, time.time())
                 if reason is not None:
                     diary.write("INFO", "state", reason, **sample)
@@ -13595,6 +16331,31 @@ class Plugin:
             except Exception as error:  # noqa: BLE001
                 diary.write("WARNING", "state", "sample_failed", error=type(error).__name__)
             await self._support_pause()
+
+    def _support_theme_folders(self, force: bool) -> dict | None:
+        """Hooandee theme folders, rescanned only when the themes folder changed (one stat
+        per sample), with the section refresh or while a change awaits confirmation."""
+        root = self._themes_root()
+        try:
+            stamp = os.stat(root).st_mtime_ns
+        except OSError:
+            stamp = None
+        if not force and stamp == getattr(self, "_support_themes_stamp", False):
+            return None
+        self._support_themes_stamp = stamp
+        return journal_context.hooandee_theme_folders(root)
+
+    async def _journal_theme_folders(self, diary, watcher, rescan: bool) -> None:
+        """Settings lost on a restart showed no trace of theme folders coming and going."""
+        try:
+            # The theme executor runs installs one at a time: never scans half an update.
+            folders = await self._offload_theme_call(lambda: self._support_theme_folders(rescan or watcher.pending))
+        except Exception:  # noqa: BLE001 - stopping, or the folder is unreadable
+            return
+        found = watcher.observe(folders) if folders is not None else None
+        if found is not None:
+            message, event = found
+            diary.write("WARNING" if event["removed"] else "INFO", "themes", message, **event)
 
     async def _support_pause(self) -> None:
         deadline = time.monotonic() + _SUPPORT_SAMPLE_INTERVAL_S
@@ -13615,9 +16376,13 @@ class Plugin:
         home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
         return journal_context.custom_artwork(os.path.join(home, ".local", "share", "Steam", "userdata"))
 
-    @staticmethod
-    def _support_ambient_state() -> dict:
-        return {"available": False}
+    def _support_ambient_state(self) -> dict:
+        state = self.ambient_diagnostics()
+        for live in ("events", "indexed", "queueLength", "shareActive", "mediaServer", "themeImages", "musicEnabled"):
+            state.pop(live, None)
+        if isinstance(state.get("setup"), dict):
+            state["setup"] = {k: v for k, v in state["setup"].items() if k != "volume"}
+        return state
 
     def _support_settings_state(self) -> dict:
         prefs = self._settings.get("ui_prefs")
@@ -13718,6 +16483,7 @@ class Plugin:
             wait_task.cancel()
             self._display_wait_task = None
         self._stop_night_loop()
+        self._stop_ps5_console_loop()
         self._audio_shutdown = True
         audio_task = getattr(self, "_audio_task", None)
         self._audio_task = None
@@ -13730,12 +16496,16 @@ class Plugin:
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         self._cancel_queued_offloads()
+        self._ambient_stop()
         self._close_steam_cleaner_sync()
+        self._close_upscalers_sync()
 
     def _perform_shutdown_handoff(
         self, stage: str, preserve_recovery=False
     ) -> None:
-        fans_released = self._restore_fans_safe()
+        fans_released = (
+            self._restore_fans_safe() if self._fans_owned_by_panel() else True
+        )
         desktop_power_released = self._restore_desktop_power_safe()
         self._restore_color_safe()
         self._restore_audio_safe()
@@ -13758,6 +16528,9 @@ class Plugin:
             else self._release_cpu_controls_sync(stage)
         )
         decky.logger.info(f"Shutdown stage {stage}:cpu-handoff ok=%s", cpu_released)
+        guard = getattr(self, "_sleep_core_guard", None)
+        if cpu_released and guard is not None:
+            guard.remove(reload=False)
         gpu_released = (
             self._release_gpu_clock_sync(stage, preserve_ownership=True)
             if preserve_recovery
@@ -13855,6 +16628,7 @@ class Plugin:
 
     async def _uninstall(self) -> None:
         decky.logger.info("Shutdown stage uninstall:begin")
+        self._stop_pulse()
         self._prepare_shutdown()
         await self._stop_pixel()
         try:
@@ -13869,6 +16643,7 @@ class Plugin:
                 self._handoff_after_drain_timeout("uninstall", remove_fan_conf=True)
         finally:
             self._finish_theme_shutdown_sync()
+        await self._stop_steam_inventory_compat()
         decky.logger.info("Panel de Control uninstalled")
         self._stop_journal()
 
@@ -13878,8 +16653,14 @@ journal.trace_calls(
     untraced=frozenset({
         "set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result", "set_eco_screen",
         "get_accessories_state", "preview_accessory_scene", "list_accessory_drawings", "load_accessory_drawing",
+        "get_theme_storage", "set_theme_storage", "force_close_game", "pause_theme_game", "resume_theme_game",
     }),
     automatic=frozenset({"load_theme_extension"}),
-    hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers", "save_accessory_drawing", "accessory_event"}),
+    hidden_arguments=frozenset({
+        "submit_report", "set_aside_theme_leftovers", "add_upscaler_mod", "prepare_early_theme_install",
+        "commit_theme_install", "rollback_theme_install", "acknowledge_theme_install_rollback",
+        "begin_theme_activation", "settle_theme_activation", "acknowledge_theme_activation",
+        "save_accessory_drawing", "accessory_event",
+    }),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

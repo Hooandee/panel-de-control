@@ -1,3 +1,11 @@
+import { createGroupsClient } from "./groups/groupsClient";
+import type { SteamGlobals } from "./groups/steamFacts";
+import { cleanerForceSession } from "./cleaner/forceSession";
+import { artworkImages, artworkGameTitle } from "./themes/artworkImages";
+import { listInstalledGames, listLibraryGames } from "./launch/steamApi";
+import { artworkAccess, configureArtworkHost, startArtworkHydration, registerArtworkEditor, getGeneralArtwork, getCustomArtwork, saveArtwork, vidaArtwork } from "./themes/artworkClient";
+import { openGameArtworkEditor } from "./components/GameArtworkEditor";
+import { getDuoArtwork, getThemeArtwork, setDuoArtwork, setThemeArtwork } from "./api";
 import { ErrorBoundary, findSP, staticClasses } from "@decky/ui";
 import { definePlugin, openFilePicker, toaster } from "@decky/api";
 import { FC } from "react";
@@ -20,6 +28,16 @@ import {
   restoreThemeCleanup,
   acknowledgeThemeCleanupUndo,
   loadThemeExtension,
+  getThemeStorage,
+  getThemeGroups,
+  setThemeGroups,
+  getTabMasterTabs,
+  setThemeStorage,
+  forceCloseGame,
+  pauseThemeGame,
+  resumeThemeGame,
+  getThemeHltb,
+  getThemeProtonDb,
   prepareEarlyThemeInstall,
   prepareRemoteThemeInstall,
   recordThemeFailure,
@@ -32,11 +50,16 @@ import { openThemeHealthModal } from "./components/ThemeHealth";
 import { watchQamCover } from "./themes/qamCoverWatch";
 import { ControlCenter } from "./components/ControlCenter";
 import { ReportingBoundary } from "./components/ReportingBoundary";
-import { startFrontendErrorReporting } from "./system/uiDiagnostics";
-import { setUiEventSink } from "./system/uiEvents";
+import { recordUiDiagnostic, startFrontendErrorReporting } from "./system/uiDiagnostics";
+import { setStaleBackendSink } from "./system/staleBackend";
+import { reloadDeckyAfterClosingMenus } from "./system/reloadDecky";
+import { recordUiEvent as queueUiEvent, setUiEventSink } from "./system/uiEvents";
+import { startSteamPerformanceOwnership } from "./steam/performanceOwnership";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startAccessoryArtWatcher } from "./accessories/gameArt";
 import { startAccessorySteamEvents } from "./accessories/steamEvents";
+import { startCollectionsHeal } from "./steam/healCollections";
+import { resumePendingInstalls } from "./upscalers/pendingInstall";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
 import { hydratePrefs, onPrefsHealed, prefsHydrated, readString, writeString } from "./system/pdcStorage";
@@ -55,24 +78,35 @@ import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
 import { configurePanelThemeInstallHost, onThemePackagesChanged } from "./themes/panelThemeInstallHost";
 import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
+import { themesClientOptionsWriter } from "./themes/runtime/themeOptions";
+import { ambientThemeChannel, startAmbient } from "./ambient";
+import { startUpscalerOverlays } from "./upscalers/overlays";
+import { adoptStaleActivePlugin } from "./deckyInternal";
+import { createGameSessionPort } from "./platform/gameSessions";
+import { createPowerPort } from "./platform/power";
 import { parseSectionHandoffs } from "./themes/sectionOwnership";
 import {
   configureEarlyArchivePicker,
   configureSectionHandoffStore,
   configureThemeFailureReporter,
+  configureCssLoaderSlowMutationReporter,
+  slowMutationBucket,
   createProductionThemesDependencies,
 } from "./themes/themesClient";
 import { configureThemeEarlyCheckHost, configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
+import { configureThemeInteractionJournal } from "./themes/themeInteractionJournal";
 import { configureThemeHealthHost } from "./themes/themeCleanupHost";
 import { getThemesClient } from "./themes/useThemes";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
+import { createThemeStorage } from "./themes/runtime/themeStorage";
+import { createThemeGamesAccess } from "./themes/runtime/gamesAccess";
+import { themeActionsChannel } from "./themes/runtime/themeActions";
 import { startPluginQamRuntime } from "./qam/pluginRuntime";
 import { getQamDocument, onQamDocument } from "./qamDocument";
 
-// Localized header title only; the internal plugin name / install folder stays
-// "Panel de Control" (renaming it would break existing installs and the updater).
+// Steam's public beta stopped exposing the module @decky/ui reads these classes from.
 const PluginTitle: FC = () => (
-  <div className={staticClasses.Title}>{translate("app.title")}</div>
+  <div className={staticClasses?.Title}>{translate("app.title")}</div>
 );
 
 const ControlCenterContent: FC = () => (
@@ -93,7 +127,16 @@ const StandardPluginContent: FC<{
   </I18nProvider>
 );
 
+// The heal runs as the plugin starts, before the backend has opened its journal.
+function recordUntilJournalOpen(area: string, action: string, detail: string, attempt = 0): void {
+  const retry = () => {
+    if (attempt < 20) setTimeout(() => recordUntilJournalOpen(area, action, detail, attempt + 1), 3_000);
+  };
+  recordUiEvent(area, action, detail, true).then((recorded) => (recorded ? undefined : retry()), retry);
+}
+
 export default definePlugin(() => {
+  cleanerForceSession.acknowledged = false;
   const deckyHost = window;
   const releaseCssLoaderHost = configureDeckyCssLoaderHost(deckyHost);
   const releaseThemeInstallHost = configurePanelThemeInstallHost({
@@ -134,10 +177,23 @@ export default definePlugin(() => {
   const releaseThemeFailureReporter = configureThemeFailureReporter(
     ({ operation, code, message }) => recordThemeFailure(operation, code, message),
   );
+  const releaseSlowMutationReporter = configureCssLoaderSlowMutationReporter(
+    ({ method, elapsedMs, settled }) => recordUiDiagnostic(
+      "themes",
+      `css_loader_${method}_${settled}_${slowMutationBucket(elapsedMs)}`,
+    ),
+  );
   const releaseSectionHandoffStore = configureSectionHandoffStore({
     read: () => parseSectionHandoffs(readString("pdc:themeSectionHandoffs")),
     write: (handoffs) => writeString("pdc:themeSectionHandoffs", JSON.stringify(handoffs)),
   });
+  const stopThemeInteractionJournal = configureThemeInteractionJournal(() => {
+    try {
+      const main = findSP()?.document;
+      if (main) return [{ doc: main, surface: "main" }];
+    } catch {}
+    return [];
+  }, recordUiEvent, onQamDocument);
   const themesClient = getThemesClient(createProductionThemesDependencies());
   let qamRuntime: ReturnType<typeof startPluginQamRuntime> | null = null;
   let dismounted = false;
@@ -180,9 +236,23 @@ export default definePlugin(() => {
 
   const stopFrontendErrorReporting = startFrontendErrorReporting(window);
   setUiEventSink((area, action, detail, ok) => recordUiEvent(area, action, detail, ok));
+  setStaleBackendSink((detail) => {
+    recordUiDiagnostic("themes", "backend_outdated", detail);
+    toaster.toast({
+      title: translate("backend.outdated.title"),
+      body: translate("backend.outdated.body"),
+      onClick: reloadDeckyAfterClosingMenus,
+    });
+  });
   const stopGameWatcher = startGameWatcher();
   const stopAccessoryArtWatcher = startAccessoryArtWatcher();
   const stopAccessorySteamEvents = startAccessorySteamEvents();
+  const stopCollectionsHeal = startCollectionsHeal(
+    () => (globalThis as { collectionStore?: object }).collectionStore,
+    (healed) => recordUntilJournalOpen("steam", "collections_heal", JSON.stringify({ healed })),
+  );
+  resumePendingInstalls();
+  const stopSteamPerformanceOwnership = startSteamPerformanceOwnership();
   const stopSteamOverlayActivity = startSteamOverlayActivity();
   const stopQamDocumentActivity = startQamDocumentActivity();
   const stopEcoAmbient = startEcoAmbient();
@@ -196,25 +266,77 @@ export default definePlugin(() => {
     onClick: () => openThemeHealthModal(),
   }));
   const standardLifecycle = new AbortController();
+  const releaseArtworkHost = configureArtworkHost({ read: getDuoArtwork, write: setDuoArtwork });
+  const releaseVidaArtworkHost = vidaArtwork.configureHost({
+    read: () => getThemeArtwork("vida"),
+    write: (appId, value) => setThemeArtwork("vida", appId, value),
+  });
+  const releaseArtworkEditor = registerArtworkEditor(openGameArtworkEditor);
+  const stopArtworkHydration = startArtworkHydration();
+  const themeGroups = createGroupsClient({ read: getThemeGroups, write: setThemeGroups, tabMaster: getTabMasterTabs }, globalThis as SteamGlobals, { doc: document });
   const stopThemesRuntime = startThemesRuntime({
+    artwork: {
+      duo: {
+        ...artworkAccess,
+        editor: {
+          getGeneral: getGeneralArtwork,
+          getCustom: getCustomArtwork,
+          save: saveArtwork,
+          images: artworkImages,
+          title: artworkGameTitle,
+          games: () => listInstalledGames().map(game => ({ appId: game.liveAppid, name: game.name })),
+        },
+      },
+      // Vida draws its own editor: its `edit` stays a no-op returning false (no Panel editor is registered for it).
+      vida: {
+        ...vidaArtwork.access,
+        editor: {
+          getGeneral: vidaArtwork.getGeneral,
+          getCustom: vidaArtwork.getCustom,
+          save: vidaArtwork.save,
+          images: artworkImages,
+          title: artworkGameTitle,
+          games: listLibraryGames,
+        },
+      },
+    },
+    options: themesClientOptionsWriter(themesClient),
+    retireTheme: (cssLoaderName, keep) => themesClient.retireRuntimeTheme(cssLoaderName, keep),
     client: themesClient,
     getSteamDocument: () => findSP()?.document ?? null,
     getQamDocument,
     subscribeQamDocument: onQamDocument,
+    ambient: ambientThemeChannel,
+    storage: createThemeStorage({ get: getThemeStorage, set: setThemeStorage }),
+    games: createThemeGamesAccess({ forceClose: forceCloseGame, pause: pauseThemeGame, resume: resumeThemeGame, howLongToBeat: getThemeHltb, protonDb: getThemeProtonDb }),
     subscribePackageChanges: onThemePackagesChanged,
+    groups: themeGroups,
+    actions: themeActionsChannel,
   });
+  const stopUpscalerOverlays = startUpscalerOverlays();
+  const stopAmbient = startAmbient({
+    gameSessions: createGameSessionPort(),
+    power: createPowerPort(),
+    notify: (title, body) => toaster.toast({ title, body }),
+    translate,
+    recordEvent: (action, detail) => queueUiEvent("ambient", action, detail),
+  });
+
+  const content = (
+    <StandardPluginContent
+      lifecycle={standardLifecycle.signal}
+    />
+  );
+  const stopAdoptingActivePlugin = adoptStaleActivePlugin("Panel de Control", content);
 
   return {
     name: "Panel de Control",
     titleView: <PluginTitle />,
-    content: (
-      <StandardPluginContent
-        lifecycle={standardLifecycle.signal}
-      />
-    ),
+    content,
     icon: <LuSlidersVertical />,
     onDismount() {
       dismounted = true;
+      stopAdoptingActivePlugin();
       cancelHydrationRetry();
       standardLifecycle.abort();
       qamRuntime?.dispose();
@@ -222,10 +344,12 @@ export default definePlugin(() => {
       stopQamDocumentActivity();
       stopSteamOverlayActivity();
       shutdownUiActivity();
+      stopSteamPerformanceOwnership();
       stopGameWatcher();
       stopAccessoryArtWatcher();
       stopAccessorySteamEvents();
       stopFrontendErrorReporting();
+      setStaleBackendSink(null);
       setUiEventSink(null);
       stopEcoAmbient();
       stopValueToast();
@@ -233,7 +357,16 @@ export default definePlugin(() => {
       stopListLocalizer();
       stopKioskSteamBridge();
       stopThemesRuntime();
+      themeGroups.stop();
+      stopCollectionsHeal();
+      stopAmbient();
+      stopUpscalerOverlays();
+      stopArtworkHydration();
+      releaseArtworkEditor();
+      releaseArtworkHost();
+      releaseVidaArtworkHost();
       stopQamCoverWatch();
+      stopThemeInteractionJournal();
       releaseThemeInstallHost();
       releaseThemeActivationJournalHost();
       releaseThemePublicationHost();
@@ -242,6 +375,7 @@ export default definePlugin(() => {
       releaseThemeHealthHost();
       releaseThemeExtensionHost();
       releaseThemeFailureReporter();
+      releaseSlowMutationReporter();
       releaseSectionHandoffStore();
       releaseCssLoaderHost();
     },

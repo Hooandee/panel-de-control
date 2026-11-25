@@ -3,6 +3,7 @@ import { Focusable } from "@decky/ui";
 import { LuTriangleAlert } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
+import { NoticeDismissButton } from "./NoticeCard";
 import { theme } from "../theme";
 
 interface RivalRowProps {
@@ -57,10 +58,11 @@ const RivalRow: FC<RivalRowProps> = ({ name, desc, action, onAction }) => (
 );
 
 interface Props {
-  rivals: { sdtdp: boolean; hhd: boolean; powerstation: boolean };
+  rivals: { sdtdp: boolean; hhd: boolean; powerstation: boolean; steamOsManager?: boolean };
   onDisableSdtdp: () => void;
   onTakeHhd: () => void;
   onDisablePdcTdp: () => void;
+  onHide?: () => void;
 }
 
 export const TdpConflictCard: FC<Props> = ({
@@ -68,6 +70,7 @@ export const TdpConflictCard: FC<Props> = ({
   onDisableSdtdp,
   onTakeHhd,
   onDisablePdcTdp,
+  onHide,
 }) => {
   const { t } = useI18n();
   return (
@@ -91,7 +94,7 @@ export const TdpConflictCard: FC<Props> = ({
           color: theme.color.warn,
         }}
       >
-        <LuTriangleAlert size={16} color={theme.color.warn} /> {t("tdp.conflict.card.title")}
+        <LuTriangleAlert size={16} color={theme.color.warn} /> {t(rivals.steamOsManager ? "tdp.conflict.steamos.title" : "tdp.conflict.card.title")}
       </div>
       <div
         style={{
@@ -102,7 +105,9 @@ export const TdpConflictCard: FC<Props> = ({
         }}
       >
         {t(
-          rivals.powerstation
+          rivals.steamOsManager
+            ? "tdp.conflict.steamos.desc"
+            : rivals.powerstation
             ? "tdp.conflict.card.desc.powerstation"
             : "tdp.conflict.card.desc",
         )}
@@ -123,6 +128,14 @@ export const TdpConflictCard: FC<Props> = ({
           onAction={onTakeHhd}
         />
       )}
+      {rivals.steamOsManager && (
+        <RivalRow
+          name="SteamOS Manager"
+          desc={t("tdp.conflict.steamos.detected")}
+          action={t("tdp.conflict.steamos.release")}
+          onAction={onDisablePdcTdp}
+        />
+      )}
       {rivals.powerstation && (
         <RivalRow
           name={t("tdp.conflict.powerstation")}
@@ -131,6 +144,7 @@ export const TdpConflictCard: FC<Props> = ({
           onAction={onDisablePdcTdp}
         />
       )}
+      {onHide && <NoticeDismissButton label={t("tdp.conflict.hide")} onActivate={onHide} />}
     </div>
   );
 };

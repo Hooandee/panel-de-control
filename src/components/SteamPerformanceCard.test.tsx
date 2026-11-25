@@ -1,488 +1,298 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import type { CSSProperties, ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const surface = vi.hoisted(() => ({
-  useSurface: vi.fn(),
+const state = vi.hoisted(() => ({
+  stable: "42", live: 42 as number | null, capabilities: null as Record<string, boolean> | null, active: "42", filter: 1,
+  owner: { supported: true, context_appid: "42" as string | null, revision: 1, explicit_owner: null as string | null, owner: "steam", steam_settings: {} },
+  reset: vi.fn(), get: vi.fn(), claim: vi.fn(), update: vi.fn(), write: vi.fn(), notify: () => {},
 }));
-
-vi.mock("../steam/useSteamPerformanceSurface", () => ({
-  useSteamPerformanceSurface: surface.useSurface,
-}));
-
-vi.mock("../i18n", () => ({
-  useI18n: () => ({ t: (key: string) => key }),
-}));
-
-vi.mock("../system/collapseState", () => ({
-  isCollapsed: () => false,
-  setCollapsed: vi.fn(),
-}));
-
+vi.mock("../tdp/runningGame", () => ({readRunningGame: () => state.live === null ? null : ({appid: state.stable, liveAppid: state.live})}));
+vi.mock("../api", () => ({ getGamePowerOwner: state.get, setGamePowerOwner: state.claim, updateGameSteamSetting: state.update }));
+vi.mock("../steam/performanceReset", () => ({ resetManagedGamePerformance: state.reset }));
+vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock("../system/collapseState", () => ({ isCollapsed: () => false, setCollapsed: vi.fn() }));
+vi.mock("../system/uiEvents", () => ({ recordUiEvent: vi.fn() }));
+vi.mock("../navigation/showModal", () => ({ showModal: (element: any) => { const dialog = render(element); dialog.rerender({ ...element, props: { ...element.props, closeModal: () => dialog.unmount() } }); } }));
 vi.mock("@decky/ui", () => ({
-  Focusable: ({ children, onClick, style }: {
-    children?: ReactNode;
-    onClick?: () => void;
-    style?: CSSProperties;
-  }) => <button type="button" onClick={onClick} style={style}>{children}</button>,
-  PanelSectionRow: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  findModuleByExport: () => undefined, findModuleExport: () => undefined,
+  Focusable: ({children}: any) => <div>{children}</div>, PanelSectionRow: ({children}: any) => <div>{children}</div>, ModalRoot: ({children}: any) => <div role="dialog">{children}</div>,
+  DialogButton: ({children, onClick, disabled}: any) => <button onClick={onClick} disabled={disabled}>{children}</button>,
+  DropdownItem: ({label, rgOptions, selectedOption, disabled, onChange}: any) => <select aria-label={label} value={selectedOption} disabled={disabled} onChange={(event) => onChange({data: Number(event.target.value)})}>{rgOptions.map((option: any) => <option key={option.data} value={option.data}>{option.label}</option>)}</select>,
 }));
-
+vi.mock("../steam/performanceSettingsRuntime", () => ({ createPerformanceSettingsDeps: () => ({
+  store: () => (window as any).SystemPerfStore,
+  runningGameId: () => state.live,
+  display: () => null, gamescope: () => null, steamOs: () => state.capabilities,
+}) }));
 import { SteamPerformanceCard } from "./SteamPerformanceCard";
-import type { SteamPerformanceSurfaceState } from "../steam/useSteamPerformanceSurface";
-import {
-  resetSteamPerformanceDiagnostics,
-  steamPerformanceDiagnostics,
-} from "../steam/performanceDiagnostics";
+import { resetSteamPerformanceRuntimeCache } from "../steam/performanceRuntime";
 
-describe("SteamPerformanceCard", () => {
-  beforeEach(() => {
-    surface.useSurface.mockReset();
-    resetSteamPerformanceDiagnostics();
-    localStorage.clear();
+beforeEach(() => {
+  vi.useFakeTimers(); state.reset.mockReset(); state.stable = "42"; state.live = 42; state.capabilities = null; state.active = "42"; state.filter = 1;
+  state.owner = { supported: true, context_appid: "42" as string | null, revision: 1, explicit_owner: null, owner: "steam", steam_settings: {} };
+  state.get.mockReset().mockImplementation(async () => ({...state.owner}));
+  state.claim.mockReset().mockImplementation(async (_id, owner, _revision, settings) => ({ok: true, ...state.owner, owner, explicit_owner: owner, revision: 2, steam_settings: settings}));
+  state.update.mockReset().mockImplementation(async () => ({ok: true, ...state.owner, owner: "pdc", explicit_owner: "pdc", revision: 3}));
+  state.write.mockReset().mockImplementation((value) => { state.filter = value; });
+  Object.assign(window, { SystemPerfStore: {
+    nCurrentGameID: "42", get nActiveProfileGameID() { return state.active; },
+    msgLimits: {split_scaling_filters_available: [1, 2, 3]},
+    get msgSettingsPerApp() {return {split_scaling_filter: state.filter};},
+    SetSplitScalingFilter: state.write,
+  } });
+  vi.stubGlobal("SteamClient", { System: { Perf: { RegisterForStateChanges: (notify: () => void) => {state.notify = notify; return {unregister: vi.fn()};} } } });
+  resetSteamPerformanceRuntimeCache();
+});
+afterEach(() => { state.live = null; state.notify(); cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); delete (window as any).SystemPerfStore; delete (window as any).settingsStore; });
+const mount = async () => { const view = render(<SteamPerformanceCard profileScope="game" runningGameId={42} />); await act(async () => {}); return view; };
+const edit = () => fireEvent.change(screen.getByRole("combobox", {name: "steam.performance.control.splitScalingFilter"}), {target: {value: "3"}});
+const confirm = async () => { await act(async () => {fireEvent.click(screen.getByRole("button", {name: "steam.performance.claim"}));}); };
+
+it("canceling first edit never claims, persists or writes Steam", async () => {
+  await mount(); edit();
+  fireEvent.click(screen.getByRole("button", {name: "steam.performance.cancel"}));
+  expect(state.claim).not.toHaveBeenCalled(); expect(state.update).not.toHaveBeenCalled(); expect(state.write).not.toHaveBeenCalled();
+});
+it("confirms actual Steam snapshot before saving and applying the requested setting", async () => {
+  await mount(); edit(); await confirm();
+  expect(state.claim).toHaveBeenCalledWith("42", "pdc", 1, {splitScalingFilter: 1});
+  expect(state.update).toHaveBeenCalledWith("42", 2, "splitScalingFilter", 3);
+  expect(state.write).toHaveBeenCalledWith(3);
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("3");
+});
+it("rejects confirmation after live game or ownership revision changed", async () => {
+  await mount(); edit(); state.owner.revision = 2; await confirm();
+  expect(state.claim).not.toHaveBeenCalled(); expect(state.write).not.toHaveBeenCalled();
+  edit(); state.live = 43; await confirm(); expect(state.claim).not.toHaveBeenCalled();
+});
+it("does not apply a queued edit after context changes while ownership is being read", async () => {
+  const view = await mount(); edit();
+  let resolve!: (value: unknown) => void;
+  state.get.mockImplementationOnce(() => new Promise((done) => {resolve = done;}));
+  await confirm(); state.live = 43;
+  view.rerender(<SteamPerformanceCard profileScope="game" runningGameId={43} />);
+  await act(async () => {resolve({...state.owner});});
+  expect(state.claim).not.toHaveBeenCalled(); expect(state.update).not.toHaveBeenCalled(); expect(state.write).not.toHaveBeenCalled();
+});
+it("withdraws own controls when Steam profile changes without selecting a different profile", async () => {
+  await mount(); expect(screen.getByRole("combobox")).toBeTruthy();
+  state.active = "769"; await act(async () => {state.notify();});
+  expect(screen.queryByRole("combobox")).toBeNull(); expect(state.write).not.toHaveBeenCalled();
+});
+it("does not write Steam after failed persistence", async () => {
+  await mount(); state.update.mockResolvedValueOnce({ok: false, detail: "persist_failed"}); edit(); await confirm();
+  expect(state.write).not.toHaveBeenCalled(); expect(screen.getByRole("status").textContent).toBe("steam.performance.writeFailed");
+});
+
+it.each(["steam", "pdc"])("resets game settings and power while retaining %s ownership", async (owner) => {
+  state.owner.owner = owner;
+  state.owner.explicit_owner = owner;
+  state.reset.mockResolvedValue({ ...state.owner, ok: true });
+  const reset = vi.fn();
+  (window as any).SystemPerfStore.ResetCurrentPerfProfileSettings = reset;
+  await mount();
+  const button = screen.getByRole("button", {name: "steam.performance.control.reset"}) as HTMLButtonElement;
+  expect(button.disabled).toBe(false);
+  await act(async () => { fireEvent.click(button); });
+  expect(state.reset).toHaveBeenCalledOnce();
+  expect(state.claim).not.toHaveBeenCalled();
+  expect(reset).not.toHaveBeenCalled();
+});
+it("allows explicit global reset through the real Steam adapter", async () => {
+  state.active = "769";
+  const reset = vi.fn(() => {state.filter = 1;});
+  (window as any).SystemPerfStore.ResetCurrentPerfProfileSettings = reset;
+  render(<SteamPerformanceCard profileScope="global" runningGameId={42} />);
+  await act(async () => {});
+  await act(async () => {fireEvent.click(screen.getByRole("button", {name: "steam.performance.control.reset"}));});
+  expect(reset).toHaveBeenCalledOnce(); expect(state.claim).not.toHaveBeenCalled(); expect(state.update).not.toHaveBeenCalled();
+});
+it("does not invoke the Steam setter after a persisted edit loses its context", async () => {
+  await mount();
+  state.update.mockImplementationOnce(async () => {state.live = 43; return {ok: true, ...state.owner, revision: 3};});
+  edit(); await confirm();
+  expect(state.update).toHaveBeenCalledOnce(); expect(state.write).not.toHaveBeenCalled();
+});
+
+it("confirms once after QAM unmount using stable shortcut identity", async () => {
+  state.stable = "shortcut-key";
+  state.owner.context_appid = "shortcut-key";
+  const view = await mount(); edit();
+  const confirmButton = screen.getByRole("button", {name: "steam.performance.claim"});
+  view.unmount();
+  await act(async () => {fireEvent.click(confirmButton);});
+  expect(state.claim).toHaveBeenCalledExactlyOnceWith("shortcut-key", "pdc", 1, {splitScalingFilter: 1});
+  expect(state.update).toHaveBeenCalledExactlyOnceWith("shortcut-key", 2, "splitScalingFilter", 3);
+  expect(state.write).toHaveBeenCalledExactlyOnceWith(3);
+});
+it("rejects a shortcut identity change even when the live ID remains equal", async () => {
+  const view = await mount(); edit(); view.unmount(); state.stable = "another-shortcut";
+  await confirm(); expect(state.claim).not.toHaveBeenCalled(); expect(state.write).not.toHaveBeenCalled();
+});
+
+it("returns control using unchanged Steam power settings after releasing ownership", async () => {
+  state.owner.explicit_owner = "pdc"; state.owner.owner = "pdc";
+  state.capabilities = {is_manual_gpu_clock_available: true};
+  const setEnabled = vi.fn(), setValue = vi.fn();
+  (window as any).settingsStore = {GetClientSetting: (key: string) => key.endsWith("enabled") ? [false, setEnabled] : [1600, setValue]};
+  state.claim.mockImplementationOnce(async (_id, owner) => {
+    state.owner = {...state.owner, explicit_owner: owner, owner, revision: 2};
+    state.get.mockResolvedValue({...state.owner, supported: true});
+    return {...state.owner, ok: true};
   });
+  await mount();
+  await act(async () => {fireEvent.click(screen.getByRole("button", {name: "steam.performance.release"}));});
+  expect(state.claim).toHaveBeenCalledExactlyOnceWith("42", "steam", 1);
+  expect(setEnabled).toHaveBeenCalledExactlyOnceWith(false);
+  expect(setValue).toHaveBeenCalledExactlyOnceWith(1600);
+  expect(state.write).not.toHaveBeenCalled();
+});
 
-  afterEach(() => {
-    cleanup();
-    vi.useRealTimers();
-    vi.restoreAllMocks();
-  });
+it("edits and resets global Steam settings without a running game", async () => {
+  state.live = null; state.active = "769"; state.owner.context_appid = null;
+  state.reset.mockResolvedValue({ ...state.owner, ok: true });
+  const reset = vi.fn(); (window as any).SystemPerfStore.ResetCurrentPerfProfileSettings = reset;
+  render(<SteamPerformanceCard profileScope="global" runningGameId={null} />);
+  await act(async () => {});
+  await act(async () => {edit();});
+  expect(state.write).toHaveBeenCalledExactlyOnceWith(3);
+  await act(async () => {fireEvent.click(screen.getByRole("button", {name: "steam.performance.control.reset"}));});
+  expect(reset).not.toHaveBeenCalled(); expect(state.reset).toHaveBeenCalledOnce();
+  expect(state.claim).not.toHaveBeenCalled(); expect(state.update).not.toHaveBeenCalled();
+});
+it("keeps unsupported-device game edits and reset on the direct Steam route", async () => {
+  state.owner.supported = false;
+  const reset = vi.fn(); (window as any).SystemPerfStore.ResetCurrentPerfProfileSettings = reset;
+  await mount(); await act(async () => {edit();});
+  expect(state.write).toHaveBeenCalledExactlyOnceWith(3);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await act(async () => {fireEvent.click(screen.getByRole("button", {name: "steam.performance.control.reset"}));});
+  expect(reset).toHaveBeenCalledOnce(); expect(state.claim).not.toHaveBeenCalled(); expect(state.update).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", {name: "steam.performance.release"})).toBeNull();
+});
+it("blocks game edits while ownership is unavailable or Steam profile is unknown", async () => {
+  state.get.mockRejectedValue(new Error("unavailable"));
+  await mount();
+  expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(true);
+  await act(async () => {edit();}); expect(state.write).not.toHaveBeenCalled();
+  state.active = "bad-profile"; await act(async () => {state.notify();});
+  expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(true); expect(state.claim).not.toHaveBeenCalled();
+});
 
-  it("renders the native controls inline in three always-open groups", () => {
-    const row = (text: string) => () => <div data-testid="native-row">{text}</div>;
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [
-        { id: "appFrameRate", Component: row("frame") },
-        { id: "disableFrameLimit", Component: row("limit") },
-        { id: "variableResolution", Component: row("shading") },
-        { id: "vrr", Component: row("vrr") },
-        { id: "allowTearing", Component: row("tearing") },
-        { id: "scalingMode", Component: row("mode") },
-        { id: "splitScalingFilter", Component: row("filter") },
-        { id: "sharpness", Component: row("sharpness") },
-        { id: "reset", Component: row("reset") },
-      ],
-    });
+it("keeps a selection visible while Steam readback is delayed instead of flashing the old option", async () => {
+  state.owner.explicit_owner = "pdc";
+  state.write.mockImplementation(() => {});
+  await mount();
+  await act(async () => { edit(); });
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("3");
+  await act(async () => { state.notify(); });
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("3");
+  state.filter = 3;
+  await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("3");
+  expect(screen.getByRole("status").textContent).not.toBe("steam.performance.writeFailed");
+});
+it("restores the observed option and reports an unconfirmed write after the bounded wait", async () => {
+  state.owner.explicit_owner = "pdc";
+  state.write.mockImplementation(() => {});
+  await mount();
+  await act(async () => { edit(); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(4100); });
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("1");
+  expect(screen.getByRole("status").textContent).toBe("steam.performance.writeFailed");
+});
+it("rolls back the displayed selection immediately when Steam rejects the write", async () => {
+  state.owner.explicit_owner = "pdc";
+  state.write.mockImplementation(() => { throw new Error("rejected"); });
+  await mount();
+  await act(async () => { edit(); });
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("1");
+  expect(screen.getByRole("status").textContent).toBe("steam.performance.writeFailed");
+});
 
-    render(<SteamPerformanceCard />);
+it("does not time out readback while ownership persistence has not sent the write", async () => {
+  state.owner.explicit_owner = "pdc";
+  let resolve!: (value: unknown) => void;
+  state.update.mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+  await mount();
+  await act(async () => { edit(); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+  expect(state.write).not.toHaveBeenCalled();
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("3");
+  expect(screen.getByRole("status").textContent).not.toBe("steam.performance.writeFailed");
+  await act(async () => { resolve({ ok: true, ...state.owner }); });
+  expect(state.write).toHaveBeenCalledWith(3);
+  expect(screen.getByRole("status").textContent).not.toBe("steam.performance.writeFailed");
+});
+it("discards pending selection when Steam changes profile before component props update", async () => {
+  state.owner.explicit_owner = "pdc";
+  state.write.mockImplementation(() => {});
+  await mount();
+  await act(async () => { edit(); });
+  state.active = "769";
+  await act(async () => { state.notify(); });
+  state.active = "42";
+  await act(async () => { state.notify(); });
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("1");
+});
 
-    expect(screen.queryByRole("button", { name: /steam\.performance\.open/ })).toBeNull();
-    expect(within(screen.getByRole("group", { name: "steam.performance.group.display" }))
-      .getAllByTestId("native-row").map((item) => item.textContent))
-      .toEqual(["frame", "limit"]);
-    expect(within(screen.getByRole("group", { name: "steam.performance.group.fluidity" }))
-      .getAllByTestId("native-row").map((item) => item.textContent))
-      .toEqual(["shading", "vrr", "tearing"]);
-    expect(within(screen.getByRole("group", { name: "steam.performance.group.scaling" }))
-      .getAllByTestId("native-row").map((item) => item.textContent))
-      .toEqual(["mode", "filter", "sharpness"]);
-    const rows = screen.getAllByTestId("native-row");
-    expect(rows[rows.length - 1]?.textContent).toBe("reset");
-  });
+it("preserves the selected option across the real QAM remount caused by a context menu", async () => {
+  state.owner.explicit_owner = "pdc";
+  state.write.mockImplementation(() => {});
+  const first = await mount();
+  await act(async () => { edit(); });
+  first.unmount();
+  await mount();
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("3");
+  state.filter = 3;
+  await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("3");
+});
 
-  it("selects the running game's Steam profile through the shared power scope", () => {
-    surface.useSurface.mockImplementation((scope, gameId) => ({
-      status: scope === "game" && gameId === 42 ? "ready" : "unavailable",
-      rows: [],
-    }));
+it("delivers rejection and rollback to the replacement QAM mount within the pending refresh", async () => {
+  state.owner.explicit_owner = "pdc";
+  let reject!: (reason: Error) => void;
+  state.write.mockImplementation(() => new Promise((_resolve, fail) => { reject = fail; }));
+  const first = await mount();
+  await act(async () => { edit(); });
+  first.unmount();
+  await mount();
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("3");
+  await act(async () => { reject(new Error("Steam rejected")); await vi.advanceTimersByTimeAsync(100); });
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("1");
+  expect(screen.getByRole("status").textContent).toBe("steam.performance.writeFailed");
+});
 
-    render(<SteamPerformanceCard profileScope="game" runningGameId={42} />);
+it("shows readable controls while missing profile identity and recovers without remount", async () => {
+  state.active = "missing";
+  await mount();
+  expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(true);
+  expect(screen.getByRole("status").textContent).toBe("steam.performance.profile.unknown");
+  state.active = "42";
+  await act(async () => { state.notify(); });
+  expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(false);
+  expect(state.write).not.toHaveBeenCalled();
+});
 
-    expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
-  });
-
-  it("uses the same inline collapsible card pattern as the System section", () => {
-    const Refresh = () => <div data-testid="native-row">refresh</div>;
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [{ id: "refreshRate", Component: Refresh }],
-    });
-
-    render(<SteamPerformanceCard />);
-
-    const title = screen.getByText("steam.performance.title");
-    const toggle = title.closest("button");
-    expect(toggle).toBeTruthy();
-    expect(screen.getByRole("group", { name: "steam.performance.group.display" })).toBeTruthy();
-
-    fireEvent.click(toggle!);
-    expect(screen.queryByRole("group", { name: "steam.performance.group.display" })).toBeNull();
-
-    fireEvent.click(toggle!);
-    expect(screen.getByRole("group", { name: "steam.performance.group.display" })).toBeTruthy();
-  });
-
-  it("shortens only Steam's automatic scaling notch to Auto", () => {
-    const ScalingMode = () => (
-      <div>
-        <span>Automático</span>
-        <span>Ajustar</span>
-      </div>
-    );
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [{ id: "scalingMode", Component: ScalingMode }],
-    });
-
-    render(<SteamPerformanceCard />);
-
-    expect(screen.queryByText("Automático")).toBeNull();
-    expect(screen.getByText("Auto")).toBeTruthy();
-    expect(screen.getByText("Ajustar")).toBeTruthy();
-  });
-
-  it("fits native scaling sliders inside a narrower isolated viewport", () => {
-    const sliderRow = (id: string, text: string) => () => (
-      <div>
-        <div id={`${id}-label`}>{text}</div>
-        <div role="button" data-testid="native-slider-control">
-          <div
-            role="slider"
-            aria-labelledby={`${id}-label`}
-            data-testid="native-slider"
-          />
-        </div>
-      </div>
-    );
-    const Tearing = () => <div>tearing</div>;
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [
-        { id: "scalingMode", Component: sliderRow("mode", "mode") },
-        { id: "splitScalingFilter", Component: sliderRow("filter", "filter") },
-        { id: "sharpness", Component: sliderRow("sharpness", "sharpness") },
-        { id: "allowTearing", Component: Tearing },
-      ],
-    });
-
-    render(<SteamPerformanceCard />);
-
-    const viewports = screen.getAllByTestId("steam-scaling-slider-viewport");
-    const controls = screen.getAllByTestId("native-slider-control");
-    const sliders = screen.getAllByTestId("native-slider");
-    expect(viewports).toHaveLength(3);
-    expect(controls).toHaveLength(3);
-    expect(sliders).toHaveLength(3);
-    expect(screen.queryByTestId("steam-scaling-slider-layout")).toBeNull();
-    viewports.forEach((viewport) => {
-      expect(viewport.style.width).toBe("calc(100% - 8px)");
-      expect(viewport.style.marginInline).toBe("auto");
-      expect(viewport.style.minWidth).toBe("0");
-      expect(viewport.style.overflow).toBe("visible");
-      expect(viewport.style.contain).toBe("layout");
-    });
-    controls.forEach((control) => {
-      expect(control.style.width).toBe("");
-      const scale = Number(control.style.transform.match(/scale\(([^)]+)\)/)?.[1]);
-      expect(scale).toBeLessThanOrEqual(0.86);
-      expect(control.style.transformOrigin).toBe("left top");
-    });
-    sliders.forEach((slider) => {
-      expect(slider.style.width).toBe("");
-      expect(slider.style.transform).toBe("");
-    });
-    expect(screen.getByText("tearing").closest('[data-testid="steam-scaling-slider-viewport"]')).toBeNull();
-  });
-
-  it("indents native scaling titles without changing unrelated controls", () => {
-    const ScalingMode = () => (
-      <div>
-        <div id="scaling-mode-label">Modo de escalado</div>
-        <div role="slider" aria-labelledby="scaling-mode-label">Auto</div>
-      </div>
-    );
-    const Tearing = () => (
-      <div>
-        <div id="tearing-label">Permitir desgarro</div>
-        <div role="slider" aria-labelledby="tearing-label">Off</div>
-      </div>
-    );
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [
-        { id: "scalingMode", Component: ScalingMode },
-        { id: "allowTearing", Component: Tearing },
-      ],
-    });
-
-    render(<SteamPerformanceCard />);
-
-    expect(screen.getByText("Modo de escalado").style.paddingInline).toBe("8px");
-    expect(screen.getByText("Modo de escalado").style.boxSizing).toBe("border-box");
-    expect(screen.getByText("Permitir desgarro").style.paddingInline).toBe("");
-  });
-
-  it("keeps the native refresh-rate value on one line in the narrow card", () => {
-    const RefreshRate = () => (
-      <div>
-        <div id="refresh-rate-label">
-          <div>Frecuencia de actualización</div>
-          <div aria-hidden="true">77&nbsp;Hz</div>
-        </div>
-        <div role="button">
-          <div role="slider" aria-labelledby="refresh-rate-label" />
-        </div>
-      </div>
-    );
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [{ id: "refreshRate", Component: RefreshRate }],
-    });
-
-    render(<SteamPerformanceCard />);
-
-    const value = screen.getByText("77 Hz");
-    expect(value.style.whiteSpace).toBe("nowrap");
-    expect(value.style.flexShrink).toBe("0");
-  });
-
-  it("uses the mounted document realm for native Steam elements", () => {
-    const RefreshRate = () => (
-      <div>
-        <div id="cross-realm-refresh-label">
-          <div>Frecuencia de actualización</div>
-          <div aria-hidden="true">77&nbsp;Hz</div>
-        </div>
-        <div role="slider" aria-labelledby="cross-realm-refresh-label" />
-      </div>
-    );
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [{ id: "refreshRate", Component: RefreshRate }],
-    });
-    const iframe = document.createElement("iframe");
-    document.body.appendChild(iframe);
-    const foreignDocument = iframe.contentDocument!;
-    const NativeHTMLElement = globalThis.HTMLElement;
-    vi.stubGlobal("HTMLElement", class ForeignHTMLElement {});
-    expect(foreignDocument.defaultView?.HTMLElement).not.toBe(globalThis.HTMLElement);
-
-    let view;
-    try {
-      view = render(<SteamPerformanceCard />, { container: foreignDocument.body });
-    } finally {
-      vi.stubGlobal("HTMLElement", NativeHTMLElement);
-    }
-
-    expect(view.getByText("77 Hz").style.whiteSpace).toBe("nowrap");
-    view.unmount();
-    iframe.remove();
-  });
-
-  it("suppresses only Steam's separator below the reset row", () => {
-    const Reset = () => (
-      <div className="Panel Focusable" data-testid="native-reset-panel">
-        <button type="button">Restablecer predeterminado</button>
-      </div>
-    );
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [{ id: "reset", Component: Reset }],
-    });
-
-    render(<SteamPerformanceCard />);
-
-    const resetWrapper = screen.getByTestId("native-reset-panel")
-      .closest("[data-pdc-steam-reset]");
-    expect(resetWrapper).toBeTruthy();
-    expect(resetWrapper?.querySelector("style")?.textContent)
-      .toContain("[data-pdc-steam-reset] .Panel.Focusable::after");
-  });
-
-  it("shows synchronization as visible announced text", () => {
-    surface.useSurface.mockReturnValue({ status: "ready", rows: [] });
-
-    render(<SteamPerformanceCard />);
-
-    expect(screen.getByText("steam.performance.title")).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
-  });
-
-  it("shows an honest loading state before Steam discovery finishes", () => {
-    surface.useSurface.mockReturnValue({ status: "loading", rows: [] });
-
-    render(<SteamPerformanceCard />);
-
-    expect(screen.getByRole("status").textContent).toContain("steam.performance.loading");
-    expect(screen.queryByTestId("native-row")).toBeNull();
-  });
-
-  it("shows the unavailable state without inventing controls", () => {
-    surface.useSurface.mockReturnValue({ status: "unavailable", rows: [] });
-
-    render(<SteamPerformanceCard />);
-
-    expect(screen.getByRole("status").textContent).toContain("steam.performance.unavailable");
-    expect(screen.queryByTestId("native-row")).toBeNull();
-  });
-
-  it("keeps healthy inline controls mounted if one Steam control throws", () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const Broken = () => {
-      throw new Error("Steam component changed");
-    };
-    const Healthy = () => <div data-testid="native-row">tearing</div>;
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [
-        { id: "vrr", Component: Broken },
-        { id: "allowTearing", Component: Healthy },
-      ],
-    });
-
-    render(<SteamPerformanceCard />);
-
-    expect(screen.getByTestId("native-row").textContent).toBe("tearing");
-    expect(screen.getByRole("status").textContent).toContain("steam.performance.partial");
-    expect(steamPerformanceDiagnostics()?.current.control).toEqual({
-      status: "render_failed",
-      control_id: "vrr",
-      error: {
-        name: "Error",
-        message: "Steam component changed",
-      },
-    });
-  });
-
-  it("recovers a failed inline control when Steam publishes a new generation", () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const Broken = () => {
-      throw new Error("Old Steam component");
-    };
-    const Recovered = () => <div data-testid="native-row">refresh-recovered</div>;
-    let current: SteamPerformanceSurfaceState = {
-      status: "ready",
-      rows: [{ id: "refreshRate", Component: Broken }],
-    };
-    surface.useSurface.mockImplementation(() => current);
-    const view = render(<SteamPerformanceCard />);
-    expect(screen.getByRole("status").textContent).toContain("steam.performance.partial");
-
-    current = {
-      status: "ready",
-      rows: [{ id: "refreshRate", Component: Recovered }],
-    };
-    view.rerender(<SteamPerformanceCard />);
-
-    expect(screen.getByTestId("native-row").textContent).toBe("refresh-recovered");
-    expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
-    expect(steamPerformanceDiagnostics()?.current.control).toEqual({
-      status: "recovered",
-      control_id: "refreshRate",
-      reason: "control_replaced",
-    });
-  });
-
-  it("recovers when Steam's replacement control also fails once", () => {
-    vi.useFakeTimers();
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const Broken = () => {
-      throw new Error("Old Steam component");
-    };
-    let replacementReady = false;
-    const Replacement = () => {
-      if (!replacementReady) throw new Error("New Steam component is still hydrating");
-      return <div data-testid="native-row">replacement-recovered</div>;
-    };
-    let current: SteamPerformanceSurfaceState = {
-      status: "ready",
-      rows: [{ id: "refreshRate", Component: Broken }],
-    };
-    surface.useSurface.mockImplementation(() => current);
-    const view = render(<SteamPerformanceCard />);
-
-    current = {
-      status: "ready",
-      rows: [{ id: "refreshRate", Component: Replacement }],
-    };
-    view.rerender(<SteamPerformanceCard />);
-    replacementReady = true;
-    act(() => { vi.advanceTimersByTime(2000); });
-
-    expect(screen.getByTestId("native-row").textContent).toBe("replacement-recovered");
-    expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
-    expect(steamPerformanceDiagnostics()?.current.control).toMatchObject({
-      status: "recovered",
-      control_id: "refreshRate",
-      reason: "retry_succeeded",
-    });
-  });
-
-  it("retries one transient native render failure inline", () => {
-    vi.useFakeTimers();
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
-    let hydrated = false;
-    const Transient = () => {
-      if (!hydrated) throw new Error("Steam is still hydrating");
-      return <div data-testid="native-row">recovered</div>;
-    };
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [{ id: "refreshRate", Component: Transient }],
-    });
-
-    render(<SteamPerformanceCard />);
-    expect(screen.getByRole("status").textContent).toContain("steam.performance.partial");
-
-    hydrated = true;
-    act(() => { vi.advanceTimersByTime(2000); });
-
-    expect(screen.getByTestId("native-row").textContent).toBe("recovered");
-    expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
-    expect(steamPerformanceDiagnostics()?.current.control).toEqual({
-      status: "recovered",
-      control_id: "refreshRate",
-      reason: "retry_succeeded",
-    });
-  });
-
-  it("renews the retry budget after the same inline control recovers", () => {
-    vi.useFakeTimers();
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
-    let failing = true;
-    const Intermittent = () => {
-      if (failing) throw new Error("Steam control is temporarily unavailable");
-      return <div data-testid="native-row">stable</div>;
-    };
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [{ id: "refreshRate", Component: Intermittent }],
-    });
-    const view = render(<SteamPerformanceCard />);
-
-    failing = false;
-    act(() => { vi.advanceTimersByTime(2000); });
-    expect(screen.getByTestId("native-row").textContent).toBe("stable");
-
-    failing = true;
-    view.rerender(<SteamPerformanceCard />);
-    expect(screen.getByRole("status").textContent).toContain("steam.performance.partial");
-
-    failing = false;
-    act(() => { vi.advanceTimersByTime(2000); });
-    expect(screen.getByTestId("native-row").textContent).toBe("stable");
-  });
-
-  it("hides a group while its only native control is failed", () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const Broken = () => {
-      throw new Error("Steam display control changed");
-    };
-    const Healthy = () => <div data-testid="native-row">vrr</div>;
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [
-        { id: "refreshRate", Component: Broken },
-        { id: "vrr", Component: Healthy },
-      ],
-    });
-
-    render(<SteamPerformanceCard />);
-
-    expect(screen.queryByRole("group", { name: "steam.performance.group.display" })).toBeNull();
-    expect(within(screen.getByRole("group", { name: "steam.performance.group.fluidity" }))
-      .getByTestId("native-row").textContent).toBe("vrr");
-  });
+it.each(["steam", "pdc"])("blocks degraded Deck ownership and recovers without treating it as unsupported (%s)", async (owner) => {
+  Object.assign(state.owner, { supported: false, owner, explicit_owner: owner, reason: "ownership_capability_lost", write_allowed: false });
+  const reset = vi.fn(); (window as any).SystemPerfStore.ResetCurrentPerfProfileSettings = reset;
+  await mount();
+  expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(true);
+  const button = screen.getByRole("button", {name: "steam.performance.control.reset"}) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  await act(async () => { edit(); fireEvent.click(button); });
+  expect(state.write).not.toHaveBeenCalled(); expect(reset).not.toHaveBeenCalled(); expect(state.reset).not.toHaveBeenCalled();
+  Object.assign(state.owner, { supported: true, reason: "explicit_owner", write_allowed: owner === "pdc" });
+  await act(async () => { state.notify(); });
+  expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(false);
+});
+it.each(["edit", "reset"])("rechecks capability loss before a queued %s writes to Steam", async (action) => {
+  Object.assign(state.owner, { owner: "pdc", explicit_owner: "pdc" });
+  const reset = vi.fn(); (window as any).SystemPerfStore.ResetCurrentPerfProfileSettings = reset;
+  await mount();
+  state.get.mockResolvedValue({ ...state.owner, supported: false, reason: "ownership_capability_lost", write_allowed: false });
+  await act(async () => { if (action === "edit") edit(); else fireEvent.click(screen.getByRole("button", {name: "steam.performance.control.reset"})); });
+  expect(state.write).not.toHaveBeenCalled(); expect(reset).not.toHaveBeenCalled(); expect(state.reset).not.toHaveBeenCalled(); expect(state.update).not.toHaveBeenCalled();
 });

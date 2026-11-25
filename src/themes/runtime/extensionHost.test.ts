@@ -14,6 +14,7 @@ import {
   type ThemeExtensionMountContext,
   type ThemeExtensionMountContextV2,
 } from "./extensionHost";
+import { ThemeActionsChannel } from "./themeActions";
 
 const DESCRIPTOR: ThemeExtensionDescriptor = {
   catalogId: "example-theme",
@@ -129,7 +130,7 @@ describe("ThemeExtensionRuntimeHost surfaces", () => {
   function recordingEvaluate(mounted: string[], stopped: string[]) {
     return vi.fn((source: string): ThemeExtensionExport => Object.freeze({
       abiVersion: 1 as const,
-      ...(source === "keyboard-theme" ? { surface: "keyboard" as const } : {}),
+      ...(source.startsWith("keyboard-theme") ? { surface: "keyboard" as const } : {}),
       mount: () => {
         mounted.push(source);
         return () => { stopped.push(source); };
@@ -151,6 +152,101 @@ describe("ThemeExtensionRuntimeHost surfaces", () => {
     expect(mounted.sort()).toEqual(["example-theme", "keyboard-theme"]);
     host.dispose();
     expect(stopped.sort()).toEqual(["example-theme", "keyboard-theme"]);
+  });
+
+  const SECOND_KEYBOARD: ThemeExtensionDescriptor = {
+    catalogId: "keyboard-theme-two", cssLoaderName: "Keyboard Two", version: "1.0.0", abiVersion: 1, sha256: "t".repeat(64),
+  };
+  const secondKeyboardTheme = theme({ id: "Keyboard Two", name: "Keyboard Two", displayName: "Keyboard Two", version: "1.0.0" });
+
+  it("lets a keyboard theme turned on next to the mounted one replace it and turns the old one off", async () => {
+    const mounted: string[] = [];
+    const stopped: string[] = [];
+    const retireTheme = vi.fn(async () => true);
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, KEYBOARD, SECOND_KEYBOARD]), doc: document,
+      evaluate: recordingEvaluate(mounted, stopped), retireTheme,
+    });
+
+    host.reconcile(snapshot([homeTheme, keyboardTheme]));
+    await settle(); await settle();
+    expect(mounted.sort()).toEqual(["example-theme", "keyboard-theme"]);
+
+    host.reconcile(snapshot([homeTheme, keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+    expect(retireTheme).toHaveBeenCalledTimes(1);
+    expect(retireTheme).toHaveBeenCalledWith("Keyboard Theme", "Keyboard Two");
+    expect(stopped).toEqual(["keyboard-theme"]);
+    expect(mounted).toContain("keyboard-theme-two");
+
+    host.reconcile(snapshot([homeTheme, { ...keyboardTheme, enabled: false }, secondKeyboardTheme]));
+    await settle(); await settle();
+    expect(retireTheme).toHaveBeenCalledTimes(1);
+    expect(mounted.filter((source) => source === "keyboard-theme-two")).toHaveLength(1);
+    host.dispose();
+  });
+
+  it("lets the replaced keyboard theme win again when turned back on with no other runtime theme on", async () => {
+    const mounted: string[] = [];
+    const retireTheme = vi.fn(async () => true);
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([KEYBOARD, SECOND_KEYBOARD]), doc: document,
+      evaluate: recordingEvaluate(mounted, []), retireTheme,
+    });
+    const off = { ...keyboardTheme, enabled: false };
+
+    host.reconcile(snapshot([keyboardTheme]));
+    await settle(); await settle();
+    host.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+    host.reconcile(snapshot([off, secondKeyboardTheme]));
+    await settle(); await settle();
+    host.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+
+    expect(retireTheme.mock.calls).toEqual([["Keyboard Theme", "Keyboard Two"], ["Keyboard Two", "Keyboard Theme"]]);
+    expect(mounted).toEqual(["keyboard-theme", "keyboard-theme-two", "keyboard-theme"]);
+    host.dispose();
+  });
+
+  it("keeps the first listed keyboard theme when two are on at startup", async () => {
+    const mounted: string[] = [];
+    const retireTheme = vi.fn(async () => true);
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([KEYBOARD, SECOND_KEYBOARD]), doc: document,
+      evaluate: recordingEvaluate(mounted, []), retireTheme,
+    });
+
+    host.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+
+    expect(mounted).toEqual(["keyboard-theme"]);
+    expect(retireTheme).toHaveBeenCalledWith("Keyboard Two", "Keyboard Theme");
+    host.dispose();
+  });
+
+  it("still mounts one keyboard theme where Panel cannot turn the other off, and logs a refused retirement", async () => {
+    const mounted: string[] = [];
+    const log = vi.fn();
+    const withoutWriter = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([KEYBOARD, SECOND_KEYBOARD]), doc: document, evaluate: recordingEvaluate(mounted, []),
+    });
+    withoutWriter.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+    expect(mounted).toEqual(["keyboard-theme"]);
+    withoutWriter.dispose();
+
+    const refused = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([KEYBOARD, SECOND_KEYBOARD]), doc: document, evaluate: recordingEvaluate([], []),
+      retireTheme: vi.fn(async () => false), log,
+    });
+    refused.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle(); await settle();
+    expect(log).toHaveBeenCalledWith("keyboard_theme_retire_failed");
+    refused.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+    expect(log).toHaveBeenCalledTimes(1);
+    refused.dispose();
   });
 
   it("keeps two home runtimes CSS-only", async () => {
@@ -449,6 +545,37 @@ describe("ThemeExtensionRuntimeHost", () => {
     expect(navigation.focus).toHaveBeenCalledWith(element);
     expect(navigation.capture).not.toHaveBeenCalled();
     host.dispose();
+  });
+
+  it("lets a theme freeze the game and thaws it when the theme goes", async () => {
+    const games = { forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}), howLongToBeat: vi.fn(async () => null), protonDb: vi.fn(async () => null) };
+    const mountWith = (use: (context: ThemeExtensionMountContext) => void) => new ThemeExtensionRuntimeHost({
+      client: client(),
+      doc: document,
+      games,
+      evaluate: () => Object.freeze({
+        abiVersion: 1,
+        mount: (context: ThemeExtensionMountContext) => {
+          use(context);
+          return () => {};
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+
+    let seen: ThemeExtensionMountContext["games"];
+    const idle = mountWith((context) => { seen = context.games; });
+    idle.reconcile(snapshot());
+    await settle();
+    expect(Object.isFrozen(seen)).toBe(true);
+    idle.dispose();
+    expect(games.resume).not.toHaveBeenCalled();
+
+    const pausing = mountWith((context) => { void context.games?.pause(400); });
+    pausing.reconcile(snapshot());
+    await settle();
+    expect(games.pause).toHaveBeenCalledWith(400);
+    pausing.dispose();
+    expect(games.resume).toHaveBeenCalledTimes(1);
   });
 
   it("exposes a frozen navigation channel to ABI-v2 themes", async () => {
@@ -767,5 +894,470 @@ describe("ThemeExtensionRuntimeHost", () => {
     expect(extensions.load).toHaveBeenCalledTimes(3);
     expect(logs).toEqual(expect.arrayContaining(["extension_dispose_failed", "extension_evaluation_failed", "extension_mount_failed"]));
     expect(logs.join(" ")).not.toContain("example-theme");
+  });
+});
+
+describe("ambient channel", () => {
+  function provider() {
+    const released: string[] = [];
+    const claims: { themeId: string; options: unknown }[] = [];
+    const listeners = new Set<() => void>();
+    return {
+      released,
+      claims,
+      listeners,
+      value: {
+        claim: vi.fn((themeId: string, options: unknown) => {
+          claims.push({ themeId, options });
+          return () => released.push(themeId);
+        }),
+        getState: () => ({ owner: "panel" as const, media: null, motion: "play" as const }),
+        subscribe: vi.fn((listener: () => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        }),
+      },
+    };
+  }
+
+  function capturing(onMount: (context: ThemeExtensionMountContext) => void): (source: string) => ThemeExtensionExport {
+    return () => Object.freeze({
+      abiVersion: 1 as const,
+      mount(context: ThemeExtensionMountContext) {
+        onMount(context);
+        return () => undefined;
+      },
+    });
+  }
+
+  it("is absent when Panel offers no provider", async () => {
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(seen).toBeDefined();
+    expect(seen && "ambient" in seen).toBe(false);
+    host.dispose();
+  });
+
+  it("is frozen, keyed by the theme, and sanitizes claims", async () => {
+    const p = provider();
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, ambient: p.value, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(Object.isFrozen(seen?.ambient)).toBe(true);
+    seen?.ambient?.claim({ name: "  Example  ", surfaces: ["home", "bogus" as never], mode: "host" });
+    expect(p.claims).toEqual([{ themeId: "example-theme", options: { name: "Example", surfaces: ["home"], mode: "host" } }]);
+    host.dispose();
+  });
+
+  it("passes Panel's frame through, and null from a provider without one", async () => {
+    const frame = document.createElement("video");
+    const p = provider();
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, ambient: { ...p.value, frame: () => frame }, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(seen?.ambient?.frame()).toBe(frame);
+    host.dispose();
+    let older: ThemeExtensionMountContext | undefined;
+    const olderHost = new ThemeExtensionRuntimeHost({ client: client(), doc: document, ambient: p.value, evaluate: capturing((c) => { older = c; }) });
+    olderHost.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(older?.ambient?.frame()).toBeNull();
+    olderHost.dispose();
+  });
+
+  it("releases claims and subscriptions the runtime forgot when it unmounts", async () => {
+    const p = provider();
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(),
+      doc: document,
+      ambient: p.value,
+      evaluate: capturing((c) => {
+        c.ambient?.claim({ name: "Example", surfaces: ["home"], mode: "yield" });
+        c.ambient?.subscribe(() => undefined);
+      }),
+    });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(p.listeners.size).toBe(1);
+    host.reconcile({ status: "ready", themes: [] });
+    expect(p.released).toEqual(["example-theme"]);
+    expect(p.listeners.size).toBe(0);
+    host.dispose();
+  });
+
+  it("lets a theme report its selected game, and drops it when the theme unmounts", async () => {
+    const p = provider();
+    const selections: [string, string | null][] = [];
+    const released: string[] = [];
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(),
+      doc: document,
+      ambient: { ...p.value, select: (themeId: string, appid: string | null) => { selections.push([themeId, appid]); return () => released.push(`${themeId}:${appid}`); } },
+      evaluate: capturing((c) => { seen = c; }),
+    });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    seen?.ambient?.select?.(1669420);
+    seen?.ambient?.select?.(null);
+    expect(selections).toEqual([["example-theme", "1669420"], ["example-theme", null]]);
+    host.reconcile({ status: "ready", themes: [] });
+    expect(released).toEqual(["example-theme:null"]);
+    host.dispose();
+    let older: ThemeExtensionMountContext | undefined;
+    const olderHost = new ThemeExtensionRuntimeHost({ client: client(), doc: document, ambient: p.value, evaluate: capturing((c) => { older = c; }) });
+    olderHost.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(older?.ambient && "select" in older.ambient).toBe(false);
+    olderHost.dispose();
+  });
+});
+
+describe("ambient theme pictures", () => {
+  function capturing(onMount: (context: ThemeExtensionMountContext) => void): (source: string) => ThemeExtensionExport {
+    return () => Object.freeze({
+      abiVersion: 1 as const,
+      mount(context: ThemeExtensionMountContext) {
+        onMount(context);
+        return () => undefined;
+      },
+    });
+  }
+  const base = {
+    claim: () => () => undefined,
+    getState: () => ({ owner: "theme" as const, media: null, motion: "pause" as const }),
+    subscribe: () => () => undefined,
+  };
+
+  async function mounted(provider: Record<string, unknown>) {
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, ambient: { ...base, ...provider }, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    return { host, ambient: seen!.ambient! };
+  }
+
+  it("resolves a pick with its ref and url, trimming the title", async () => {
+    const pickImage = vi.fn(async () => ({ ref: "local:abc", url: "http://127.0.0.1:1/m/t/local%3Aabc", extra: true }));
+    const { host, ambient } = await mounted({ pickImage });
+    await expect(ambient.pickImage!({ title: `  ${"Fondo ".repeat(30)}` })).resolves.toEqual({ ref: "local:abc", url: "http://127.0.0.1:1/m/t/local%3Aabc" });
+    const [owner, options, signal] = pickImage.mock.calls[0] as unknown as [string, { title: string }, AbortSignal];
+    expect(owner).toBe("example-theme");
+    expect(options.title.length).toBe(80);
+    expect(options.title.startsWith("Fondo")).toBe(true);
+    expect(signal.aborted).toBe(false);
+    await ambient.pickImage!({ title: 42 as never, maxSide: Number.NaN });
+    expect((pickImage.mock.calls[1] as unknown[])[1]).toEqual({});
+    await ambient.pickImage!({ maxSide: 2560 });
+    expect((pickImage.mock.calls[2] as unknown[])[1]).toEqual({ maxSide: 2560 });
+    host.dispose();
+  });
+
+  it("settles null when the user backs out or the provider fails", async () => {
+    const pickImage = vi.fn().mockResolvedValueOnce(null).mockRejectedValueOnce(new Error("modal"));
+    const { host, ambient } = await mounted({ pickImage });
+    await expect(ambient.pickImage!()).resolves.toBeNull();
+    await expect(ambient.pickImage!()).resolves.toBeNull();
+    host.dispose();
+  });
+
+  it("closes an open picker when the theme unmounts", async () => {
+    let signal: AbortSignal | undefined;
+    const pickImage = vi.fn((_owner: string, _options: unknown, s: AbortSignal) => new Promise((resolve) => {
+      signal = s;
+      s.addEventListener("abort", () => resolve(null));
+    }));
+    const { host, ambient } = await mounted({ pickImage });
+    const pending = ambient.pickImage!();
+    host.reconcile({ status: "ready", themes: [] });
+    expect(signal?.aborted).toBe(true);
+    await expect(pending).resolves.toBeNull();
+    host.dispose();
+  });
+
+  it("answers imageUrl synchronously for the theme's own pictures, refusing malformed refs and swallowing provider errors", async () => {
+    const imageUrl = vi.fn((_owner: string, ref: string) => {
+      if (ref === "local:boom") throw new Error("boom");
+      return ref === "local:abc" ? "u" : null;
+    });
+    const { host, ambient } = await mounted({ imageUrl });
+    expect(ambient.imageUrl!("local:abc")).toBe("u");
+    expect(ambient.imageUrl!("local:abc", 1920)).toBe("u");
+    expect(ambient.imageUrl!("local:abc", -3)).toBe("u");
+    expect(imageUrl.mock.calls.slice(0, 3)).toEqual([
+      ["example-theme", "local:abc", undefined], ["example-theme", "local:abc", 1920], ["example-theme", "local:abc", undefined],
+    ]);
+    expect(ambient.imageUrl!("local:missing")).toBeNull();
+    expect(ambient.imageUrl!("local:boom")).toBeNull();
+    expect(ambient.imageUrl!("x".repeat(513))).toBeNull();
+    expect(ambient.imageUrl!(7 as never)).toBeNull();
+    expect(imageUrl).toHaveBeenCalledTimes(5);
+    host.dispose();
+  });
+
+  it("drops forgotten image subscriptions on unmount and is absent on older providers", async () => {
+    const listeners = new Set<() => void>();
+    const subscribeImages = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+    const { host, ambient } = await mounted({ subscribeImages });
+    ambient.subscribeImages!(() => undefined);
+    expect(listeners.size).toBe(1);
+    host.reconcile({ status: "ready", themes: [] });
+    expect(listeners.size).toBe(0);
+    host.dispose();
+    const older = await mounted({});
+    expect(["pickImage", "imageUrl", "subscribeImages", "keepImages"].some((name) => name in older.ambient)).toBe(false);
+    older.host.dispose();
+  });
+
+  it("keeps pictures under the theme's catalog id and ignores invalid input", async () => {
+    const keepImages = vi.fn();
+    const { host, ambient } = await mounted({ keepImages });
+    const refs = ["local:a", "local:b"];
+    ambient.keepImages!(refs);
+    expect(keepImages).toHaveBeenCalledWith("example-theme", ["local:a", "local:b"]);
+    expect(keepImages.mock.calls[0][1]).not.toBe(refs);
+    for (const bad of ["local:a", null, [1], [""], ["x".repeat(513)], Array(513).fill("local:a")]) ambient.keepImages!(bad as never);
+    expect(keepImages).toHaveBeenCalledOnce();
+    keepImages.mockImplementationOnce(() => { throw new Error("boom"); });
+    expect(() => ambient.keepImages!([])).not.toThrow();
+    host.dispose();
+  });
+});
+
+describe("DUO artwork bridge", () => {
+  it.each([1, 2] as const)("exposes the optional bridge only to DUO ABI %s and disposes subscriptions", async (abiVersion) => {
+    const unsubscribe = vi.fn();
+    const artwork = { get: vi.fn(() => null), edit: vi.fn(() => true), subscribe: vi.fn(() => unsubscribe) };
+    const descriptor = { ...DESCRIPTOR, catalogId: "hooandee-duo", abiVersion };
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([descriptor]), doc: document, artwork: { duo: artwork },
+      qam: { getDocument: () => null, subscribe: () => () => {} },
+      evaluate: () => ({ abiVersion, mount: (context: ThemeExtensionMountContext) => {
+        expect(context.artwork).toBeDefined();
+        context.artwork!.subscribe(() => {});
+        return () => {};
+      } }) as ThemeExtensionExport,
+    });
+    host.reconcile(snapshot());
+    await settle(); await settle();
+    expect(artwork.subscribe).toHaveBeenCalledOnce();
+    host.dispose();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+  it("holds the bridge while DUO is mounted and lets it go when DUO stops", async () => {
+    const detach = vi.fn();
+    const artwork = { get: vi.fn(() => null), edit: vi.fn(() => true), subscribe: vi.fn(() => () => {}), attach: vi.fn(() => detach) };
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([{ ...DESCRIPTOR, catalogId: "hooandee-duo", abiVersion: 2 }]), doc: document, artwork: { duo: artwork },
+      qam: { getDocument: () => null, subscribe: () => () => {} },
+      evaluate: () => ({ abiVersion: 2, mount: () => () => {} }) as ThemeExtensionExport,
+    });
+    host.reconcile(snapshot());
+    await settle(); await settle();
+    expect(artwork.attach).toHaveBeenCalledOnce();
+    expect(detach).not.toHaveBeenCalled();
+    host.dispose();
+    expect(detach).toHaveBeenCalledOnce();
+  });
+});
+
+describe("cover stores by theme", () => {
+  function access(edit = false) {
+    return { get: vi.fn(() => null), edit: vi.fn(() => edit), subscribe: vi.fn(() => () => {}), attach: vi.fn(() => () => {}) };
+  }
+  async function contextFor(catalogId: string, stores: { duo?: ReturnType<typeof access>; vida?: ReturnType<typeof access> }) {
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([{ ...DESCRIPTOR, catalogId }]), doc: document, artwork: stores,
+      evaluate: () => Object.freeze({ abiVersion: 1 as const, mount: (context: ThemeExtensionMountContext) => { seen = context; return () => {}; } }),
+    });
+    host.reconcile(snapshot());
+    await settle(); await settle();
+    return { seen, host };
+  }
+
+  it("gives Vida its own store and never Duo's", async () => {
+    const duo = access(true), vida = access();
+    const { seen, host } = await contextFor("hooandee-vida", { duo, vida });
+    seen!.artwork!.get(12);
+    seen!.artwork!.subscribe(() => {});
+    expect(vida.get).toHaveBeenCalledWith(12);
+    expect(vida.subscribe).toHaveBeenCalledOnce();
+    expect(vida.attach).toHaveBeenCalledOnce();
+    expect(seen!.artwork!.edit(12)).toBe(false);
+    expect(duo.get).not.toHaveBeenCalled();
+    expect(duo.attach).not.toHaveBeenCalled();
+    host.dispose();
+  });
+
+  it("keeps giving Duo its store", async () => {
+    const duo = access(true), vida = access();
+    const { seen, host } = await contextFor("hooandee-duo", { duo, vida });
+    expect(seen!.artwork!.edit(12)).toBe(true);
+    expect(duo.attach).toHaveBeenCalledOnce();
+    expect(vida.attach).not.toHaveBeenCalled();
+    host.dispose();
+  });
+
+  it.each(["example-theme", "constructor", "hooandee-gallery"])("offers no covers to %s", async (catalogId) => {
+    const duo = access(true), vida = access();
+    const { seen, host } = await contextFor(catalogId, { duo, vida });
+    expect(seen && "artwork" in seen).toBe(false);
+    host.dispose();
+  });
+
+  it("offers no covers to Vida when Panel has no Vida store", async () => {
+    const { seen, host } = await contextFor("hooandee-vida", { duo: access(true) });
+    expect(seen && "artwork" in seen).toBe(false);
+    host.dispose();
+  });
+});
+
+describe("theme storage", () => {
+  function capturing(onMount: (context: ThemeExtensionMountContext) => void): (source: string) => ThemeExtensionExport {
+    return () => Object.freeze({
+      abiVersion: 1 as const,
+      mount(context: ThemeExtensionMountContext) {
+        onMount(context);
+        return () => undefined;
+      },
+    });
+  }
+
+  it("is absent when Panel offers no backend", async () => {
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(seen).toBeDefined();
+    expect(seen && "storage" in seen).toBe(false);
+    host.dispose();
+  });
+
+  it("is scoped to the mounted theme's catalog id", async () => {
+    const forTheme = vi.fn(() => Object.freeze({ get: async () => null, set: async () => true }));
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(), doc: document, storage: { forTheme }, evaluate: capturing((c) => { seen = c; }),
+    });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(forTheme).toHaveBeenCalledWith("example-theme");
+    expect(await seen?.storage?.get("layout")).toBeNull();
+    expect(seen && "games" in seen).toBe(false);
+    host.dispose();
+  });
+
+  it("offers game controls only when Panel provides them", async () => {
+    const games = Object.freeze({ forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}), howLongToBeat: vi.fn(async () => null), protonDb: vi.fn(async () => null) });
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, games, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(await seen?.games?.forceClose!(730)).toBe("terminated");
+    expect(await seen?.games?.howLongToBeat!(730, "Counter-Strike 2")).toBeNull();
+    expect(games.howLongToBeat).toHaveBeenCalledWith(730, "Counter-Strike 2");
+    host.dispose();
+  });
+});
+
+describe("shared groups", () => {
+  it("are offered to every theme and drop its subscriptions when it unmounts", async () => {
+    const unsubscribe = vi.fn();
+    const groups = {
+      list: vi.fn(() => []), subscribe: vi.fn(() => unsubscribe), save: vi.fn(), remove: vi.fn(), preview: vi.fn(() => []),
+      catalog: vi.fn(), importSources: vi.fn(), import: vi.fn(), migrate: vi.fn(), status: vi.fn(),
+    };
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(), doc: document, groups: groups as never,
+      evaluate: () => Object.freeze({ abiVersion: 1 as const, mount(context: ThemeExtensionMountContext) { seen = context; context.groups?.subscribe(() => {}); return () => undefined; } }),
+    });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(Object.isFrozen(seen?.groups)).toBe(true);
+    seen?.groups?.preview({ mode: "all", rules: [] });
+    expect(groups.preview).toHaveBeenCalled();
+    host.reconcile({ status: "ready", themes: [] });
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    host.dispose();
+  });
+});
+
+describe("theme actions", () => {
+  async function mountWith(actions: ThemeActionsChannel | undefined, abiVersion: 1 | 2, listener: (id: string) => void) {
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([{ ...DESCRIPTOR, abiVersion }]),
+      doc: document,
+      qam: { getDocument: () => document, subscribe: () => () => {} },
+      actions,
+      evaluate: () => Object.freeze({
+        abiVersion,
+        mount(context: ThemeExtensionMountContext) {
+          seen = context;
+          context.actions?.subscribe(listener);
+          return () => undefined;
+        },
+      }) as ThemeExtensionExport,
+    });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    return { host, seen: () => seen };
+  }
+
+  it("is absent when Panel offers no channel", async () => {
+    const { host, seen } = await mountWith(undefined, 1, () => {});
+    expect(seen()).toBeDefined();
+    expect(seen()).not.toHaveProperty("actions");
+    host.dispose();
+  });
+
+  it.each([1, 2] as const)("delivers only this theme's actions to an ABI-%s runtime and drops its listener on unmount", async (abiVersion) => {
+    const channel = new ThemeActionsChannel();
+    const received: string[] = [];
+    const { host, seen } = await mountWith(channel, abiVersion, (id) => received.push(id));
+
+    expect(Object.isFrozen(seen()?.actions)).toBe(true);
+    expect(channel.listening("example-theme")).toBe(true);
+    expect(channel.dispatch("another-theme", "reset-home")).toBe(0);
+    expect(channel.dispatch("example-theme", "reset-home")).toBe(1);
+    expect(received).toEqual(["reset-home"]);
+
+    host.reconcile({ status: "ready", themes: [] });
+    expect(channel.listening("example-theme")).toBe(false);
+    expect(channel.dispatch("example-theme", "reset-home")).toBe(0);
+    expect(received).toEqual(["reset-home"]);
+    host.dispose();
+  });
+
+  it("lets a theme unsubscribe itself, and releasing twice is harmless", async () => {
+    const channel = new ThemeActionsChannel();
+    const listener = vi.fn();
+    const { host, seen } = await mountWith(channel, 1, () => {});
+    const off = seen()!.actions!.subscribe(listener);
+    off();
+    off();
+    channel.dispatch("example-theme", "reset-home");
+    expect(listener).not.toHaveBeenCalled();
+    host.dispose();
+    expect(channel.listening("example-theme")).toBe(false);
   });
 });

@@ -14,10 +14,14 @@ export function boardFanNote(state: BoardFanState): string {
   return "fans.board.note";
 }
 
+export function boardFanToggleVisible(state: BoardFanState): boolean {
+  return !!state.available?.length || !!state.enabled || !!state.channels || !!state.control_off;
+}
+
 export const BoardFanCard: FC<{ state: BoardFanState; onChange: () => void }> = ({ state, onChange }) => {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const canToggle = !!state.available?.length || !!state.enabled;
+  const canToggle = boardFanToggleVisible(state);
   return (
     <PanelSectionRow>
       <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden", marginBottom: theme.space.card }}>

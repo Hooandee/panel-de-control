@@ -4,7 +4,7 @@ import { LuMaximize2, LuPencil, LuRefreshCw, LuScale, LuVolumeX, LuZap } from "r
 
 import { DesktopFanChannel, FanCurveState, getFanCurveState, setDesktopFanCurve } from "../api";
 import { Point } from "../fans/curve";
-import { desktopFanVisible } from "../fans/presentation";
+import { desktopFanVisible, isDesktopFanChannel } from "../fans/presentation";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { openDesktopFanCurveModal } from "./DesktopFanCurveModal";
@@ -60,7 +60,7 @@ const ChannelCard: FC<{ channel: DesktopFanChannel; state: FanCurveState; refres
     setDesktopFanCurve(channel.key, "custom", points, "global", null)
       .then((next) => {
         const confirmed = next.apply_ok === true
-          ? next.channels?.find((candidate) => candidate.key === channel.key)
+          ? next.channels?.filter(isDesktopFanChannel).find((candidate) => candidate.key === channel.key)
           : undefined;
         if (confirmed?.controllable && confirmed.preset === "custom" && confirmed.points?.length) {
           launch(confirmed.points as Point[]);
@@ -138,6 +138,7 @@ export const DesktopFanCurves: FC<{ initial: FanCurveState }> = ({ initial }) =>
     return () => window.clearInterval(timer);
   }, []);
   return <>{(state.channels ?? [])
+    .filter(isDesktopFanChannel)
     .filter((channel) => desktopFanVisible(state.device_key, channel.key))
     .map((channel) => <ChannelCard key={channel.key} channel={channel} state={state} refresh={refresh} />)}</>;
 };

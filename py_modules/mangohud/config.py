@@ -8,6 +8,7 @@ _DIRECTIVE = {
     "fps": "fps",
     "fps_metrics": "fps_metrics",
     "frametime": "frametime",
+    "frame_timing": "frame_timing",
     "frame_count": "frame_count",
     "show_fps_limit": "show_fps_limit",
     "time": "time",
@@ -75,6 +76,8 @@ _PDC_LABEL_ES = {
     "pdc_power": "Consumo",
     "pdc_charge": "Limite",
     "pdc_bat_health": "Salud",
+    "pdc_bat_power": "Bateria",
+    "pdc_bat_time": "Restante",
     "pdc_smt": "SMT",
     "pdc_boost": "Boost",
     "pdc_cores": "Nucleos",
@@ -92,6 +95,8 @@ _PDC_LABEL_EN = {
     "pdc_power": "Power",
     "pdc_charge": "Limit",
     "pdc_bat_health": "Health",
+    "pdc_bat_power": "Battery",
+    "pdc_bat_time": "Left",
     "pdc_smt": "SMT",
     "pdc_boost": "Boost",
     "pdc_cores": "Cores",
@@ -119,9 +124,21 @@ _LABEL_DIRECTIVE = {"fps": "fps_text", "cpu": "cpu_text", "gpu": "gpu_text"}
 # interface (MangoHud reads the first token "1" as "all interfaces bar loopback").
 _VALUE_ON = {"device_battery": "gamepad", "fps_metrics": "avg", "network": "1"}
 
-# Value metrics have no clean =0 form. The four boolean renderers below also draw
-# whenever their directive is present, even when its parsed value is 0.
-_OMIT_WHEN_OFF = frozenset((*_VALUE_ON, "hdr", "refresh_rate", "winesync", "present_mode"))
+# Value metrics have no clean =0 form. These boolean renderers also draw
+# whenever present on supported MangoHud versions, even with a parsed value of 0.
+_OMIT_WHEN_OFF = frozenset((*_VALUE_ON, "hdr", "refresh_rate", "winesync", "present_mode", "display_server"))
+
+# MangoHud v0.8.1 src/hud_elements.cpp::sort_elements registers these standalone
+# callbacks even for =0. src/overlay.cpp::render_imgui adds a horizontal divider
+# after each callback, including those that draw nothing. Omit only those off
+# callbacks in horizontal ordered layouts; submetrics (notably frametime, whose
+# default is true) still need explicit =0. Custom presets do not use `inherit`.
+_HORIZONTAL_CALLBACKS = frozenset((
+    "version", "time", "gpu_stats", "cpu_stats", "core_load", "io_read", "io_write",
+    "arch", "wine", "procmem", "gamemode", "vkbasalt", "engine_version",
+    "vulkan_driver", "resolution", "show_fps_limit", "vram", "ram", "fps",
+    "gpu_name", "frame_timing", "media_player", "battery", "fsr", "frame_count", "fan",
+))
 
 # A drawn divider row (MangoHud has no first-class per-row separator in vertical
 # layout, so we emulate one with a custom_text line). MangoHud's font has a
@@ -435,10 +452,11 @@ def coerce_model(raw):
 
 
 def _style_lines(model):
-    # A MangoHud preset MERGES over Steam's default level, so we pin the layout
-    # basics: no fps-only collapse, table (not legacy) layout.
+    # Pin ordered layout. fps_only defaults to false in custom presets; emitting
+    # even fps_only=0 registers an empty callback and separator in horizontal mode.
     lines = ["fps_only=0", "legacy_layout=0", "hide_engine_names=1"]
     if model["layout"] == "horizontal":
+        lines.remove("fps_only=0")
         lines.append("horizontal=1")
     if model["compact"]:
         lines.append("hud_compact=1")
@@ -496,7 +514,19 @@ def _color_lines(model):
     return lines
 
 
-def _enable_lines(item, values, locale="es"):
+# Horizontal rows are laid out inline, so a baked value that gains a digit pushes
+# every metric after it. Pad pdc values to their widest common form so the row only
+# moves when MangoHud's own (unpaddable) values do. Plain spaces: custom_text is ASCII.
+_PDC_MIN_WIDTH = {
+    "pdc_tdp": 3, "pdc_power": 3, "pdc_bat_power": 3, "pdc_fan_rpm": 4,
+    "pdc_charge": 4, "pdc_bat_health": 4, "pdc_gpu_clock": 4,
+}
+
+def _pad_pdc(mid, value):
+    return value.rjust(_PDC_MIN_WIDTH.get(mid, 0))
+
+
+def _enable_lines(item, values, locale="es", pad=False):
     """The directive(s) that turn an enabled metric on, in emit order. A real metric:
     its custom label (only fps/cpu/gpu) then the metric key. A pdc metric: a single
     baked `custom_text=<label> <value>` line — Steam's mangoapp does not run `exec`, so
@@ -508,6 +538,8 @@ def _enable_lines(item, values, locale="es"):
     if mid in PDC_IDS:
         text = _single_line(label if has_label else _PDC_LABELS[locale][mid])
         value = _single_line((values or {}).get(mid))
+        if pad and value:
+            value = _pad_pdc(mid, value)
         return [f"custom_text={text} {value}" if value else f"custom_text={text}"]
     lines = []
     if mid in _LABEL_DIRECTIVE and has_label:
@@ -519,22 +551,31 @@ def _enable_lines(item, values, locale="es"):
     return lines
 
 
-def to_directives(model, values=None):
+def to_directives(model, values=None, omit=()):
     """The MangoHud directive lines for the full HUD. Because a preset merges over
     parser defaults, disabled real metrics are normally written as `=0`; renderers that
-    ignore that value are omitted. Enabled metrics are emitted in item order
+    ignore that value and empty horizontal callbacks are omitted. Enabled metrics are emitted in item order
     (== on-screen order) with custom text interleaved. pdc metrics have no directive;
     `values` (id -> value string) bakes their live value into the row."""
     model = coerce_model(model)
-    enabled = {it["id"] for it in model["items"] if it["kind"] == "metric"}
+    horizontal = model["layout"] == "horizontal"
+    omit = frozenset(omit)
+    enabled = {
+        it["id"] for it in model["items"]
+        if it["kind"] == "metric" and it["id"] not in omit
+    }
     lines = _style_lines(model)
     for mid in _DIRECTIVE:
         if mid in enabled or mid in _OMIT_WHEN_OFF:
             continue
+        if model["layout"] == "horizontal" and _DIRECTIVE[mid] in _HORIZONTAL_CALLBACKS:
+            continue
         lines.append(f"{_DIRECTIVE[mid]}=0")
     for item in model["items"]:
         if item["kind"] == "metric":
-            lines.extend(_enable_lines(item, values, model["locale"]))
+            if item["id"] in omit:
+                continue
+            lines.extend(_enable_lines(item, values, model["locale"], pad=horizontal))
         elif item["kind"] == "separator":
             lines.append(f"custom_text={_SEPARATOR_TEXT}")
         elif item["kind"] == "spacer":
@@ -544,7 +585,7 @@ def to_directives(model, values=None):
     return lines
 
 
-def directives_for_level(model, level, values=None):
+def directives_for_level(model, level, values=None, omit=()):
     """The directives for a given Steam overlay level: 0 = off, 1 = minimal (fps
     only, styled), 2..4 = the user's full HUD. `values` bakes the pdc metric values."""
     model = coerce_model(model)
@@ -553,11 +594,11 @@ def directives_for_level(model, level, values=None):
     if level == 1:
         minimal = dict(model)
         minimal["items"] = [{"kind": "metric", "id": "fps"}]
-        return to_directives(minimal, values)
-    return to_directives(model, values)
+        return to_directives(minimal, values, omit)
+    return to_directives(model, values, omit)
 
 
-def build_presets_conf(model, values=None):
+def build_presets_conf(model, values=None, omit=()):
     """The presets.conf text Steam reads for its 5 overlay levels:
     0 = off, 1 = minimal FPS, 2..4 = the user's full HUD. `values` (pdc id -> value
     string) bakes the live plugin-state values into the pdc rows.
@@ -569,6 +610,6 @@ def build_presets_conf(model, values=None):
     out = []
     for level in range(5):
         out.append(f"[preset {level}]")
-        out.extend(directives_for_level(model, level, values))
+        out.extend(directives_for_level(model, level, values, omit))
         out.append("")
     return "\n".join(out).rstrip() + "\n"

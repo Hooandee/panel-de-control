@@ -39,8 +39,9 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
   const modeColor =
     mode === "estable" ? theme.color.ok : mode === "auto" ? theme.color.accent : theme.color.warn;
   const badge: CSSProperties = {
-    fontSize: theme.font.caption,
-    padding: "1px 7px",
+    fontSize: "var(--pdc-boost-caption, 12px)",
+    padding: "var(--pdc-boost-badge-padding, 3px 8px)",
+    lineHeight: 1.3,
     borderRadius: 999,
     color: modeColor,
     boxShadow: `inset 0 0 0 1px ${modeColor}`,
@@ -89,7 +90,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
   };
 
   return (
-    <div style={{
+    <div data-pdc-part="boost-card" style={{
       ...theme.card,
       padding: theme.space.md,
       marginTop: theme.space.sm,
@@ -97,15 +98,16 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
       overflow: "hidden",
     }}>
       <Focusable
-        style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: theme.space.xs, cursor: "pointer" }}
+        data-pdc-part="boost-header"
+        style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: "var(--pdc-boost-gap, 8px)", padding: "var(--pdc-boost-header-padding, 8px)", height: "auto", minWidth: 0, boxSizing: "border-box", cursor: "pointer" }}
         onActivate={() => setOpen((o) => !o)}
         onClick={() => setOpen((o) => !o)}
       >
-        <span style={{ display: "flex", alignItems: "center", gap: theme.space.sm, minWidth: 0 }}>
+        <span data-pdc-part="boost-title" style={{ display: "flex", alignItems: "center", gap: theme.space.sm, minWidth: 0 }}>
           <Chevron size={16} color={theme.color.textMuted} />
           <span>{t(isDeckPpt ? "tdp.deckPpt.title" : "tdp.boost.title")}</span>
         </span>
-        <span style={{ display: "flex", flexWrap: "wrap", gap: theme.space.xs, paddingLeft: 16 + theme.space.sm }}>
+        <span data-pdc-part="boost-badges" style={{ display: "flex", flexWrap: "wrap", gap: theme.space.xs, paddingLeft: 16 + theme.space.sm }}>
           {isDeckPpt && <span style={{ ...badge, color: theme.color.warn, boxShadow: `inset 0 0 0 1px ${theme.color.warn}` }}>{t("tdp.deckPpt.experimental")}</span>}
           <span style={badge}>{t(`tdp.boost.mode.${mode}`)}</span>
         </span>
@@ -113,20 +115,23 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
 
       {open && (
         <>
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm }}>
+          <div style={{ fontSize: "var(--pdc-boost-caption, 12px)", color: theme.color.textMuted, marginTop: theme.space.sm }}>
             {isDeckPpt ? t("tdp.deckPpt.hint") : t(`tdp.boost.hint.${mode}`)}
           </div>
 
-          <Focusable flow-children="row" style={{ ...segmentGroupStyle, gap: theme.space.sm, marginTop: theme.space.sm }}>
+          <Focusable data-pdc-part="boost-modes" flow-children="row" style={{ ...segmentGroupStyle, gap: theme.space.sm, marginTop: theme.space.sm }}>
             {MODES.map((m) => (
               <Focusable
                 key={m}
+                data-pdc-part="boost-mode"
                 style={{
                   ...segmentItemStyle(m === mode),
-                  flex: 1,
+                  flex: m === "auto" ? "0.65 1 0" : m === "custom" ? "1.3 1 0" : "1.15 1 0",
                   minWidth: 0,
-                  padding: "4px 3px",
-                  fontSize: theme.font.caption,
+                  padding: "var(--pdc-boost-mode-padding, 10px 4px)",
+                  minHeight: "var(--pdc-boost-mode-height, 40px)",
+                  boxSizing: "border-box",
+                  fontSize: "var(--pdc-boost-caption, 12px)",
                   lineHeight: 1.15,
                 }}
                 onActivate={() => onSetMode(m)}
@@ -143,14 +148,14 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
           {/* Resulting rails: the watts the firmware actually holds, for any mode. */}
           <div style={{
             display: "flex", justifyContent: "space-between",
-            fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.md,
+            fontSize: "var(--pdc-boost-caption, 12px)", color: theme.color.textMuted, marginTop: theme.space.md,
           }}>
             <span>{isDeckPpt ? "SlowPPT" : "SPPT"} {levels.pl2} W</span>
             <span>{isDeckPpt ? "FastPPT" : "FPPT"} {levels.pl3} W</span>
           </div>
 
           {isDeckPpt && mode !== "estable" && ppt && (
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>
+            <div style={{ fontSize: "var(--pdc-boost-caption, 12px)", color: theme.color.textMuted, marginTop: theme.space.xs }}>
               {t("tdp.deckPpt.applied", {
                 slow: ppt.applied.slow ?? "—",
                 fast: ppt.applied.fast ?? "—",
@@ -159,7 +164,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
           )}
 
           {needsBios && (
-            <div style={{ fontSize: theme.font.caption, color: theme.color.warn, marginTop: theme.space.xs }}>
+            <div style={{ fontSize: "var(--pdc-boost-caption, 12px)", color: theme.color.warn, marginTop: theme.space.xs }}>
               {t("tdp.deckPpt.biosRequired")}
             </div>
           )}

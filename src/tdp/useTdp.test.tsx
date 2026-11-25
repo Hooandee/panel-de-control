@@ -1,9 +1,13 @@
 // @vitest-environment happy-dom
+import { notifyPowerOwnershipChanged } from "../tdp/powerOwnershipInvalidation";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RunningGame } from "./useRunningGame";
 
+const ownershipUi = vi.hoisted(() => ({ modal: null as any }));
+vi.mock("@decky/ui", () => ({ Router: {}, findModuleByExport: () => undefined, findModuleExport: () => undefined }));
+vi.mock("../navigation/showModal", () => ({ showModal: (element: any) => { ownershipUi.modal = element; } }));
 let runningGame: RunningGame | null = {
   appid: "100",
   liveAppid: 100,
@@ -11,6 +15,7 @@ let runningGame: RunningGame | null = {
 };
 
 const TDP_STATE = {
+  appid: "100",
   follows_global: true,
   on_ac: false,
   auto_limits: { min: 5, default: 15, max: 25, max_ac: 40 },
@@ -123,6 +128,150 @@ describe("useTdp game context", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+  });
+
+  it("refreshes a global reset after power polling and ignores its older same-revision start read", async () => {
+    runningGame = null;
+    const owner = { supported: true, context_appid: null, revision: 1, observed: true,
+      steam_profile: "inactive" as const, explicit_owner: null, owner: "pdc" as const,
+      write_allowed: true, reason: "global" };
+    mocks.getTdpState.mockResolvedValue({ ...TDP_STATE, appid: null, watts: 12, global_watts: 12, game_power_owner: owner });
+    const { result } = renderHook(() => useTdp());
+    await settle();
+    const reads: Array<(state: any) => void> = [];
+    mocks.getTdpState.mockImplementation(() => new Promise((resolve) => reads.push(resolve)));
+    act(() => notifyPowerOwnershipChanged({ ...owner }));
+    act(() => notifyPowerOwnershipChanged({ ...owner }));
+    await act(async () => vi.advanceTimersByTimeAsync(1000));
+    reads[1]({ ...TDP_STATE, appid: null, watts: 15, global_watts: 15, game_power_owner: { ...owner } });
+    await settle();
+    expect(result.current.tdp?.global_watts).toBe(15);
+    reads[0]({ ...TDP_STATE, appid: null, watts: 12, global_watts: 12, game_power_owner: { ...owner } });
+    await settle();
+    expect(result.current.tdp?.global_watts).toBe(15);
+  });
+
+  it("preserves a new watt draft entered while a reset read is pending", async () => {
+    const owner = { supported: true, context_appid: "100", revision: 1, observed: true,
+      steam_profile: "inactive" as const, explicit_owner: "pdc" as const, owner: "pdc" as const,
+      write_allowed: true, reason: "explicit" };
+    mocks.getTdpState.mockResolvedValue({ ...TDP_STATE, game_power_owner: owner });
+    const { result } = renderHook(() => useTdp());
+    await settle();
+    let complete!: (state: any) => void;
+    mocks.getTdpState.mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
+    act(() => notifyPowerOwnershipChanged({ ...owner }));
+    act(() => result.current.onWatts(22));
+    complete({ ...TDP_STATE, global_watts: 15, game_power_owner: { ...owner } });
+    await settle();
+    expect(result.current.tdp?.global_watts).toBe(22);
+  });
+
+  it("refreshes the effective baseline after a handoff and ignores obsolete ownership responses", async () => {
+    const owner = { supported: true, context_appid: "100", revision: 1, observed: true,
+      steam_profile: "active" as const, explicit_owner: "steam" as const, owner: "steam" as const,
+      write_allowed: false, reason: "explicit" };
+    mocks.getTdpState.mockResolvedValue({ ...TDP_STATE, game_power_owner: owner });
+    const { result } = renderHook(() => useTdp());
+    await settle();
+    let complete!: (state: any) => void;
+    mocks.getTdpState.mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
+    act(() => notifyPowerOwnershipChanged({ ...owner, revision: 2 }));
+    const latest = { ...owner, revision: 3, explicit_owner: "pdc" as const, owner: "pdc" as const, write_allowed: true };
+    mocks.getTdpState.mockResolvedValue({ ...TDP_STATE, watts: 11, game_power_owner: latest });
+    act(() => notifyPowerOwnershipChanged(latest));
+    await settle();
+    expect(result.current.tdp?.watts).toBe(11);
+    complete({ ...TDP_STATE, game_power_owner: { ...owner, revision: 2 } });
+    await settle();
+    act(() => notifyPowerOwnershipChanged({ ...owner, context_appid: "other", revision: 99 }));
+    expect(result.current.tdp?.game_power_owner?.revision).toBe(3);
+    expect(result.current.tdp?.game_power_owner?.owner).toBe("pdc");
+  });
+
+  it("updates all mounted cards after another card changes ownership without replacing a draft", async () => {
+    vi.useFakeTimers();
+    const owner = { supported: true, context_appid: "100", revision: 1, observed: true,
+      steam_profile: "active" as const, explicit_owner: "pdc" as const, owner: "pdc" as const,
+      write_allowed: true, reason: "explicit" };
+    mocks.getTdpState.mockResolvedValue({ ...TDP_STATE, game_power_owner: owner });
+    const first = renderHook(() => useTdp());
+    const second = renderHook(() => useTdp());
+    await settle();
+    act(() => first.result.current.onWatts(22));
+    const changed = { ...owner, revision: 2, explicit_owner: "steam" as const, owner: "steam" as const, write_allowed: false };
+    act(() => notifyPowerOwnershipChanged(changed));
+    await settle();
+    expect(first.result.current.tdp?.game_power_owner?.revision).toBe(2);
+    expect(second.result.current.tdp?.game_power_owner?.owner).toBe("steam");
+    expect(first.result.current.tdp?.global_watts).toBe(22);
+    first.unmount(); second.unmount();
+    vi.useRealTimers();
+  });
+
+  it("leaves watts and debounce untouched until Steam ownership is confirmed", async () => {
+    mocks.getTdpState.mockResolvedValue({ ...TDP_STATE, game_power_owner: {
+      context_appid: "100", revision: 1, observed: true, steam_profile: "active", explicit_owner: null, owner: "steam",
+    } });
+    const {result} = renderHook(() => useTdp());
+    await settle();
+    act(() => result.current.onScope("game"));
+    act(() => result.current.onWatts(22));
+    expect(ownershipUi.modal).not.toBeNull();
+    expect(result.current.tdp?.watts).toBe(15);
+    await act(async () => vi.advanceTimersByTimeAsync(300));
+    expect(mocks.setTdpWatts).not.toHaveBeenCalled();
+  });
+
+  it("switches views without writing profiles and routes explicit edits to the chosen scope", async () => {
+    const { result } = renderHook(() => useTdp());
+    await settle();
+    act(() => result.current.onScope("game"));
+    await settle();
+    expect(result.current.scope).toBe("game");
+    expect(mocks.setTdpFollowGlobal).not.toHaveBeenCalled();
+    expect(mocks.setTdpWatts).not.toHaveBeenCalled();
+    expect(mocks.setTdpLevels).not.toHaveBeenCalled();
+    expect(mocks.setAutoTdp).not.toHaveBeenCalled();
+    expect(mocks.setAutoTdpConfig).not.toHaveBeenCalled();
+    expect(result.current.tdp?.follows_global).toBe(true);
+    act(() => result.current.onWatts(18));
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    expect(mocks.setTdpWatts).toHaveBeenLastCalledWith(18, "game", "100", "100");
+    expect(result.current.scope).toBe("game");
+    act(() => result.current.onScope("global"));
+    act(() => result.current.onWatts(20));
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    expect(mocks.setTdpWatts).toHaveBeenLastCalledWith(20, "global", null, "100");
+    expect(mocks.setTdpFollowGlobal).not.toHaveBeenCalled();
+  });
+
+  it("initializes from the matching game profile without replacing an explicit view on refresh", async () => {
+    mocks.getTdpState.mockResolvedValue({ ...TDP_STATE, follows_global: false });
+    const { result } = renderHook(() => useTdp());
+    await settle();
+    expect(result.current.scope).toBe("game");
+    act(() => result.current.onScope("global"));
+    act(() => result.current.refresh());
+    await settle();
+    expect(result.current.scope).toBe("global");
+    expect(result.current.tdp?.follows_global).toBe(false);
+    expect(mocks.setTdpFollowGlobal).not.toHaveBeenCalled();
+  });
+
+  it("resets the local view for a new game and never exposes a game view without a game", async () => {
+    const { result, rerender } = renderHook(() => useTdp());
+    await settle();
+    act(() => result.current.onScope("game"));
+    runningGame = { appid: "200", liveAppid: 200, name: "Second" };
+    rerender();
+    await settle();
+    expect(result.current.scope).toBe("global");
+    runningGame = null;
+    rerender();
+    act(() => result.current.onScope("game"));
+    expect(result.current.scope).toBe("global");
+    expect(mocks.setTdpFollowGlobal).not.toHaveBeenCalled();
   });
 
   it("cancels queued watts and levels when the running game changes", async () => {
@@ -285,18 +434,14 @@ describe("useTdp game context", () => {
   });
 
   it.each([
-    ["scope", "global", "game"],
-    ["game", "scope", "global"],
-    ["game", "global", "scope"],
-    ["game", "global", "refresh", "scope"],
+    ["global", "game"],
+    ["game", "global"],
+    ["game", "global", "refresh"],
   ])("persists both scopes and preserves newer intent with response order %s → %s → %s", async (...order) => {
     const responses: Record<string, () => void> = {};
     const globalConfig = { ...TDP_STATE.global_auto_config, min_tdp: 10 };
     const gameConfig = { ...TDP_STATE.auto_config, target_fps: 60, max_tdp: 20 };
     mocks.getTdpState.mockResolvedValue({ ...TDP_STATE, follows_global: false });
-    mocks.setTdpFollowGlobal.mockImplementation((follow) => follow ? Promise.resolve(TDP_STATE) : new Promise((resolve) => {
-      responses.scope = () => resolve({ ...TDP_STATE, follows_global: false });
-    }));
     mocks.setAutoTdpConfig.mockImplementation((_fps, _initial, scope) => new Promise((resolve) => {
       responses[scope] = () => resolve(scope === "global"
         ? { ...TDP_STATE, global_auto_config: globalConfig }
@@ -350,23 +495,13 @@ describe("useTdp game context", () => {
   });
 
   it.each([false, true])("keeps own-game identity through inherited global state (late game response: %s)", async (lateGameResponse) => {
-    let follows = false;
+    const follows = false;
     let own = { ...TDP_STATE.auto_config, initial_tdp: 12, max_tdp: 20 as number | null };
     let global = { ...TDP_STATE.global_auto_config, initial_tdp: 25, max_tdp: 35 as number | null };
     const state = () => ({ ...TDP_STATE, follows_global: follows, auto_config: follows ? global : own, global_auto_config: global });
     let finishGame!: () => void;
-    let finishFollow!: () => void;
     let gameWrites = 0;
     mocks.getTdpState.mockImplementation(async () => state());
-    mocks.setTdpFollowGlobal.mockImplementation((follow) => {
-      if (follow) {
-        follows = true;
-        return Promise.resolve(state());
-      }
-      return new Promise((resolve) => {
-        finishFollow = () => { follows = false; resolve(state()); };
-      });
-    });
     mocks.setAutoTdpConfig.mockImplementation((fps, initial, sc, _target, _context, _minimum, maximum) => {
       if (sc === "global") {
         global = { ...global, target_fps: fps, initial_tdp: initial, max_tdp: maximum };
@@ -391,13 +526,13 @@ describe("useTdp game context", () => {
     if (lateGameResponse) await act(async () => finishGame());
     act(() => result.current.refresh());
     await settle();
-    expect(result.current.tdp?.auto_config).toEqual(global);
+    expect(result.current.tdp?.auto_config).toEqual(own);
     act(() => result.current.onScope("game"));
     act(() => result.current.onAutoTargetFps(57));
     await act(async () => vi.advanceTimersByTimeAsync(200));
     expect(mocks.setAutoTdpConfig).toHaveBeenLastCalledWith(57, 12, "game", "100", "100", null, 20);
-    expect(result.current.tdp?.auto_config).toEqual(global);
-    await act(async () => finishFollow());
+    expect(result.current.tdp?.auto_config).toEqual(own);
+    expect(mocks.setTdpFollowGlobal).not.toHaveBeenCalled();
     expect(result.current.tdp?.auto_config).toMatchObject({ target_fps: 57, initial_tdp: 12, max_tdp: 20 });
     expect(result.current.tdp?.global_auto_config).toMatchObject({ initial_tdp: 25, max_tdp: 40 });
   });

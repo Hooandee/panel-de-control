@@ -1,6 +1,7 @@
 import { FC, ReactNode } from "react";
 
 import { theme } from "../theme";
+import { themeSizeOverride } from "../system/themeTokens";
 
 export const ExperimentalBadge: FC<{ children: ReactNode }> = ({ children }) => (
   <span
@@ -9,7 +10,7 @@ export const ExperimentalBadge: FC<{ children: ReactNode }> = ({ children }) => 
       alignSelf: "flex-start",
       boxSizing: "border-box",
       flexShrink: 0,
-      fontSize: 9,
+      fontSize: themeSizeOverride("fontCaption") ?? 9,
       lineHeight: 1.2,
       padding: "2px 5px",
       borderRadius: 999,

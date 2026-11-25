@@ -243,8 +243,10 @@ export function localizePublishedText(
 export function parseEarlyPublication(value: unknown): readonly PublishedEarlyTheme[] {
   try {
     const publication = record(value);
-    if (publication.status !== "published") return [];
-    exact(publication, ["status", "themes"]);
+    // `cached` is the last verified list Panel saved on this device, shown while offline.
+    if (publication.status === "published") exact(publication, ["status", "themes"]);
+    else if (publication.status === "cached") exact(publication, ["status", "themes", "code", "retryable"]);
+    else return [];
     if (!Array.isArray(publication.themes) || publication.themes.length > 32) return [];
     const themes = publication.themes.map((entry) => {
       const { earlyVersion, ...fields } = record(entry);

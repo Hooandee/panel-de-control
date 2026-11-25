@@ -15,6 +15,10 @@ const qamRuntime = vi.hoisted(() => {
     start: vi.fn<() => { dispose(): void; refresh(): void }>(() => ({ dispose, refresh })),
   };
 });
+const ambient = vi.hoisted(() => {
+  const stop = vi.fn();
+  return { stop, start: vi.fn(() => stop) };
+});
 const prefs = vi.hoisted(() => ({
   get: vi.fn<() => Promise<Record<string, string>>>(),
   set: vi.fn<(values: Record<string, string | null>) => Promise<boolean>>(),
@@ -35,9 +39,22 @@ const persistentServices = vi.hoisted(() => {
 });
 
 vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory, openFilePicker: vi.fn(), toaster: { toast: vi.fn() }, routerHook: { addRoute: vi.fn(), removeRoute: vi.fn() } }));
+vi.mock("./ambient", () => ({ startAmbient: ambient.start, ambientThemeChannel: {}, AmbienteSection: () => null, AmbientPlayerBlock: () => null }));
+vi.mock("./platform/gameSessions", () => ({ createGameSessionPort: () => ({}) }));
+vi.mock("./upscalers/overlays", () => ({ startUpscalerOverlays: () => () => {} }));
+vi.mock("./deckyInternal", async (original) => ({ ...(await original<object>()), adoptStaleActivePlugin: () => () => {} }));
+vi.mock("./platform/power", () => ({ createPowerPort: () => ({}) }));
 vi.mock("./themes/qamCoverWatch", () => ({ watchQamCover: vi.fn(() => () => {}) }));
 vi.mock("./components/ThemeHealth", () => ({ openThemeHealthModal: vi.fn() }));
 vi.mock("./api", () => ({
+  getDuoArtwork: vi.fn(async () => ({})),
+  getThemeArtwork: vi.fn(async () => ({})),
+  setThemeArtwork: vi.fn(async () => ({ ok: true })),
+  pauseThemeGame: vi.fn(async () => false),
+  resumeThemeGame: vi.fn(async () => {}),
+  getThemeHltb: vi.fn(async () => ({ result: "not_found" })),
+  getThemeProtonDb: vi.fn(async () => ({ result: "not_found" })),
+  setDuoArtwork: vi.fn(async () => ({ ok: true })),
   checkThemeEarly: vi.fn(),
   earlyThemeArchiveFolder: vi.fn(),
   prepareEarlyThemeInstall: vi.fn(),
@@ -46,6 +63,7 @@ vi.mock("./api", () => ({
   acknowledgeThemeActivation: vi.fn(),
   acknowledgeThemeInstallRollback: vi.fn(),
   recordThemeFailure: vi.fn(),
+  recordUiEvent: vi.fn(async () => true),
   beginThemeActivation: vi.fn(),
   checkThemeReleases: vi.fn(),
   commitThemeInstall: vi.fn(),
@@ -58,6 +76,12 @@ vi.mock("./api", () => ({
   restoreThemeCleanup: vi.fn(),
   acknowledgeThemeCleanupUndo: vi.fn(),
   loadThemeExtension: vi.fn(),
+  getThemeStorage: vi.fn(),
+  getThemeGroups: vi.fn(async () => []),
+  setThemeGroups: vi.fn(async () => ({ ok: true })),
+  getTabMasterTabs: vi.fn(async () => []),
+  setThemeStorage: vi.fn(),
+  forceCloseGame: vi.fn(),
   prepareRemoteThemeInstall: vi.fn(),
   rollbackThemeInstall: vi.fn(),
   settleThemeActivation: vi.fn(),
@@ -114,6 +138,8 @@ vi.mock("./themes/runtime/start", () => ({ startThemesRuntime: () => () => {} })
 vi.mock("./themes/themesClient", () => ({
   configureEarlyArchivePicker: () => () => {},
   configureThemeFailureReporter: () => () => undefined,
+  configureCssLoaderSlowMutationReporter: () => () => undefined,
+  slowMutationBucket: () => "",
   configureSectionHandoffStore: () => () => undefined,
   createProductionThemesDependencies: () => ({}),
 }));
@@ -157,8 +183,11 @@ describe("QAM plugin surfaces", () => {
     expect(persistentServices.startGameWatcher).toHaveBeenCalledOnce();
     expect(persistentServices.startQamActivity).toHaveBeenCalledOnce();
     expect(persistentServices.startSteamActivity).toHaveBeenCalledOnce();
+    expect(ambient.start).toHaveBeenCalledOnce();
 
     plugin.onDismount();
+
+    expect(ambient.stop).toHaveBeenCalledOnce();
 
     expect(persistentServices.stopGameWatcher).toHaveBeenCalledOnce();
     expect(persistentServices.stopQamActivity).toHaveBeenCalledOnce();

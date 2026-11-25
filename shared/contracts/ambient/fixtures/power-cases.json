@@ -1,0 +1,9 @@
+[
+  {"name": "idle home on charger plays", "input": {"inGame": false, "screenOn": true, "surfaceVisible": true, "battery": {"percent": 10, "charging": true}, "threshold": 20}, "expect": "play"},
+  {"name": "in game pauses", "input": {"inGame": true, "screenOn": true, "surfaceVisible": true, "battery": null, "threshold": 20}, "expect": "pause"},
+  {"name": "screen off pauses", "input": {"inGame": false, "screenOn": false, "surfaceVisible": true, "battery": null, "threshold": 20}, "expect": "pause"},
+  {"name": "hidden surface pauses", "input": {"inGame": false, "screenOn": true, "surfaceVisible": false, "battery": null, "threshold": 20}, "expect": "pause"},
+  {"name": "low battery unplugged freezes", "input": {"inGame": false, "screenOn": true, "surfaceVisible": true, "battery": {"percent": 19, "charging": false}, "threshold": 20}, "expect": "freeze"},
+  {"name": "exactly at threshold still plays", "input": {"inGame": false, "screenOn": true, "surfaceVisible": true, "battery": {"percent": 20, "charging": false}, "threshold": 20}, "expect": "play"},
+  {"name": "no battery (desktop) plays", "input": {"inGame": false, "screenOn": true, "surfaceVisible": true, "battery": null, "threshold": 20}, "expect": "play"}
+]

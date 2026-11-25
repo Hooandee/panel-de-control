@@ -118,6 +118,24 @@ def power(snap):
     return watts or DASH
 
 
+def bat_power(snap):
+    watts = snap.get("bat_watts")
+    if snap.get("bat_status") != "Discharging" or not isinstance(watts, (int, float)):
+        return DASH
+    return _watts(abs(watts))
+
+
+def bat_time(snap):
+    # Some firmware reports a signed discharge current, which makes the ETA negative.
+    seconds = snap.get("bat_eta_s")
+    if snap.get("bat_status") != "Discharging" or not isinstance(seconds, (int, float)):
+        return DASH
+    minutes = round(abs(seconds) / 60)
+    if minutes <= 0:
+        return DASH
+    return f"{minutes // 60}h{minutes % 60:02d}"
+
+
 def model(snap):
     # Just the model name — the full chip string overruns the row.
     return str(snap.get("model_name") or DASH)
@@ -194,6 +212,8 @@ FORMATTERS = {
     "pdc_power": power,
     "pdc_charge": charge,
     "pdc_bat_health": bat_health,
+    "pdc_bat_power": bat_power,
+    "pdc_bat_time": bat_time,
     "pdc_smt": smt,
     "pdc_boost": boost,
     "pdc_cores": cores,

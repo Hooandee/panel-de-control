@@ -48,7 +48,7 @@ export function toggleCaches(entries: CleanerEntry[], selected: ReadonlySet<stri
 
 export function toggleEntry(entry: CleanerEntry, selected: ReadonlySet<string>): Set<string> {
   const next = new Set(selected);
-  if (entry.blocked_reason) return next;
+  if (entry.blocked_reason && !entry.can_force) return next;
   if (next.has(entry.id)) next.delete(entry.id);
   else next.add(entry.id);
   return next;

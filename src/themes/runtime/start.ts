@@ -1,7 +1,11 @@
+import type { ThemeGroupsAccess } from "../../groups/groupsClient";
+import type { ThemeArtworkAccess, ThemeArtworkStore } from "../artwork";
 import type { CssLoaderSnapshot } from "../cssLoaderTypes";
 import { createThemeExtensionClient } from "../themeExtensionClient";
 import {
   ThemeExtensionRuntimeHost,
+  type AmbientChannelProvider,
+  type ThemeExtensionExport,
   type ThemeExtensionQamAccess,
 } from "./extensionHost";
 import {
@@ -12,15 +16,19 @@ import {
   createThemeNavigationAccess,
   type ThemeExtensionNavigationAccess,
 } from "./navigationAccess";
+import type { ThemeStorageProvider } from "./themeStorage";
+import type { ThemeExtensionGamesAccess } from "./gamesAccess";
+import type { ThemeActionsProvider } from "./themeActions";
+import type { ThemeOptionsWriter } from "./themeOptions";
 
 interface RuntimeManagerLike {
-  reconcile(snapshot: CssLoaderSnapshot): void;
+  reconcile(snapshot: CssLoaderSnapshot, runtimeInstallHold?: string): void;
   refreshDescriptors?(): Promise<void>;
   dispose(): void;
 }
 
 export interface SteamRuntimeBridge {
-  reconcile(snapshot: CssLoaderSnapshot): void;
+  reconcile(snapshot: CssLoaderSnapshot, runtimeInstallHold?: string): void;
   refreshDescriptors(): void;
   dispose(): void;
 }
@@ -97,7 +105,7 @@ export function createSteamRuntimeBridge(
   };
 
   return {
-    reconcile(snapshot) {
+    reconcile(snapshot, runtimeInstallHold) {
       let nextDocument: Document | null = null;
       try {
         nextDocument = getSteamDocument();
@@ -124,7 +132,8 @@ export function createSteamRuntimeBridge(
       const inventoryChanged = inventoryFingerprint !== null
         && inventoryFingerprint !== nextInventoryFingerprint;
       inventoryFingerprint = nextInventoryFingerprint;
-      manager?.reconcile(snapshot);
+      if (runtimeInstallHold === undefined) manager?.reconcile(snapshot);
+      else manager?.reconcile(snapshot, runtimeInstallHold);
       if (inventoryChanged) void manager?.refreshDescriptors?.();
     },
     refreshDescriptors() {
@@ -135,12 +144,15 @@ export function createSteamRuntimeBridge(
 }
 
 interface ThemesRuntimeClient {
-  getSnapshot(): { snapshot: CssLoaderSnapshot };
+  getSnapshot(): { snapshot: CssLoaderSnapshot; runtimeInstallHold?: string | null };
   subscribe(listener: () => void, refreshIntervalMs?: number): () => void;
   refresh(): Promise<void>;
 }
 
 interface ThemesRuntimeOptions {
+  artwork?: Readonly<Partial<Record<ThemeArtworkStore, ThemeArtworkAccess>>>;
+  /** Writes for `context.options`; omitted where Panel cannot write CSS Loader options (Windows). */
+  options?: ThemeOptionsWriter;
   client: ThemesRuntimeClient;
   getSteamDocument(): Document | null;
   getQamDocument?(): Document | null;
@@ -150,6 +162,15 @@ interface ThemesRuntimeOptions {
   subscribePackageChanges?(listener: () => void): () => void;
   library?: Readonly<ThemeExtensionLibraryAccess>;
   navigation?: Readonly<ThemeExtensionNavigationAccess>;
+  ambient?: AmbientChannelProvider;
+  storage?: ThemeStorageProvider;
+  games?: Readonly<ThemeExtensionGamesAccess>;
+  groups?: Readonly<ThemeGroupsAccess>;
+  actions?: ThemeActionsProvider;
+  /** Turns a theme off in CSS Loader; omitted where Panel cannot (Windows). */
+  retireTheme?(cssLoaderName: string, keep: string): Promise<boolean>;
+  evaluate?(source: string): ThemeExtensionExport;
+  log?(code: string): void;
   createManager?(
     doc: Document,
     qam?: Readonly<ThemeExtensionQamAccess>,
@@ -159,6 +180,8 @@ interface ThemesRuntimeOptions {
 }
 
 export function startThemesRuntime({
+  artwork,
+  options,
   client,
   getSteamDocument,
   getQamDocument,
@@ -166,7 +189,15 @@ export function startThemesRuntime({
   subscribePackageChanges,
   library = createThemeLibraryAccess(),
   navigation = createThemeNavigationAccess(),
+  evaluate,
+  log,
   createManager,
+  ambient,
+  storage,
+  games,
+  groups,
+  actions,
+  retireTheme,
 }: ThemesRuntimeOptions): () => void {
   const qam = getQamDocument && subscribeQamDocument
     ? Object.freeze({
@@ -181,11 +212,24 @@ export function startThemesRuntime({
       doc,
       qam,
       library,
+      artwork,
+      options,
       navigation,
+      ambient,
+      storage,
+      games,
+      groups,
+      actions,
+      retireTheme,
+      evaluate,
+      log,
     }),
     () => { void client.refresh(); },
   );
-  const reconcile = () => bridge.reconcile(client.getSnapshot().snapshot);
+  const reconcile = () => {
+    const { snapshot, runtimeInstallHold } = client.getSnapshot();
+    bridge.reconcile(snapshot, runtimeInstallHold ?? undefined);
+  };
   const unsubscribe = client.subscribe(reconcile, 30_000);
   const stopPackageWatch = subscribePackageChanges?.(() => bridge.refreshDescriptors());
   let stopped = false;

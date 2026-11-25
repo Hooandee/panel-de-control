@@ -4,6 +4,7 @@ import { LuChevronDown, LuChevronRight } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { themeSizeOverride } from "../system/themeTokens";
 import { ValuePills } from "./LaunchPills";
 import { LaunchEditor } from "../launch/useLaunchEditor";
 import { LaunchTools, Pill, isPillAvailable, pillLabel, pillDesc, pillHelp, selectionForPill } from "../launch/catalog";
@@ -29,7 +30,7 @@ const RowSwitch: FC<{ label: string; active: boolean; disabled?: boolean; onTogg
 const Badge: FC<{ text: string; accent?: boolean }> = ({ text, accent }) => (
   <span
     style={{
-      fontSize: 9,
+      fontSize: themeSizeOverride("fontCaption") ?? 9,
       color: accent ? theme.color.onAccent : theme.color.textMuted,
       background: accent ? theme.color.accent : "transparent",
       boxShadow: accent ? "none" : `inset 0 0 0 1px ${theme.color.hairline}`,
@@ -69,12 +70,12 @@ export const LaunchRow: FC<{ pill: Pill; ed: LaunchEditor; tools: LaunchTools; g
             <Chevron size={14} color={theme.color.textMuted} style={{ flexShrink: 0 }} />
             {pillLabel(pill, t)}
             {pill.recommended && <Badge text={t("params.recommended")} accent />}
-            {pill.raw && <span style={{ fontFamily: "monospace", fontSize: 10, color: theme.color.textMuted }}>{pill.raw}</span>}
+            {pill.raw && <span style={{ fontFamily: "monospace", fontSize: themeSizeOverride("fontCaption") ?? 10, color: theme.color.textMuted }}>{pill.raw}</span>}
             {!available && <Badge text={t("params.notInstalled")} />}
           </div>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, marginLeft: 20 }}>{pillDesc(pill, t)}</div>
         </Focusable>
-        {isToggle && <RowSwitch label={pillLabel(pill, t)} active={!!sel} disabled={!available} onToggle={() => ed.set(pill.id, !sel)} />}
+        {isToggle && <RowSwitch label={pillLabel(pill, t)} active={!!sel} disabled={!available && !sel} onToggle={() => ed.set(pill.id, !sel)} />}
       </Focusable>
 
       {expanded && (
@@ -99,7 +100,6 @@ export const LaunchRow: FC<{ pill: Pill; ed: LaunchEditor; tools: LaunchTools; g
           <TextField
             value={typeof sel === "string" ? sel : ""}
             onChange={(e) => ed.set(pill.id, e.target.value || null)}
-            // @ts-expect-error Decky TextField forwards input attrs; placeholder is valid.
             placeholder={pill.placeholderKey ? t(pill.placeholderKey) : ""}
           />
         </div>
@@ -110,6 +110,23 @@ export const LaunchRow: FC<{ pill: Pill; ed: LaunchEditor; tools: LaunchTools; g
           <span>{caveat}</span>
         </div>
       )}
+    </div>
+  );
+};
+
+export const UnavailableFsrRow: FC<{ reason: string }> = ({ reason }) => {
+  const { t } = useI18n();
+  return (
+    <div style={{ ...theme.card, padding: "10px 11px", marginBottom: theme.space.sm }}>
+      <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>{t("params.pill.fsr4")} <Badge text={t("params.fsr4.unavailable")} /></div>
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>{reason}</div>
+        </div>
+        <div role="switch" aria-checked={false} aria-disabled="true" aria-label={t("params.pill.fsr4")}>
+          <RowSwitch label={t("params.pill.fsr4")} active={false} disabled onToggle={() => {}} />
+        </div>
+      </div>
     </div>
   );
 };

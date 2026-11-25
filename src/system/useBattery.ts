@@ -6,6 +6,7 @@ import {
   setChargeLimit,
   setChargeLimitFullOnce,
 } from "../api";
+import { recordUiEvent } from "./uiEvents";
 
 const POLL_MS = 3000; // battery changes slowly
 const DEBOUNCE_MS = 250; // coalesce slider drags before writing
@@ -37,6 +38,7 @@ export function useBattery(): BatteryController {
   // backend value (which would visibly bounce the toggle/slider for a frame).
   const pending = useRef(false);
   const mutation = useRef(0);
+  const settledLimit = useRef<{ request: number; percent: number } | null>(null);
 
   const enqueueMutation = useCallback(<T,>(operation: () => Promise<T>): Promise<T> => {
     const queued = mutationQueue.current.then(operation, operation);
@@ -51,6 +53,7 @@ export function useBattery(): BatteryController {
     enqueueMutation(operation)
       .then((chargeLimit) => {
         if (mutation.current !== request) return;
+        settledLimit.current = { request, percent: chargeLimit.percent };
         setState((prev) => (prev ? { ...prev, charge_limit: chargeLimit } : prev));
       })
       .catch(() => {
@@ -63,17 +66,36 @@ export function useBattery(): BatteryController {
 
   useEffect(() => {
     let alive = true;
+    let inFlight = false;
     const tick = () => {
+      if (inFlight) return;
+      inFlight = true;
+      const request = mutation.current;
+      const wasPending = pending.current;
       getBatteryState()
         .then((s) => {
           if (!alive) return;
-          // keep the live battery info, but preserve an in-flight limit choice
+          const stale = wasPending || request !== mutation.current;
+          const settled = settledLimit.current;
+          if (stale && !pending.current && settled?.request === mutation.current) {
+            recordUiEvent("battery", "stale_limit_read", {
+              superseded: request !== mutation.current,
+              pendingAtStart: wasPending,
+              observedPercent: s.charge_limit.percent,
+              confirmedPercent: settled.percent,
+            });
+          }
+          // Keep live battery info, without reviving a choice from before a write.
           setState((prev) =>
-            pending.current && prev ? { ...s, charge_limit: prev.charge_limit } : s,
+            (stale || pending.current) && prev
+              ? { ...s, charge_limit: prev.charge_limit } : s,
           );
         })
         .catch(() => {
           /* keep last values */
+        })
+        .finally(() => {
+          inFlight = false;
         });
     };
     tick();

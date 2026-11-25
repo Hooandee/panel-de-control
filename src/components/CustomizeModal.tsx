@@ -39,7 +39,7 @@ const iconSquare = (on: boolean): React.CSSProperties => ({
 });
 
 const viewTag: React.CSSProperties = {
-  flexShrink: 0, fontSize: theme.font.caption, color: theme.color.accent,
+  flexShrink: 0, fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`, color: theme.color.accent,
   background: `rgba(${theme.color.accentRgb},0.14)`,
   padding: "1px 7px", borderRadius: 6, whiteSpace: "nowrap",
 };
@@ -56,7 +56,7 @@ const ExpansionRow: FC<{
   return (
     <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.sm, paddingLeft: theme.space.sm + indent, opacity: off || hidden ? 0.55 : 1 }}>
       <span style={{ display: "flex", color: theme.color.textMuted }}>{icon}</span>
-      <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
       <IconAction label={hidden ? t("customize.show") : t("customize.hide")} color={theme.color.textMuted} onTap={onToggleHide}>
         {hidden ? <LuEyeOff size={17} /> : <LuEye size={17} />}
       </IconAction>
@@ -74,10 +74,12 @@ const ExpansionRow: FC<{
 const AccentSwatch: FC<{ id: string; hex: string; on: boolean; label: string; children?: ReactNode }> = ({ id, hex, on, label, children }) => (
   <Focusable
     aria-label={label}
+    data-pdc-modal-swatch
     onActivate={() => setAccent(id)}
     onClick={() => setAccent(id)}
     style={{
       width: 26, height: 26, borderRadius: 999, background: hex,
+      ["--pdc-modal-swatch-color" as string]: hex,
       display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
       boxShadow: on ? `0 0 0 2px ${theme.color.surface}, 0 0 0 4px ${hex}` : `inset 0 0 0 1px ${theme.color.hairline}`,
     }}
@@ -92,7 +94,7 @@ const AccentPicker: FC = () => {
   const followed = themeAccentHex() ?? DEFAULT_ACCENT.hex;
   return (
     <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-      <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>{t("customize.accent")}</span>
+      <span style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textPrimary }}>{t("customize.accent")}</span>
       <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
         <AccentSwatch id={THEME_ACCENT_ID} hex={followed} on={active.id === THEME_ACCENT_ID} label={t("accent.default")}>
           <LuSparkles size={13} color="#fff" />
@@ -101,7 +103,7 @@ const AccentPicker: FC = () => {
           <AccentSwatch key={a.id} id={a.id} hex={a.hex} on={a.id === active.id} label={t(`accent.${a.id}`)} />
         ))}
       </Focusable>
-      <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("customize.accentHint")}</span>
+      <span style={{ fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`, color: theme.color.textMuted }}>{t("customize.accentHint")}</span>
     </div>
   );
 };
@@ -196,12 +198,12 @@ const CustomizeBody: FC = () => {
   return (
     <div ref={focusVisibilityRef} style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("customize.title")}</div>
+        <div style={{ fontSize: `var(--pdc-modal-title, ${theme.font.value}px)`, color: theme.color.textPrimary }}>{t("customize.title")}</div>
         <Focusable
           noFocusRing
           style={{
             ...iconBtn, gap: theme.space.xs, padding: `${theme.space.xs}px ${theme.space.sm}px`,
-            fontSize: theme.font.caption,
+            fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`,
             color: editing ? theme.color.accent : theme.color.textMuted,
             boxShadow: `inset 0 0 0 1px ${editing ? theme.color.accent : theme.color.hairline}`,
             background: editing ? `rgba(${theme.color.accentRgb},0.14)` : "transparent",
@@ -240,11 +242,11 @@ const CustomizeBody: FC = () => {
                   >
                     <span style={iconSquare(!hidden)}>{viewIconNode(v.icon, 16)}</span>
                     <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: theme.space.xs }}>
-                      <span style={{ minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span style={{ minWidth: 0, fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {name}
                       </span>
                       <span style={viewTag}>{t("customize.views.tag")}</span>
-                      {hidden && <span style={{ color: theme.color.textMuted, fontSize: theme.font.caption, whiteSpace: "nowrap" }}> · {t("customize.state.background")}</span>}
+                      {hidden && <span style={{ color: theme.color.textMuted, fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`, whiteSpace: "nowrap" }}> · {t("customize.state.background")}</span>}
                     </span>
                   </Focusable>
                   {editing ? (
@@ -296,9 +298,9 @@ const CustomizeBody: FC = () => {
                 >
                   <span style={iconSquare(!off)}>{meta?.icon(16)}</span>
                   <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-                    <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {t(meta.labelKey)}
-                      {stateNote && <span style={{ color: theme.color.textMuted, fontSize: theme.font.caption }}> · {stateNote}</span>}
+                      {stateNote && <span style={{ color: theme.color.textMuted, fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)` }}> · {stateNote}</span>}
                     </span>
                   </span>
                 </Focusable>
@@ -401,8 +403,8 @@ const CustomizeBody: FC = () => {
             <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
               <span style={iconSquare(learningState === "visible")}><LuBrain size={16} /></span>
               <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-                <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>{t("settings.telemetry")}</span>
-                <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+                <span style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textPrimary }}>{t("settings.telemetry")}</span>
+                <span style={{ fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`, color: theme.color.textMuted }}>
                   {learningState === "blocked" ? t("customize.module.learning.blocked") : t("customize.module.learning.desc")}
                 </span>
               </span>
@@ -426,7 +428,7 @@ const CustomizeBody: FC = () => {
         <>
           <div style={theme.sectionLabel}>{t("customize.views.title")}</div>
           <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-            <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            <span style={{ fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`, color: theme.color.textMuted }}>
               {views.length === 0 ? t("customize.views.none") : t("customize.views.reorderHint")}
             </span>
             <Focusable
@@ -435,7 +437,7 @@ const CustomizeBody: FC = () => {
               onActivate={onNewView}
               onClick={onNewView}
             >
-              <LuPlus size={16} /> <span style={{ fontSize: theme.font.body }}>{t("customize.views.new")}</span>
+              <LuPlus size={16} /> <span style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)` }}>{t("customize.views.new")}</span>
             </Focusable>
           </div>
 
@@ -452,7 +454,7 @@ const CustomizeBody: FC = () => {
 
 const CustomizeModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <FocusRoot>
+    <FocusRoot settingsModal="customize">
       <CustomizeBody />
     </FocusRoot>
   </ModalRoot>

@@ -5,6 +5,7 @@ import { PanelThemeInstaller, ThemeInstallError } from "./panelThemeInstaller";
 import { parseEarlyPublication, type PublishedThemeRelease, type ThemePublicationState } from "./remotePublication";
 import { createRemotePublicationClient } from "./remotePublicationClient";
 import { deriveThemeCards } from "./state";
+import { configureThemeInteractionJournal } from "./themeInteractionJournal";
 import { ThemesClient, type ThemesDependencies } from "./themesClient";
 
 const TEXT = { es: "Tema", en: "Theme", it: "Tema" };
@@ -29,6 +30,9 @@ describe("early access themes", () => {
     expect(parseEarlyPublication({ status: "temporarily-unavailable", code: "offline", retryable: true })).toEqual([]);
     expect(parseEarlyPublication({ status: "published", themes: [{ ...RAW_EARLY, earlyVersion: "x" }] })).toEqual([]);
     expect(parseEarlyPublication(null)).toEqual([]);
+    expect(parseEarlyPublication({ status: "cached", themes: [RAW_EARLY], code: "offline", retryable: true }))
+      .toEqual(parseEarlyPublication({ status: "published", themes: [RAW_EARLY] }));
+    expect(parseEarlyPublication({ status: "cached", themes: [RAW_EARLY] })).toEqual([]);
   });
 
   it("lists an early-only theme without a regular install and tags a catalog theme with its early build", () => {
@@ -47,7 +51,7 @@ describe("early access themes", () => {
     await expect(client.check(false)).resolves.toMatchObject({ status: "published", themes: [{ catalogId: "stable-theme" }] });
   });
 
-  it("sends only an absolute picked path to the backend's early install", async () => {
+  it("binds the picked archive to the requested catalog theme", async () => {
     const prepareEarly = vi.fn(async () => ({
       ok: true, code: "prepared", theme_id: "early-theme", theme_name: "Early Theme", version: "0.2.0", transaction: "t",
     }));
@@ -56,7 +60,7 @@ describe("early access themes", () => {
     });
     await expect(installer.prepare({ kind: "early-archive", catalogId: "early-theme", archivePath: "/home/deck/Downloads/a.zip" }))
       .resolves.toMatchObject({ themeId: "early-theme", version: "0.2.0" });
-    expect(prepareEarly).toHaveBeenCalledWith("/home/deck/Downloads/a.zip");
+    expect(prepareEarly).toHaveBeenCalledWith("/home/deck/Downloads/a.zip", "early-theme");
     await expect(installer.prepare({ kind: "early-archive", catalogId: "early-theme", archivePath: "a.zip" }))
       .rejects.toBeInstanceOf(ThemeInstallError);
   });
@@ -83,14 +87,21 @@ describe("early access themes", () => {
     await client.refresh();
     await client.refreshPublication();
 
-    await expect(client.install("early-theme")).resolves.toBe(false);
-    await expect(client.installEarly("early-theme")).resolves.toBe(true);
-    expect(prepare).toHaveBeenCalledWith({ kind: "early-archive", catalogId: "early-theme", archivePath: "/home/deck/Downloads/early.zip" });
-    expect(reloadTheme).toHaveBeenCalledWith("Early Theme", "0.2.0", READY);
-    expect(commit).toHaveBeenCalledWith("t");
+    const phases: string[] = [];
+    const stop = configureThemeInteractionJournal(() => [], async (_area, _action, detail) => {
+      phases.push(JSON.parse(detail).phase);
+    });
+    try {
+      await expect(client.install("early-theme")).resolves.toBe(false);
+      await expect(client.installEarly("early-theme")).resolves.toBe(true);
+      expect(prepare).toHaveBeenCalledWith({ kind: "early-archive", catalogId: "early-theme", archivePath: "/home/deck/Downloads/early.zip" });
+      expect(reloadTheme).toHaveBeenCalledWith("Early Theme", "0.2.0", READY);
+      expect(commit).toHaveBeenCalledWith("t");
 
-    pickEarlyArchive.mockResolvedValueOnce(null);
-    await expect(client.installEarly("early-theme")).resolves.toBe(false);
-    expect(prepare).toHaveBeenCalledTimes(1);
+      pickEarlyArchive.mockResolvedValueOnce(null);
+      await expect(client.installEarly("early-theme")).resolves.toBe(false);
+      expect(prepare).toHaveBeenCalledTimes(1);
+      expect(phases).toEqual(["started", "completed", "observation_unavailable"]);
+    } finally { stop(); }
   });
 });

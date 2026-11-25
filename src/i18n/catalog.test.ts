@@ -38,6 +38,7 @@ vi.mock("../api", () => ({
 
 import { LanguageSelector } from "../components/LanguageSelector";
 import * as i18n from "./index";
+import pluginTitleReport from "./fixtures/plugin-title-report.json";
 
 const DICTS = i18n.DICTS;
 const STORAGE_KEY = "panel-de-control-lang";
@@ -72,6 +73,13 @@ afterEach(() => {
 });
 
 describe("Every supported translation catalog", () => {
+  it("preserves the initial plugin name after the reported English preference is loaded", () => {
+    window.localStorage.setItem(STORAGE_KEY, pluginTitleReport.savedLanguage);
+    expect(i18n.translate("app.title")).toBe(pluginTitleReport.initialVisibleName);
+    expect(new Set(CATALOGS.map(([, catalog]) => catalog["app.title"])))
+      .toEqual(new Set([pluginTitleReport.initialVisibleName]));
+  });
+
   it.each(CATALOGS)("%s includes learned starting watts and FPS without dead reason copy", (_lang, catalog) => {
     expect(placeholders(catalog["tdp.auto.learned_start"])).toEqual(["{fps}", "{watts}"]);
     expect(catalog["tdp.auto.status.above_target"]).toBeUndefined();
@@ -220,12 +228,12 @@ describe("Every supported translation catalog", () => {
         "fans.experimental.resetFail": "Couldn't restart the fan control. Reboot the device if the problem persists.",
       },
       it: {
-        "app.title": "Pannello di controllo",
+        "load.retry": "Riprova",
         "hud.metric.gpu_junction_temp": "Temperatura giunzione GPU",
         "hud.metric.battery_time": "Autonomia batteria",
       },
       de: {
-        "app.title": "Kontrollzentrum",
+        "load.retry": "Erneut versuchen",
         "params.pill.makoRun.help": "Erzeugt mit Mako Zwischenbilder für flüssigere Bewegungen. Das Skript ~/.local/bin/mako-run muss ausführbar sein.",
         "hud.metric.io_read": "E/A-Lesezugriffe",
         "hud.elements.hint": "Ändere die Reihenfolge mit den Pfeilen. Elemente mit einem Pfeilsymbol haben eigene Einstellungen.",
@@ -273,17 +281,17 @@ describe("Italian catalog", () => {
     }
   });
 
-  it("uses the Italian product title and an Italian Auto-TDP label", () => {
+  it("uses Italian retry and Auto-TDP labels", () => {
     const italian = italianCatalog();
 
-    expect(italian["app.title"]).toBe("Pannello di controllo");
+    expect(italian["load.retry"]).toBe("Riprova");
     expect(italian["tdp.auto.title"]).toContain("TDP");
   });
 
   it("accepts a persisted Italian selection for lookup", () => {
     window.localStorage.setItem(STORAGE_KEY, "it");
 
-    expect(i18n.translate("app.title")).toBe("Pannello di controllo");
+    expect(i18n.translate("load.retry")).toBe("Riprova");
   });
 
   it("formats reviewed count labels without fixed singular or plural forms", () => {
@@ -344,9 +352,9 @@ describe("German catalog", () => {
     }
   });
 
-  it("uses natural German product and safety copy", () => {
+  it("uses natural German retry and safety copy", () => {
     expect(germanCatalog()).toMatchObject({
-      "app.title": "Kontrollzentrum",
+      "load.retry": "Erneut versuchen",
       "display.oled.desc": "Lässt die Farben deines Bildschirms lebendiger und tiefer wirken, ähnlich wie bei einem OLED-Display. Das Display selbst wird nicht verändert, nur die Farbdarstellung.",
       "settings.cooler": "Externe Kühlung angeschlossen",
       "settings.cooler.desc": "Aktiviere diese Option nur, wenn das externe Kühlsystem oder der externe Akku angeschlossen ist. Dadurch steigt das TDP-Limit auf bis zu {max} W. Ohne externe Kühlung kann das Gerät überhitzen.",
@@ -365,7 +373,7 @@ describe("German catalog", () => {
   it("accepts a persisted German selection for lookup", () => {
     window.localStorage.setItem(STORAGE_KEY, "de");
 
-    expect(i18n.translate("app.title")).toBe("Kontrollzentrum");
+    expect(i18n.translate("load.retry")).toBe("Erneut versuchen");
   });
 });
 
@@ -373,7 +381,6 @@ describe("Brazilian Portuguese catalog", () => {
   it("is a first-class supported language with reviewed Brazilian wording", () => {
     expect(i18n.SUPPORTED_LANGUAGES).toContain("pt-BR");
     expect(brazilianPortugueseCatalog()).toMatchObject({
-      "app.title": "Painel de Controle",
       "load.retry": "Tentar novamente",
       "fans.suggest.dial.cool": "Mais frio",
       "cleaner.reason.tool_in_use": "Um jogo está configurado para usar esta versão do Proton. Ela será mantida.",
@@ -423,7 +430,7 @@ describe("Brazilian Portuguese catalog", () => {
   it("accepts a persisted Brazilian Portuguese selection for lookup", () => {
     window.localStorage.setItem(STORAGE_KEY, "pt-BR");
 
-    expect(i18n.translate("app.title")).toBe("Painel de Controle");
+    expect(i18n.translate("load.retry")).toBe("Tentar novamente");
   });
 });
 
@@ -431,7 +438,6 @@ describe("French catalog", () => {
   it("is a first-class supported language with reviewed French wording", () => {
     expect(i18n.SUPPORTED_LANGUAGES).toContain("fr");
     expect(frenchCatalog()).toMatchObject({
-      "app.title": "Centre de contrôle",
       "load.retry": "Réessayer",
       "home.title": "Accueil",
       "home.tabs": "Vue en onglets",
@@ -463,7 +469,6 @@ describe("French catalog", () => {
       "dispositif",
       "RVB",
       "le panneau",
-      "Panel de Control",
       "Veuillez",
       "screenshot",
       "Hors Steam",
@@ -491,7 +496,7 @@ describe("French catalog", () => {
   it("accepts a persisted French selection for lookup", () => {
     window.localStorage.setItem(STORAGE_KEY, "fr");
 
-    expect(i18n.translate("app.title")).toBe("Centre de contrôle");
+    expect(i18n.translate("load.retry")).toBe("Réessayer");
   });
 });
 

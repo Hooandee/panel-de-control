@@ -1,13 +1,16 @@
+import re
+import json
 import os
 import types
 
-from report import collector as report_collector
-from report.collector import (
+from pdc_report import collector as report_collector
+from pdc_report.collector import (
     build_bundle,
     capabilities_from,
     controller_daemon_cmds,
     decky_plugins,
     frontend_crash_diagnostics,
+    theme_diagnostic_lines,
     kernel_logs,
     redact_obj,
     redact_text,
@@ -336,12 +339,29 @@ def test_frontend_crash_diagnostics_names_plugin_and_crash(tmp_path):
         {
             "error_type": "TypeError",
             "source": "cef_log.previous.txt",
+            "origin": "panel",
         }
     ]
     assert {signal["kind"] for signal in diagnostics["signals"]} == {
         "plugin_load_error",
         "shared_context_crash",
     }
+
+
+def test_plugin_load_error_names_a_known_plugin_by_fixed_origin(tmp_path):
+    # PDC-AHYE: 17 load errors under Decky 4.0.0-pre1 without saying whether CSS Loader was one.
+    current = tmp_path / "cef_log.txt"
+    _write(
+        current,
+        "Decky PluginLoader: Error loading plugin CSS Loader (v2.1.3) TypeError: boom\n"
+        "Decky PluginLoader: Error loading plugin CSS Loader (v2.1.3) TypeError: boom\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(current)])
+
+    assert diagnostics["plugin_load_errors"] == [
+        {"error_type": "TypeError", "source": "cef_log.txt", "origin": "css_loader"},
+    ]
 
 
 def test_frontend_crash_diagnostics_does_not_parse_error_from_plugin_name(tmp_path):
@@ -357,8 +377,8 @@ def test_frontend_crash_diagnostics_does_not_parse_error_from_plugin_name(tmp_pa
     diagnostics = frontend_crash_diagnostics([str(previous)])
 
     assert diagnostics["plugin_load_errors"] == [
-        {"error_type": "TypeError", "source": "cef_log.previous.txt"},
-        {"error_type": "ReferenceError", "source": "cef_log.previous.txt"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
+        {"error_type": "ReferenceError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
     ]
 
 
@@ -416,8 +436,9 @@ def test_frontend_crash_diagnostics_never_includes_free_form_cef_text(tmp_path):
     ):
         assert secret not in serialized
     assert diagnostics["plugin_load_errors"] == [
-        {"error_type": "TypeError", "source": "cef_log.previous.txt"},
-        {"error_type": "ReferenceError", "source": "cef_log.previous.txt"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "panel"},
+        {"error_type": "TypeError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
+        {"error_type": "ReferenceError", "source": "cef_log.previous.txt", "origin": "other_plugin"},
     ]
     assert all("line" not in signal for signal in diagnostics["signals"])
 
@@ -440,7 +461,7 @@ def test_frontend_exception_names_only_the_error_type_and_a_fixed_origin(tmp_pat
 
     assert diagnostics["signals"] == [
         {"source": "cef_log.txt", "kind": "decky_frontend_exception",
-         "error_type": "TypeError", "origin": "panel"},
+         "error_type": "TypeError", "origin": "panel", "line": 2},
         {"source": "cef_log.txt", "kind": "decky_frontend_exception",
          "error_type": "ReferenceError", "origin": "steamgriddb"},
         {"source": "cef_log.txt", "kind": "decky_frontend_exception",
@@ -449,6 +470,78 @@ def test_frontend_exception_names_only_the_error_type_and_a_fixed_origin(tmp_pat
          "error_type": "SyntaxError", "origin": "decky"},
     ]
     assert "hunter2" not in str(diagnostics)
+
+
+def test_steam_ui_exception_names_type_property_and_script_once(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    line = (
+        '[1110/112413.343200:INFO:CONSOLE(16)] "Uncaught TypeError: Cannot read properties of undefined '
+        "(reading 'values')\", source: https://steamloopback.host/libraries/libraries~00299a408.js (16)\n"
+    )
+    _write(
+        current,
+        line * 30
+        + '[1110/112413.496642:INFO:CONSOLE(1)] "TypeError: Cannot read properties of undefined '
+        "(reading 'values')\", source: https://steamloopback.host/library.js (1)\n"
+        + '[1110/112414.000000:INFO:CONSOLE(1)] "Uncaught TypeError: user@example.com is not a function", '
+        "source: https://steamloopback.host/routes/library/app/123?token=secret (1)\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(current)])
+
+    assert diagnostics["signals"] == [
+        {"source": "cef_log.txt", "kind": "steam_ui_exception", "error_type": "TypeError",
+         "script": "libraries", "reading": "values", "count": 30},
+        {"source": "cef_log.txt", "kind": "steam_ui_exception", "error_type": "TypeError",
+         "script": "library", "reading": "values", "count": 1},
+        {"source": "cef_log.txt", "kind": "steam_ui_exception", "error_type": "TypeError",
+         "script": "other", "count": 1},
+    ]
+    assert "user@example.com" not in str(diagnostics)
+    assert "secret" not in str(diagnostics)
+
+
+def test_steam_ui_exception_keeps_names_fixed_and_trusts_only_the_source(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    _write(
+        current,
+        '[1] "Uncaught TypeError: Cannot read properties of undefined (reading \'JoséMaría\')", '
+        "source: https://steamloopback.host/sp.js?contenthash=1 (1)\n"
+        '[2] "Uncaught TypeError: x https://steamloopback.host/chunk~1.js", '
+        "source: https://store.steampowered.com/app/1?u=https://steamloopback.host/chunk~1.js (1)\n"
+        '[3] "Uncaught TypeError: y", source: https://steamloopback.host/routes/wsp.js (1)\n',
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(current)])
+
+    assert diagnostics["signals"] == [
+        {"source": "cef_log.txt", "kind": "steam_ui_exception", "error_type": "TypeError",
+         "script": "sp", "reading": "other", "count": 1},
+        {"source": "cef_log.txt", "kind": "steam_ui_exception", "error_type": "TypeError",
+         "script": "other", "count": 1},
+    ]
+    assert "José" not in str(diagnostics)
+
+
+def test_steam_ui_exceptions_leave_room_for_plugin_signals(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    names = ["values", "keys", "entries", "get", "has", "set", "size", "length", "map", "filter", "find", "some"]
+    noisy = "".join(
+        f'[{i}] "Uncaught TypeError: Cannot read properties of undefined (reading \'{name}\')", '
+        "source: https://steamloopback.host/library.js (1)\n"
+        for i, name in enumerate(names * 3)
+    )
+    _write(
+        current,
+        noisy + '[9] "Uncaught TypeError: w", '
+        "source: http://localhost:1337/plugins/Panel%20de%20Control/dist/index.js (9)\n",
+    )
+
+    signals = frontend_crash_diagnostics([str(current)])["signals"]
+
+    assert sum(s["kind"] == "steam_ui_exception" for s in signals) == 8
+    assert {"source": "cef_log.txt", "kind": "decky_frontend_exception",
+            "error_type": "TypeError", "origin": "panel", "line": 9} in signals
 
 
 def test_frontend_crash_diagnostics_reports_missing_unreadable_and_symlink(
@@ -742,6 +835,14 @@ def test_sysfs_snapshot_asus_ppt_captures_both_interfaces_with_values(tmp_path):
     assert ppt["asus_nb_wmi"]["ppt_fppt"] == "49"
 
 
+def test_sysfs_snapshot_asus_ppt_captures_the_legacy_thermal_policy(tmp_path):
+    legacy = tmp_path / "sys/devices/platform/asus-nb-wmi"
+    legacy.mkdir(parents=True)
+    (legacy / "throttle_thermal_policy").write_text("0\n")
+    ppt = sysfs_snapshot(root=str(tmp_path))["asus_ppt"]
+    assert ppt["asus_nb_wmi"]["throttle_thermal_policy"] == "0"
+
+
 def test_sysfs_snapshot_asus_ppt_absent_is_empty(tmp_path):
     snap = sysfs_snapshot(root=str(tmp_path))
     assert snap["asus_ppt"] == {"asus_armoury": {}, "asus_nb_wmi": {}}
@@ -855,6 +956,7 @@ def test_sysfs_snapshot_captures_cpu_gpu_and_rapl_selection_surfaces(tmp_path):
         "hardware_max_khz": "4800000",
         "applied_min_khz": "1200000",
         "applied_max_khz": "3000000",
+        "current_khz": None, "governor": None, "available_khz": None, "boost_khz": None,
     }]
     assert surfaces["gpu"] == [{
         "backend": "xe",
@@ -910,7 +1012,7 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         "leds": [],
         "pstore": [],
         "pstore_archive": [],
-        "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
+        "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": [], "boost": None, "devfreq": []},
         "desktop": {
             "board_fans": {"available": [], "loaded": [], "channels": 0},
             "power_supplies": [],
@@ -929,6 +1031,8 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
             "dump": None,
         },
         "arm": {"arch": "x86"},
+        "ps5": {},
+        "platform": {"drivers": [], "misc": []},
         "connected_devices": {
             "usb": [], "hid": [], "input": [], "pci": [], "thunderbolt": [],
             "bluetooth_adapters": [],
@@ -1289,9 +1393,11 @@ def test_sysfs_snapshot_records_arm_identity_and_emulation(tmp_path):
     assert arm["devfreq"] == [{
         "name": "3d00000.gpu",
         "governor": "simple_ondemand",
+        "available_governors": None,
         "min_hz": "220000000",
         "max_hz": "680000000",
         "cur_hz": "475000000",
+        "target_hz": None,
         "available_hz": "220000000 475000000 680000000",
     }]
     assert arm["backlight"] == [
@@ -1389,3 +1495,257 @@ def test_kernel_logs_keep_decky_stop_and_earlyoom_evidence_across_a_forced_reboo
     assert "Sending SIGKILL" in out["previous_boot_loader"]
     assert "PluginLoader" in out["previous_boot_earlyoom"]
 
+
+
+def test_sysfs_snapshot_ps5_fan_and_gpufreq(tmp_path):
+    root = str(tmp_path)
+    _mk(os.path.join(root, "sys/bus/platform/devices/ps5-fan/target_temp"), "80\n")
+    gpu = os.path.join(root, "sys/class/devfreq/ps5-gpufreq")
+    _mk(os.path.join(gpu, "available_frequencies"), "400000000 2230000000\n")
+    _mk(os.path.join(gpu, "cur_freq"), "400000000\n")
+    snap = sysfs_snapshot(root=root)
+    assert snap["ps5"] == {"fan_node": True, "buzzer": False}
+    assert snap["cpu_gpu_power"]["devfreq"][0]["name"] == "ps5-gpufreq"
+    assert snap["cpu_gpu_power"]["devfreq"][0]["cur_hz"] == "400000000"
+
+
+def test_sysfs_snapshot_shows_cpu_boost_and_vendor_platform_drivers(tmp_path):
+    root = str(tmp_path)
+    policy = os.path.join(root, "sys/devices/system/cpu/cpufreq/policy0")
+    _mk(os.path.join(policy, "scaling_driver"), "ps5-cpufreq\n")
+    _mk(os.path.join(policy, "scaling_cur_freq"), "3500000\n")
+    _mk(os.path.join(policy, "scaling_boost_frequencies"), "3500000 3400000 3300000\n")
+    _mk(os.path.join(root, "sys/devices/system/cpu/cpufreq/boost"), "1\n")
+    driver = os.path.join(root, "sys/bus/platform/drivers/ps5-fan")
+    os.makedirs(driver)
+    os.symlink("/nonexistent", os.path.join(driver, "ps5-fan"))
+    _mk(os.path.join(driver, "uevent"), "")
+    os.makedirs(os.path.join(root, "sys/class/misc/ps5_buzzer"))
+    snap = sysfs_snapshot(root=root)
+    cpu = snap["cpu_gpu_power"]
+    assert cpu["boost"] == "1"
+    assert cpu["cpufreq"][0]["current_khz"] == "3500000"
+    assert cpu["cpufreq"][0]["boost_khz"] == "3500000 3400000 3300000"
+    assert snap["platform"] == {"drivers": [{"name": "ps5-fan", "devices": ["ps5-fan"]}], "misc": ["ps5_buzzer"]}
+
+
+def test_sysfs_snapshot_measures_rapl_package_power(tmp_path, monkeypatch):
+    rapl = os.path.join(
+        str(tmp_path),
+        "sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio:0",
+    )
+    _mk(os.path.join(rapl, "name"), "package-0\n")
+    _mk(os.path.join(rapl, "constraint_0_power_limit_uw"), "30000000\n")
+    _mk(os.path.join(rapl, "energy_uj"), "999000000\n")
+    _mk(os.path.join(rapl, "max_energy_range_uj"), "1000000000\n")
+
+    def elapse(seconds):
+        assert seconds == report_collector._RAPL_SAMPLE_S
+        _mk(os.path.join(rapl, "energy_uj"), "19000000\n")
+
+    monkeypatch.setattr(report_collector, "_sleep", elapse)
+
+    surfaces = sysfs_snapshot(root=str(tmp_path))["cpu_gpu_power"]["rapl"]
+
+    assert surfaces[0]["power_w"] == round(20 / report_collector._RAPL_SAMPLE_S, 1)
+
+
+def test_panel_exception_names_the_bundle_line_and_a_fixed_property(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    _write(
+        current,
+        '[1104/232900.000:INFO:CONSOLE(41237)] "Uncaught TypeError: Cannot read properties of undefined '
+        "(reading 'appid')\", source: http://localhost:1337/plugins/Panel%20de%20Control/dist/index.js?v=0.84.0 (41237)\n"
+        '[1104/232901.000:INFO:CONSOLE(7)] "Uncaught TypeError: Cannot read properties of null '
+        "(reading 'MyPrivateKey')\", source: http://localhost:1337/plugins/Panel%20de%20Control/dist/index.js (7)\n",
+    )
+    signals = frontend_crash_diagnostics([str(current)])["signals"]
+    assert signals == [
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception", "error_type": "TypeError", "origin": "panel",
+         "line": 41237, "reading": "appid"},
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception", "error_type": "TypeError", "origin": "panel",
+         "line": 7, "reading": "other"},
+    ]
+    assert "MyPrivateKey" not in str(signals)
+
+
+def test_theme_diagnostic_lines_read_webhelper_js_without_private_text(tmp_path):
+    (tmp_path / "webhelper_js.previous.txt").write_text(
+        "[2026-11-14 17:00:00] SteamUI: WARNING: [Duo] login waiting for account\n", encoding="utf-8")
+    (tmp_path / "webhelper_js.txt").write_text(
+        "[2026-11-14 18:00:00] SteamUI: WARNING: [Duo] home-hidden detached path=/library/home window=1280x800 sheets=3\n"
+        "[2026-11-14 18:00:01] SteamUI: WARNING: [Duo] covers-late 4 user@example.com \u00e9t\u00e9\n"
+        "[2026-11-14 18:00:02] SteamUI: unrelated line\n",
+        encoding="utf-8",
+    )
+    result = theme_diagnostic_lines(str(tmp_path))
+    lines = result["lines"]
+    assert [(line["source"], line["event"]) for line in lines] == [
+        ("webhelper_js.previous.txt", "login"), ("webhelper_js.txt", "home-hidden"), ("webhelper_js.txt", "covers-late")]
+    assert lines[1]["detail"] == "detached path=/library/home window=1280x800 sheets=3"
+    assert "example.com" not in lines[2]["detail"] and "\u00e9" not in lines[2]["detail"]
+    assert theme_diagnostic_lines(str(tmp_path / "missing"))["lines"] == []
+
+
+
+def test_sysfs_snapshot_preserves_reported_fan_curve_nodes(tmp_path):
+    import json
+    from pathlib import Path
+
+    fixtures = json.loads((Path(__file__).parent / "data/fan_curve_report_topology.json").read_text())["chips"]
+    for index, fixture in enumerate(fixtures):
+        chip = tmp_path / f"sys/class/hwmon/hwmon{index}"
+        _mk(str(chip / "name"), fixture["name"])
+        for name, facts in fixture["nodes"].items():
+            # MSI curve values were not captured; ASUS values are a real readback.
+            # Empty reads model unknown values without supplying numeric ones.
+            _mk(str(chip / name), facts["value"] if facts["value"] is not None else "")
+            if facts["writable"] is False:
+                os.chmod(chip / name, 0o444)
+
+    chips = {chip["name"]: chip["fan_nodes"] for chip in sysfs_snapshot(root=str(tmp_path))["hwmon"]}
+
+    for fixture in fixtures:
+        nodes = chips[fixture["name"]]
+        assert set(nodes) == set(fixture["nodes"])
+        for name, facts in fixture["nodes"].items():
+            assert nodes[name]["value"] == facts["value"]
+            if facts["writable"] is not None:
+                assert nodes[name]["writable"] is facts["writable"]
+
+
+def test_hwmon_curve_capture_bounds_indices_and_rejects_non_numeric_values(tmp_path):
+    for name, value in {
+        "pwm2_auto_point8_pwm": "255",
+        "pwm2_auto_point8_temp": "private-path-or-token",
+        "pwm1_auto_point1_pwm": "999999999999999999999999",
+        "pwm1_auto_point1_temp": "2147483648",
+        "pwm3_auto_point1_temp": "40",
+        "pwm1_auto_point9_temp": "40",
+        "pwm1_auto_point1_extra": "40",
+    }.items():
+        _mk(str(tmp_path / name), value)
+
+    nodes = report_collector._hwmon_fan_nodes(str(tmp_path))
+
+    assert set(nodes) == {
+        "pwm2_auto_point8_pwm", "pwm2_auto_point8_temp",
+        "pwm1_auto_point1_pwm", "pwm1_auto_point1_temp",
+    }
+    assert nodes["pwm2_auto_point8_pwm"]["value"] == "255"
+    assert all(nodes[name]["value"] is None for name in nodes if name != "pwm2_auto_point8_pwm")
+
+
+def test_inputplumber_lifecycle_filter_excludes_per_input_debug():
+    import re
+
+    commands = controller_daemon_cmds("inputplumber")
+    cmd = commands["controller_lifecycle"]
+    assert commands["controller"][-3:] == ["-n", "300", "--no-pager"]
+    assert "-b" in cmd and cmd[cmd.index("-n") + 1] == "120"
+    pattern = re.compile(cmd[cmd.index("--grep") + 1])
+    for message in (
+        "Loading device profile `Default` from: /usr/share/inputplumber/profiles/default.yaml",
+        "Setting target devices: []", "Setting intercept mode to: Pass",
+        "Device added: test", "Device removed: test", "Failed running device test",
+        "Found missing input device, adding source device test",
+        "POSSIBLE DEADLOCK: timed out waiting for response", "channel closed",
+    ):
+        assert pattern.search(message), message
+    for message in (
+        "Send event NativeEvent at sleep time 80",
+        "Found matching intercept event: Gamepad(Button(Guide))",
+        "More events needed to activate intercept mode.",
+        "Output capabilities changed: {LED(Color)}",
+    ):
+        assert not pattern.search(message), message
+    assert "controller_lifecycle" not in controller_daemon_cmds("hhd")
+
+
+def test_controller_lifecycle_capture_is_byte_bounded_and_reports_limits():
+    extra = controller_daemon_cmds("inputplumber")
+    text = "\n".join("Loading device profile /home/test/é" for _ in range(120))
+    out = kernel_logs(lambda cmd: text, cap=500, extra=extra)
+    assert len(out["controller_lifecycle"].encode("utf-8")) <= 500
+    assert "/home/test" not in out["controller_lifecycle"]
+    assert out["controller_lifecycle_capture"] == {
+        "status": "captured", "window": "current_boot_tail",
+        "line_limit": 120, "line_limit_reached": True,
+        "byte_limit": 500, "byte_truncated": True,
+    }
+
+
+def test_controller_lifecycle_no_entries_and_command_failure_remain_distinct():
+    extra = controller_daemon_cmds("inputplumber")
+    for value, status in ((None, "unavailable"), ("", "empty"),
+                          ("-- No entries --\n", "empty"),
+                          ("[exit 1] ", "command_exit"),
+                          ("[exit 1] permission denied", "command_exit")):
+        out = kernel_logs(lambda cmd: value, extra=extra)
+        assert out["controller_lifecycle_capture"]["status"] == status
+        assert not out["controller_lifecycle_capture"]["byte_truncated"]
+    def broken(cmd):
+        raise TimeoutError("journal unavailable")
+    out = kernel_logs(broken, extra=extra)
+    assert out["controller_lifecycle_capture"]["status"] == "unavailable"
+    assert out["controller_lifecycle"] is None
+
+
+def test_bundle_keeps_only_observed_sleep_events_by_boot():
+    messages = [
+        "[main][INFO]: CEF has disconnected...",
+        "[CSS_Loader] Connected to Steam Browser",
+        "[main][INFO]: Loading Decky frontend!",
+        "pdc-sleep-cores rc=1 smt_active=unknown",
+        "unrelated /home/private-user",
+    ]
+
+    def run(cmd):
+        if "--output-fields=MESSAGE" not in cmd:
+            return None
+        if "-1" not in cmd:
+            return "-- No entries --"
+        assert "--reverse" in cmd
+        stamps = [1, 3, 2, 4, 5]  # The wall clock moved back during reconnect.
+        return "\n".join(json.dumps({
+            "__REALTIME_TIMESTAMP": str(1_000_000 * stamp), "MESSAGE": message,
+            "_HOSTNAME": "private-host", "_BOOT_ID": "private-boot",
+        }) for stamp, message in reversed(list(zip(stamps, messages))))
+
+    bundle = build_bundle(app="pdc", categories=[], text="", environment={}, capabilities={},
+                          state={}, stores={}, logs=[], kernel=kernel_logs(run))
+    assert bundle["kernel"]["previous_boot_sleep_userspace"] == [
+        {"t": 1, "event": "cef_disconnected"},
+        {"t": 3, "event": "steam_browser_connected"},
+        {"t": 2, "event": "decky_frontend_loading"},
+        {"t": 4, "event": "sleep_core_guard", "ok": False, "smt_active": None},
+    ]
+    assert bundle["kernel"]["sleep_userspace"] == []
+    assert kernel_logs(lambda cmd: None)["sleep_userspace"] is None
+
+    def journalctl(cmd, **_kwargs):
+        stderr = "No journal boot entry found for the specified boot (-1)." if "-1" in cmd else ""
+        return types.SimpleNamespace(returncode=1, stdout="", stderr=stderr)
+
+    missing = kernel_logs(lambda cmd: report_collector.capture_command(cmd, run=journalctl))
+    assert missing["sleep_userspace"] == []
+    assert missing["previous_boot_sleep_userspace"] is None
+
+
+def test_kernel_logs_capture_session_crashes_behind_a_cef_disconnect():
+    cmd = report_collector._KERNEL_CMDS["session_crashes"]
+    pattern = re.compile(cmd[cmd.index("--grep") + 1])
+    assert pattern.search("Process 13440 (gamescope-wl) of user 1000 dumped core.")
+    assert pattern.search("steamwebhelper[5120]: segfault at 0 ip 0000 sp 0000 error 4")
+    assert pattern.search("traps: gamescope-wl[2211] general protection fault ip:7f1c sp:7ffd error:0 in libc.so.6")
+    assert not pattern.search("Process 9001 (MonsterHunterRi) of user 1000 dumped core.")
+    assert not pattern.search("wine64-preloader[812]: segfault at 10 ip 0000 sp 0000 error 6")
+
+    def run(argv):
+        if argv == cmd:
+            return ("systemd-coredump[14702]: Process 13440 (gamescope-wl) of user 1000 "
+                    "dumped core.")
+        return None
+
+    out = kernel_logs(run)
+    assert "gamescope-wl" in out["session_crashes"]

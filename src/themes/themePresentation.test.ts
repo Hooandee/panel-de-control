@@ -17,11 +17,13 @@ describe("themeCoverFor", () => {
     const gallery = themeCoverFor(release("hooandee-gallery", "Hooandee Gallery"));
     const atlas = themeCoverFor(release("hooandee-luminous-atlas", "Hooandee Luminous Atlas"));
     const eclipse = themeCoverFor(release("hooandee-eclipse", "Hooandee Eclipse"));
+    const vida = themeCoverFor(release("hooandee-vida", "Hooandee Vida"));
 
     expect(gallery).toBeTruthy();
     expect(atlas).toBeTruthy();
     expect(eclipse).toBeTruthy();
-    expect(new Set([gallery, atlas, eclipse]).size).toBe(3);
+    expect(vida).toBeTruthy();
+    expect(new Set([gallery, atlas, eclipse, vida]).size).toBe(4);
   });
 
   it("gives no cover to an unknown theme or one whose identity does not match", () => {
@@ -31,29 +33,26 @@ describe("themeCoverFor", () => {
 });
 
 describe("themeDescriptionFor", () => {
-  it("describes Hooandee themes in German, Brazilian Portuguese and French, which the catalog cannot carry", () => {
-    for (const [catalogId, cssLoaderName] of [
-      ["hooandee-gallery", "Hooandee Gallery"],
-      ["hooandee-luminous-atlas", "Hooandee Luminous Atlas"],
-      ["hooandee-eclipse", "Hooandee Eclipse"],
-    ]) {
-      const de = themeDescriptionFor(release(catalogId, cssLoaderName), "de");
-      const pt = themeDescriptionFor(release(catalogId, cssLoaderName), "pt-BR");
-      expect(de).not.toBe("Published description.");
-      expect(pt).not.toBe("Published description.");
-      const fr = themeDescriptionFor(release(catalogId, cssLoaderName), "fr");
-      expect(de).not.toBe(pt);
-      expect(fr).not.toBe("Published description.");
-      expect(fr).not.toBe(de);
+  const hooandee = [
+    ["hooandee-vida", "Hooandee Vida"],
+    ["hooandee-duo", "Hooandee Duo"],
+    ["hooandee-gallery", "Hooandee Gallery"],
+    ["hooandee-luminous-atlas", "Hooandee Luminous Atlas"],
+    ["hooandee-eclipse", "Hooandee Eclipse"],
+  ] as const;
+
+  it("describes every Hooandee theme in every language from one place", () => {
+    for (const [catalogId, cssLoaderName] of hooandee) {
+      const lines = SUPPORTED_LANGUAGES.map((lang) => themeDescriptionFor(release(catalogId, cssLoaderName), lang));
+      for (const line of lines) expect(line).not.toMatch(/published|publicada|pubblicata/i);
+      expect(new Set(lines).size).toBe(SUPPORTED_LANGUAGES.length);
     }
   });
 
-  it("keeps the published text for the catalog's own languages and for other themes", () => {
-    const eclipse = release("hooandee-eclipse", "Hooandee Eclipse");
-    expect(themeDescriptionFor(eclipse, "es")).toBe("Descripción publicada.");
-    expect(themeDescriptionFor(eclipse, "it")).toBe("Descrizione pubblicata.");
+  it("keeps the published text for themes that are not Hooandee's or whose identity does not match", () => {
+    expect(themeDescriptionFor(release("someone-else", "Someone"), "es")).toBe("Descripción publicada.");
     expect(themeDescriptionFor(release("someone-else", "Someone"), "de")).toBe("Published description.");
-    expect(themeDescriptionFor(release("hooandee-eclipse", "Other Name"), "pt-BR")).toBe("Published description.");
+    expect(themeDescriptionFor(release("hooandee-eclipse", "Other Name"), "it")).toBe("Descrizione pubblicata.");
   });
 });
 
@@ -63,6 +62,7 @@ describe("themeTaglineFor", () => {
     ["hooandee-gallery", "Hooandee Gallery"],
     ["hooandee-luminous-atlas", "Hooandee Luminous Atlas"],
     ["hooandee-eclipse", "Hooandee Eclipse"],
+    ["hooandee-vida", "Hooandee Vida"],
   ] as const;
 
   it("gives every Hooandee theme a short line in every language", () => {

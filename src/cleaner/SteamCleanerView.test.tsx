@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { cleanerForceSession } from "./forceSession";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -26,6 +27,7 @@ const entry = (id: string, overrides: Partial<CleanerEntry> = {}): CleanerEntry 
 const state = (overrides: Partial<CleanerState> = {}): CleanerState => ({ schema_version: 1, available: true, status: "ready", scan_id: "scan", coverage_complete: true, entries: [entry("cache"), entry("prefix", { kind: "compatdata" })], libraries: [{ id: "library", label: "Internal drive", available: true, reason: null }], totals: { shadercache: 1_000_000, compatdata: 1_000_000, unknown: 0 }, progress: { processed: 0, total: null }, error: null, last_result: null, ...overrides });
 const controller = (overrides: Partial<CleanerController> = {}): CleanerController => ({ state: state(), plan: null, result: null, error: null, loading: false, pending: null, busy: false, cancelling: false, scan: vi.fn(async () => {}), prepare: vi.fn(async () => {}), execute: vi.fn(async () => {}), cancel: vi.fn(async () => {}), refresh: vi.fn(async () => {}), dismissPlan: vi.fn(), dismissResult: vi.fn(), ...overrides });
 afterEach(() => {
+  cleanerForceSession.acknowledged = false;
   cleanup();
   localStorage.clear();
 });
@@ -260,4 +262,64 @@ describe("Steam Cleaner interface", () => {
     expect(screen.queryByRole("button", { name: "cleaner.cleanSelection" })).toBeNull();
     expect(screen.getByRole("button", { name: "cleaner.scanAgain" })).toBeTruthy();
   });
+});
+
+
+describe("manual protected selection", () => {
+  const protectedEntry = (id: string) => entry(id, { blocked_reason: "activity_unknown", can_force: true });
+  it("keeps details collapsed and excludes protected data from bulk selection", () => {
+    render(<SteamCleanerView controller={controller({ state: state({ entries: [protectedEntry("protected")] }) })} />);
+    expect(screen.getByText("Game")).toBeTruthy();
+    expect(screen.queryByText("cleaner.force.reason.activity_unknown")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.selectCaches" }));
+    expect(screen.queryByRole("button", { name: "cleaner.cleanSelection" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.chooseGameData Game" }));
+    expect(screen.getByText("cleaner.force.reason.activity_unknown")).toBeTruthy();
+  });
+  it("requires acceptance once and remembers it after leaving and returning to Cleanup", () => {
+    const c = controller({ state: state({ entries: [protectedEntry("first")] }) });
+    const view = render(<SteamCleanerView controller={c} />);
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.gameDetails Game" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "cleaner.kind.shadercache · Internal drive" }));
+    expect(screen.getByText("cleaner.force.warning")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "cleaner.cleanSelection" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.force.accept" }));
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.cleanSelection" }));
+    expect(c.prepare).toHaveBeenLastCalledWith(["first"], ["first"]);
+    view.unmount();
+    render(<SteamCleanerView controller={controller({ state: state({ entries: [protectedEntry("second")] }) })} />);
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.gameDetails Game" }));
+    const checkbox = screen.getByRole("checkbox", { name: "cleaner.kind.shadercache · Internal drive" });
+    fireEvent.click(checkbox);
+    expect(checkbox.getAttribute("aria-checked")).toBe("true");
+    expect(screen.queryByText("cleaner.force.warning")).toBeNull();
+    expect(screen.getByText("cleaner.force.reason.activity_unknown")).toBeTruthy();
+    fireEvent.click(checkbox);
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+  });
+  it("cancelling the warning neither selects nor acknowledges it", () => {
+    render(<SteamCleanerView controller={controller({ state: state({ entries: [protectedEntry("protected")] }) })} />);
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.gameDetails Game" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "cleaner.kind.shadercache · Internal drive" }));
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.cancel" }));
+    expect(cleanerForceSession.acknowledged).toBe(false);
+    expect(screen.queryByRole("button", { name: "cleaner.cleanSelection" })).toBeNull();
+  });
+});
+
+it("dismisses other pending warnings once the session warning is accepted", () => {
+  render(<SteamCleanerView controller={controller({ state: state({ entries: [
+    entry("a", { blocked_reason: "activity_unknown", can_force: true }),
+    entry("b", { kind: "compatdata", blocked_reason: "runtime", can_force: true }),
+  ] }) })} />);
+  fireEvent.click(screen.getByRole("button", { name: "cleaner.gameDetails Game" }));
+  const cache = screen.getByRole("checkbox", { name: "cleaner.kind.shadercache · Internal drive" });
+  const prefix = screen.getByRole("checkbox", { name: "cleaner.kind.compatdata · Internal drive" });
+  fireEvent.click(cache);
+  fireEvent.click(prefix);
+  expect(screen.getAllByText("cleaner.force.warning")).toHaveLength(2);
+  fireEvent.click(screen.getAllByRole("button", { name: "cleaner.force.accept" })[0]);
+  expect(screen.queryByText("cleaner.force.warning")).toBeNull();
+  fireEvent.click(prefix);
+  expect(prefix.getAttribute("aria-checked")).toBe("true");
 });

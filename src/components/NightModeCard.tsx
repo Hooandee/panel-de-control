@@ -23,7 +23,7 @@ export const NightModeCard: FC<Props> = ({ state, onChange }) => {
         minWidth: 22, padding: "2px 6px", textAlign: "center",
         borderRadius: theme.radius.sm, background: theme.color.surfaceRaised,
         boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-        color: theme.color.textPrimary, fontSize: theme.font.body, cursor: "pointer",
+        color: theme.color.textPrimary, fontSize: "var(--pdc-display-label, 13px)", cursor: "pointer",
       }}
       onActivate={onClick} onClick={onClick}
     >
@@ -41,7 +41,7 @@ export const NightModeCard: FC<Props> = ({ state, onChange }) => {
       btn(sign < 0 ? "−" : "+", () => onChange({ [key]: stepMinutes(value, sign, size) }));
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: theme.space.sm }}>
-        <span style={{ flex: 1, fontSize: theme.font.caption, color: theme.color.textMuted }}>{label}</span>
+        <span style={{ flex: 1, fontSize: "var(--pdc-display-caption, 11px)", color: theme.color.textMuted }}>{label}</span>
         {step(-1, 60)}{num(hh)}{step(1, 60)}
         <span style={{ color: theme.color.textMuted }}>:</span>
         {step(-1, 15)}{num(mm)}{step(1, 15)}
@@ -50,7 +50,7 @@ export const NightModeCard: FC<Props> = ({ state, onChange }) => {
   };
 
   return (
-    <div style={{ ...theme.card, padding: theme.space.md, margin: `${theme.space.sm}px 0`, overflow: "hidden" }}>
+    <div style={{ ...theme.card, padding: "var(--pdc-display-padding, 12px)", margin: `${theme.space.sm}px 0`, overflow: "hidden" }}>
       <ToggleField
         label={t("display.night")}
         description={t("display.night.desc")}
@@ -62,7 +62,7 @@ export const NightModeCard: FC<Props> = ({ state, onChange }) => {
       {state.enabled && (
         <>
           <div style={{ marginTop: theme.space.sm }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--pdc-display-caption, 11px)", color: theme.color.textMuted }}>
               <LuMoon size={13} />
               <span>{t("display.night.warmth")}</span>
               <span style={{ marginLeft: "auto", color: theme.color.textPrimary, fontWeight: 700 }}>{state.warmth}</span>
@@ -85,7 +85,7 @@ export const NightModeCard: FC<Props> = ({ state, onChange }) => {
           )}
 
           <div style={{
-            marginTop: theme.space.sm, fontSize: theme.font.caption,
+            marginTop: theme.space.sm, fontSize: "var(--pdc-display-caption, 11px)",
             color: state.active ? theme.color.accent : theme.color.textMuted,
           }}>
             {state.active ? t("display.night.on_now") : t("display.night.off_now")}

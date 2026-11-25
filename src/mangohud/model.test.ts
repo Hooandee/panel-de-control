@@ -73,6 +73,15 @@ describe("previewRows", () => {
     }
   });
 
+  it("leaves out metrics the machine cannot read", () => {
+    const rows = previewRows(
+      { ...DEFAULT_MODEL, items: metrics("cpu", "cpu_power", "gpu", "gpu_power") },
+      {},
+      ["cpu_power", "gpu_power"],
+    );
+    expect(rows.map((r) => (r.kind === "group" ? r.cells : null))).toEqual([["41%"], ["74%"]]);
+  });
+
   it("keeps non-mergeable metrics (fps, ram) as their own lines", () => {
     const rows = previewRows({ ...DEFAULT_MODEL, items: metrics("fps", "ram") });
     expect(rows.map((r) => r.kind)).toEqual(["line", "line"]);
@@ -284,8 +293,8 @@ describe("pdc (Panel de Control) metrics", () => {
     const pdc = GROUPS.find((g) => g.key === "pdc");
     expect(pdc?.ids).toEqual([
       "pdc_tdp", "pdc_tdp_learn", "pdc_auto_tdp", "pdc_fan", "pdc_fan_rpm", "pdc_eco",
-      "pdc_profile", "pdc_power", "pdc_charge", "pdc_bat_health", "pdc_smt", "pdc_boost",
-      "pdc_cores", "pdc_gpu_clock", "pdc_model",
+      "pdc_profile", "pdc_power", "pdc_charge", "pdc_bat_health", "pdc_bat_power",
+      "pdc_bat_time", "pdc_smt", "pdc_boost", "pdc_cores", "pdc_gpu_clock", "pdc_model",
     ]);
   });
   it("renders a pdc metric with the latest honest backend value", () => {
@@ -397,5 +406,20 @@ describe("catalog + presets + groups", () => {
 
     expect(matchingPresetKey(items, presets)).toBe("balanced");
     expect(matchingPresetKey(metrics("gpu", "fps"), presets)).toBeNull();
+  });
+});
+
+describe("frametime graph", () => {
+  it("is opt-in and independent of the numeric frametime and FPS", () => {
+    expect(DEFAULT_MODEL.items).not.toContainEqual({ kind: "metric", id: "frame_timing" });
+    const items = addMetricItem([], "frame_timing");
+    expect(items).toEqual([{ kind: "metric", id: "frame_timing" }]);
+    expect(addMetricItem(items, "frame_timing")).toEqual(items);
+    expect(toggleMetricItem(items, "frame_timing")).toEqual([]);
+  });
+  it("keeps graph order and uses the existing frametime colour", () => {
+    const model = { ...DEFAULT_MODEL, colors: { ...DEFAULT_MODEL.colors, frametime: "123456" }, items: metrics("fps", "frame_timing", "gpu") };
+    expect(previewRows(model).map(row => row.kind)).toEqual(["line", "graph", "group"]);
+    expect(previewRows(model)[1]).toMatchObject({ kind: "graph", color: "#123456" });
   });
 });

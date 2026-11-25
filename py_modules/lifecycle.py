@@ -4,6 +4,7 @@ import os
 import time
 from collections import deque
 
+MIN_SUSPEND_S = 0.5
 _CHARGER_TYPES = ("Mains", "USB")
 
 
@@ -37,10 +38,10 @@ def _read_wakeup_count(root="/"):
         with open(os.path.join(root, "sys/power/wakeup_count")) as f:
             return int(f.read().strip())
     except (OSError, ValueError):
-        return 0
+        return None
 
 
-def _read_suspend_time():
+def read_suspend_time():
     try:
         return (
             time.clock_gettime(time.CLOCK_BOOTTIME)
@@ -70,7 +71,6 @@ class LifecycleManager:
     _AC_UNSTABLE_WINDOW_S = 300.0
     _AC_UNSTABLE_MIN_CHANGES = 6
     _AC_UNSTABLE_QUIET_S = 600.0
-    _MIN_SUSPEND_S = 0.5
     _SUSPEND_EVIDENCE_MAX_AGE_S = 10.0
 
     def __init__(self, apply_cb, root="/", wakeup_delay=4.0, interval=2.0,
@@ -85,10 +85,11 @@ class LifecycleManager:
         self._interval = interval
         self._read_wakeup = read_wakeup or (lambda: _read_wakeup_count(root))
         self._read_ac = read_ac or (lambda: read_on_ac(root))
-        self._read_suspend = read_suspend or _read_suspend_time
+        self._read_suspend = read_suspend or read_suspend_time
         self._event_cb = event_cb
         self._last_wakeup = None
         self._last_suspend = None
+        self._observed_suspend = None
         self._suspend_evidence_since = None
         self._suspend_clock_available = False
         self._last_ac = None
@@ -106,7 +107,7 @@ class LifecycleManager:
         self._poll_failures = 0
         self._last_poll_failure = None
         self._last_event = None
-        self._pending = []        # times for the full re-apply (base resume delay)
+        self._resume_apply_at = None
         self._pending_light = []  # times for the TDP-only settle-retries
         self._pending_ac_light = []  # AC settle-retries, dropped when a burst defers them
         self._task = None
@@ -149,7 +150,7 @@ class LifecycleManager:
                 if self._last_poll_failure is not None
                 else None
             ),
-            "pending_full_reapplies": len(self._pending),
+            "pending_full_reapplies": int(self._resume_apply_at is not None),
             "pending_tdp_reasserts": len(self._pending_light) + len(self._pending_ac_light),
             "last_event": (
                 dict(self._last_event)
@@ -183,12 +184,24 @@ class LifecycleManager:
         if self._is_logarithmic_sample(self._poll_failures):
             self._emit("poll_failed", **failure)
 
-    def _read_input(self, stage, reader):
-        try:
-            return True, reader()
-        except Exception as exc:  # noqa: BLE001 - one bad reader must not kill the poller
-            self._record_poll_failure(stage, exc)
-            return False, None
+    def _sample_inputs(self):
+        samples = []
+        for stage, reader in (
+            ("read_wakeup", self._read_wakeup),
+            ("read_ac", self._read_ac),
+            ("read_suspend", self._read_suspend),
+        ):
+            try:
+                samples.append((stage, True, reader()))
+            except Exception as exc:  # noqa: BLE001 - one bad reader must not kill the poller
+                samples.append((stage, False, exc))
+        return samples
+
+    def _accept_sample(self, stage, ok, value):
+        if ok:
+            return True, value
+        self._record_poll_failure(stage, value)
+        return False, None
 
     def _fire_due(self, pending, cb, now, operation, ac):
         """Fire cb once (with live AC) if any scheduled time is due; return the times left."""
@@ -221,37 +234,18 @@ class LifecycleManager:
             self._ac_unstable_episodes += 1
             self._emit("ac_unstable", transitions=len(self._ac_changes))
         recent = sum(1 for t in self._ac_changes if now - t <= self._AC_FLAP_WINDOW_S)
-        return recent >= self._AC_FLAP_MIN_CHANGES or self._ac_stable_at is not None
-
-    def check(self, now, wall=None):
-        wakeup_ok, wc = self._read_input("read_wakeup", self._read_wakeup)
-        ac_ok, ac = self._read_input("read_ac", self._read_ac)
-        suspend_ok, suspend_time = self._read_input(
-            "read_suspend", self._read_suspend
+        return recent >= self._AC_FLAP_MIN_CHANGES or (
+            self._ac_stable_at is not None and self._ac_stable_at > now
         )
-        if not wakeup_ok or not ac_ok:
-            return
-        if not suspend_ok:
-            suspend_time = None
-        self._suspend_clock_available = suspend_time is not None
-        # initialize on first observation (no event)
-        if self._last_wakeup is None:
-            self._last_wakeup, self._last_ac = wc, ac
-            self._last_suspend = suspend_time
-            self._emit(
-                "baseline",
-                on_ac=bool(ac),
-                suspend_clock_available=suspend_time is not None,
-            )
-            return
-        # resume → full re-apply after the base delay, then TDP-only settle retries
+
+    def _observe_wakeup(self, now, wc, suspend_time):
         suspend_delta = (
             suspend_time - self._last_suspend
             if suspend_time is not None and self._last_suspend is not None
             else 0.0
         )
-        wakeup_changed = wc != self._last_wakeup
-        suspend_evidence = suspend_delta >= self._MIN_SUSPEND_S
+        wakeup_changed = wc is not None and self._last_wakeup is not None and wc != self._last_wakeup
+        suspend_evidence = suspend_delta >= MIN_SUSPEND_S
         stale_suspend_evidence = (
             suspend_evidence
             and self._suspend_evidence_since is not None
@@ -267,18 +261,8 @@ class LifecycleManager:
         elif suspend_evidence and not wakeup_changed:
             if self._suspend_evidence_since is None:
                 self._suspend_evidence_since = now
-        if wakeup_changed and suspend_evidence:
-            self._resume_count += 1
-            base = now + self._wakeup_delay
-            self._pending.append(base)
-            self._pending_light.extend(base + d for d in self._RESUME_SETTLE_RETRIES)
-            self._emit(
-                "resume_detected",
-                suspend_seconds=round(suspend_delta, 3),
-                full_delay_seconds=self._wakeup_delay,
-                tdp_settle_retries=len(self._RESUME_SETTLE_RETRIES),
-            )
-        elif wakeup_changed:
+        resumed_now = wakeup_changed and suspend_evidence
+        if wakeup_changed and not resumed_now:
             self._ignored_wakeup_changes += 1
             if self._is_logarithmic_sample(self._ignored_wakeup_changes):
                 reason = (
@@ -293,43 +277,72 @@ class LifecycleManager:
                     reason=reason,
                     ignored_count=self._ignored_wakeup_changes,
                 )
-        self._last_wakeup = wc
+        if wc is not None:
+            self._last_wakeup = wc
         if wakeup_changed:
-            self._last_suspend = suspend_time
             self._suspend_evidence_since = None
-        # AC transition → full re-apply now, then TDP-only re-asserts as the firmware settles
+        if wakeup_changed or self._last_suspend is None:
+            self._last_suspend = suspend_time
+        return suspend_delta if resumed_now else None
+
+    def check(self, now, wall=None, samples=None):
+        if samples is None:
+            samples = self._sample_inputs()
+        (wakeup_ok, wc), (ac_ok, ac), (_, suspend_time) = (
+            self._accept_sample(*sample) for sample in samples
+        )
+        if not wakeup_ok or not ac_ok:
+            return
+        self._suspend_clock_available = suspend_time is not None
+        if suspend_time is not None:
+            self._observed_suspend = suspend_time
+        elif self._suspend_evidence_since is not None:
+            # A missing clock sample cannot invalidate evidence inside the pairing window.
+            suspend_time = self._observed_suspend
+        if self._last_ac is None:
+            self._last_wakeup, self._last_ac = wc, ac
+            self._last_suspend = suspend_time
+            self._emit(
+                "baseline",
+                on_ac=bool(ac),
+                suspend_clock_available=suspend_time is not None,
+            )
+            return
+        suspend_delta = self._observe_wakeup(now, wc, suspend_time)
+        waiting_for_wakeup = self._suspend_evidence_since is not None
+        if suspend_delta is not None:
+            self._resume_count += 1
+            base = now + self._wakeup_delay
+            # A new resume supersedes retries scheduled before this sleep.
+            self._resume_apply_at = base
+            self._pending_light = [base + d for d in self._RESUME_SETTLE_RETRIES]
+            self._pending_ac_light.clear()
+            self._emit(
+                "resume_detected",
+                suspend_seconds=round(suspend_delta, 3),
+                full_delay_seconds=self._wakeup_delay,
+                tdp_settle_retries=len(self._RESUME_SETTLE_RETRIES),
+            )
         if ac != self._last_ac:
             self._last_ac = ac
             self._ac_transition_count += 1
             flapping = self._record_ac_change(now, now if wall is None else wall)
-            if flapping:
-                self._ac_stable_at = now + self._AC_STABLE_S
+            if flapping or waiting_for_wakeup:
+                self._ac_stable_at = now + self._AC_STABLE_S if flapping else now
                 self._pending_ac_light = []
                 self._emit("ac_changed", on_ac=bool(ac), deferred=True)
+            elif self._resume_apply_at is not None:
+                self._emit("ac_changed", on_ac=bool(ac), deferred_to_resume=True)
             else:
-                self._safe(self._apply, ac, "ac-full-reapply")
-                self._pending_ac_light.extend(now + d for d in self._AC_SETTLE_RETRIES)
+                self._apply_charger(now, ac, "ac-full-reapply")
                 self._emit(
                     "ac_changed",
                     on_ac=bool(ac),
                     tdp_settle_retries=len(self._AC_SETTLE_RETRIES),
                 )
-        elif self._ac_stable_at is not None and now >= self._ac_stable_at:
-            self._ac_stable_at = None
-            self._ac_deferred_reapplies += 1
-            self._safe(self._apply, ac, "ac-stable-reapply")
-            self._pending = [t for t in self._pending if now < t]
-            self._pending_ac_light.extend(now + d for d in self._AC_SETTLE_RETRIES)
-            self._emit(
-                "ac_stable",
-                on_ac=bool(ac),
-                deferred_reapplies=self._ac_deferred_reapplies,
-            )
-        # fire scheduled re-applies whose delay has elapsed (re-reading AC live)
-        if self._ac_stable_at is None:
-            self._pending = self._fire_due(
-                self._pending, self._apply, now, "resume-full-reapply", ac
-            )
+        if waiting_for_wakeup:
+            return
+        self._apply_when_ready(now, ac)
         self._pending_light = self._fire_due(
             self._pending_light, self._reassert, now, "tdp-settle-reassert", ac
         )
@@ -337,11 +350,34 @@ class LifecycleManager:
             self._pending_ac_light, self._reassert, now, "tdp-settle-reassert", ac
         )
 
+    def _apply_charger(self, now, ac, operation):
+        self._ac_stable_at = None
+        self._safe(self._apply, ac, operation)
+        self._pending_ac_light.extend(now + d for d in self._AC_SETTLE_RETRIES)
+
+    def _apply_when_ready(self, now, ac):
+        deadlines = (self._resume_apply_at, self._ac_stable_at)
+        due = max((t for t in deadlines if t is not None), default=None)
+        if due is None or now < due:
+            return
+        resume = due == self._resume_apply_at
+        self._resume_apply_at = None
+        if resume:
+            self._ac_stable_at = None
+            self._safe(self._apply, ac, "resume-full-reapply")
+        else:
+            self._apply_charger(now, ac, "ac-stable-reapply")
+            self._ac_deferred_reapplies += 1
+            self._emit("ac_stable", on_ac=bool(ac), deferred_reapplies=self._ac_deferred_reapplies)
+
     async def run(self):
         while True:
             try:
+                # The kernel blocks wakeup_count reads while wakeup events are still
+                # being processed, which right after resume lasts seconds.
+                samples = await asyncio.to_thread(self._sample_inputs)
                 # Monotonic, so a clock jump after wake cannot stall a deferred re-apply.
-                self.check(time.monotonic(), time.time())
+                self.check(time.monotonic(), time.time(), samples)
             except Exception as exc:  # noqa: BLE001 - the poller must never die
                 self._record_poll_failure("check", exc)
             await asyncio.sleep(self._interval)

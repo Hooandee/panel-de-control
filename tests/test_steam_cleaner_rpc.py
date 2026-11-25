@@ -500,3 +500,21 @@ def test_real_empty_scan_survives_reload_in_first_report(plugin, monkeypatch, tm
         assert reloaded._steam_cleaner.get_state()["status"] == "idle"
     finally:
         reloaded._close_steam_cleaner_sync()
+
+
+def test_prepare_rpc_forwards_only_explicit_force_ids(plugin):
+    calls = []
+
+    class Cleaner:
+        def prepare(self, scan_id, entry_ids, force_entry_ids=None):
+            calls.append((scan_id, entry_ids, force_entry_ids))
+            return {'id': 'plan'}
+
+    install_service(plugin, Cleaner())
+
+    async def run():
+        assert await plugin.prepare_steam_cleaner('scan', ['one']) == {'id': 'plan'}
+        assert await plugin.prepare_steam_cleaner('scan', ['one'], ['one']) == {'id': 'plan'}
+
+    asyncio.run(run())
+    assert calls == [('scan', ['one'], None), ('scan', ['one'], ['one'])]

@@ -59,14 +59,14 @@ function renderMarkdown(md: string): ReactNode[] {
           key={i}
           role="heading"
           aria-level={heading[1].length}
-          style={{ fontSize: heading[1].length <= 2 ? 16 : 13, fontWeight: 700, margin: "12px 0 4px" }}
+          style={{ fontSize: heading[1].length <= 2 ? "var(--pdc-modal-heading, 16px)" : "var(--pdc-modal-body, 13px)", fontWeight: 700, margin: "12px 0 4px" }}
         >
           {renderInline(heading[2])}
         </div>,
       );
     } else if (bullet) {
       bullets.push(
-        <li key={i} style={{ fontSize: 12, margin: "3px 0", lineHeight: 1.35 }}>
+        <li key={i} style={{ fontSize: "var(--pdc-modal-caption, 12px)", margin: "3px 0", lineHeight: 1.35 }}>
           {renderInline(bullet[1])}
         </li>,
       );
@@ -75,7 +75,7 @@ function renderMarkdown(md: string): ReactNode[] {
     } else {
       flush(`u${i}`);
       out.push(
-        <div key={i} style={{ fontSize: 12, margin: "4px 0", lineHeight: 1.4 }}>
+        <div key={i} style={{ fontSize: "var(--pdc-modal-caption, 12px)", margin: "4px 0", lineHeight: 1.4 }}>
           {renderInline(line)}
         </div>,
       );
@@ -129,8 +129,8 @@ export function UpdateModal({
 
   return (
     <ModalRoot onCancel={closeModal} onEscKeypress={closeModal}>
-      <FocusRoot style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ fontSize: 20, fontWeight: 700 }}>
+      <FocusRoot settingsModal="update" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ fontSize: "var(--pdc-modal-title, 20px)", fontWeight: 700 }}>
           {t.title} v{latest}
         </div>
         {visibleNotes ? (
@@ -148,7 +148,7 @@ export function UpdateModal({
         )}
         {done ? (
           <>
-            <div style={{ fontSize: 13 }}>
+            <div style={{ fontSize: "var(--pdc-modal-body, 13px)" }}>
               {t.installed} {t.restartNote}
             </div>
             <DialogButton ref={actionRef} onClick={() => restart()}>{t.restart}</DialogButton>
@@ -163,7 +163,7 @@ export function UpdateModal({
           </DialogButton>
         )}
         {result && !result.ok && (
-          <div style={{ fontSize: 12, color: "#ff6b6b" }}>{t.failed}</div>
+          <div style={{ fontSize: "var(--pdc-modal-caption, 12px)", color: "#ff6b6b" }}>{t.failed}</div>
         )}
       </FocusRoot>
     </ModalRoot>

@@ -85,6 +85,11 @@ class _PortEC:
                 return False
 
 
+def _dmi_text(root: str, *fields: str) -> str:
+    dmi = os.path.join(root, "sys/class/dmi/id")
+    return " ".join(_read(os.path.join(dmi, field)) or "" for field in fields).upper()
+
+
 def _read_le16(ec, addr: int) -> Optional[int]:
     """16-bit little-endian EC value across addr,addr+1. None if either read fails."""
     lo = ec.read(addr)
@@ -115,9 +120,7 @@ class LegionGo2FanBackend(SoftwareLoopBackend):
         return self._dmi_ok
 
     def _dmi_matches(self) -> bool:
-        dmi = os.path.join(self._root, "sys/class/dmi/id")
-        text = ((_read(os.path.join(dmi, "product_version")) or "") + " "
-                + (_read(os.path.join(dmi, "product_name")) or "")).upper()
+        text = _dmi_text(self._root, "product_version", "product_name")
         return any(tok in text for tok in _DMI_MATCH)
 
     def _write_target(self, rpm: int) -> bool:
@@ -167,7 +170,7 @@ _GOS_MAX_RPM = 4500
 _GOS_MIN_SPIN = 1536
 # Above this temperature we ignore the user's curve and force full (capped) cooling —
 # a bad curve must never leave the fan slow while hot.
-_GOS_TEMP_GUARD_C = 90
+_TEMP_GUARD_C = 90
 
 
 class LegionGoSFanBackend(LegionGo2FanBackend):
@@ -184,10 +187,7 @@ class LegionGoSFanBackend(LegionGo2FanBackend):
         return self.supported
 
     def _dmi_matches(self) -> bool:
-        dmi = os.path.join(self._root, "sys/class/dmi/id")
-        text = ((_read(os.path.join(dmi, "product_version")) or "") + " "
-                + (_read(os.path.join(dmi, "product_name")) or "") + " "
-                + (_read(os.path.join(dmi, "product_family")) or "")).upper()
+        text = _dmi_text(self._root, "product_version", "product_name", "product_family")
         return any(tok in text for tok in _DMI_MATCH_GOS)
 
     def target_for_temp(self, temp: Optional[float]) -> Optional[int]:
@@ -197,13 +197,176 @@ class LegionGoSFanBackend(LegionGo2FanBackend):
         None (writes nothing) when not driving."""
         if self._points is None or temp is None:
             return None
-        if temp >= _GOS_TEMP_GUARD_C:
+        if temp >= _TEMP_GUARD_C:
             return self.max_rpm  # guardian
         duty = _interp(self._points, temp)
         if duty <= 0:
             return 0  # curve wants the fan off → release to firmware
         frac = min(255, duty) / 255.0
         return int(round(_GOS_MIN_SPIN + frac * (self.max_rpm - _GOS_MIN_SPIN)))
+
+
+# Legion Go original: EC window from the DSDT (GZFD SFAN). SFNT = 1 makes the EC follow
+# the 10-step fan table; a platform profile switch resets it to 0.
+GO1_EC_BASE = 0xFE0B0000
+GO1_SFNT = 0x30E
+GO1_RPM = 0x38B
+GO1_TABLE = 0x930
+GO1_STEPS = 10
+# The table is indexed by a board sensor far cooler than the APU, so the loop writes its
+# duty to the cool steps and the hot steps keep the firmware minimums.
+GO1_HOT_FLOOR = (None, None, None, None, None, 79, 87, 87, 100, 100)
+
+
+_unmapped_logged = False
+
+
+def _log_unmapped(error) -> None:
+    global _unmapped_logged
+    diary = journal.active
+    if diary is not None and not _unmapped_logged:
+        _unmapped_logged = True
+        diary.write("WARNING", "fans", "ec_window_unavailable", error=error)
+
+
+class _MemEC:
+    """Byte access to the EC window through /dev/mem. Never raises. Maps per access:
+    a mapping kept open would fault (SIGBUS) if a driver later claimed the range."""
+
+    def __init__(self, path: str = "/dev/mem", base: int = GO1_EC_BASE, size: int = 0x1000) -> None:
+        self._path = path
+        self._base = base
+        self._size = size
+        self._lock = threading.Lock()
+        self.error: Optional[str] = None
+
+    def _access(self, fn):
+        import mmap
+        with self._lock:
+            fd = os.open(self._path, os.O_RDWR | os.O_SYNC)
+            try:
+                with mmap.mmap(fd, self._size, mmap.MAP_SHARED,
+                               mmap.PROT_READ | mmap.PROT_WRITE, offset=self._base) as window:
+                    return fn(window)
+            finally:
+                os.close(fd)
+
+    def available(self) -> bool:
+        try:
+            self._access(lambda window: window[0])
+            return True
+        except (OSError, ValueError) as error:
+            self.error = type(error).__name__ + ":" + str(getattr(error, "errno", ""))
+            return False
+
+    def read(self, off: int) -> Optional[int]:
+        try:
+            return self._access(lambda window: window[off])
+        except (OSError, ValueError, IndexError):
+            return None
+
+    def write(self, off: int, val: int) -> bool:
+        def poke(window):
+            window[off] = val & 0xFF
+        try:
+            self._access(poke)
+            return True
+        except (OSError, ValueError, IndexError) as error:
+            journal.write_failed(f"legion-go-ec:{off:#05x}", val, error)
+            return False
+
+
+class LegionGoFanTableBackend(SoftwareLoopBackend):
+    """Legion Go original: the loop writes the duty into the firmware table and keeps
+    SFNT = 1; release = SFNT 0."""
+
+    name = "legion-go-ec-table"
+    resettable = False
+
+    def __init__(self, temp_fn: Optional[Callable[[], Optional[float]]] = None,
+                 root: str = "/", ec=None) -> None:
+        super().__init__(temp_fn=temp_fn, root=root)
+        self._dmi_ok = _dmi_text(root, "product_name").strip() == "83E1"
+        self._ec = ec or (_MemEC(os.path.join(root, "dev/mem")) if self._dmi_ok else None)
+        self._mapped = bool(self._dmi_ok and self._ec is not None and self._ec.available())
+        self._reasserts = 0
+        self._last_duty: Optional[int] = None
+        self._drove = False
+        if self._dmi_ok and not self._mapped:
+            _log_unmapped(getattr(self._ec, "error", None))
+
+    def _find_chip(self) -> Optional[str]:
+        return None
+
+    @property
+    def supported(self) -> bool:
+        return self._dmi_ok and self._mapped
+
+    @staticmethod
+    def table_for(duty: int) -> list:
+        return [duty if floor is None else max(duty, floor) for floor in GO1_HOT_FLOOR]
+
+    def target_for_temp(self, temp: Optional[float]) -> Optional[int]:
+        if self._points is None:
+            return None
+        if temp is None or temp >= _TEMP_GUARD_C:
+            return 100
+        return max(0, min(100, round(_interp(self._points, temp) * 100 / 255)))
+
+    @classmethod
+    def _is_ours(cls, table: list) -> bool:
+        return None not in table and table == cls.table_for(table[0])
+
+    def _read_table(self) -> list:
+        return [self._ec.read(GO1_TABLE + i) for i in range(GO1_STEPS)]
+
+    def _apply_once_locked(self) -> bool:
+        duty = self.target_for_temp(self._temp_fn() if self._temp_fn else None)
+        if duty is None:
+            return False
+        table = self.table_for(duty)
+        sfnt = self._ec.read(GO1_SFNT)
+        if sfnt == 1 and self._read_table() == table:
+            self._drive_ok = True
+            self._last_duty = duty
+            return True
+        if self._drive_ok and sfnt != 1:
+            self._reasserts += 1
+            diary = journal.active
+            if diary is not None and self._reasserts & (self._reasserts - 1) == 0:
+                diary.write("INFO", "fans", "table_reset", count=self._reasserts, sfnt=sfnt)
+        # Table before SFNT so taking over never runs a half-written table.
+        for i, pct in enumerate(table):
+            self._ec.write(GO1_TABLE + i, pct)
+        self._ec.write(GO1_SFNT, 1)
+        self._drove = True
+        self._drive_ok = self._ec.read(GO1_SFNT) == 1 and self._read_table() == table
+        self._last_duty = duty if self._drive_ok else None
+        return self._drive_ok
+
+    def _write_target(self, rpm: int) -> bool:
+        return False
+
+    def _release(self) -> bool:
+        self._last_duty = None
+        sfnt = self._ec.read(GO1_SFNT)
+        if sfnt == 0 or (sfnt == 1 and not self._drove and not self._is_ours(self._read_table())):
+            return True  # firmware already in charge, or another tool's table
+        for _ in range(_RELEASE_CONFIRM_RETRIES):
+            if self._ec.write(GO1_SFNT, 0) and self._ec.read(GO1_SFNT) == 0:
+                return True
+        return False
+
+    def _read_rpm(self) -> Optional[int]:
+        return _read_le16(self._ec, GO1_RPM) if self._ec is not None else None
+
+    def diagnostics(self) -> dict:
+        if not self._dmi_ok:
+            return {}
+        if not self._mapped:
+            return {"mapped": False, "error": getattr(self._ec, "error", None)}
+        return {"mapped": True, "sfnt": self._ec.read(GO1_SFNT), "table": self._read_table(),
+                "duty": self._last_duty, "reasserts": self._reasserts}
 
 
 class LegionGoRpmReader:

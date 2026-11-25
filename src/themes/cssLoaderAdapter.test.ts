@@ -683,6 +683,84 @@ describe("CssLoaderAdapter mutations", () => {
     }
   });
 
+  it("waits for a reset that CSS Loader stretches with an unresponsive Steam tab", async () => {
+    vi.useFakeTimers();
+    try {
+      const slow: Array<{ method: string; elapsedMs: number; settled: string }> = [];
+      const call = vi.fn((method: string) => {
+        if (method === "get_themes") return Promise.resolve([RAW_THEME]);
+        if (method === "reset") {
+          return new Promise<{ fails: never[] }>((done) => {
+            setTimeout(() => done({ fails: [] }), 27_000);
+          });
+        }
+        return Promise.reject(new Error(`Unexpected method: ${method}`));
+      });
+      const adapter = new CssLoaderAdapter(host({ call }), {
+        onSlowMutation: (event) => slow.push(event),
+      });
+      const before = await adapter.requireReady();
+
+      const restore = adapter.restoreThemeSnapshot(before);
+      await vi.advanceTimersByTimeAsync(27_000);
+
+      await expect(restore).resolves.toEqual(before);
+      expect(adapter.hasPendingMutation()).toBe(false);
+      expect(slow).toEqual([{ method: "reset", elapsedMs: 27_000, settled: "ok" }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reapplies theme states without reloading CSS Loader", async () => {
+    let enabled = false;
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_themes") return [{ ...RAW_THEME, enabled }];
+      if (method === "set_theme_state") {
+        enabled = true;
+        return { success: true, message: "" };
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const expected = { status: "ready" as const, themes: [{ ...(await adapter.requireReady()).themes[0], enabled: true }] };
+
+    await expect(adapter.reapplyThemeStates(expected)).resolves.toMatchObject({ themes: [{ enabled: true }] });
+    expect(call).not.toHaveBeenCalledWith("reset");
+  });
+
+  it("reports a reset that settles only after the deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const slow: Array<{ method: string; elapsedMs: number; settled: string }> = [];
+      let settleReset!: (value: { fails: never[] }) => void;
+      const call = vi.fn((method: string) => {
+        if (method === "get_themes") return Promise.resolve([RAW_THEME]);
+        if (method === "reset") return new Promise<{ fails: never[] }>((done) => { settleReset = done; });
+        return Promise.reject(new Error(`Unexpected method: ${method}`));
+      });
+      const adapter = new CssLoaderAdapter(host({ call }), {
+        reloadTimeoutMs: 50,
+        onSlowMutation: (event) => slow.push(event),
+      });
+      const before = await adapter.requireReady();
+
+      const failure = expect(adapter.restoreThemeSnapshot(before)).rejects.toMatchObject({ code: "timeout" });
+      await vi.advanceTimersByTimeAsync(50);
+      await failure;
+      expect(slow).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(950);
+      settleReset({ fails: [] });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(adapter.hasPendingMutation()).toBe(false);
+      expect(slow).toEqual([{ method: "reset", elapsedMs: 1_000, settled: "late" }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reconciles a durable rollback after restart and protects every unrelated theme", async () => {
     const themeNew = { ...RAW_THEME, version: "0.6.0" };
     const themeOld = { ...themeNew, version: "0.5.0" };

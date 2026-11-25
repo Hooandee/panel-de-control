@@ -121,6 +121,19 @@ class RemapStore:
         tgt.update(data)
         self._save()
 
+    def rename_sources(self, renames: dict) -> bool:
+        """Move overrides to a renamed source; an override already on the new name wins."""
+        changed = False
+        for overrides in [self._data["global"], *(g["overrides"] for g in self._data["games"].values())]:
+            for old, new in renames.items():
+                if old in overrides:
+                    targets = overrides.pop(old)
+                    overrides.setdefault(new, targets)
+                    changed = True
+        if changed:
+            self._save()
+        return changed
+
     def reset(self, scope: str, appid=None) -> None:
         self._target(scope, appid).clear()
         self._save()

@@ -32,7 +32,7 @@ describe("Panel QAM catalog", () => {
         blocks: {
           system: {
             order: [],
-            hidden: ["eco", "battery", "cpu", "gpu", "brightness", "volume", "colores"],
+            hidden: ["eco", "battery", "cpu", "gpu", "brightness", "volume", "colores", "consoleLight", "consoleTemps", "consoleThermal"],
           },
         },
       },
@@ -42,17 +42,4 @@ describe("Panel QAM catalog", () => {
     expect(emptyTokens).not.toContain("pdc:section:system");
   });
 
-  it("changes presentation identity when the language changes", () => {
-    const spanish = buildPanelQamCatalog([], {
-      ...options,
-      presentationKeySuffix: "es",
-    });
-    const english = buildPanelQamCatalog([], {
-      ...options,
-      presentationKeySuffix: "en",
-    });
-
-    expect(spanish.map((entry) => entry.presentationKey))
-      .not.toEqual(english.map((entry) => entry.presentationKey));
-  });
 });

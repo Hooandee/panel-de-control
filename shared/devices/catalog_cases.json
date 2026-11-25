@@ -9,6 +9,7 @@
     {"id": "legion_go", "input": {"product_name": "83E1", "sys_vendor": "LENOVO", "board_name": ""}, "expected": {"key": "legion_go"}},
     {"id": "legion_go_2_z2_extreme", "input": {"product_name": "83N0", "sys_vendor": "LENOVO", "board_name": ""}, "expected": {"key": "legion_go_2"}},
     {"id": "legion_go_2_z2", "input": {"product_name": "83N1", "sys_vendor": "LENOVO", "board_name": ""}, "expected": {"key": "legion_go_2"}},
+    {"id": "msi_claw_8_ex_ai_plus", "input": {"product_name": "Claw 8 EX AI+ CG3EM", "sys_vendor": "Micro-Star International Co., Ltd.", "board_name": "MS-1T91"}, "expected": {"key": "msi_claw_8_ex_ai_plus"}},
     {"id": "msi_claw_8_ai_plus", "input": {"product_name": "Claw 8 AI+ A2VM", "sys_vendor": "Micro-Star International Co., Ltd.", "board_name": ""}, "expected": {"key": "msi_claw_8_ai_plus"}},
     {"id": "msi_claw_a8", "input": {"product_name": "Claw A8", "sys_vendor": "Micro-Star International Co., Ltd.", "board_name": ""}, "expected": {"key": "msi_claw_a8"}},
     {"id": "dmi_exact_board_match", "input": {"product_name": "ZOTAC GAMING ZONE", "sys_vendor": "ZOTAC", "board_name": "G1A1W"}, "expected": {"key": "zotac_gaming_zone"}},

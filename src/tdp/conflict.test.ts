@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sdtdpActive, tdpConflict, monitorOnly } from "./conflict";
+import { sdtdpActive, tdpConflict, monitorOnly, conflictCardVisible } from "./conflict";
 
 describe("sdtdpActive", () => {
   it("true if installed and not disabled", () => {
@@ -36,6 +36,15 @@ describe("tdpConflict", () => {
     expect(result.rivals.powerstation).toBe(true);
     expect(result.takeoverAvailable).toBe(false);
   });
+  it("offers release, not daemon takeover, for SteamOS Manager", () => {
+    const result = tdpConflict({ ...base, steamOsManagerActive: true });
+    expect(result.conflict).toBe(true);
+    expect(result.rivals.steamOsManager).toBe(true);
+    expect(result.takeoverAvailable).toBe(false);
+    expect(tdpConflict({ ...base, steamOsManagerActive: true, weControl: false }).conflict).toBe(false);
+    expect(tdpConflict({ ...base, steamOsManagerActive: true, tdpSupported: false }).conflict).toBe(false);
+    expect(tdpConflict({ ...base, steamOsManagerActive: true, hhdManaging: true }).takeoverAvailable).toBe(false);
+  });
   it("we don't control (toggle off) -> false", () => {
     expect(tdpConflict({ ...base, sdtdp: true, weControl: false }).conflict).toBe(false);
   });
@@ -65,5 +74,27 @@ describe("monitorOnly", () => {
   });
   it("false when supported and controlling", () => {
     expect(monitorOnly(true, true)).toBe(false);
+  });
+});
+
+describe("conflictCardVisible", () => {
+  const steam = tdpConflict({
+    sdtdp: false, hhdManaging: false, powerstationActive: false,
+    steamOsManagerActive: true, weControl: true, tdpSupported: true,
+  });
+  it("closing the SteamOS Manager card hides it", () => {
+    expect(conflictCardVisible(steam, false)).toBe(true);
+    expect(conflictCardVisible(steam, true)).toBe(false);
+  });
+  it("does not change who controls: the conflict itself stays", () => {
+    expect(steam.conflict).toBe(true);
+    expect(monitorOnly(true, true)).toBe(false);
+  });
+  it("a closed card still shows for another rival", () => {
+    const both = tdpConflict({
+      sdtdp: true, hhdManaging: false, powerstationActive: false,
+      steamOsManagerActive: true, weControl: true, tdpSupported: true,
+    });
+    expect(conflictCardVisible(both, true)).toBe(true);
   });
 });

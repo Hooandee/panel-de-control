@@ -7,6 +7,7 @@ _HWMON = "sys/class/hwmon"
 # Generic ACPI fan chip that usually mirrors a vendor chip with nicer labels.
 _GENERIC_FAN_CHIP = "acpi_fan"
 _PWM_FAN_CHIP = "pwmfan"
+_PS5_FAN_CHIP = "ps5_fan"
 
 # Friendly name + priority for well-known temperature sources (AMD handhelds +
 # Intel). Lower priority shows first. Unknown chips fall back to priority 2 with
@@ -99,6 +100,9 @@ def curate_fans(fans: list[dict]) -> list[dict]:
 
 def _rank_temp(t: dict, desktop: bool = False, device_key: str | None = None) -> tuple[str, int]:
     chip = t["chip"]
+    # The PS5 Tctl is the whole APU and the console has no separate GPU sensor.
+    if device_key == "playstation_5" and chip == "k10temp":
+        return "APU", 0
     raw_label = str(t.get("label", "")).lower()
     if desktop:
         if device_key == "steam_machine" and chip == "acpitz":
@@ -138,24 +142,23 @@ def curate_temps(temps: list[dict], desktop: bool = False, device_key: str | Non
     known = [d for d in decorated if d[0] <= 1]
     chosen = known if known else decorated
 
+    # A GPU sensor with no CPU sensor IS the whole APU (e.g. Steam Deck exposes only
+    # amdgpu, no k10temp): label it "APU" rather than implying discrete graphics.
+    labels = {row["label"] for _prio, _i, row in chosen}
+    if not desktop and "GPU" in labels and "CPU" not in labels:
+        for _prio, _i, row in chosen:
+            if row["label"] == "GPU":
+                row["label"] = "APU"
+
     # Collapse rows sharing a friendly label (e.g. Intel coretemp's Package + every
-    # core all map to "CPU") into one, keeping the hottest — no wall of duplicates.
-    # (dict preserves first-seen order, so no separate order list is needed.)
+    # core all map to "CPU", or the PS5's Tctl and amdgpu edge both read the APU)
+    # into one, keeping the hottest, so there is no wall of duplicates.
     collapsed: dict[str, dict] = {}
     for _prio, _i, row in chosen:
         label = row["label"]
         if label not in collapsed or row["celsius"] > collapsed[label]["celsius"]:
             collapsed[label] = row
-    result = list(collapsed.values())
-
-    # A GPU sensor with no CPU sensor IS the whole APU (e.g. Steam Deck exposes only
-    # amdgpu, no k10temp) — label it "APU" rather than implying discrete graphics.
-    labels = {r["label"] for r in result}
-    if not desktop and "GPU" in labels and "CPU" not in labels:
-        for r in result:
-            if r["label"] == "GPU":
-                r["label"] = "APU"
-    return result
+    return list(collapsed.values())
 
 
 def extract_cpu_gpu_temps(fan_state: dict) -> tuple:
@@ -175,6 +178,10 @@ class FanReader:
         self._root = root
         self._desktop = bool(desktop)
         self._device_key = device_key
+        self._ps5_duty = None
+        if device_key == "playstation_5":
+            from fans.ps5_duty import Ps5FanDuty
+            self._ps5_duty = Ps5FanDuty()
         self._layout_cache: list[tuple] | None = None
         self._layout_until = 0.0
         self._layout_names: tuple[tuple[str, str], ...] = ()
@@ -207,6 +214,10 @@ class FanReader:
             if name == _PWM_FAN_CHIP and not fans:
                 for pwm in sorted(glob.glob(os.path.join(d, "pwm[0-9]"))):
                     fans.append((None, f"Fan {os.path.basename(pwm)[len('pwm'):]}", pwm, None))
+            if name == _PS5_FAN_CHIP and self._ps5_duty is not None and not fans:
+                pwm = os.path.join(d, "pwm1")
+                if os.path.isfile(pwm):
+                    fans.append((None, "Fan 1", pwm, None))
             temps = []
             for inp in sorted(glob.glob(os.path.join(d, "temp*_input"))):
                 n = os.path.basename(inp)[len("temp"):-len("_input")]
@@ -277,13 +288,16 @@ class FanReader:
         for name, fans, temps in self._layout():
             for inp, label, pwm_path, max_rpm in fans:
                 if inp is None:
-                    pwm = _read_int(pwm_path)
+                    ps5_duty = name == _PS5_FAN_CHIP and self._ps5_duty is not None
+                    pwm = self._ps5_duty.read(pwm_path) if ps5_duty else _read_int(pwm_path)
                     if pwm is None:
-                        vanished = vanished or not os.path.exists(pwm_path)
-                        continue
+                        missing = not os.path.exists(pwm_path)
+                        vanished = vanished or missing
+                        if not ps5_duty or missing:
+                            continue
                     raw_fans.append({"chip": name, "label": label, "rpm": None,
-                                     "percent": round(pwm / 255 * 100), "max_rpm": None,
-                                     "duty_only": True})
+                                     "percent": round(pwm / 255 * 100) if pwm is not None else None,
+                                     "max_rpm": None, "duty_only": True})
                     continue
                 rpm = _read_int(inp)
                 if rpm is None:
@@ -328,4 +342,6 @@ class FanReader:
         if self._desktop:
             state["desktop"] = True
             state["device_key"] = self._device_key
+        if self._ps5_duty is not None:
+            state["duty_diagnostics"] = self._ps5_duty.diagnostics()
         return state

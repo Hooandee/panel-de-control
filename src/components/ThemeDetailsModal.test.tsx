@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   showModal: vi.fn(),
   patchLabels: {} as Record<string, unknown>,
+  actions: [] as unknown[],
 }));
 vi.mock("@decky/ui", () => ({
   ModalRoot: ({ children, onCancel, onEscKeypress, bAllowFullSize }: { children?: ReactNode; onCancel?: () => void; onEscKeypress?: () => void; bAllowFullSize?: boolean }) => (
@@ -43,9 +44,12 @@ vi.mock("../themes/useThemePatchLabels", async () => {
   const { useState } = await import("react");
   return { useThemePatchLabels: () => useState(() => mocks.patchLabels)[0] };
 });
+vi.mock("../themes/useThemeActions", () => ({ useThemeActions: () => mocks.actions }));
 vi.mock("./FocusRoot", () => ({ FocusRoot: ({ children }: { children?: ReactNode }) => <div>{children}</div> }));
 
 import { ThemeDetailsModal } from "./ThemeDetailsModal";
+import { themeActionsChannel } from "../themes/runtime/themeActions";
+import { parseThemeActions } from "../themes/themeActions";
 
 function controller(overrides: Partial<ThemesController> = {}): ThemesController {
   const release = {
@@ -105,6 +109,18 @@ function installedController(overrides: Partial<ThemesController> = {}): ThemesC
 describe("ThemeDetailsModal", () => {
   afterEach(() => { cleanup(); mocks.controller = null; mocks.patchLabels = {}; vi.clearAllMocks(); });
 
+  it.each([
+    ["hooandee-duo", true, true, true],
+    ["hooandee-duo", true, false, false],
+    ["hooandee-duo", false, true, false],
+    ["example-theme", true, true, false],
+  ])("limits Dock entry to active installed DUO (%s, %s, %s)", (id, installed, active, visible) => {
+    const base = controller();
+    mocks.controller = controller({ cards: [{ ...base.cards[0], id, installed, active }] });
+    render(<ThemeDetailsModal themeId={id} />);
+    expect(Boolean(screen.queryByRole("button", { name: "Customize Dock" }))).toBe(visible);
+  });
+
   it("offers an early access build only from a file, and names a rejected one", () => {
     const base = controller();
     const installEarly = vi.fn(async () => true);
@@ -116,12 +132,28 @@ describe("ThemeDetailsModal", () => {
     const view = render(<ThemeDetailsModal themeId="example-theme" />);
     expect(view.container.querySelector("[data-pdc-theme-early]")).not.toBeNull();
     expect(screen.queryByText(/themes.action.install$/)).toBeNull();
+    expect(screen.queryByText("themes.early.update")).toBeNull();
     fireEvent.click(screen.getByText(/themes.early.install/));
     expect(installEarly).toHaveBeenCalledWith("example-theme");
     cleanup();
     mocks.controller = { ...mocks.controller!, error: "x", errorCode: "unknown_archive" };
     render(<ThemeDetailsModal themeId="example-theme" />);
     expect(screen.getByText("themes.early.rejected")).toBeTruthy();
+  });
+
+  it("says a newer early build is out and points at installing it from a file", () => {
+    const base = controller();
+    mocks.controller = controller({
+      snapshot: { status: "ready", themes: [] },
+      cards: [{
+        ...base.cards[0], installed: true, installedVersion: "0.2.0", installable: false, targetVersion: undefined,
+        earlyOnly: true, early: { version: "0.3.0", installable: true }, earlyUpdateAvailable: true,
+      }],
+    });
+    render(<ThemeDetailsModal themeId="example-theme" />);
+    expect(screen.getByText("themes.early.update")).toBeTruthy();
+    expect(screen.getByText(/themes.early.install/)).toBeTruthy();
+    expect(screen.queryByText("themes.update.ready")).toBeNull();
   });
 
   it("keeps working when its card disappears while the catalog refreshes", () => {
@@ -622,11 +654,158 @@ describe("ThemeDetailsModal", () => {
     expect(deactivate).toHaveBeenCalledWith("example-theme");
   });
 
+  // PDC-AHYE: the button turned into "Deactivate" under the cursor and the next press, 1.4–2.3 s
+  // after each activation, switched the theme off again before it could be seen.
+  it("holds a fresh activation against the next press, then allows deactivation", async () => {
+    vi.useFakeTimers();
+    try {
+      const deactivate = vi.fn(async () => true);
+      const base = controller();
+      const installedTheme = {
+        id: "Example Theme", name: "Example Theme", displayName: "Example Theme", version: "1.2.3",
+        author: "Example Author", enabled: false, patches: [],
+      };
+      const installedCard = { ...base.cards[0], installed: true, installedVersion: "1.2.3", cssLoaderTheme: installedTheme, versionRelation: "current" as const };
+      const activeController = controller({
+        snapshot: { status: "ready", themes: [{ ...installedTheme, enabled: true }] },
+        cards: [{ ...installedCard, active: true, cssLoaderTheme: { ...installedTheme, enabled: true } }],
+        deactivate,
+      });
+      mocks.controller = controller({
+        snapshot: { status: "ready", themes: [installedTheme] },
+        cards: [installedCard],
+        activate: vi.fn(async () => {
+          mocks.controller = activeController;
+          return true;
+        }),
+        deactivate,
+      });
+      const view = render(<ThemeDetailsModal themeId="example-theme" />);
+
+      fireEvent.click(screen.getByRole("button", { name: "themes.action.activate" }));
+      await act(async () => {});
+      view.rerender(<ThemeDetailsModal themeId="example-theme" />);
+      fireEvent.click(screen.getByRole("button", { name: "themes.action.activated" }));
+      expect(deactivate).not.toHaveBeenCalled();
+
+      await act(async () => { vi.advanceTimersByTime(4000); });
+      fireEvent.click(screen.getByRole("button", { name: "themes.action.deactivate" }));
+      expect(deactivate).toHaveBeenCalledWith("example-theme");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("uses Panel tokens instead of theme-owned chrome variables", () => {
     mocks.controller = controller();
     render(<ThemeDetailsModal themeId="example-theme" />);
     const css = screen.getByTestId("theme-settings-content").querySelector("style")?.textContent ?? "";
     expect(css).not.toContain("--hdg-");
     expect(css).toContain("[data-pdc-theme-settings]");
+  });
+
+  describe("theme actions", () => {
+    const RESET_HOME = parseThemeActions([{
+      id: "reset-home",
+      label: { es: "Restablecer menú principal", en: "Reset home screen" },
+      description: { en: "Back to the original layout." },
+      confirm: { en: "Reset the home screen?" },
+      destructive: true,
+    }, { id: "reload-art", label: { en: "Reload covers" } }]);
+    let unsubscribe: (() => void) | null = null;
+
+    afterEach(() => { unsubscribe?.(); unsubscribe = null; mocks.actions = []; });
+
+    function activeController(): ThemesController {
+      const base = installedController();
+      return { ...base, cards: [{ ...base.cards[0], active: true }] };
+    }
+
+    it("asks before a confirmable action and delivers its id to the theme's runtime only once confirmed", () => {
+      const received: string[] = [];
+      const other = vi.fn();
+      unsubscribe = themeActionsChannel.subscribe("example-theme", (id) => received.push(id));
+      const offOther = themeActionsChannel.subscribe("another-theme", other);
+      mocks.actions = [...RESET_HOME];
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+
+      expect(screen.getByText("themes.actions.title")).toBeTruthy();
+      expect(screen.getByText("Back to the original layout.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Reset home screen" }));
+      const confirmation = screen.getByRole("group", { name: "Reset the home screen?" });
+      expect(received).toEqual([]);
+      fireEvent.click(within(confirmation).getByRole("button", { name: "themes.install.confirm.cancel" }));
+      expect(received).toEqual([]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Reset home screen" }));
+      fireEvent.click(within(screen.getByRole("group", { name: "Reset the home screen?" })).getByRole("button", { name: "Reset home screen" }));
+      expect(received).toEqual(["reset-home"]);
+      expect(other).not.toHaveBeenCalled();
+      expect(screen.getByText("themes.actions.sent")).toBeTruthy();
+      offOther();
+    });
+
+    it("fires an action without a confirmation straight away", () => {
+      const listener = vi.fn();
+      unsubscribe = themeActionsChannel.subscribe("example-theme", listener);
+      mocks.actions = [...RESET_HOME];
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Reload covers" }));
+      expect(listener).toHaveBeenCalledWith("reload-art");
+      expect(screen.queryByRole("group", { name: /Reset/ })).toBeNull();
+    });
+
+    it("always asks before a destructive action, with Panel's wording when the theme gives none", () => {
+      const listener = vi.fn();
+      unsubscribe = themeActionsChannel.subscribe("example-theme", listener);
+      mocks.actions = [...parseThemeActions([{ id: "wipe", label: { en: "Wipe layout" }, destructive: true }])];
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Wipe layout" }));
+      expect(listener).not.toHaveBeenCalled();
+      const confirmation = screen.getByRole("group", { name: "themes.actions.confirm.title" });
+      expect(within(confirmation).getByText("themes.actions.confirm.desc")).toBeTruthy();
+      fireEvent.click(within(confirmation).getByRole("button", { name: "Wipe layout" }));
+      expect(listener).toHaveBeenCalledWith("wipe");
+    });
+
+    it("disables actions and says why while the theme is off or its runtime is not listening", () => {
+      mocks.actions = [...RESET_HOME];
+      mocks.controller = installedController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+      expect((screen.getByRole("button", { name: "Reset home screen" }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText("themes.actions.inactive")).toBeTruthy();
+      cleanup();
+
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+      expect((screen.getByRole("button", { name: "Reset home screen" }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText("themes.actions.notListening")).toBeTruthy();
+
+      act(() => { unsubscribe = themeActionsChannel.subscribe("example-theme", () => {}); });
+      expect((screen.getByRole("button", { name: "Reset home screen" }) as HTMLButtonElement).disabled).toBe(false);
+      expect(screen.queryByText("themes.actions.notListening")).toBeNull();
+    });
+
+    it("says so when the theme's listener throws", () => {
+      unsubscribe = themeActionsChannel.subscribe("example-theme", () => { throw new Error("boom"); });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      mocks.actions = [...RESET_HOME];
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+      fireEvent.click(screen.getByRole("button", { name: "Reload covers" }));
+      expect(screen.getByText("themes.actions.failed")).toBeTruthy();
+      warn.mockRestore();
+    });
+
+    it("shows no actions section for a theme that declares none", () => {
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+      expect(screen.queryByText("themes.actions.title")).toBeNull();
+    });
   });
 });

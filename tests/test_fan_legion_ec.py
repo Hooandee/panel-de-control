@@ -12,7 +12,7 @@ from fans.legion_ec import (
     REG_RPM_83E1,
     _GOS_MAX_RPM,
     _GOS_MIN_SPIN,
-    _GOS_TEMP_GUARD_C,
+    _TEMP_GUARD_C,
     select_legion_rpm_reader,
 )
 from fans.control import select_fan_backend, NullFanBackend
@@ -148,8 +148,8 @@ class TestLegionGoSBackend:
         _dmi_gos(str(tmp_path))
         b = LegionGoSFanBackend(root=str(tmp_path), ec=FakeEC(), temp_fn=lambda: 70.0)
         b.apply_curve_all(CURVE)  # a gentle curve
-        assert b.target_for_temp(_GOS_TEMP_GUARD_C) == _GOS_MAX_RPM
-        assert b.target_for_temp(_GOS_TEMP_GUARD_C + 10) == _GOS_MAX_RPM
+        assert b.target_for_temp(_TEMP_GUARD_C) == _GOS_MAX_RPM
+        assert b.target_for_temp(_TEMP_GUARD_C + 10) == _GOS_MAX_RPM
 
     def test_set_auto_releases(self, tmp_path):
         _dmi_gos(str(tmp_path))

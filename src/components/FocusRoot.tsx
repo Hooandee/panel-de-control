@@ -8,6 +8,7 @@ import { getThemeTokensVersion, subscribeThemeTokens } from "../system/themeToke
 
 interface Props {
   children: ReactNode;
+  settingsModal?: string;
   style?: CSSProperties;
   // The main panel root publishes its document so the plugin-list localizer can
   // reach the surrounding QAM. Modals are separate documents — they must not set it.
@@ -17,7 +18,7 @@ interface Props {
 // Scopes the focus ring to its subtree and injects the sheet into that subtree's own
 // document — the panel and each showModal modal are separate documents, and the
 // plugin's `document` global is neither.
-export const FocusRoot: FC<Props> = ({ children, style, publishDocument }) => {
+export const FocusRoot: FC<Props> = ({ children, style, publishDocument, settingsModal }) => {
   useAccent(); // recolour when the accent changes
   const tokens = useSyncExternalStore(subscribeThemeTokens, getThemeTokensVersion, getThemeTokensVersion);
   const [panelDocument, setPanelDocument] = useState<Document | null>(null);
@@ -38,7 +39,7 @@ export const FocusRoot: FC<Props> = ({ children, style, publishDocument }) => {
   }, [panelDocument, tokens]);
   const vars = { [`--pdc-accent-rgb`]: currentAccentRgb() } as CSSProperties;
   return (
-    <div className={PDC_ROOT} ref={ref} style={{ ...vars, ...style }}>
+    <div className={PDC_ROOT} data-pdc-settings-modal={settingsModal} ref={ref} style={{ ...vars, ...style }}>
       {children}
     </div>
   );

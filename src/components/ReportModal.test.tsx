@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, type ReactNode } from "react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cloneElement, createElement, useState, type ReactElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   modal: null as ReactNode | null,
   submitReport: vi.fn(async () => ({ ok: true, code: "PDC-TEST" })),
   steamDiagnostics: vi.fn(),
+  upscalersContext: vi.fn(() => ({ status: "available", running: { live_appid: "123", stable_appid: "123", name: "Game" } })),
   steamOverlay: {
     snapshot_status: "available",
     resolver: "global",
@@ -22,6 +23,11 @@ const mocks = vi.hoisted(() => ({
       outcome: "not_attempted",
       before_level: null,
       requested_level: null,
+      observed_level: null,
+    },
+    last_deactivation: {
+      outcome: "not_attempted",
+      before_level: null,
       observed_level: null,
     },
   },
@@ -58,7 +64,21 @@ vi.mock("@decky/ui", () => ({
     },
     children,
   ),
-  ModalRoot: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  ModalRoot: ({ children, closeModal, onOK, bOKDisabled }: {
+    children?: ReactNode;
+    closeModal?: () => void;
+    onOK?: () => void;
+    bOKDisabled?: boolean;
+  }) => (
+    <form onSubmit={async (event) => {
+      event.preventDefault();
+      if (bOKDisabled) return;
+      if (onOK) await onOK();
+      closeModal?.();
+    }}>
+      {children}
+    </form>
+  ),
   showModal: (node: ReactNode) => { mocks.modal = node; },
   TextField: ({ value, onChange }: { value: string; onChange: (event: unknown) => void }) => (
     <input value={value} onChange={onChange} />
@@ -74,6 +94,7 @@ vi.mock("../api", () => ({
   submitReport: mocks.submitReport,
 }));
 
+vi.mock("../report/upscalersContext", () => ({ upscalersReportContext: mocks.upscalersContext }));
 vi.mock("../launch/reportContext", () => ({ launchReportContext: vi.fn(async () => ({})) }));
 vi.mock("../mangohud/steamOverlay", () => ({
   steamOverlay: { diagnostics: mocks.steamDiagnostics },
@@ -83,14 +104,66 @@ vi.mock("../qamDocument", () => ({ getQamDocument: vi.fn(() => document) }));
 vi.mock("./FocusRoot", () => ({ FocusRoot: ({ children }: { children: ReactNode }) => <>{children}</> }));
 
 import { openReportModal } from "./ReportModal";
+import { setUiEventSink } from "../system/uiEvents";
 
 describe("ReportModal request type", () => {
+  it("keeps the draft after keyboard confirmation and sends only from the send button", async () => {
+    const events: unknown[][] = [];
+    setUiEventSink((...args) => events.push(args));
+    openReportModal();
+    const Report = () => {
+      const [closed, setClosed] = useState(false);
+      return closed
+        ? <div>Report closed</div>
+        : cloneElement(mocks.modal as ReactElement<{ closeModal: () => void }>, {
+          closeModal: () => setClosed(true),
+        });
+    };
+    render(<Report />);
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.bug" }));
+    fireEvent.click(screen.getByRole("button", { name: "report.cat.other" }));
+    const text = "Al escribir un reporte con teclado virtual, se cancela el reporte al pulsar intro";
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: text } });
+
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("textbox").closest("form")!);
+    });
+
+    await waitFor(() => expect(screen.getByRole("textbox")).toHaveProperty("value", text));
+    expect(mocks.submitReport).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "report.send" }));
+    await waitFor(() => expect(mocks.submitReport).toHaveBeenCalledWith(
+      ["other"], text, expect.objectContaining({ report_kind: "bug" }),
+    ));
+    fireEvent.click(await screen.findByRole("button", { name: "report.close" }));
+    expect(screen.getByText("Report closed")).toBeTruthy();
+    setUiEventSink(null);
+    expect(events).toContainEqual(["report", "confirm", "{}", true]);
+    expect(events).toContainEqual(["report", "close", "{}", true]);
+    expect(JSON.stringify(events)).not.toContain(text);
+  });
+
+  it("submits Escaladores with its separate running-game context", async () => {
+    openReportModal();
+    render(mocks.modal);
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.bug" }));
+    fireEvent.click(screen.getByRole("button", { name: "report.cat.upscalers" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "FSR does not activate" } });
+    fireEvent.click(screen.getByRole("button", { name: "report.send" }));
+    await waitFor(() => expect(mocks.submitReport).toHaveBeenCalledWith(
+      ["upscalers"], "FSR does not activate", expect.objectContaining({
+        upscalers: { status: "available", running: { live_appid: "123", stable_appid: "123", name: "Game" } },
+      }),
+    ));
+  });
+
   beforeEach(() => {
     mocks.steamDiagnostics.mockReturnValue(mocks.steamOverlay);
   });
 
   afterEach(() => {
     cleanup();
+    setUiEventSink(null);
     mocks.modal = null;
     mocks.submitReport.mockClear();
     mocks.steamDiagnostics.mockReset();
@@ -202,4 +275,16 @@ describe("ReportModal request type", () => {
       expect.objectContaining({ report_kind: "bug" }),
     ));
   });
+  it("submits the selected Ambiente category without requiring Other", async () => {
+    openReportModal();
+    render(mocks.modal);
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.bug" }));
+    fireEvent.click(screen.getByRole("button", { name: "report.cat.ambient" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "El fondo no aparece" } });
+    fireEvent.click(screen.getByRole("button", { name: "report.send" }));
+    await waitFor(() => expect(mocks.submitReport).toHaveBeenCalledWith(
+      ["ambient"], "El fondo no aparece", expect.objectContaining({ report_kind: "bug" }),
+    ));
+  });
+
 });

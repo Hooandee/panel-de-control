@@ -1,11 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const performance = vi.hoisted(() => ({
+  profile: "global" as "global" | "game" | "unknown",
+  notify: () => undefined as void,
+  unsubscribe: vi.fn(),
+  read: vi.fn(),
+}));
+vi.mock("../steam/performanceRuntime", () => ({
+  readSteamPerformanceProfile: (appid: number | null) => {
+    performance.read(appid);
+    return performance.profile;
+  },
+  subscribeSteamPerformanceState: (notify: () => void) => {
+    performance.notify = notify;
+    return performance.unsubscribe;
+  },
+}));
 const setCurrentGame = vi.hoisted(() => vi.fn());
 const gameState = vi.hoisted(() => ({
   current: null as { appid: string; liveAppid: number; name: string } | null,
 }));
 
+const syncHud = vi.hoisted(() => vi.fn());
 vi.mock("../api", () => ({ setCurrentGame }));
+vi.mock("../mangohud/hudGameSync", () => ({ syncSteamOverlayForGame: syncHud }));
 vi.mock("./runningGame", () => ({
   readRunningGame: () => gameState.current,
 }));
@@ -41,8 +59,13 @@ describe("startGameWatcher", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     gameState.current = null;
+    performance.profile = "global";
+    performance.unsubscribe.mockClear();
+    performance.read.mockClear();
     setCurrentGame.mockReset();
     setCurrentGame.mockResolvedValue(undefined);
+    syncHud.mockReset();
+    syncHud.mockResolvedValue(undefined);
     notifyLifetime = () => undefined;
     unregisterLifetime = vi.fn();
     vi.stubGlobal("SteamClient", {
@@ -61,6 +84,71 @@ describe("startGameWatcher", () => {
     vi.unstubAllGlobals();
   });
 
+  it("reports Steam profile changes for the same game through the persistent listener", async () => {
+    gameState.current = { appid: "shortcut", liveAppid: 101, name: "Game A" };
+    performance.profile = "game";
+    const stop = startGameWatcher();
+    await flushPromises();
+    expect(performance.read).toHaveBeenCalledWith(101);
+    performance.profile = "global";
+    performance.notify();
+    await flushPromises();
+    expect(setCurrentGame.mock.calls).toEqual([
+      ["shortcut", "Game A", "active"],
+      ["shortcut", "Game A", "inactive"],
+    ]);
+    stop();
+    performance.profile = "game";
+    performance.notify();
+    await flushPromises();
+    expect(setCurrentGame).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets the HUD follow the game once the backend knows it, and again on exit", async () => {
+    gameState.current = { appid: "shortcut", liveAppid: 101, name: "Game A" };
+    const stop = startGameWatcher();
+    await flushPromises();
+    expect(syncHud).toHaveBeenCalledTimes(1);
+    gameState.current = null;
+    notifyLifetime();
+    await flushPromises();
+    expect(syncHud).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
+  it("polls unknown profile recovery without requiring an open panel", async () => {
+    gameState.current = game("101", "Game A");
+    performance.profile = "unknown";
+    const stop = startGameWatcher();
+    await flushPromises();
+    performance.profile = "game";
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(setCurrentGame.mock.calls).toEqual([
+      ["101", "Game A", "unknown"],
+      ["101", "Game A", "active"],
+    ]);
+    stop();
+  });
+
+  it("repairs a profile observation after an expired request completes late", async () => {
+    const first = deferred();
+    setCurrentGame.mockImplementationOnce(() => first.promise);
+    gameState.current = game("101", "Game A");
+    performance.profile = "game";
+    const stop = startGameWatcher();
+    performance.profile = "global";
+    performance.notify();
+    await vi.advanceTimersByTimeAsync(30000);
+    first.resolve();
+    await flushPromises();
+    expect(setCurrentGame.mock.calls).toEqual([
+      ["101", "Game A", "active"],
+      ["101", "Game A", "inactive"],
+      ["101", "Game A", "inactive"],
+    ]);
+    stop();
+  });
+
   it("confirms startup idle after allowing Router to hydrate", async () => {
     const stop = startGameWatcher();
     await flushPromises();
@@ -69,7 +157,7 @@ describe("startGameWatcher", () => {
     await vi.advanceTimersByTimeAsync(1999);
     expect(setCurrentGame).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
-    expect(setCurrentGame.mock.calls).toEqual([[null, null]]);
+    expect(setCurrentGame.mock.calls).toEqual([[null, null, "inactive"]]);
     stop();
   });
 
@@ -83,8 +171,8 @@ describe("startGameWatcher", () => {
     await vi.advanceTimersByTimeAsync(2000);
 
     expect(setCurrentGame.mock.calls).toEqual([
-      ["101", "Game A"],
-      [null, null],
+      ["101", "Game A", "inactive"],
+      [null, null, "inactive"],
     ]);
     stop();
   });
@@ -101,8 +189,8 @@ describe("startGameWatcher", () => {
     await flushPromises();
 
     expect(setCurrentGame.mock.calls).toEqual([
-      ["101", "Game A"],
-      [null, null],
+      ["101", "Game A", "inactive"],
+      [null, null, "inactive"],
     ]);
     stop();
   });
@@ -119,9 +207,9 @@ describe("startGameWatcher", () => {
     await vi.advanceTimersByTimeAsync(2000);
 
     expect(setCurrentGame.mock.calls).toEqual([
-      ["101", "Game A"],
-      [null, null],
-      [null, null],
+      ["101", "Game A", "inactive"],
+      [null, null, "inactive"],
+      [null, null, "inactive"],
     ]);
     stop();
   });
@@ -139,9 +227,9 @@ describe("startGameWatcher", () => {
     await vi.advanceTimersByTimeAsync(2000);
 
     expect(setCurrentGame.mock.calls).toEqual([
-      ["101", "Game A"],
-      [null, null],
-      [null, null],
+      ["101", "Game A", "inactive"],
+      [null, null, "inactive"],
+      [null, null, "inactive"],
     ]);
     stop();
   });
@@ -155,12 +243,12 @@ describe("startGameWatcher", () => {
     gameState.current = null;
     notifyLifetime();
     await vi.advanceTimersByTimeAsync(29999);
-    expect(setCurrentGame.mock.calls).toEqual([["101", "Game A"]]);
+    expect(setCurrentGame.mock.calls).toEqual([["101", "Game A", "inactive"]]);
     await vi.advanceTimersByTimeAsync(1);
 
     expect(setCurrentGame.mock.calls).toEqual([
-      ["101", "Game A"],
-      [null, null],
+      ["101", "Game A", "inactive"],
+      [null, null, "inactive"],
     ]);
     stop();
   });
@@ -179,9 +267,9 @@ describe("startGameWatcher", () => {
     await flushPromises();
 
     expect(setCurrentGame.mock.calls).toEqual([
-      ["101", "Game A"],
-      [null, null],
-      [null, null],
+      ["101", "Game A", "inactive"],
+      [null, null, "inactive"],
+      [null, null, "inactive"],
     ]);
     stop();
   });
@@ -196,8 +284,8 @@ describe("startGameWatcher", () => {
     await vi.advanceTimersByTimeAsync(120000);
 
     expect(setCurrentGame.mock.calls).toEqual([
-      ["101", "Game A"],
-      [null, null],
+      ["101", "Game A", "inactive"],
+      [null, null, "inactive"],
     ]);
     stop();
   });
@@ -210,7 +298,7 @@ describe("startGameWatcher", () => {
     gameState.current = game("101", "Game A");
     await vi.advanceTimersByTimeAsync(2000);
 
-    expect(setCurrentGame.mock.calls).toEqual([["101", "Game A"]]);
+    expect(setCurrentGame.mock.calls).toEqual([["101", "Game A", "inactive"]]);
     stop();
   });
 
@@ -228,7 +316,7 @@ describe("startGameWatcher", () => {
     gameState.current = game("101", "Game A");
     await vi.advanceTimersByTimeAsync(2000);
 
-    expect(setCurrentGame.mock.calls).toEqual([["101", "Game A"]]);
+    expect(setCurrentGame.mock.calls).toEqual([["101", "Game A", "inactive"]]);
     stop();
   });
 
@@ -241,7 +329,7 @@ describe("startGameWatcher", () => {
     notifyLifetime();
     await vi.advanceTimersByTimeAsync(6000);
 
-    expect(setCurrentGame.mock.calls).toEqual([["101", "Game A"]]);
+    expect(setCurrentGame.mock.calls).toEqual([["101", "Game A", "inactive"]]);
     stop();
   });
 
@@ -258,7 +346,8 @@ describe("startGameWatcher", () => {
     await flushPromises();
     await vi.advanceTimersByTimeAsync(2000);
 
-    expect(setCurrentGame.mock.calls).toEqual([["101", "Game A"]]);
+    expect(setCurrentGame.mock.calls).toEqual([["101", "Game A", "inactive"]]);
     expect(unregisterLifetime).toHaveBeenCalledOnce();
+    expect(performance.unsubscribe).toHaveBeenCalledOnce();
   });
 });

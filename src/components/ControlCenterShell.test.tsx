@@ -304,11 +304,29 @@ describe("ControlCenterShell", () => {
     });
 
     it("does not claim focus for initial rendering or external mode changes", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const steamFocus = document.createElement("button");
+      steamFocus.className = "gpfocus";
+      document.body.append(steamFocus);
       renderShell();
       flushFrames();
       act(() => setShellMode("detail"));
       flushFrames();
+      act(() => { vi.advanceTimersByTime(1000); });
       expect(focusNavigation.focus).not.toHaveBeenCalled();
+      steamFocus.remove();
+      vi.useRealTimers();
+    });
+
+    it("focuses the section when Steam left nothing focused on open", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      act(() => setShellMode("detail"));
+      renderShell();
+      flushFrames();
+      expect(focusNavigation.focus).not.toHaveBeenCalled();
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(focusNavigation.focus).toHaveBeenCalled();
+      vi.useRealTimers();
     });
 
     it("does not focus a destination after the shell unmounts", () => {

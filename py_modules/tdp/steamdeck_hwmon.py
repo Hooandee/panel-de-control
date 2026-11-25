@@ -39,6 +39,7 @@ def _label(value):
 class SteamDeckHwmonBackend(TDPBackend):
     name = "steamdeck-hwmon"
     primary_rail = "pl2"
+    seeds_from_readback = True
     low_battery_hold_strategy = "primary"
     cap_boost_to_active = True
     manual_boost_to_driver_max = True

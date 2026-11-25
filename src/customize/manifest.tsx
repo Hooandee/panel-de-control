@@ -1,5 +1,11 @@
 import { ReactNode } from "react";
-import { LuActivity, LuAudioLines, LuBatteryCharging, LuBatteryFull, LuChartSpline, LuCpu, LuFan, LuGamepad2, LuGauge, LuGrid3X3, LuHardDrive, LuHeartPulse, LuImage, LuLayoutDashboard, LuLeaf, LuLightbulb, LuMemoryStick, LuMonitorCog, LuMoon, LuPaintbrush, LuPalette, LuPuzzle, LuReplace, LuRocket, LuSettings, LuSlidersHorizontal, LuSlidersVertical, LuSparkles, LuSun, LuThermometer, LuVolume2, LuWind } from "react-icons/lu";
+import {
+  LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
+  LuLeaf, LuBatteryCharging, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
+  LuLightbulb, LuLamp, LuShieldAlert, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
+  LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket, LuLayoutDashboard, LuPaintbrush, LuPuzzle, LuHardDrive, LuScaling,
+  LuMonitorCog, LuImage, LuRadio, LuGrid3X3,
+} from "react-icons/lu";
 import type { SectionIcon } from "../sections/types";
 import type { LearningTag } from "../learning/logic";
 import type { ModuleId } from "./moduleLogic";
@@ -45,6 +51,7 @@ export const TABS: TabMeta[] = [
   { id: "mandos", labelKey: "nav.mandos", descriptionKey: "nav.mandos.desc", accent: "#64609b", icon: (size) => <LuGamepad2 size={size} /> },
   { id: "hud", labelKey: "nav.hud", descriptionKey: "nav.hud.desc", accent: "#3e7e5e", icon: (size) => <LuLayoutDashboard size={size} /> },
   { id: "params", labelKey: "nav.params", descriptionKey: "nav.params.desc", accent: "#955e44", icon: (size) => <LuRocket size={size} /> },
+  { id: "upscalers", labelKey: "nav.upscalers", descriptionKey: "nav.upscalers.desc", accent: "#b0533f", icon: (size) => <LuScaling size={size} /> },
   { id: "cleaner", labelKey: "nav.cleaner", descriptionKey: "nav.cleaner.desc", accent: "#507e86", icon: (size) => <LuHardDrive size={size} /> },
   { id: "accessories", labelKey: "nav.accessories", descriptionKey: "nav.accessories.desc", accent: "#7a5fb0", icon: (size) => <LuGrid3X3 size={size} /> },
   { id: "ambient", labelKey: "nav.ambient", descriptionKey: "nav.ambient.desc", accent: "#5f7fb0", icon: (size) => <LuImage size={size} /> },
@@ -74,6 +81,9 @@ export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
     { id: "brightness", labelKey: "system.brightness", icon: <LuSun size={ICON} /> },
     { id: "volume", labelKey: "system.volume", icon: <LuVolume2 size={ICON} /> },
     { id: "colores", labelKey: "system.rgb.title", icon: <LuLightbulb size={ICON} /> },
+    { id: "consoleLight", labelKey: "console.light.title", icon: <LuLamp size={ICON} /> },
+    { id: "consoleTemps", labelKey: "console.temps.title", icon: <LuThermometer size={ICON} /> },
+    { id: "consoleThermal", labelKey: "console.guard.title", icon: <LuShieldAlert size={ICON} /> },
   ],
   fans: [
     { id: "fanRpm", labelKey: "customize.block.fanRpm", icon: <LuWind size={ICON} />, learningTags: ["fans"] },
@@ -138,7 +148,11 @@ export const PICKABLE_BLOCKS: Record<string, BlockDef[]> = {
   ...SECTION_BLOCKS,
   power: [
     { id: "tdp", labelKey: "customize.block.tdp", icon: <LuGauge size={ICON} />, handheldOnly: true, learningTags: ["tdp"] },
+    { id: "tdpWatts", labelKey: "customize.block.tdpWatts", icon: <LuGauge size={ICON} />, handheldOnly: true, learningTags: ["tdp"] },
     ...SECTION_BLOCKS.power,
+  ],
+  ambient: [
+    { id: "ambientPlayer", labelKey: "ambient.player.title", icon: <LuRadio size={ICON} /> },
   ],
 };
 
@@ -157,8 +171,8 @@ export function pickableBlocksForSection(
   presentIds: string[] | null,
 ): BlockDef[] {
   if (sectionId === "power" && !desktopMode) {
-    const tdp = PICKABLE_BLOCKS.power.find((block) => block.id === "tdp")!;
-    return [tdp, ...customizationBlocks(sectionId, false, presentIds)];
+    const tdpBlocks = PICKABLE_BLOCKS.power.filter((block) => block.id === "tdp" || block.id === "tdpWatts");
+    return [...tdpBlocks, ...customizationBlocks(sectionId, false, presentIds)];
   }
   return customizationBlocks(sectionId, desktopMode, presentIds);
 }

@@ -1,6 +1,8 @@
+import ownedTabFixture from "./qam/fixtures/owned-tab-diagnostics.json";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  adoptStaleActivePlugin,
   callLegacyPluginBackend,
   cleanupOwnedQuickAccessTabs,
   configureQuickAccessTabComposition,
@@ -1456,12 +1458,15 @@ describe("quickAccessTabDiagnostics", () => {
       registry_unique_count: null,
       registry_decky_count: null,
       registry_pdc_count: null,
+      registry_owned_count: null,
       qam_document_available: false,
       qam_document_hidden: null,
       rendered_count: null,
       rendered_unique_count: null,
       rendered_decky_count: null,
       rendered_pdc_count: null,
+      rendered_owned_count: null,
+      rendered_decky_geometry: null,
       panel_root_count: null,
       visible_panel_root_count: null,
       render_adapter_active: false,
@@ -1499,12 +1504,15 @@ describe("quickAccessTabDiagnostics", () => {
       registry_unique_count: 2,
       registry_decky_count: 1,
       registry_pdc_count: 2,
+      registry_owned_count: 0,
       qam_document_available: true,
       qam_document_hidden: false,
       rendered_count: 4,
       rendered_unique_count: 3,
       rendered_decky_count: 2,
       rendered_pdc_count: 1,
+      rendered_owned_count: 0,
+      rendered_decky_geometry: null,
       panel_root_count: 2,
       visible_panel_root_count: 1,
       render_adapter_active: false,
@@ -1512,6 +1520,51 @@ describe("quickAccessTabDiagnostics", () => {
       render_adapter_observed_arrays: 0,
       registration_reason: "hook_unavailable",
     });
+  });
+});
+
+describe("owned QAM diagnostics", () => {
+  it("counts all Panel-owned tabs separately from Home and reports the captured raw Decky geometry", () => {
+    const sectionId = PDC_QAM_TAB_ID + 1;
+    const ownedIds = [PDC_QAM_TAB_ID, sectionId];
+    const host = { __TABS_HOOK_INSTANCE: { tabs: [
+      { id: 999, title: "private-decky-content" },
+      ...ownedIds.map(id => ({ id, __pdcOwner: "panel-de-control", title: "private-view-name" })),
+    ] } };
+    for (const captured of ownedTabFixture.scenarios) {
+      const tabs = [
+        { id: "quickaccess_tab_999", getBoundingClientRect: () => captured.decky_box },
+        ...ownedIds.map(id => ({ id: `quickaccess_tab_${id}` })),
+        ...Array.from({ length: ownedTabFixture.rendered_count - ownedTabFixture.registry_count }, (_, index) => ({ id: `quickaccess_tab_native-alias-${index}` })),
+      ];
+      const doc = {
+        hidden: false,
+        defaultView: { innerWidth: captured.viewport[0], innerHeight: captured.viewport[1] },
+        body: { getBoundingClientRect: () => captured.body_box },
+        querySelectorAll: (selector: string) => selector === ".pdc-root" ? [] : tabs,
+      };
+      const diagnostic = quickAccessTabDiagnostics(host, doc as unknown as Document);
+      expect(diagnostic).toMatchObject({
+        registry_count: ownedTabFixture.registry_count, registry_decky_count: 1,
+        registry_pdc_count: ownedTabFixture.registry_pdc_home_count,
+        registry_owned_count: ownedTabFixture.registry_owned_count,
+        rendered_count: ownedTabFixture.rendered_count, rendered_decky_count: 1,
+        rendered_pdc_count: 1, rendered_owned_count: 2,
+      });
+      expect(diagnostic.rendered_decky_geometry).toEqual({
+        x: expect.any(Number), y: expect.any(Number), width: expect.any(Number), height: expect.any(Number),
+        viewport_width: captured.viewport[0], viewport_height: captured.viewport[1],
+      });
+      expect(diagnostic.rendered_decky_geometry?.height).toBeGreaterThan(0);
+      expect(diagnostic.rendered_decky_geometry?.height).toBeCloseTo(captured.decky_box.height, 3);
+      expect(diagnostic.rendered_decky_geometry?.y).toBeCloseTo(captured.decky_box.y, 3);
+      expect(JSON.stringify(diagnostic)).not.toMatch(/private-|native-alias|526035|999|__pdcOwner|title/);
+      doc.hidden = true;
+      expect(quickAccessTabDiagnostics(host, doc as unknown as Document).rendered_decky_geometry).toBeNull();
+      doc.hidden = false;
+      tabs.push(tabs[0]);
+      expect(quickAccessTabDiagnostics(host, doc as unknown as Document).rendered_decky_geometry).toBeNull();
+    }
   });
 });
 
@@ -1609,5 +1662,54 @@ describe("callLegacyPluginBackend", () => {
       {},
       { DeckyBackend: { call: vi.fn(async () => ({ unexpected: true })) } },
     )).rejects.toThrow("invalid legacy response");
+  });
+});
+
+
+describe("adoptStaleActivePlugin", () => {
+  function hostWith(state: { plugins: { name: string; content: unknown }[]; activePlugin: unknown }) {
+    const setActivePlugin = vi.fn();
+    return { setActivePlugin, host: { DeckyPluginLoader: { deckyState: { publicState: () => state, setActivePlugin } } } };
+  }
+
+  it("replaces a stale copy of this plugin once the new instance is listed", async () => {
+    vi.useFakeTimers();
+    const content = {};
+    const state = { plugins: [] as { name: string; content: unknown }[], activePlugin: { name: "Panel de Control", content: {} } as unknown };
+    const { host, setActivePlugin } = hostWith(state);
+    adoptStaleActivePlugin("Panel de Control", content, host);
+    vi.advanceTimersByTime(300);
+    expect(setActivePlugin).not.toHaveBeenCalled();
+    state.plugins.push({ name: "Panel de Control", content });
+    vi.advanceTimersByTime(300);
+    expect(setActivePlugin).toHaveBeenCalledWith("Panel de Control");
+    vi.useRealTimers();
+  });
+
+  it("never steals focus from another open plugin or an up-to-date view", () => {
+    vi.useFakeTimers();
+    const content = {};
+    const mine = { name: "Panel de Control", content };
+    const other = hostWith({ plugins: [mine], activePlugin: { name: "CSS Loader", content: {} } });
+    adoptStaleActivePlugin("Panel de Control", content, other.host);
+    const fresh = hostWith({ plugins: [mine], activePlugin: mine });
+    adoptStaleActivePlugin("Panel de Control", content, fresh.host);
+    const closed = hostWith({ plugins: [mine], activePlugin: null });
+    adoptStaleActivePlugin("Panel de Control", content, closed.host);
+    vi.advanceTimersByTime(10);
+    expect(other.setActivePlugin).not.toHaveBeenCalled();
+    expect(fresh.setActivePlugin).not.toHaveBeenCalled();
+    expect(closed.setActivePlugin).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("gives up after a while and can be cancelled", () => {
+    vi.useFakeTimers();
+    const { host, setActivePlugin } = hostWith({ plugins: [], activePlugin: { name: "Panel de Control", content: {} } });
+    const cancel = adoptStaleActivePlugin("Panel de Control", {}, host);
+    vi.advanceTimersByTime(20_000);
+    cancel();
+    expect(setActivePlugin).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });

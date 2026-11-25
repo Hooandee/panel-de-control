@@ -366,8 +366,44 @@ def test_gpu_generation():
     assert gpu_generation("intel", "Intel Core Ultra 7 258V") == "intel"
     assert gpu_generation("amd", "AMD Sephiroth") == "rdna2"
     assert gpu_generation("amd", "AMD Van Gogh") == "rdna2"
+    # Panel shows the real CPU model, which on Steam Deck is Valve's APU code, not the family name.
+    assert gpu_generation("amd", "AMD Custom APU 0405") == "rdna2"
+    assert gpu_generation("amd", "AMD Custom APU 0932") == "rdna2"
     assert gpu_generation("amd", "AMD Z1 Extreme") == "rdna3"
     assert gpu_generation("amd", "AMD Ryzen Z2 Go") == "rdna2"
+    # Every handheld chip by its own name, not only the Extreme ones
+    assert gpu_generation("amd", "AMD Ryzen Z1") == "rdna3"
+    assert gpu_generation("amd", "AMD Ryzen Z2") == "rdna3"
+    assert gpu_generation("amd", "AMD Ryzen Z2 Extreme") == "rdna35"
+    assert gpu_generation("amd", "AMD Ryzen AI Z2 Extreme") == "rdna35"
+    assert gpu_generation("amd", "AMD Ryzen Z2 A") == "rdna2"
+    assert gpu_generation("amd", "AMD Ryzen 7 6800U with Radeon Graphics") == "rdna2"
+    assert gpu_generation("amd", "AMD Ryzen 7 7735U") == "rdna2"
+    assert gpu_generation("amd", "AMD Ryzen 7 7840U w/ Radeon 780M Graphics") == "rdna3"
+    assert gpu_generation("amd", "AMD Ryzen 5 7640U") == "rdna3"
+    assert gpu_generation("amd", "AMD Custom APU 1234") == "unknown"
+
+
+def _card(root, index, vendor, device):
+    folder = root / f"sys/class/drm/card{index}/device"
+    folder.mkdir(parents=True)
+    (folder / "vendor").write_text(vendor + "\n")
+    (folder / "device").write_text(device + "\n")
+
+
+@pytest.mark.parametrize(("vendor", "device", "expected"), [
+    ("0x1002", "0x15bf", "rdna3"), ("0x1002", "0x1681", "rdna2"), ("0x1002", "0x150e", "rdna35"),
+    ("0x1002", "0x7550", "rdna4"), ("0x1002", "0x9999", "rdna3"), ("0x8086", "0x64a0", "intel"),
+])
+def test_an_unnamed_chip_falls_back_to_its_gpu_pci_id(tmp_path, vendor, device, expected):
+    from device_registry import gpu_generation
+    _card(tmp_path, 0, vendor, device)
+    assert gpu_generation("amd", "AMD Custom APU 1234", str(tmp_path)) == expected
+
+
+def test_no_gpu_found_stays_unknown(tmp_path):
+    from device_registry import gpu_generation
+    assert gpu_generation("amd", "", str(tmp_path)) == "unknown"
     assert gpu_generation("amd", "AMD Ryzen AI Z2 Extreme") == "rdna35"
     assert gpu_generation("amd", "AMD Ryzen AI 9 HX 370") == "rdna35"
     assert gpu_generation("amd", "AMD Ryzen AI Max+ 395") == "rdna35"
@@ -472,3 +508,48 @@ def test_known_profiles_win_over_desktop_detection(tmp_path):
         (dmi / field).write_text(value)
     (tmp_path / "sys/class/power_supply").mkdir(parents=True)
     assert detect(root=str(tmp_path)).key == "steam_machine"
+
+
+def test_playstation_5_is_detected_by_exact_dmi(tmp_path):
+    prof = _detect_dmi(tmp_path, "PlayStation 5", "Sony Interactive Entertainment")
+    assert prof.key == "playstation_5"
+    assert prof.display_name == "PlayStation 5"
+    assert prof.is_generic is False
+    assert prof.experimental is True
+    assert prof.tdp_presets == ()
+
+
+def test_playstation_5_name_from_another_vendor_stays_generic(tmp_path):
+    assert _detect_dmi(tmp_path, "PlayStation 5", "OTHER").key == "generic"
+
+
+@pytest.mark.parametrize(
+    "product", ("Claw 8 EX AI+ CG3EM", "Claw 8 EX AI+ CG3EM Launch Pack")
+)
+def test_msi_claw_8_ex_is_recognised_by_board(tmp_path, product):
+    profile = _detect_dmi(
+        tmp_path, product, "Micro-Star International Co., Ltd.", "MS-1T91"
+    )
+
+    assert profile.key == "msi_claw_8_ex_ai_plus"
+    assert profile.vendor == "intel"
+    assert profile.experimental is True
+    assert (profile.tdp_min, profile.tdp_default, profile.tdp_max,
+            profile.tdp_max_charger) == (8, 17, 35, 35)
+
+
+def test_msi_claw_8_ai_plus_a2vm_stays_on_its_profile(tmp_path):
+    profile = _detect_dmi(
+        tmp_path, "Claw 8 AI+ A2VM", "Micro-Star International Co., Ltd.", "MS-1T52"
+    )
+
+    assert profile.key == "msi_claw_8_ai_plus"
+
+
+def test_reports_say_where_the_gpu_generation_came_from(tmp_path):
+    from device_registry import gpu_facts
+    _card(tmp_path, 0, "0x1002", "0x15c8")
+    assert gpu_facts("amd", "AMD Ryzen Z1", str(tmp_path)) == {
+        "generation": "rdna3", "source": "name", "pci": [{"card": "card0", "vendor": "0x1002", "device": "0x15c8"}]}
+    assert gpu_facts("amd", "AMD Custom APU 1234", str(tmp_path))["source"] == "pci"
+    assert gpu_facts("amd", "AMD Custom APU 1234", str(tmp_path / "none")) == {"generation": "unknown", "source": "unknown", "pci": []}

@@ -1,0 +1,18 @@
+{
+  "owner": "lobo-blanco",
+  "dpr": 1.5,
+  "face": {
+    "rect": {
+      "x": 6,
+      "y": 350.3125,
+      "width": 48.5,
+      "height": 44
+    },
+    "style": {
+      "borderImage": "lobo:plush-silver.png",
+      "slice": "54 fill",
+      "borderImageWidth": "18px",
+      "outset": "6px"
+    }
+  }
+}

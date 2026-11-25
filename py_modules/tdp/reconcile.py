@@ -5,6 +5,7 @@ VERIFY_S = 0.5
 MIN_CORRECTION_S = 2.0
 RETRY_S = (0.5, 2.0, 5.0)
 DEGRADED_RETRY_S = 30.0
+DEGRADED_RETRY_MAX_S = 240.0
 CONFLICT_WINDOW_S = 30.0
 CONFLICT_COUNT = 3
 UNVERIFIABLE_HEARTBEAT_S = 15.0
@@ -473,10 +474,12 @@ def after_apply(
             retry,
             conflict,
         )
+    degraded_rounds = failures - len(RETRY_S) - 1
     degraded = replace(
         memory,
         failures=failures,
-        next_retry_at=now + DEGRADED_RETRY_S,
+        next_retry_at=now + min(DEGRADED_RETRY_S * 2 ** min(degraded_rounds, 8),
+                                DEGRADED_RETRY_MAX_S),
         last_write_at=now,
     )
     return ReconcileDecision(

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { CssLoaderSnapshot, CssLoaderTheme } from "./cssLoaderTypes";
-import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
+import type { PublishedEarlyTheme, PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 import { deriveThemeCards } from "./state";
 
 const RELEASE: PublishedThemeRelease = {
@@ -86,5 +86,76 @@ describe("deriveThemeCards", () => {
   it("does not offer a downgrade when the local version is newer", () => {
     expect(deriveThemeCards(publication(), ready([installed("Example Theme", "2.0.0")]))[0])
       .toMatchObject({ versionRelation: "local-newer", updateAvailable: false });
+  });
+
+  describe("early builds", () => {
+    const DUO: PublishedThemeRelease = {
+      ...RELEASE,
+      catalogId: "hooandee-duo",
+      cssLoaderName: "Hooandee Duo",
+      publishedVersion: "0.3.0",
+    };
+    const earlyOf = (release: PublishedThemeRelease, version: string): PublishedEarlyTheme => ({
+      catalogId: release.catalogId,
+      earlyVersion: version,
+      release: { ...release, publishedVersion: version },
+    });
+    const withEarly = (early: PublishedEarlyTheme, status: "published" | "cached" = "published") =>
+      ({ ...publication(status), early: [early] }) as ThemePublicationState;
+    const duoCard = (installedVersion: string, early = earlyOf(DUO, "0.3.0")) =>
+      deriveThemeCards(withEarly(early), ready([installed("Hooandee Duo", installedVersion)]))
+        .find((card) => card.id === "hooandee-duo");
+
+    it("detects a newer early for a theme installed as solo-early", () => {
+      expect(duoCard("0.2.0")).toMatchObject({
+        earlyOnly: true,
+        installable: false,
+        updateAvailable: false,
+        earlyUpdateAvailable: true,
+        early: { version: "0.3.0", installable: true },
+      });
+    });
+
+    it.each([["the same", "0.3.0"], ["a newer", "0.4.0"]])("does not flag an early when %s build is installed", (_, version) => {
+      expect(duoCard(version)?.earlyUpdateAvailable).toBe(false);
+    });
+
+    it("does not flag an early the running Panel cannot install", () => {
+      const early = earlyOf(DUO, "0.3.0");
+      expect(duoCard("0.2.0", { ...early, release: { ...early.release, compatibility: "incompatible-panel" } })?.earlyUpdateAvailable)
+        .toBe(false);
+    });
+
+    it("does not flag an early for a solo-early theme that is not installed", () => {
+      const card = deriveThemeCards(withEarly(earlyOf(DUO, "0.3.0")), ready([])).find((entry) => entry.id === "hooandee-duo");
+      expect(card?.earlyUpdateAvailable).toBe(false);
+    });
+
+    it("flags a newer early on a catalog theme only when the installed build is itself an early", () => {
+      const early = earlyOf(RELEASE, "1.4.0");
+      const card = (version: string) => deriveThemeCards(withEarly(early), ready([installed("Example Theme", version)]))[0];
+      expect(card("1.3.0")).toMatchObject({ versionRelation: "local-newer", earlyUpdateAvailable: true });
+      expect(card("1.2.3")).toMatchObject({ versionRelation: "current", earlyUpdateAvailable: false });
+      expect(card("1.2.0")).toMatchObject({ updateAvailable: true, earlyUpdateAvailable: false });
+    });
+  });
+
+  describe("offline versus no updates", () => {
+    it("marks cards from the copy saved on this device as offline, not as up to date", () => {
+      const card = deriveThemeCards(publication("cached"), ready([installed("Example Theme", "1.2.3")]))[0];
+      expect(card).toMatchObject({ versionRelation: "current", updateAvailable: false, offline: true });
+    });
+
+    it("reports a live check with nothing newer as up to date and online", () => {
+      const card = deriveThemeCards(publication("published"), ready([installed("Example Theme", "1.2.3")]))[0];
+      expect(card).toMatchObject({ versionRelation: "current", updateAvailable: false, offline: false });
+    });
+
+    it("keeps solo-early cards and their early update visible from an offline copy", () => {
+      const duo = { ...RELEASE, catalogId: "hooandee-duo", cssLoaderName: "Hooandee Duo", publishedVersion: "0.3.0" };
+      const state = { ...publication("cached"), early: [{ catalogId: duo.catalogId, earlyVersion: "0.3.0", release: duo }] } as ThemePublicationState;
+      const card = deriveThemeCards(state, ready([installed("Hooandee Duo", "0.2.0")])).find((entry) => entry.id === "hooandee-duo");
+      expect(card).toMatchObject({ earlyOnly: true, offline: true, earlyUpdateAvailable: true });
+    });
   });
 });

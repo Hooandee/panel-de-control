@@ -7,6 +7,7 @@ import {
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { themeSizeOverride } from "../system/themeTokens";
 import { useEq } from "../audio/useEq";
 import { refocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 import {
@@ -158,7 +159,7 @@ export const SonidoSection: FC = () => {
             </span>
             <span
               style={{
-                fontSize: 9,
+                fontSize: themeSizeOverride("fontCaption") ?? 9,
                 color: theme.color.ok,
                 border: `1px solid ${theme.color.ok}`,
                 borderRadius: 6,
@@ -231,7 +232,7 @@ export const SonidoSection: FC = () => {
 
           {/* My profiles — named curves the user saves and reuses across games. */}
           <div>
-            <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
+            <div style={{ fontSize: themeSizeOverride("fontCaption") ?? 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
               {t("audio.profile.mine")}
             </div>
             <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -254,6 +255,7 @@ export const SonidoSection: FC = () => {
                     {pr.name}
                   </Focusable>
                   <Focusable
+                    data-pdc-part="icon-action"
                     style={{ display: "flex", cursor: "pointer", color: theme.color.textMuted }}
                     onActivate={() => deleteProfile(pr.name)}
                     onClick={() => deleteProfile(pr.name)}
@@ -276,7 +278,7 @@ export const SonidoSection: FC = () => {
           </div>
 
           <div>
-            <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
+            <div style={{ fontSize: themeSizeOverride("fontCaption") ?? 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
               {t("audio.tone")}
             </div>
             {(["graves", "voces", "agudos"] as ToneRegion[]).map((region) => {
@@ -329,6 +331,7 @@ export const SonidoSection: FC = () => {
             summary={presetLabel(state.preset)}
             action={
               <Focusable
+                data-pdc-part="icon-action"
                 style={{ display: "flex", alignItems: "center", padding: 4, borderRadius: theme.radius.sm, color: theme.color.textMuted, cursor: "pointer" }}
                 onActivate={() => openEqCurveModal(refresh)}
                 onClick={() => openEqCurveModal(refresh)}
@@ -378,7 +381,7 @@ export const SonidoSection: FC = () => {
                 margin: "2px 2px 6px",
               }}
             >
-              <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: themeSizeOverride("fontCaption") ?? 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted }}>
                 <LuArrowLeftRight size={12} />
                 {t("audio.balance")}
               </span>

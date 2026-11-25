@@ -112,11 +112,13 @@ export function useSteamCleaner() {
     if (mounted.current) { epoch.current += 1; setResult(next); await refresh(); }
   };
 
-  const prepare = async (entryIds: string[]) => {
+  const prepare = async (entryIds: string[], forceEntryIds: string[] = []) => {
     if (!state?.scan_id || !entryIds.length || !start("prepare")) return;
     setPlan(null);
     try {
-      const next = await prepareSteamCleaner(state.scan_id, entryIds);
+      const next = forceEntryIds.length
+        ? await prepareSteamCleaner(state.scan_id, entryIds, forceEntryIds)
+        : await prepareSteamCleaner(state.scan_id, entryIds);
       if (!mounted.current) return;
       epoch.current += 1;
       if (next.requires_prefix_confirmation) setPlan(next);

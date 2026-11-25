@@ -1,0 +1,35 @@
+{
+  "board_name": "MS-1T8K",
+  "boot_levels": [
+    0,
+    0,
+    0
+  ],
+  "current_levels": [
+    17,
+    20,
+    24
+  ],
+  "rail_min": [
+    7,
+    9,
+    10
+  ],
+  "rail_max": [
+    35,
+    40,
+    48
+  ],
+  "platform_profile": "custom",
+  "platform_profile_choices": "low-power balanced balanced-performance performance",
+  "ownership": {
+    "detail": "firmware ownership recovery failed: msi-claw-a8-firmware/pl1!EINVAL, msi-claw-a8-firmware/pl2!EINVAL, msi-claw-a8-firmware/pl3!EINVAL, msi-claw-a8-firmware/pl3=24, msi-claw-a8-firmware/pl2=20, msi-claw-a8-firmware/pl1=17",
+    "profile": null,
+    "snapshot": {
+      "msi-claw-a8-firmware/pl1": 0,
+      "msi-claw-a8-firmware/pl2": 0,
+      "msi-claw-a8-firmware/pl3": 0
+    },
+    "state": "rollback_failed"
+  }
+}

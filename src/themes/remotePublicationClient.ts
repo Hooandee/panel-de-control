@@ -1,3 +1,4 @@
+import { reportStaleBackend } from "../system/staleBackend";
 import {
   parseEarlyPublication,
   parseThemePublication,
@@ -52,7 +53,8 @@ export function createRemotePublicationClient(
         if (publication.status !== "published" && publication.status !== "cached") return publication;
         const early = parseEarlyPublication(rawEarly);
         return early.length ? { ...publication, early } : publication;
-      } catch {
+      } catch (error) {
+        reportStaleBackend(error);
         return {
           status: "recoverable-failure",
           code: "invalid_descriptor",

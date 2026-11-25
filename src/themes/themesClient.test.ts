@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 
 import { ThemeActivationError, ThemeActivator, type ThemeActivationAdapter } from "./activation";
@@ -5,7 +6,9 @@ import { CssLoaderOperationError, type CssLoaderReadySnapshot } from "./cssLoade
 import type { CssLoaderTheme } from "./cssLoaderTypes";
 import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 import { ThemeInstallError } from "./panelThemeInstaller";
-import { ThemesClient, type ThemesDependencies } from "./themesClient";
+import { startThemesRuntime } from "./runtime/start";
+import { configureThemeExtensionRpcHost } from "./themeExtensionClient";
+import { ThemesClient, slowMutationBucket, type ThemesDependencies } from "./themesClient";
 
 const RELEASE: PublishedThemeRelease = {
   catalogId: "example-theme",
@@ -68,6 +71,50 @@ function dependencies(overrides: Partial<ThemesDependencies> = {}): ThemesDepend
 }
 
 describe("ThemesClient", () => {
+  it("turns off a keyboard theme a runtime replaced, even one Panel does not publish, and answers false without a writer", async () => {
+    const keyboard = { ...INSTALLED_THEME, id: "Keyboard", name: "Keyboard", displayName: "Keyboard" };
+    const winner = { ...INSTALLED_THEME, id: "Winner", name: "Winner", displayName: "Winner" };
+    const before: CssLoaderReadySnapshot = { ...READY, themes: [keyboard, winner] };
+    const after: CssLoaderReadySnapshot = { ...READY, themes: [{ ...keyboard, enabled: false }, winner] };
+    const setThemeState = vi.fn(async () => after);
+    const base = dependencies();
+    const client = new ThemesClient(dependencies({
+      adapter: { ...base.adapter, inspect: vi.fn(async () => before), requireReady: vi.fn(async () => before), setThemeState },
+    }));
+    await client.refresh();
+
+    await expect(client.retireRuntimeTheme("Keyboard", "Winner")).resolves.toBe(true);
+    expect(setThemeState).toHaveBeenCalledWith("Keyboard", false);
+    expect(client.getSnapshot().snapshot).toEqual(after);
+    await expect(client.retireRuntimeTheme("Keyboard", "Winner")).resolves.toBe(true);
+    expect(setThemeState).toHaveBeenCalledTimes(1);
+
+    const withoutWriter = new ThemesClient(dependencies({
+      adapter: { ...base.adapter, inspect: vi.fn(async () => before), requireReady: vi.fn(async () => before) },
+    }));
+    await withoutWriter.refresh();
+    await expect(withoutWriter.retireRuntimeTheme("Keyboard", "Winner")).resolves.toBe(false);
+  });
+
+  it("leaves the replaced keyboard theme on when a recovery turned the one replacing it off", async () => {
+    const keyboard = { ...INSTALLED_THEME, id: "Keyboard", name: "Keyboard", displayName: "Keyboard" };
+    const winner = { ...INSTALLED_THEME, id: "Winner", name: "Winner", displayName: "Winner" };
+    const before: CssLoaderReadySnapshot = { ...READY, themes: [keyboard, winner] };
+    const recovered: CssLoaderReadySnapshot = { ...READY, themes: [keyboard, { ...winner, enabled: false }] };
+    const inspect = vi.fn(async () => before);
+    const setThemeState = vi.fn(async () => recovered);
+    const base = dependencies();
+    const client = new ThemesClient(dependencies({
+      adapter: { ...base.adapter, inspect, requireReady: vi.fn(async () => before), setThemeState },
+    }));
+    await client.refresh();
+    inspect.mockResolvedValue(recovered);
+
+    await expect(client.retireRuntimeTheme("Keyboard", "Winner")).resolves.toBe(true);
+    expect(setThemeState).not.toHaveBeenCalled();
+    expect(client.getSnapshot().snapshot).toEqual(recovered);
+  });
+
   it("reports a setting change for a theme Panel does not know instead of dropping it silently", async () => {
     const reportFailure = vi.fn();
     const client = new ThemesClient(dependencies({ reportFailure }));
@@ -314,6 +361,132 @@ describe("ThemesClient", () => {
     expect(deps.installer.rollback).not.toHaveBeenCalled();
     expect(deps.installer.acknowledgeRollback).not.toHaveBeenCalled();
   });
+
+  it.each(["commit", "early commit", "prepare fails", "reload fails", "receipt read fails"] as const)(
+    "retires only the installed runtime before a theme update and remounts the verified receipt after %s",
+    async (result) => {
+      const commits = result !== "prepare fails" && result !== "reload fails";
+      const keyboard = { ...INSTALLED_THEME, name: "Other Keyboard", id: "Other Keyboard" };
+      const before = { ...INSTALLED_READY, themes: [INSTALLED_THEME, keyboard] };
+      const deps = dependencies();
+      let liveSnapshot = before;
+      let forbidInspection = false;
+      deps.adapter.inspect = async () => {
+        if (forbidInspection) throw new Error("CSS Loader became unavailable after verification");
+        return liveSnapshot;
+      };
+      deps.adapter.requireReady = async () => before;
+      deps.adapter.restoreThemeSnapshot = async () => before;
+      const previous = {
+        catalogId: RELEASE.catalogId, cssLoaderName: INSTALLED_THEME.name, abiVersion: 1,
+        version: INSTALLED_THEME.version, sha256: "a".repeat(64),
+      };
+      const replacement = {
+        ...previous, version: result === "early commit" ? "1.2.4" : previous.version, sha256: "b".repeat(64),
+      };
+      const other = { ...previous, catalogId: "other-keyboard", cssLoaderName: keyboard.name, sha256: "c".repeat(64) };
+      let receipt = previous;
+      let packagesChanged!: () => void;
+      const mounted = new Map<string, string>();
+      const transitions: string[] = [];
+      let releaseStaleReceipts: (() => void) | undefined;
+      let delayReceipts = false;
+      let failReceiptRead = false;
+      const log = vi.fn();
+      const releaseRpc = configureThemeExtensionRpcHost({
+        list: async () => {
+          const records = [receipt, other];
+          if (delayReceipts) {
+            delayReceipts = false;
+            await new Promise<void>((resolve) => { releaseStaleReceipts = resolve; });
+          } else if (failReceiptRead) {
+            failReceiptRead = false;
+            throw new Error("Receipt refresh failed");
+          }
+          return records;
+        },
+        load: async (id) => {
+          const descriptor = id === other.catalogId ? other : receipt;
+          return { ...descriptor, source: descriptor.sha256[0] };
+        },
+      });
+      deps.installer.prepare = async () => {
+        transitions.push(`prepare:${mounted.get(RELEASE.catalogId) ?? "off"}`);
+        if (result === "prepare fails") throw new ThemeInstallError("invalid_archive", "Archive rejected");
+        delayReceipts = true;
+        packagesChanged();
+        return { themeId: RELEASE.catalogId, themeName: INSTALLED_THEME.name, version: replacement.version, transaction: "token" };
+      };
+      deps.adapter.reloadTheme = async () => {
+        transitions.push(`reload:${mounted.get(RELEASE.catalogId) ?? "off"}`);
+        if (result === "reload fails") throw new CssLoaderOperationError("verification_failed", "CSS Loader rejected update");
+        liveSnapshot = { ...before, themes: [{ ...INSTALLED_THEME, version: replacement.version }, keyboard] };
+        return liveSnapshot;
+      };
+      deps.installer.commit = async () => {
+        receipt = replacement;
+        failReceiptRead = result === "receipt read fails";
+        transitions.push("commit");
+      };
+      deps.installer.rollback = async () => { receipt = previous; transitions.push("rollback"); };
+      deps.installer.acknowledgeRollback = async () => {
+        forbidInspection = true;
+        transitions.push("acknowledge");
+      };
+      deps.pickEarlyArchive = async () => "/themes/example.zip";
+      deps.publication = { check: async () => ({
+        status: "published", checkedAt: 10, themes: [RELEASE],
+        early: [{ catalogId: RELEASE.catalogId, earlyVersion: replacement.version, release: RELEASE }],
+      }) };
+      const client = new ThemesClient(deps);
+      await client.refresh();
+      const stop = startThemesRuntime({
+        client,
+        getSteamDocument: () => document,
+        log,
+        subscribePackageChanges: (onChange) => { packagesChanged = onChange; return () => {}; },
+        evaluate: (source) => ({
+          abiVersion: 1,
+          ...(source === "c" ? { surface: "keyboard" as const } : {}),
+          mount() {
+            const id = source === "c" ? other.catalogId : RELEASE.catalogId;
+            mounted.set(id, source);
+            transitions.push(`mount:${source}`);
+            return () => { mounted.delete(id); transitions.push(`stop:${source}`); };
+          },
+        }),
+      });
+      try {
+        await vi.waitFor(() => expect([...mounted.values()].sort()).toEqual(["a", "c"]));
+        transitions.length = 0;
+        const install = result === "early commit" ? client.installEarly : client.install;
+        await expect(install(RELEASE.catalogId)).resolves.toBe(commits);
+        if (releaseStaleReceipts) {
+          expect(mounted.has(RELEASE.catalogId)).toBe(false);
+          expect(mounted.get(other.catalogId)).toBe("c");
+          releaseStaleReceipts();
+        }
+        if (result === "receipt read fails") {
+          await vi.waitFor(() => expect(log).toHaveBeenCalledWith("extension_list_failed"));
+          expect(mounted.has(RELEASE.catalogId)).toBe(false);
+          expect(mounted.get(other.catalogId)).toBe("c");
+          await client.refresh();
+        }
+        const expected = commits ? "b" : "a";
+        await vi.waitFor(() => expect(transitions).toContain(`mount:${expected}`));
+        expect(transitions).toEqual([
+          "stop:a",
+          "prepare:off",
+          ...(result === "prepare fails" ? [] : ["reload:off"]),
+          ...(commits ? ["commit"] : result === "reload fails" ? ["rollback", "acknowledge"] : []),
+          `mount:${expected}`,
+        ]);
+      } finally {
+        stop();
+        releaseRpc();
+      }
+    },
+  );
 
   it.each(["reload", "commit"] as const)(
     "rolls back, restores, and acknowledges when %s fails",
@@ -887,5 +1060,11 @@ describe("ThemesClient cleanup with a stale choice", () => {
 
     expect(deactivate).not.toHaveBeenCalled();
     expect(deps.adapter.disableAllExcept).not.toHaveBeenCalled();
+  });
+});
+
+describe("slowMutationBucket", () => {
+  it("groups slow CSS Loader calls into a few ranges", () => {
+    expect([6_000, 16_000, 31_000, 65_000, 120_000].map(slowMutationBucket)).toEqual(["5s", "15s", "30s", "60s", "90s"]);
   });
 });

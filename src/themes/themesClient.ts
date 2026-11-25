@@ -1,8 +1,10 @@
+import { beginThemeObservation } from "./themeInteractionJournal";
 import { ThemeActivationError, ThemeActivator } from "./activation";
 import {
   CssLoaderAdapter,
   CssLoaderOperationError,
   type CssLoaderReadySnapshot,
+  type CssLoaderSlowMutation,
 } from "./cssLoaderAdapter";
 import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import { createDeckyCssLoaderHost } from "./deckyCssLoaderHost";
@@ -48,6 +50,7 @@ export interface ThemesAdapter {
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot>;
   setPatchValue(themeName: string, patchName: string, value: string): Promise<CssLoaderSnapshot>;
+  setThemeState?(themeName: string, enabled: boolean): Promise<CssLoaderSnapshot>;
   disableAllExcept?(before: CssLoaderReadySnapshot, keep: ReadonlySet<string>): Promise<CssLoaderReadySnapshot>;
   enableAgain?(
     before: CssLoaderReadySnapshot,
@@ -123,7 +126,7 @@ export type ThemesOperation =
   | { kind: "uninstalling"; themeId: string }
   | { kind: "activating"; themeId: string }
   | { kind: "deactivating"; themeId: string }
-  | { kind: "saving"; themeId: string; patchName: string }
+  | { kind: "saving"; themeId: string; patchNames: readonly string[] }
   | { kind: "cleaning" }
   | { kind: "restoring" };
 
@@ -132,6 +135,7 @@ export interface ThemesClientSnapshot {
   refreshing: boolean;
   snapshot: CssLoaderSnapshot;
   operation: ThemesOperation | null;
+  runtimeInstallHold: string | null;
   recoveryBlocked: boolean;
   recoveryKeptCurrent: boolean;
   error: string | null;
@@ -151,6 +155,7 @@ const MAX_INSTALL_RECONCILE_FAILURES = 3;
 let productionDependencies: ThemesDependencies | undefined;
 let failureReporter: ((failure: ThemeFailureReport) => unknown) | undefined;
 let sectionHandoffStore: SectionHandoffStore | undefined;
+let slowMutationReporter: ((event: CssLoaderSlowMutation) => void) | undefined;
 let earlyArchivePicker: (() => Promise<string | null>) | undefined;
 
 export function configureEarlyArchivePicker(picker: () => Promise<string | null>): () => void {
@@ -169,6 +174,21 @@ export function configureThemeFailureReporter(
   };
 }
 
+// Coarse, so repeated slow calls fold into one diagnostic entry instead of one per duration.
+export function slowMutationBucket(elapsedMs: number): string {
+  const seconds = elapsedMs / 1000;
+  return seconds >= 90 ? "90s" : seconds >= 60 ? "60s" : seconds >= 30 ? "30s" : seconds >= 15 ? "15s" : "5s";
+}
+
+export function configureCssLoaderSlowMutationReporter(
+  reporter: (event: CssLoaderSlowMutation) => void,
+): () => void {
+  slowMutationReporter = reporter;
+  return () => {
+    if (slowMutationReporter === reporter) slowMutationReporter = undefined;
+  };
+}
+
 export function configureSectionHandoffStore(store: SectionHandoffStore): () => void {
   sectionHandoffStore = store;
   return () => {
@@ -178,7 +198,9 @@ export function configureSectionHandoffStore(store: SectionHandoffStore): () => 
 
 export function createProductionThemesDependencies(): ThemesDependencies {
   if (productionDependencies) return productionDependencies;
-  const adapter = new CssLoaderAdapter(createDeckyCssLoaderHost());
+  const adapter = new CssLoaderAdapter(createDeckyCssLoaderHost(), {
+    onSlowMutation: (event) => slowMutationReporter?.(event),
+  });
   productionDependencies = {
     adapter,
     installer: createPanelThemeInstaller(),
@@ -230,12 +252,17 @@ function blocksThemeRecovery(error: unknown): boolean {
   );
 }
 
+class VerifiedThemeInstallFailure {
+  constructor(readonly error: unknown, readonly snapshot: CssLoaderReadySnapshot) {}
+}
+
 export class ThemesClient {
   private current: ThemesClientSnapshot = {
     loading: true,
     refreshing: false,
     snapshot: { status: "missing", themes: [] },
     operation: null,
+    runtimeInstallHold: null,
     recoveryBlocked: false,
     recoveryKeptCurrent: false,
     error: null,
@@ -261,6 +288,7 @@ export class ThemesClient {
   private installReconcileFailures = 0;
   private pendingSectionHandoff: SectionHandoffNotice | null = null;
   private lastReportedFailure: string | null = null;
+  private quietWrite: Promise<void> | null = null;
 
   constructor(readonly dependencies: ThemesDependencies) {}
 
@@ -334,6 +362,7 @@ export class ThemesClient {
       if (request === this.requestSequence) {
         this.update({
           snapshot,
+          ...(recoveryError === undefined ? { runtimeInstallHold: null } : {}),
           recoveryBlocked: recoveryError === undefined
             ? false
             : this.current.recoveryBlocked || blocksThemeRecovery(recoveryError),
@@ -444,8 +473,16 @@ export class ThemesClient {
       { kind: "installing", themeId },
       async () => {
         const before = await this.dependencies.adapter.requireReady();
+        this.update({ runtimeInstallHold: card.release.cssLoaderName });
         this.recoveryChecked = false;
-        const installed = await this.dependencies.installer.prepare(source);
+        let installed: ThemeInstallResult;
+        try {
+          installed = await this.dependencies.installer.prepare(source);
+        } catch (prepareError) {
+          const recovered = await this.reconcilePendingRecovery();
+          if (recovered) throw new VerifiedThemeInstallFailure(prepareError, recovered);
+          throw prepareError;
+        }
         try {
           if (
             installed.themeId !== card.release.catalogId
@@ -475,8 +512,9 @@ export class ThemesClient {
               `Theme installation rollback failed: ${errorMessage(rollbackError)}`,
             );
           }
+          let restored: CssLoaderReadySnapshot;
           try {
-            await this.dependencies.adapter.restoreThemeSnapshot(before, [card.release.cssLoaderName]);
+            restored = await this.dependencies.adapter.restoreThemeSnapshot(before, [card.release.cssLoaderName]);
           } catch (restoreError) {
             throw new ThemeInstallError(
               "rollback_verification_failed",
@@ -485,7 +523,7 @@ export class ThemesClient {
           }
           await this.dependencies.installer.acknowledgeRollback(installed.transaction);
           this.recoveryChecked = true;
-          throw installError;
+          throw new VerifiedThemeInstallFailure(installError, restored);
         }
       },
     );
@@ -567,19 +605,117 @@ export class ThemesClient {
     return running;
   }
 
-  setPatch = (themeId: string, patchName: string, value: string): Promise<boolean> => {
+  setPatch = (themeId: string, patchName: string, value: string): Promise<boolean> => (
+    this.setPatches(themeId, { [patchName]: value })
+  );
+
+  /** Several patches of one theme in a single Panel operation; CSS Loader still applies them one by one. */
+  setPatches = (themeId: string, values: Readonly<Record<string, string>>): Promise<boolean> => {
     const entry = this.managedThemes().find((theme) => theme.catalogId === themeId);
     if (!entry) return this.rejectUnknownTheme("saving", themeId);
+    const patchNames = Object.keys(values);
+    if (patchNames.length === 0) return Promise.resolve(true);
     return this.mutate(
-      { kind: "saving", themeId, patchName },
-      async () => {
-        const after = await this.dependencies.adapter.setPatchValue(entry.cssLoaderName, patchName, value);
-        if (sectionKeyOf(patchName) === null) return after;
-        this.forgetHandoffs([{ themeName: entry.cssLoaderName, patchName }]);
-        return this.handOffSections(after, entry.cssLoaderName, patchName);
-      },
+      { kind: "saving", themeId, patchNames },
+      () => this.writePatches(entry.cssLoaderName, values),
     );
   };
+
+  /**
+   * A theme runtime writing its own options. It waits its turn like any write, but it is not the user's
+   * operation: the Temas screen stays usable, nothing is shown while it runs and a failure is only the
+   * runtime's answer (false), never an error banner or a failure report. «Estilizar …» patches are refused,
+   * since turning a section on hands it off from other themes, which only the user may decide.
+   */
+  setRuntimePatches = async (themeId: string, values: Readonly<Record<string, string>>): Promise<boolean> => {
+    const entry = this.managedThemes().find((theme) => theme.catalogId === themeId);
+    const patchNames = Object.keys(values);
+    if (!entry || patchNames.some((name) => sectionKeyOf(name) !== null)) return false;
+    if (patchNames.length === 0) return true;
+    await this.quietWritesSettled();
+    if (this.operationLocked || this.current.recoveryBlocked) return false;
+    this.operationLocked = true;
+    const request = ++this.requestSequence;
+    const running = (async () => {
+      await this.reconcilePendingRecovery();
+      return this.writePatches(entry.cssLoaderName, values);
+    })();
+    const settled = running.then(() => undefined, () => undefined);
+    this.quietWrite = settled;
+    try {
+      const after = await running;
+      if (request === this.requestSequence) this.update({ snapshot: after });
+      return true;
+    } catch {
+      try {
+        const reconciled = await this.dependencies.adapter.inspect();
+        if (request === this.requestSequence) this.update({ snapshot: reconciled });
+      } catch {
+        // The next refresh reports CSS Loader being unreachable; this write only answers false.
+      }
+      return false;
+    } finally {
+      this.operationLocked = false;
+      if (this.quietWrite === settled) this.quietWrite = null;
+    }
+  };
+
+  /** Turns off a theme a runtime replaced (a second keyboard theme), through the same quiet lock as runtime patches.
+   * `keep` is the theme that replaced it: if a recovery turned that one off meanwhile, nothing is turned off and the
+   * next reconcile decides again. */
+  retireRuntimeTheme = async (cssLoaderName: string, keep: string): Promise<boolean> => {
+    const setThemeState = this.dependencies.adapter.setThemeState?.bind(this.dependencies.adapter);
+    const snapshot = this.current.snapshot;
+    if (!setThemeState || snapshot.status !== "ready") return false;
+    if (!snapshot.themes.some((theme) => theme.name === cssLoaderName && theme.enabled)) return true;
+    await this.quietWritesSettled();
+    if (this.operationLocked || this.current.recoveryBlocked) return false;
+    this.operationLocked = true;
+    const request = ++this.requestSequence;
+    const running = (async () => {
+      await this.reconcilePendingRecovery();
+      const current = await this.dependencies.adapter.inspect();
+      const enabled = (name: string) => current.status === "ready" && current.themes.some((theme) => theme.name === name && theme.enabled);
+      if (!enabled(keep)) return { after: current, retired: true };
+      if (!enabled(cssLoaderName)) return { after: current, retired: true };
+      return { after: await setThemeState(cssLoaderName, false), retired: true };
+    })();
+    const settled = running.then(() => undefined, () => undefined);
+    this.quietWrite = settled;
+    try {
+      const { after, retired } = await running;
+      if (request === this.requestSequence) this.update({ snapshot: after });
+      return retired;
+    } catch {
+      try {
+        const reconciled = await this.dependencies.adapter.inspect();
+        if (request === this.requestSequence) this.update({ snapshot: reconciled });
+      } catch {
+        // The next refresh reports CSS Loader being unreachable; this write only answers false.
+      }
+      return false;
+    } finally {
+      this.operationLocked = false;
+      if (this.quietWrite === settled) this.quietWrite = null;
+    }
+  };
+
+  private async writePatches(themeName: string, values: Readonly<Record<string, string>>): Promise<CssLoaderSnapshot> {
+    let after: CssLoaderSnapshot | undefined;
+    for (const [patchName, value] of Object.entries(values)) {
+      after = await this.dependencies.adapter.setPatchValue(themeName, patchName, value);
+      if (sectionKeyOf(patchName) === null) continue;
+      this.forgetHandoffs([{ themeName, patchName }]);
+      after = await this.handOffSections(after, themeName, patchName);
+    }
+    return after!;
+  }
+
+  // A runtime's write holds the lock only briefly and invisibly; the user's own operation waits for it
+  // instead of being refused for a reason the screen never showed.
+  private async quietWritesSettled(): Promise<void> {
+    while (this.quietWrite) await this.quietWrite;
+  }
 
   // Without CSS Loader running nothing can be turned off or reloaded, but its folders can still be
   // set aside and the styles it left behind removed from the Steam windows the caller can reach.
@@ -725,11 +861,14 @@ export class ThemesClient {
     return managedThemeReleases(this.current.publication);
   }
 
-  private publishSnapshot(request: number, snapshot: CssLoaderSnapshot): void {
+  private publishSnapshot(request: number, snapshot: CssLoaderSnapshot, installed = false): void {
     if (request !== this.requestSequence) return;
     const sectionHandoff = this.pendingSectionHandoff;
     this.pendingSectionHandoff = null;
-    this.update({ snapshot, error: null, errorCode: null, sectionHandoff });
+    this.update({
+      snapshot, error: null, errorCode: null, sectionHandoff,
+      ...(installed ? { runtimeInstallHold: null } : {}),
+    });
   }
 
   private reconcileRefreshTimer(): void {
@@ -788,6 +927,7 @@ export class ThemesClient {
     operation: ThemesOperation,
     run: () => Promise<CssLoaderSnapshot>,
   ): Promise<boolean> {
+    if (this.quietWrite) await this.quietWritesSettled();
     if (this.operationLocked || this.current.recoveryBlocked) return false;
     this.operationLocked = true;
     const request = ++this.requestSequence;
@@ -800,14 +940,23 @@ export class ThemesClient {
       recoveryKeptCurrent: false,
       sectionHandoff: null,
     });
+    const observe = operation.kind === "installing" || operation.kind === "activating" || operation.kind === "deactivating"
+      ? beginThemeObservation(operation.kind, operation.themeId) : undefined;
     try {
-      await this.reconcilePendingRecovery();
-      this.publishSnapshot(request, await run());
+      const recovered = await this.reconcilePendingRecovery();
+      if (recovered && this.current.runtimeInstallHold !== null) {
+        this.update({ snapshot: recovered, runtimeInstallHold: null });
+      }
+      this.publishSnapshot(request, await run(), operation.kind === "installing");
+      observe?.(true);
       return true;
-    } catch (operationError) {
+    } catch (failure) {
+      observe?.(false);
+      const verified = failure instanceof VerifiedThemeInstallFailure ? failure : undefined;
+      const operationError = verified ? verified.error : failure;
       let reconciled: CssLoaderSnapshot;
       try {
-        reconciled = await this.dependencies.adapter.inspect();
+        reconciled = verified?.snapshot ?? await this.dependencies.adapter.inspect();
       } catch (inspectionError) {
         reconciled = {
           status: "error",
@@ -818,6 +967,8 @@ export class ThemesClient {
       if (request === this.requestSequence) {
         this.update({
           snapshot: reconciled,
+          ...(operation.kind === "installing" && this.recoveryChecked && reconciled.status === "ready"
+            ? { runtimeInstallHold: null } : {}),
           recoveryBlocked: this.current.recoveryBlocked || blocksThemeRecovery(operationError),
           ...this.failurePatch(operation.kind, operationError),
         });

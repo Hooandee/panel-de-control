@@ -7,6 +7,8 @@ import re
 import time
 from typing import Callable
 
+import theme_health
+
 _RIVAL_PLUGINS = {
     "simpledeckytdp": "tdp",
     "powertools": "tdp",
@@ -172,6 +174,91 @@ def bounded(summary: dict) -> dict:
     if len(text) <= _MAX_SECTION_JSON:
         return summary
     return {"truncated": text[:_MAX_SECTION_JSON]}
+
+
+def active_themes(sections: dict) -> list[str] | None:
+    themes = (sections.get("themes") or {}).get("theme_report_diagnostics")
+    installed = themes.get("installed") if isinstance(themes, dict) else None
+    if not isinstance(installed, list):
+        return None
+    return [
+        f"{theme.get('name')} {theme.get('version')}"
+        for theme in installed
+        if isinstance(theme, dict) and theme.get("active")
+    ]
+
+
+_MAX_THEME_FOLDERS = 32
+_MAX_THEME_CHANGES = 16
+_THEME_NAME_CHARS = 80
+
+
+def hooandee_theme_folders(themes_root: object) -> dict[str, str]:
+    """Folder to theme name of the installed Hooandee themes: the same rule as theme health
+    (a usable theme.json next to panel-theme.json). Hidden folders are never CSS Loader's."""
+    return {
+        item["folder"][:_THEME_NAME_CHARS]: item["name"][:_THEME_NAME_CHARS]
+        for item in theme_health.scan(themes_root)
+        if item["kind"] == "hooandee" and not item["folder"].startswith(".")
+    }
+
+
+def theme_folder_event(previous: dict | None, current: dict) -> dict:
+    """Counts, what appeared and what went (with the theme's name) and the whole current
+    set, so the next session can compare against it."""
+    before = previous or {}
+    added = sorted(set(current) - set(before))
+    removed = sorted(set(before) - set(current))
+    event: dict = {
+        "before": None if previous is None else len(previous),
+        "after": len(current),
+        "added": [{"folder": folder, "name": current[folder]} for folder in added[:_MAX_THEME_CHANGES]],
+        "removed": [{"folder": folder, "name": before[folder]} for folder in removed[:_MAX_THEME_CHANGES]],
+        "current": dict(sorted(current.items())[:_MAX_THEME_FOLDERS]),
+    }
+    more = max(0, len(added) - _MAX_THEME_CHANGES) + max(0, len(removed) - _MAX_THEME_CHANGES)
+    if more:
+        event["more"] = more
+    return event
+
+
+def stored_theme_folders(record: dict | None) -> dict | None:
+    current = record.get("current") if isinstance(record, dict) else None
+    if not isinstance(current, dict):
+        return None
+    return {str(folder): str(name) for folder, name in current.items()}
+
+
+class ThemeFolderWatcher:
+    """A different set of Hooandee theme folders becomes a line only when two scans in a
+    row agree: an update swaps a folder out and back in. The set is also written once a
+    day, so the next session finds it in the diary's newest files to compare against."""
+
+    def __init__(self, last: dict | None) -> None:
+        self._known = stored_theme_folders(last)
+        self._last_t = last.get("t") if self._known is not None else None
+        self._pending: dict | None = None
+
+    @property
+    def pending(self) -> bool:
+        return self._pending is not None
+
+    def observe(self, current: dict, now: float | None = None) -> tuple[str, dict] | None:
+        now = time.time() if now is None else now
+        if self._known is not None and set(current) == set(self._known):
+            self._pending = None
+            self._known = current
+            if needs_snapshot({"t": self._last_t}, {}, (), now=now):
+                self._last_t = now
+                return "folders", theme_folder_event(current, current)
+            return None
+        if self._pending is None or set(self._pending) != set(current):
+            self._pending = current
+            return None
+        event = theme_folder_event(self._known, current)
+        message = "folders" if self._known is None else "folders_changed"
+        self._known, self._pending, self._last_t = current, None, now
+        return message, event
 
 
 def canonical(value: object) -> str:

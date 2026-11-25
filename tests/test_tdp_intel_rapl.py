@@ -492,3 +492,171 @@ class TestIntelRapl:
         assert rails["pl2"].applied_w == 31
         assert b.guard_interval_s == 2.0
         assert b.read_tolerance_w == 1
+
+
+def _baseline_backend(tmp_path, battery_ceiling=True):
+    return IntelRaplBackend(
+        _FALLBACK,
+        root=str(tmp_path),
+        sync_surfaces=True,
+        baseline_path=str(tmp_path / "run/rapl-baseline.lock"),
+        battery_ceiling=battery_ceiling,
+    )
+
+
+def test_release_hands_both_surfaces_back_to_their_firmware_pl1(tmp_path):
+    mmio = _mk_rapl(str(tmp_path), _MMIO, pl1_uw=40_000_000)
+    msr = _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=25_000_000)
+    backend = _baseline_backend(tmp_path)
+
+    assert backend.set_tdp(12, False).ok is True
+    assert backend.set_tdp(15, False).ok is True
+    assert (_read_uw(mmio, 0), _read_uw(msr, 0)) == (15_000_000, 15_000_000)
+
+    assert backend.release() is True
+    assert (_read_uw(mmio, 0), _read_uw(msr, 0)) == (40_000_000, 25_000_000)
+    assert not os.path.exists(tmp_path / "run/rapl-baseline.lock")
+
+
+def test_baseline_survives_a_plugin_restart_in_the_same_boot(tmp_path):
+    mmio = _mk_rapl(str(tmp_path), _MMIO, pl1_uw=40_000_000)
+    msr = _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=40_000_000)
+    assert _baseline_backend(tmp_path).set_tdp(12, False).ok is True
+
+    restarted = _baseline_backend(tmp_path)
+    assert restarted.set_tdp(20, False).ok is True
+    assert restarted.release() is True
+
+    assert (_read_uw(mmio, 0), _read_uw(msr, 0)) == (40_000_000, 40_000_000)
+
+
+def test_release_without_manual_writes_leaves_firmware_untouched(tmp_path):
+    mmio = _mk_rapl(str(tmp_path), _MMIO, pl1_uw=40_000_000)
+    _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=40_000_000)
+    backend = _baseline_backend(tmp_path)
+    with open(os.path.join(mmio, "constraint_0_power_limit_uw"), "w") as f:
+        f.write("33000000")
+
+    assert backend.release() is True
+    assert _read_uw(mmio, 0) == 33_000_000
+
+
+def test_diagnostics_show_driven_surfaces_and_recorded_firmware_pl1(tmp_path):
+    _mk_rapl(str(tmp_path), _MMIO, pl1_uw=40_000_000)
+    _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=25_000_000)
+    backend = _baseline_backend(tmp_path)
+    assert backend.diagnostics()["firmware_pl1_w"] is None
+
+    backend.set_tdp(12, False)
+
+    assert backend.diagnostics() == {
+        "pl1_surfaces": {"intel-rapl-mmio:0": 12, "intel-rapl:0": 12},
+        "firmware_pl1_w": {"intel-rapl-mmio:0": 40, "intel-rapl:0": 25},
+    }
+
+
+def _claw_battery_firmware(tmp_path):
+    mmio = _mk_rapl(str(tmp_path), _MMIO, pl1_uw=25_000_000)
+    _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=30_000_000)
+    return mmio, _baseline_backend(tmp_path)
+
+
+def _firmware_puts_back(mmio, uw):
+    with open(os.path.join(mmio, "constraint_0_power_limit_uw"), "w") as f:
+        f.write(str(uw))
+
+
+def test_battery_pl1_put_back_by_firmware_is_published_as_the_live_ceiling(tmp_path):
+    from tdp.reconcile import build_targets
+
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    assert backend.set_tdp(30, False).ok is True
+    _firmware_puts_back(mmio, 25_000_000)
+
+    pl1 = backend.observe().surfaces["intel-rapl"]["pl1"]
+    targets = build_targets({"pl1": 30}, {"pl1": {"min": 8, "max": 30}}, backend.observe())
+
+    assert (pl1.applied_w, pl1.max_w) == (25, 25)
+    assert targets.target == {"pl1": 25}
+    assert backend.diagnostics()["battery_ceiling_w"] == 25
+
+
+def test_battery_ceiling_holds_after_writing_it_and_clears_on_the_charger(tmp_path):
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, False)
+    _firmware_puts_back(mmio, 25_000_000)
+    backend.observe()
+
+    backend.set_tdp(25, False)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w == 25
+
+    backend.set_tdp(30, True)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+
+def test_no_battery_ceiling_on_the_charger_or_below_the_firmware_value(tmp_path):
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, True)
+    _firmware_puts_back(mmio, 25_000_000)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+    backend.set_tdp(20, False)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+
+def test_release_forgets_the_battery_ceiling(tmp_path):
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, False)
+    _firmware_puts_back(mmio, 25_000_000)
+    backend.observe()
+
+    assert backend.release() is True
+    assert "battery_ceiling_w" not in backend.diagnostics()
+
+
+def test_a_reset_long_after_our_write_is_drift_not_a_battery_ceiling(tmp_path, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr("tdp.intel_rapl.time.monotonic", lambda: clock[0])
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, False)
+    clock[0] += 3600.0
+    _firmware_puts_back(mmio, 25_000_000)
+
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+
+def test_battery_ceiling_expires_so_the_higher_target_is_tried_again(tmp_path, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr("tdp.intel_rapl.time.monotonic", lambda: clock[0])
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, False)
+    _firmware_puts_back(mmio, 25_000_000)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w == 25
+
+    backend.set_tdp(25, False)
+    clock[0] += 601.0
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+
+def test_plugging_in_clears_the_battery_ceiling_before_any_write(tmp_path):
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, False)
+    _firmware_puts_back(mmio, 25_000_000)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w == 25
+
+    ac = tmp_path / "sys/class/power_supply/ADP1"
+    ac.mkdir(parents=True)
+    (ac / "type").write_text("Mains")
+    (ac / "online").write_text("1")
+
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+
+def test_other_intel_machines_keep_reporting_a_rival_instead_of_a_ceiling(tmp_path):
+    mmio = _mk_rapl(str(tmp_path), _MMIO, pl1_uw=25_000_000)
+    _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=30_000_000)
+    backend = _baseline_backend(tmp_path, battery_ceiling=False)
+    backend.set_tdp(30, False)
+    _firmware_puts_back(mmio, 25_000_000)
+
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None

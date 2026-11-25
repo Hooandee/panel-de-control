@@ -3,6 +3,7 @@ import os
 import gpu.clock as clock_module
 
 from gpu.clock import (
+    DevfreqGpuClock,
     AmdGpuClock,
     IntelGpuClock,
     NullGpuClock,
@@ -526,3 +527,79 @@ def test_null_diagnostics_are_honest():
         "last_operation": None,
         "selection": [],
     }
+
+
+def _ps5_gpufreq(root, table=(400_000_000, 1_200_000_000, 2_230_000_000)):
+    node = os.path.join(root, "sys/class/devfreq/ps5-gpufreq")
+    os.makedirs(node, exist_ok=True)
+    files = {
+        "available_frequencies": " ".join(str(value) for value in table),
+        "min_freq": str(table[0]),
+        "max_freq": str(table[-1]),
+        "governor": "simple_ondemand",
+    }
+    for name, value in files.items():
+        with open(os.path.join(node, name), "w") as handle:
+            handle.write(value)
+    return node
+
+
+def test_playstation_5_selects_its_devfreq_gpu(tmp_path):
+    root = str(tmp_path)
+    _ps5_gpufreq(root)
+
+    class Ps5:
+        key = "playstation_5"
+        vendor = "amd"
+
+    backend = select_gpu_clock(Ps5(), root=root)
+    assert isinstance(backend, DevfreqGpuClock)
+    assert backend.get_range() == (400, 2230)
+    assert backend.set(1000, 1200) is True
+    assert backend.get() == (1200, 1200)
+
+
+def test_ps5_gpufreq_is_ignored_on_other_amd_devices(tmp_path):
+    root = str(tmp_path)
+    _ps5_gpufreq(root)
+
+    class Dev:
+        vendor = "amd"
+
+    assert isinstance(select_gpu_clock(Dev(), root=root), NullGpuClock)
+
+
+def test_ps5_auto_is_not_claimed_under_a_pinned_governor(tmp_path):
+    root = str(tmp_path)
+    node = _ps5_gpufreq(root)
+    with open(os.path.join(node, "governor"), "w") as handle:
+        handle.write("performance")
+    with open(os.path.join(node, "available_governors"), "w") as handle:
+        handle.write("performance powersave userspace")
+
+    class Ps5:
+        key = "playstation_5"
+        vendor = "amd"
+
+    backend = select_gpu_clock(Ps5(), root=root)
+    assert backend.set_auto() is False
+    assert backend.diagnostics()["last_operation"]["reason"] == "governor_pinned"
+    with open(os.path.join(node, "governor")) as handle:
+        assert handle.read() == "performance"
+
+
+def test_ps5_auto_switches_to_simple_ondemand_when_offered(tmp_path):
+    root = str(tmp_path)
+    node = _ps5_gpufreq(root)
+    with open(os.path.join(node, "governor"), "w") as handle:
+        handle.write("performance")
+    with open(os.path.join(node, "available_governors"), "w") as handle:
+        handle.write("simple_ondemand performance")
+
+    class Ps5:
+        key = "playstation_5"
+        vendor = "amd"
+
+    assert select_gpu_clock(Ps5(), root=root).set_auto() is True
+    with open(os.path.join(node, "governor")) as handle:
+        assert handle.read() == "simple_ondemand"

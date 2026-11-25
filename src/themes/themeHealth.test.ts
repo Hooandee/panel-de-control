@@ -4,9 +4,11 @@ import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import {
   cleanupNeeded,
   cleanupPlan,
+  coexistingThemes,
   countCssLoaderStyles,
   diagnoseThemeHealth,
   hooandeeNames,
+  interfaceThemeNames,
   parseThemeHealth,
   readSteamSettings,
   removeCssLoaderStyles,
@@ -65,7 +67,7 @@ describe("diagnoseThemeHealth", () => {
       {
         id: "set_aside",
         severity: "problem",
-        folders: [{ folder: "Old", kind: "legacy" }, { folder: "Residue", kind: "leftover" }],
+        folders: [{ folder: "Old", name: "Old", kind: "legacy" }, { folder: "Residue", name: "Residue", kind: "leftover" }],
       },
     ]);
     expect(cleanupPlan(snapshot, findings, hooandeeNames(health, []))).toEqual({
@@ -74,6 +76,48 @@ describe("diagnoseThemeHealth", () => {
       setAside: 2,
       ghostStyles: false,
     });
+  });
+
+  // PDC-E75Y: nine of the user's own themes on and none of ours; PDC-AHYE: only a keyboard theme of ours.
+  it("leaves someone's own themes alone while no interface theme of ours is on", () => {
+    const health = backend({
+      folders: [
+        { folder: "Eclipse", name: "Eclipse", kind: "hooandee", active: false },
+        { folder: "Keys", name: "Keys", kind: "hooandee", active: true },
+        { folder: "Mine", name: "Mine", kind: "third_party", active: true },
+        { folder: "Mine.profile", name: "Mine.profile", kind: "profile", active: true },
+        { folder: "Old", name: "Old", kind: "legacy", active: true },
+      ],
+    });
+    const keep = hooandeeNames(health, []);
+    const snapshot = ready(theme("Eclipse", false), theme("Keys", true), theme("Mine", true), theme("Mine.profile", true), theme("Old", true));
+
+    const findings = diagnoseThemeHealth(snapshot, health, CLEAN_DISPLAY, keep, new Set(["Eclipse"]));
+
+    expect(findings.map((finding) => finding.id)).toEqual(["set_aside"]);
+    expect(cleanupPlan(snapshot, findings, keep).disable).toEqual(["Old"]);
+    expect(coexistingThemes(snapshot, keep, cleanupPlan(snapshot, findings, keep))).toEqual(["Mine", "Mine.profile"]);
+
+    const withoutLeftovers = ready(theme("Eclipse", false), theme("Mine", true), theme("Mine.profile", true));
+    const clean = diagnoseThemeHealth(withoutLeftovers, backend({ folders: health.folders.slice(0, 4) }), CLEAN_DISPLAY, keep, new Set(["Eclipse"]));
+    expect(clean).toEqual([]);
+    expect(cleanupNeeded(cleanupPlan(withoutLeftovers, clean, keep))).toBe(false);
+  });
+
+  it("still flags someone's own themes next to an active interface theme of ours", () => {
+    const health = backend({
+      folders: [
+        { folder: "Eclipse", name: "Eclipse", kind: "hooandee", active: true },
+        { folder: "Mine", name: "Mine", kind: "third_party", active: true },
+      ],
+    });
+    const keep = hooandeeNames(health, []);
+    const snapshot = ready(theme("Eclipse", true), theme("Mine", true));
+
+    const findings = diagnoseThemeHealth(snapshot, health, CLEAN_DISPLAY, keep, new Set(["Eclipse"]));
+
+    expect(findings).toEqual([{ id: "other_active", severity: "problem", names: ["Mine"] }]);
+    expect(cleanupPlan(snapshot, findings, keep).disable).toEqual(["Mine"]);
   });
 
   it("flags styles that survive with no theme enabled", () => {
@@ -228,5 +272,15 @@ describe("CSS Loader styles", () => {
     expect(countCssLoaderStyles([reachable, gone])).toBe(2);
     expect(removeCssLoaderStyles([reachable, gone])).toBe(2);
     expect(styles.every((item) => item.remove.mock.calls.length === 1)).toBe(true);
+  });
+
+  it("never counts a keyboard theme as a second interface theme", () => {
+    const ours = new Set(["Hooandee Vida", "Hooandee Terciopelo"]);
+    const names = interfaceThemeNames([
+      { cssLoaderName: "Hooandee Vida" },
+      { cssLoaderName: "Hooandee Terciopelo", exclusiveGroup: "keyboard" },
+    ], ours);
+    expect([...names]).toEqual(["Hooandee Vida"]);
+    expect(interfaceThemeNames([], ours)).toBe(ours);
   });
 });

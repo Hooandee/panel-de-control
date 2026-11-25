@@ -41,7 +41,7 @@ export const LanguageSelector: FC = () => {
   const { lang, setLang, t } = useI18n();
 
   return (
-    <div style={{ width: 190, minWidth: 0 }}>
+    <div data-pdc-part="language-field" style={{ width: 190, minWidth: 0 }}>
       <Dropdown
         rgOptions={DROPDOWN_OPTIONS}
         selectedOption={lang}

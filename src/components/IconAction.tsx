@@ -12,6 +12,7 @@ export const IconAction: FC<{ label: string; color: string; disabled?: boolean; 
   ({ label, color, disabled, onTap, children }) => (
     <QamAction
       noFocusRing
+      part="icon-action"
       onPress={onTap}
       disabled={disabled}
       style={{ ...iconBtn, color, opacity: disabled ? 0.3 : 1, cursor: disabled ? "default" : "pointer" }}

@@ -13,6 +13,8 @@ from device_quirks import (
     legion_go_s_83n6_boost_floors_menu_only,
     legion_go_s_83n6_rail_floors,
     lenovo_legion_firmware_attr_quirks,
+    xbox_ally_x_20_legacy_rail_floors,
+    asus_legacy_overshoot_guard,
 )
 from tdp.alib import AlibBackend
 from tdp.amd_dptc import AmdDptcBackend
@@ -106,6 +108,9 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
         go_s_83l3 = legion_go_s_83l3_firmware_attr_quirks(device, root)
         boost_floors = legion_go_s_83n6_rail_floors(device, root)
         floors_menu_only = legion_go_s_83n6_boost_floors_menu_only(device, root)
+        go_2_83n0 = legion_go_2_83n0_firmware_attr_quirks(device, root)
+        # 83N0 already hands a stuck firmware back to a named profile on its own.
+        hands_back = "firmware_handoff_profile" not in go_2_83n0
         backend = FirmwareAttrBackend(
             "lenovo-wmi-other",
             fallback,
@@ -118,14 +123,21 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
                 root,
                 "firmware-lenovo-wmi-other.lock",
             ),
+            restore_on_release=hands_back,
+            relinquish_failed_restore=hands_back,
+            ownership_lock_path=_runtime_lock_path(
+                root,
+                "ownership-lenovo-wmi-other.lock",
+            ),
             write_max_ac=charger_write_max(device),
             **lenovo_legion_firmware_attr_quirks(device, root),
-            **legion_go_2_83n0_firmware_attr_quirks(device, root),
+            **go_2_83n0,
             **go_s_83l3,
             **legion_go_s_83n6_firmware_attr_quirks(device, root),
         )
         if go_s_83l3:
             backend.low_battery_hold_strategy = None
+        backend.seeds_from_readback = True
         return backend
 
     def msi():
@@ -174,7 +186,14 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
             ),
             auto_tdp_allowed=is_msi_claw_8_ai_plus_a2vm(device, root),
             write_max_ac=device.experimental_tdp_max_ac,
-            sync_surfaces=device.key in ("onexplayer_3", "desktop_pc"),
+            sync_surfaces=True,
+            battery_ceiling=device.key.startswith("msi_claw"),
+            # The desktop power coordinator captures and restores its own baseline.
+            baseline_path=(
+                None
+                if device.key == "desktop_pc"
+                else _runtime_lock_path(root, "intel-rapl-baseline.lock")
+            ),
         )
 
     def deck():
@@ -189,6 +208,8 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
                 "ownership-asus-nb-wmi.lock",
             ),
             write_max_ac=charger_write_max(device),
+            rail_floors=xbox_ally_x_20_legacy_rail_floors(device, root),
+            overshoot_guard=asus_legacy_overshoot_guard(device, root),
         )
 
     def dptc():
@@ -237,6 +258,10 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
         # AMD desktop CPUs have no verifiable power path (ryzenadj reports success
         # without readback, AMD RAPL can confirm a write it ignores).
         return [intel] if desktop_cpu else []
+    if key == "msi_claw_8_ex_ai_plus":
+        # msi-wmi-platform echoes PL1/PL2 writes on this board while RAPL keeps the
+        # firmware limits, so RAPL leads and firmware stays the fallback.
+        return [intel, msi]
     if device.vendor == "intel":
         return [msi, intel]
     if key == "steam_machine":
@@ -245,11 +270,19 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
         # binary is therefore not a capability. Keep future firmware-attribute
         # paths discoverable, but never fall into write-only generic AMD methods.
         return [asus, lenovo, msi]
+    if key == "playstation_5":
+        # ryzenadj answers "unsupported model 72" on the PS5 APU and the console has no
+        # firmware power attributes: the APU power budget belongs to its firmware.
+        return []
     if key.startswith("steam_deck"):
         return [deck]
     if os_id != "anatase":
         if key == "msi_claw_a8":
-            return [ryzenadj]
+            if os_id == "steamos":
+                # Under SteamOS the APU ignores the firmware rails (they read back any request at ~20 W); ryzenadj holds.
+                return [ryzenadj, msi_a8]
+            # The SPPT/FPPT rails live in msi-wmi-platform; ryzenadj cannot read them back.
+            return [msi_a8, ryzenadj]
         if key == "onexplayer_apex":
             # ALIB cannot read back; on Strix Halo it let a 30 W limit draw 70 W.
             return [ryzenadj, *unreadable_tail]

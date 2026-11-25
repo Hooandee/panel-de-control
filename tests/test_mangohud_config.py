@@ -165,6 +165,43 @@ def test_item_order_is_preserved_for_enabled_metrics():
     assert lines.index("cpu_stats=1") < lines.index("fps=1")
 
 
+@pytest.mark.parametrize("layout", ["vertical", "horizontal"])
+def test_display_server_is_absent_unless_selected(layout):
+    off = to_directives({"layout": layout, "items": _metrics("fps")})
+    assert not any(line.startswith("display_server=") for line in off)
+    on = to_directives({"layout": layout, "items": _metrics("display_server")})
+    assert "display_server=1" in on
+
+
+@pytest.mark.parametrize("level", [1, 2, 3, 4])
+def test_horizontal_presets_do_not_register_disabled_render_callbacks(level):
+    # MangoHud v0.8.1 sort_elements registers these even for =0, and
+    # render_imgui inserts a separator after each callback, including empty ones.
+    lines = directives_for_level({"layout": "horizontal", "items": _metrics("fps")}, level)
+    for name in ("fps_only", "version", "time", "gpu_stats", "cpu_stats",
+                 "core_load", "io_read", "io_write", "arch", "wine", "procmem",
+                 "gamemode", "vkbasalt", "engine_version", "vulkan_driver",
+                 "resolution", "show_fps_limit", "vram", "ram", "gpu_name",
+                 "frame_timing", "media_player", "battery", "fsr", "frame_count", "fan"):
+        assert not any(line.startswith(name + "=") for line in lines), name
+    assert "fps=1" in lines
+    # These belong to active metric callbacks; omitting frametime would enable
+    # its default value beside FPS. They must still be explicitly disabled.
+    for line in ("frametime=0", "gpu_temp=0", "cpu_temp=0", "battery_watt=0"):
+        assert line in lines
+
+
+def test_horizontal_preserves_selected_callbacks_and_custom_separators():
+    lines = to_directives({"layout": "horizontal", "items": [
+        *_metrics("cpu"), {"kind": "separator", "id": "divider"},
+        *_metrics("gpu", "display_server", "fps"),
+    ]})
+    visible = [line for line in lines if line in (
+        "cpu_stats=1", "custom_text=--------------", "gpu_stats=1", "display_server=1", "fps=1")]
+    assert visible == ["cpu_stats=1", "custom_text=--------------", "gpu_stats=1", "display_server=1", "fps=1"]
+    assert "fps_only=0" in to_directives({"layout": "vertical", "items": _metrics("fps")})
+
+
 @pytest.mark.parametrize(
     ("field", "on", "off", "directive"),
     [
@@ -560,3 +597,101 @@ def test_enabled_pdc_ids():
 def test_presets_conf_bakes_pdc_value():
     conf = build_presets_conf({"items": _metrics("pdc_tdp"), "enabled": True}, {"pdc_tdp": "21W"})
     assert "custom_text=TDP 21W" in conf
+
+
+# The graph is independent of the existing numeric frametime metric.
+def test_frame_timing_normalizes_without_enabling_numeric_frametime_or_fps():
+    model = coerce_model({"items": [
+        {"kind": "metric", "id": "frame_timing", "label": "ignored"},
+        {"kind": "metric", "id": "frame_timing"},
+    ]})
+    assert model["items"] == _metrics("frame_timing")
+    assert coerce_model(model) == model
+
+
+@pytest.mark.parametrize("layout", ["vertical", "horizontal"])
+def test_frame_timing_serializes_independently_in_both_layouts(layout):
+    lines = to_directives({"items": _metrics("frame_timing"), "layout": layout,
+                           "colors": {"frametime": "#123abc"}})
+    assert lines.count("frame_timing=1") == 1
+    assert "frame_timing=0" not in lines
+    assert "frametime=0" in lines
+    assert ("fps=0" in lines) == (layout == "vertical")
+    assert "frametime_color=123abc" in lines
+    assert ("horizontal=1" in lines) == (layout == "horizontal")
+
+
+def test_frame_timing_keeps_selected_order_and_numeric_frametime():
+    lines = to_directives({"items": _metrics("frame_timing", "fps", "frametime")})
+    assert lines.index("frame_timing=1") < lines.index("fps=1") < lines.index("frametime=1")
+
+
+@pytest.mark.parametrize("items", [None, *PRESETS.values(), ["fps", "frametime"]])
+def test_existing_models_and_presets_keep_graph_disabled(items):
+    model = {} if items is None else {"items": _metrics(*items)}
+    lines = to_directives(model)
+    assert "frame_timing=0" in lines
+    assert "frame_timing=1" not in lines
+    if items and "frametime" in items:
+        assert "frametime=1" in lines
+
+
+def test_frame_timing_respects_steam_minimal_and_off_levels():
+    conf = build_presets_conf({"items": _metrics("frame_timing")})
+    assert _section(conf, 0) == ["no_display=1"]
+    assert "frame_timing=0" in _section(conf, 1)
+    assert "frame_timing=1" not in _section(conf, 1)
+    for level in (2, 3, 4):
+        assert "frame_timing=1" in _section(conf, level)
+        assert "frametime=0" in _section(conf, level)
+
+
+# ---- horizontal row: stable width ----
+
+_REPORT_1158 = {
+    "enabled": True, "layout": "horizontal", "compact": True, "noSmallFont": True,
+    "fontSize": 24, "fontSizeSecondary": 24, "fontSizeText": 24,
+    "items": _metrics(
+        "fps", "cpu", "cpu_temp", "gpu", "gpu_temp", "gpu_power", "gpu_clock", "ram",
+        "battery", "battery_watt", "device_battery", "time", "pdc_tdp", "pdc_power", "fan",
+    ),
+}
+
+
+def _custom(model, values):
+    return [
+        line for line in to_directives(model, values) if line.startswith("custom_text=")
+    ]
+
+
+def test_horizontal_pdc_values_keep_their_width_across_digit_counts():
+    short = _custom(_REPORT_1158, {"pdc_tdp": "9W", "pdc_power": "8W"})
+    long = _custom(_REPORT_1158, {"pdc_tdp": "15W", "pdc_power": "15W"})
+    assert [len(x) for x in short] == [len(x) for x in long]
+
+
+def test_vertical_pdc_values_are_not_padded():
+    model = {**_REPORT_1158, "layout": "vertical", "items": _metrics("pdc_tdp")}
+    assert _custom(model, {"pdc_tdp": "9W"}) == ["custom_text=TDP 9W"]
+
+
+def test_horizontal_row_keeps_every_metric_the_user_chose():
+    lines = to_directives(_REPORT_1158, {"pdc_tdp": "12W", "pdc_power": "8W"})
+    assert "fan=1" in lines
+    assert "custom_text=TDP 12W" in lines
+
+
+def test_omitted_metrics_are_disabled_and_never_emitted():
+    model = {
+        "enabled": True,
+        "items": [
+            {"kind": "metric", "id": "fps"},
+            {"kind": "metric", "id": "gpu_power"},
+            {"kind": "metric", "id": "cpu_power"},
+        ],
+    }
+    lines = to_directives(model, omit=("gpu_power", "cpu_power"))
+    assert "gpu_power=1" not in lines and "cpu_power=1" not in lines
+    assert "gpu_power=0" in lines and "cpu_power=0" in lines
+    assert "fps=1" in lines
+    assert "gpu_power=1" in to_directives(model)

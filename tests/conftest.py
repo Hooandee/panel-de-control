@@ -13,3 +13,24 @@ def _host_is_not_a_desktop(monkeypatch):
         "_is_desktop_host",
         lambda root: False if root == "/" else real(root),
     )
+
+
+@pytest.fixture(autouse=True)
+def _no_release_lookups(monkeypatch):
+    # Tests install the catalog's pinned assets; the newest-release lookup never reaches the network here.
+    from upscalers import latest
+
+    def offline(url):
+        raise OSError("offline in tests")
+
+    monkeypatch.setattr(latest, "_fetch", offline)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_steam_libraries(monkeypatch):
+    # Library discovery looks at the host's mounted drives; tests only see the folders they build.
+    from upscalers import games
+
+    monkeypatch.setattr(games, "MOUNT_ROOTS", ())
+    monkeypatch.setattr(games, "_steam_reported", {})
+    monkeypatch.setattr(games, "_discovered", None)

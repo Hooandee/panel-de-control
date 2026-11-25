@@ -5,6 +5,13 @@ namespace PanelDeControl.Service;
 
 public sealed class PackagedTdpClientValidator : IPipeClientValidator
 {
+    private readonly TrustedBrokerStore trustedBroker;
+
+    public PackagedTdpClientValidator(TrustedBrokerStore trustedBroker)
+    {
+        this.trustedBroker = trustedBroker;
+    }
+
     private const string PackageName = "PanelDeControl.Windows";
     private const string PackagePublisher = "CN=Hooandee";
     public const string BrokerRelativePath =
@@ -19,6 +26,8 @@ public sealed class PackagedTdpClientValidator : IPipeClientValidator
                 client.PackageFamilyName,
                 PackagedPipeClient.FamilyNameFromId(PackageName, PackagePublisher),
                 client.PackagePath,
-                BrokerRelativePath);
+                BrokerRelativePath) &&
+            client.PackagePath is { } packagePath &&
+            trustedBroker.Matches(Path.Combine(packagePath, Path.GetDirectoryName(BrokerRelativePath)!));
     }
 }

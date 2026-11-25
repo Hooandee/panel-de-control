@@ -1,0 +1,13 @@
+{
+  "error": "prefix_process_running",
+  "attempts": [
+    {
+      "via": "flatpak-setup",
+      "result": "prefix_tool_unavailable"
+    },
+    {
+      "via": "native",
+      "result": "ok"
+    }
+  ]
+}

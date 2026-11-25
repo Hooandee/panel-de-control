@@ -17,3 +17,16 @@ describe("game profile power line", () => {
     expect(sectionLine("tdp", row("level"), t)?.text).toBe("Level 6");
   });
 });
+
+describe("game profile HUD line", () => {
+  it("lists a game's own HUD as on or off", () => {
+    const on = { appid: "1", hud: { enabled: true, follows_global: false } } as GameProfileRow;
+    const off = { appid: "1", hud: { enabled: false, follows_global: true } } as GameProfileRow;
+    expect(sectionLine("hud", on, t)).toEqual({
+      label: "gameProfiles.sec.hud", text: "gameProfiles.hudOn", dim: false,
+    });
+    expect(sectionLine("hud", off, t)).toEqual({
+      label: "gameProfiles.sec.hud", text: "gameProfiles.hudOff", dim: true,
+    });
+  });
+});

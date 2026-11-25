@@ -389,11 +389,13 @@ class DevfreqGpuClock(_GpuDiagnostics):
 
     backend = "devfreq"
     _AUTO_GOVERNOR = "simple_ondemand"
+    # A full window under these still holds one clock, so it is not automatic.
+    _PINNED_GOVERNORS = frozenset(("performance", "powersave", "userspace"))
 
-    def __init__(self, root="/"):
+    def __init__(self, root="/", pattern="*.gpu"):
         self._last_operation = None
         self._dir = None
-        for path in sorted(glob.glob(os.path.join(root, "sys/class/devfreq", "*.gpu"))):
+        for path in sorted(glob.glob(os.path.join(root, "sys/class/devfreq", pattern))):
             if self._table_at(path):
                 self._dir = path
                 break
@@ -453,6 +455,16 @@ class DevfreqGpuClock(_GpuDiagnostics):
         )
         return all(write_str(self._node(name), value) for name, value in writes)
 
+    def diagnostics(self):
+        # The live clock shows whether the firmware honours the window (the PS5 SMU
+        # ignores it during a CPU boost).
+        current = read_int(self._node("cur_freq")) if self._dir is not None else None
+        return {
+            **super().diagnostics(),
+            "current_mhz": current // 1_000_000 if current else None,
+            "governor": self._governor() if self._dir is not None else None,
+        }
+
     def _governor(self):
         return read_str(self._node("governor"))
 
@@ -503,19 +515,35 @@ class DevfreqGpuClock(_GpuDiagnostics):
         if not rng:
             self._record("auto", None, False, "range_unavailable")
             return False
-        if self._governor() != self._AUTO_GOVERNOR:
+        offered = (read_str(self._node("available_governors")) or "").split()
+        if self._governor() != self._AUTO_GOVERNOR and (
+            not offered or self._AUTO_GOVERNOR in offered
+        ):
             write_str(self._node("governor"), self._AUTO_GOVERNOR)
         ok = self.set(*rng)
         operation = getattr(self, "_last_operation", None)
         if operation is not None:
             operation["action"] = "auto"
+        if ok and self._governor() in self._PINNED_GOVERNORS:
+            self._record("auto", None, False, "governor_pinned")
+            return False
         return ok
+
+
+class Ps5GpuClock(DevfreqGpuClock):
+    """PlayStation 5 (ps5-linux kernel): amdgpu has no OverDrive there; the GPU
+    clock is the ps5-gpufreq devfreq device, frequencies in Hz."""
+
+    def __init__(self, root="/"):
+        super().__init__(root, pattern="ps5-gpufreq")
 
 
 def select_gpu_clock(device, root="/"):
     """AMD → amdgpu OverDrive; Intel → xe (newer) then i915; else Null."""
     if getattr(device, "arch", "x86") == "arm":
         order = (DevfreqGpuClock,)
+    elif getattr(device, "key", None) == "playstation_5":
+        order = (Ps5GpuClock, AmdGpuClock)
     elif getattr(device, "vendor", "amd") == "intel":
         order = (XeGpuClock, IntelGpuClock)
     else:

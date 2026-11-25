@@ -5,6 +5,7 @@ import { LuGauge, LuTarget } from "react-icons/lu";
 import { AutoTdpConfig, AutoTdpLive, TdpLimits, TdpScope } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { themeSizeOverride } from "../system/themeTokens";
 import { effectiveAutoRange } from "../tdp/autoView";
 import { PowerUnit, isLevelUnit } from "../tdp/unit";
 
@@ -49,6 +50,7 @@ function statusKey(live: AutoTdpLive): string {
   }
   if (
     live.reason === "external_owner"
+    || live.reason === "steam_download_mode"
     || live.reason === "tdp_unsupported"
     || live.reason === "control_disabled"
     || live.reason === "apply_unconfirmed"
@@ -128,7 +130,7 @@ export const AutoTdpCard: FC<Props> = ({
               borderRadius: 999,
               color: theme.color.warn,
               boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
-              fontSize: 10,
+              fontSize: themeSizeOverride("fontCaption") ?? 10,
               fontWeight: 700,
               flexShrink: 0,
             }}>

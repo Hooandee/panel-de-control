@@ -1,0 +1,12 @@
+[12:50:13.460137] [I] NVSDK_NGX_VULKAN_CreateFeature1 HandleId: 1000000
+[12:50:13.460180] [I] NVSDK_NGX_VULKAN_CreateFeature1 Creating new FSR 3.X/4 w/Dx12 upscaler
+[12:50:13.460247] [I] IFeature::SetInitParameters Render Resolution: 2258x1270, Display Resolution 3840x2160, Quality: 1
+[12:50:14.022811] [I] FSR4DriverDll::QueryProvider amdxcffx64.dll provider for 10000: 4.1.1 *, id: F5A5CA1E81001001, struct version: 2
+[12:50:14.593842] [E] IFeature_VkwDx12::CreateSharedTexture Failed to get memory Win32 handle properties
+[12:50:14.593900] [E] IFeature_VkwDx12::CopyTextureFromVkToDx12 Failed to create shared texture!
+[12:50:14.593908] [E] IFeature_VkwDx12::ProcessVulkanTextures Failed to copy color texture!
+[12:50:14.593915] [E] IFeature_VkwDx12::Evaluate Can't process Vulkan textures!
+[12:50:14.642496] [I] FeatureProvider_Vk::ChangeFeature changeBackend is true, counter: 1
+[12:50:14.642531] [I] FeatureProvider_Vk::ChangeFeature changing backend to FSR 2.2.1
+[12:50:14.650081] [I] FeatureProvider_Vk::ChangeFeature Creating new FSR 2.2.1 upscaler
+[12:50:15.155931] [I] FeatureProvider_Vk::ChangeFeature init successful for FSR 2.2.1, upscaler changed

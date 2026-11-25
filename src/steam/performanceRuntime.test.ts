@@ -13,6 +13,7 @@ import {
   resetSteamPerformanceRuntimeCache,
   resolveSteamPerformanceStore,
   syncSteamPerformanceProfile,
+  readSteamPerformanceProfile,
   subscribeSteamPerformanceState,
 } from "./performanceRuntime";
 import { steamPerformanceDiagnostics } from "./performanceDiagnostics";
@@ -35,6 +36,51 @@ describe("Steam performance runtime", () => {
     decky.findModuleExport.mockReset();
     delete (window as Window & { SystemPerfStore?: unknown }).SystemPerfStore;
     delete (window as Window & { webpackChunksteamui?: unknown }).webpackChunksteamui;
+  });
+
+  it.each([
+    ["42", "42", 42, "game"],
+    ["42", "769", 42, "global"],
+    ["769", "769", null, "global"],
+    ["3764200", "769", null, "global"],
+    ["3764200", "3764200", null, "unknown"],
+    ["769", "769", 42, "unknown"],
+    ["43", "43", 42, "unknown"],
+    ["42", "43", 42, "unknown"],
+    ["42", "42", null, "unknown"],
+    [undefined, "769", null, "unknown"],
+    ["42", undefined, 42, "unknown"],
+    ["-42", "-42", 42, "unknown"],
+    ["0", "0", null, "unknown"],
+    ["42.0", "42", 42, "unknown"],
+    ["18446744073709551616", "769", 42, "unknown"],
+    [Number.MAX_SAFE_INTEGER + 1, "769", 42, "unknown"],
+    ["42", "42", NaN, "unknown"],
+    ["42", "42", 0, "unknown"],
+  ])("reads profile current=%s active=%s live=%s as %s without writes", (current, active, live, expected) => {
+    const setter = vi.fn();
+    Object.assign(window, { SystemPerfStore: {
+      msgLimits: {}, nCurrentGameID: current, nActiveProfileGameID: active,
+      SetGameSpecificProfileEnabled: setter,
+    } });
+    expect(readSteamPerformanceProfile(live as number | null)).toBe(expected);
+    expect(setter).not.toHaveBeenCalled();
+  });
+
+  it("reads a non-Steam GameID64 through its live appid", () => {
+    const appid = 3570110851;
+    const id = ((BigInt(appid) << BigInt(32)) | (BigInt(2) << BigInt(24))).toString();
+    Object.assign(window, { SystemPerfStore: {
+      msgLimits: {}, nCurrentGameID: id, nActiveProfileGameID: id,
+    } });
+    expect(readSteamPerformanceProfile(appid)).toBe("game");
+  });
+
+  it.each(["nCurrentGameID", "nActiveProfileGameID"])("degrades a throwing %s getter to unknown", (key) => {
+    const store = { msgLimits: {}, nCurrentGameID: "42", nActiveProfileGameID: "42" };
+    Object.defineProperty(store, key, { get() { throw new Error("unavailable"); } });
+    Object.assign(window, { SystemPerfStore: store });
+    expect(readSteamPerformanceProfile(42)).toBe("unknown");
   });
 
   it("discovers controls only inside the module carrying Steam's reset export", () => {

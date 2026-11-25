@@ -233,6 +233,17 @@ class GameBarProjectTests(unittest.TestCase):
             r"HardwareBroker\PanelDeControl.Hardware.exe",
             full_trust.attrib["Executable"],
         )
+        startup = root.find(
+            ".//desktop:Extension[@Category='windows.startupTask']",
+            namespaces,
+        )
+        self.assertIsNotNone(startup)
+        self.assertEqual(full_trust.attrib["Executable"], startup.attrib["Executable"])
+        self.assertEqual("Windows.FullTrustApplication", startup.attrib["EntryPoint"])
+        self.assertEqual(
+            "true",
+            startup.find(".//desktop:StartupTask", namespaces).attrib["Enabled"],
+        )
         parameter_group = full_trust.find(".//desktop:ParameterGroup", namespaces)
         self.assertEqual("HardwareBroker", parameter_group.attrib["GroupId"])
         self.assertEqual("--gamebar", parameter_group.attrib["Parameters"])
@@ -628,7 +639,7 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn(r'@"LOCAL\PanelDeControl.Display"', brightness_server)
         self.assertIn("new BrightnessControlPipeServer(", program)
         self.assertIn("new WmiDisplayBrightnessProvider()", program)
-        self.assertIn("brightnessTask", program)
+        self.assertIn("SuperviseAsync(\"brightness\", () => brightnessServer.RunUntilCancelledAsync(token), token)", program)
         self.assertIn(r'@"\\.\root\wmi"', provider)
         self.assertIn("FROM WmiMonitorConnectionParams", provider)
         self.assertIn("FROM WmiMonitorBrightness ", provider)

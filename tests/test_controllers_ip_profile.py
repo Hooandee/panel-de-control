@@ -1,3 +1,6 @@
+import pytest
+
+
 from controllers import ip_profile as ip
 
 # Full Legion Go 2 source capability set (superset — includes phantom paddles the
@@ -27,13 +30,15 @@ def test_buttons_legion_go_2_silkscreen_map_grips_only():
     ]
 
 
-def test_buttons_legion_go_1_omits_unmapped_m1():
-    # M1 on the Go 1 emits a mouse/keyboard event (not a gamepad cap) → not remappable.
-    caps = [
-        "Gamepad:Button:LeftPaddle1", "Gamepad:Button:LeftPaddle2",
-        "Gamepad:Button:RightPaddle1", "Gamepad:Button:RightPaddle2",
-        "Gamepad:Button:LeftStickTouch", "Gamepad:Button:Guide",
-    ]
+GO1_GRIPS = [
+    "Gamepad:Button:LeftPaddle1", "Gamepad:Button:LeftPaddle2",
+    "Gamepad:Button:RightPaddle1", "Gamepad:Button:RightPaddle2",
+    "Gamepad:Button:RightPaddle3", "Gamepad:Button:Guide",
+]
+
+
+def test_buttons_legion_go_1_old_inputplumber_m2_is_left_stick_touch():
+    caps = GO1_GRIPS + ["Gamepad:Button:LeftStickTouch", "Gamepad:Button:RightStickTouch"]
     assert ip.buttons_for("legion_go", caps) == [
         ("LeftPaddle1", "Y1"),
         ("LeftPaddle2", "Y2"),
@@ -43,11 +48,23 @@ def test_buttons_legion_go_1_omits_unmapped_m1():
     ]
 
 
-def test_buttons_msi_claw_two_grips():
+def test_buttons_legion_go_1_current_inputplumber_m2_is_right_stick_touch():
+    caps = GO1_GRIPS + ["Gamepad:Button:RightStickTouch"]
+    assert ip.buttons_for("legion_go", caps) == [
+        ("LeftPaddle1", "Y1"),
+        ("LeftPaddle2", "Y2"),
+        ("RightPaddle1", "Y3"),
+        ("RightStickTouch", "M2"),
+        ("RightPaddle2", "M3"),
+    ]
+
+
+@pytest.mark.parametrize("key", ("msi_claw_8_ai_plus", "msi_claw_8_ex_ai_plus"))
+def test_buttons_msi_claw_two_grips(key):
     caps = ["Gamepad:Button:South", "Gamepad:Button:LeftPaddle1",
             "Gamepad:Button:RightPaddle1", "Gamepad:Button:Guide"]
     # Same caps as a Legion Y1/Y3 but on the Claw they are the physical M1/M2.
-    assert ip.buttons_for("msi_claw_8_ai_plus", caps) == [
+    assert ip.buttons_for(key, caps) == [
         ("RightPaddle1", "M1"),
         ("LeftPaddle1", "M2"),
     ]
@@ -214,3 +231,24 @@ def test_apply_empty_override_reverts_button_to_default():
     out = ip.apply_overrides_to_profile(profile, {"LeftPaddle1": [{"key": "bad"}]})
     # No valid target → our entry is dropped so the daemon's default takes over.
     assert out["mapping"] == []
+
+
+def test_source_renames_follow_the_button_to_its_new_capability():
+    caps = GO1_GRIPS + ["Gamepad:Button:RightStickTouch"]
+    assert ip.source_renames("legion_go", caps) == {"LeftStickTouch": "RightStickTouch"}
+
+
+def test_source_renames_follow_a_daemon_downgrade_too():
+    caps = GO1_GRIPS + ["Gamepad:Button:LeftStickTouch", "Gamepad:Button:RightStickTouch"]
+    assert ip.source_renames("legion_go", caps) == {"RightStickTouch": "LeftStickTouch"}
+
+
+def test_source_renames_empty_without_live_capabilities():
+    assert ip.source_renames("legion_go", []) == {}
+    assert ip.source_renames("legion_go_2", GO2_CAPS) == {}
+
+
+def test_source_renames_xbox_ally_old_paddle_names():
+    caps = ["Gamepad:Button:LeftPaddle2", "Gamepad:Button:RightPaddle2"]
+    assert ip.source_renames("rog_xbox_ally_x", caps) == {
+        "LeftPaddle1": "LeftPaddle2", "RightPaddle1": "RightPaddle2"}

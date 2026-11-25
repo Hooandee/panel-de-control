@@ -109,6 +109,26 @@ describe("ThemeCard", () => {
     expect(screen.queryByText("themes.remote.card.version")).toBeNull();
   });
 
+  it("tells offline apart from up to date and shows a newer early build", () => {
+    const { rerender } = render(<ThemeCard card={card({
+      installed: true, installedVersion: "1.2.3", versionRelation: "current", offline: true,
+    })} operation={null} onOpen={vi.fn()} />);
+
+    expect(screen.getByText("themes.remote.card.offline")).toBeTruthy();
+
+    rerender(<ThemeCard card={card({
+      installed: true, installedVersion: "1.2.3", versionRelation: "current", offline: false,
+    })} operation={null} onOpen={vi.fn()} />);
+    expect(screen.queryByText("themes.remote.card.offline")).toBeNull();
+
+    rerender(<ThemeCard card={card({
+      installed: true, installedVersion: "0.2.0", installable: false, targetVersion: undefined,
+      versionRelation: "unknown", earlyOnly: true, early: { version: "0.3.0", installable: true }, earlyUpdateAvailable: true,
+    })} operation={null} onOpen={vi.fn()} />);
+    expect(screen.getByText("themes.early.card.update")).toBeTruthy();
+    expect(screen.queryByText("themes.early.version")).toBeNull();
+  });
+
   it("remains browsable when incompatible", () => {
     const onOpen = vi.fn();
     render(<ThemeCard card={card({

@@ -3,6 +3,7 @@ from tdp.overshoot import (
     PROFILE_SETTLE_S,
     PlatformProfileWatch,
     NUDGE,
+    POLICY,
     REWRITE,
     SUSTAIN_S,
     VERIFY_S,
@@ -20,11 +21,19 @@ GAME = "game-a"
 ALLY_X_AC_OVERSHOOT = [21.5, 38.1, 40.2, 42.9, 44.0, 42.6, 43.0, 43.5, 43.2, 43.0]
 
 
-def feed(monitor, samples, start=0.0, step=2.0, target=FLAT_20, eligible=True):
+def feed(
+    monitor,
+    samples,
+    start=0.0,
+    step=2.0,
+    target=FLAT_20,
+    eligible=True,
+    policy_capable=False,
+):
     actions = []
     now = start
     for watts in samples:
-        action = monitor.observe(now, GAME, watts, target, eligible)
+        action = monitor.observe(now, GAME, watts, target, eligible, policy_capable)
         if action is not None:
             actions.append((now, action))
         now += step
@@ -71,6 +80,26 @@ def test_rewrite_that_does_not_help_escalates_to_nudge_then_gives_up():
     actions, _ = feed(monitor, samples)
     assert [action for _, action in actions] == [REWRITE, NUDGE]
     assert monitor.last["state"] == "unresolved"
+
+
+def test_policy_capable_backend_escalates_to_the_thermal_policy_last():
+    monitor = HiddenOvershootMonitor()
+    samples = [28.0] * int((SUSTAIN_S + 3 * VERIFY_S) / 2 + 4)
+    actions, _ = feed(monitor, samples, policy_capable=True)
+    assert [action for _, action in actions] == [REWRITE, NUDGE, POLICY]
+    assert monitor.last["state"] == "unresolved"
+    assert monitor.last["method"] == POLICY
+
+
+def test_policy_that_worked_becomes_the_first_correction_next_time():
+    monitor = HiddenOvershootMonitor()
+    first = [28.0] * int((SUSTAIN_S + 2 * VERIFY_S) / 2 + 2) + [20.0, 20.0]
+    actions, now = feed(monitor, first, policy_capable=True)
+    assert [action for _, action in actions] == [REWRITE, NUDGE, POLICY]
+    assert monitor.last["state"] == "restored"
+    assert monitor.as_dict()["preferred_method"] == POLICY
+    actions, _ = feed(monitor, [28.0] * 12, start=now, policy_capable=True)
+    assert [action for _, action in actions] == [POLICY]
 
 
 def test_nudge_that_worked_becomes_the_first_correction_next_time():

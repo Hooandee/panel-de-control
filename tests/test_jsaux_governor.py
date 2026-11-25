@@ -59,7 +59,7 @@ def test_hourly_and_daily_budgets():
     assert gov.decide("next", "user") is Decision.ALLOW
     clock.t += 3600
     assert gov.decide("next", "scheduled") is Decision.ALLOW
-    for n in range(120):
+    for n in range(240):
         gov.record(f"u{n}", ok=True, kind="user")
     assert gov.decide("more", "user") is Decision.BUDGET
 

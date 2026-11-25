@@ -496,3 +496,19 @@ def test_persistent_conflict_survives_sync_until_window_expires():
     expired = decide(targets, obs(), recent.memory, 51.0, 0)
     assert recent.conflict_persistent is True
     assert expired.conflict_persistent is False
+
+
+def test_degraded_retries_back_off_while_the_firmware_keeps_rejecting():
+    targets = build_targets({"pl1": 15}, {"pl1": {"min": 7, "max": 30}}, obs())
+    memory = ReconcileMemory()
+    for _ in range(3):
+        memory = after_apply(targets, obs(value=30), memory, now=10.0,
+                             wrote_ok=False, tolerance=0).memory
+    delays = []
+    for _ in range(6):
+        out = after_apply(targets, obs(value=30), memory, now=10.0,
+                          wrote_ok=False, tolerance=0)
+        assert out.status == "rejected"
+        delays.append(out.memory.next_retry_at - 10.0)
+        memory = out.memory
+    assert delays == [30.0, 60.0, 120.0, 240.0, 240.0, 240.0]

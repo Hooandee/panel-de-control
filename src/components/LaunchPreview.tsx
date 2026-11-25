@@ -1,6 +1,7 @@
 import { FC } from "react";
 
 import { theme } from "../theme";
+import { themeSizeOverride } from "../system/themeTokens";
 import { useI18n } from "../i18n";
 
 /**
@@ -45,7 +46,7 @@ export const LaunchPreview: FC<{ preview: string; owned: Set<string> }> = ({ pre
           })
         )}
       </div>
-      <div style={{ display: "flex", gap: theme.space.md, marginTop: theme.space.xs, fontSize: 10, color: theme.color.textMuted }}>
+      <div style={{ display: "flex", gap: theme.space.md, marginTop: theme.space.xs, fontSize: themeSizeOverride("fontCaption") ?? 10, color: theme.color.textMuted }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
           <span style={{ width: 9, height: 9, borderRadius: 2, background: theme.color.textMuted, display: "inline-block" }} />
           {t("params.preview.preserved")}

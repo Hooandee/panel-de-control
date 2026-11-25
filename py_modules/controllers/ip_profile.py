@@ -37,11 +37,6 @@ DEVICE_BUTTONS = {
         ("LeftPaddle1", "Y1"), ("LeftPaddle2", "Y2"), ("RightPaddle1", "Y3"),
         ("RightStickTouch", "M1"), ("LeftStickTouch", "M2"), ("RightPaddle2", "M3"),
     ],
-    "legion_go": [
-        # Go 1: M1 emits a mouse/keyboard event (not a gamepad cap) → not remappable.
-        ("LeftPaddle1", "Y1"), ("LeftPaddle2", "Y2"), ("RightPaddle1", "Y3"),
-        ("LeftStickTouch", "M2"), ("RightPaddle2", "M3"),
-    ],
     "legion_go_s": [
         ("LeftPaddle1", "Y1"), ("RightPaddle1", "Y2"),
     ],
@@ -49,6 +44,13 @@ DEVICE_BUTTONS = {
         ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
     ],
     "msi_claw_a8": [
+        ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
+    ],
+    "msi_claw_8_ex_ai_plus": [
+        ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
+    ],
+    # InputPlumber's oxp8 capability map swaps the raw HID sides before profiles.
+    "onexplayer_apex": [
         ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
     ],
     "zotac_gaming_zone": [
@@ -69,12 +71,22 @@ CAPABILITY_MAPPED_BUTTONS = {
 # Recognised models whose controller has no extra button beyond the standard
 # layout and the system buttons (AYN Thor: Back and AYN keys map to QuickAccess).
 DEVICES_WITHOUT_EXTRA_BUTTONS = frozenset({"ayn_thor"})
+# Consoles have no built-in controls; every pad is external and set up in Steam Input.
+DEVICES_WITHOUT_BUILTIN_CONTROLS = frozenset({"playstation_5"})
 
 # InputPlumber changed the normalized Xbox Ally paddle capabilities between shipped
 # versions. Pick the generation that best matches the live daemon; ties prefer the
 # current names. This keeps one physical M1/M2 pair in the UI instead of exposing
 # duplicate aliases when a transitional daemon advertises both generations.
 DEVICE_BUTTON_VARIANTS = {
+    # Go 1 M1 sends mouse events. InputPlumber <= 0.77.6 sends M2 as LeftStickTouch and
+    # advertises both touches (tie keeps the first); later versions use RightStickTouch.
+    "legion_go": [
+        [("LeftPaddle1", "Y1"), ("LeftPaddle2", "Y2"), ("RightPaddle1", "Y3"),
+         ("LeftStickTouch", "M2"), ("RightPaddle2", "M3")],
+        [("LeftPaddle1", "Y1"), ("LeftPaddle2", "Y2"), ("RightPaddle1", "Y3"),
+         ("RightStickTouch", "M2"), ("RightPaddle2", "M3")],
+    ],
     "rog_xbox_ally": [
         [("LeftPaddle2", "M2"), ("RightPaddle2", "M1")],
         [("LeftPaddle1", "M2"), ("RightPaddle1", "M1")],
@@ -139,17 +151,35 @@ def buttons_for(device_key, capabilities) -> list:
     ]
 
 
+def source_renames(device_key, capabilities) -> dict:
+    """{old source: current source} for buttons whose capability changed between
+    daemon versions, so a stored remap follows its physical button."""
+    current = {label: cap for cap, label in buttons_for(device_key, capabilities)}
+    renames = {}
+    for variant in DEVICE_BUTTON_VARIANTS.get(device_key or "", []):
+        for cap, label in variant:
+            new = current.get(label)
+            if new is not None and new != cap and cap not in current.values():
+                renames[cap] = new
+    return renames
+
+
 def is_known_device(device_key) -> bool:
     """Whether we have a known button map for this device."""
     return (
         device_key in DEVICE_BUTTONS
         or device_key in DEVICE_BUTTON_VARIANTS
         or device_key in DEVICES_WITHOUT_EXTRA_BUTTONS
+        or device_key in DEVICES_WITHOUT_BUILTIN_CONTROLS
     )
 
 
 def has_extra_buttons(device_key) -> bool:
     return device_key not in DEVICES_WITHOUT_EXTRA_BUTTONS
+
+
+def has_builtin_controls(device_key) -> bool:
+    return device_key not in DEVICES_WITHOUT_BUILTIN_CONTROLS
 
 
 def sanitize_target(target: dict):

@@ -32,9 +32,9 @@ German, Brazilian Portuguese and French.
 
 The videos are in Spanish, but YouTube's auto-translated subtitles work well.
 
-| [![Panel de Control in depth](https://img.youtube.com/vi/sDpXFTxG7NQ/hqdefault.jpg)](https://youtu.be/sDpXFTxG7NQ) | [![How to install themes](https://img.youtube.com/vi/aENDY4BFcRE/hqdefault.jpg)](https://youtu.be/aENDY4BFcRE) | [![Panel on ARM with Armada](https://img.youtube.com/vi/1BHufGK6nbo/hqdefault.jpg)](https://youtu.be/1BHufGK6nbo) |
-|:---:|:---:|:---:|
-| **The plugin in depth** | **How to install themes** | **Panel on ARM with Armada** |
+| [![Panel de Control in depth](https://img.youtube.com/vi/sDpXFTxG7NQ/hqdefault.jpg)](https://youtu.be/sDpXFTxG7NQ) | [![How to install themes](https://img.youtube.com/vi/aENDY4BFcRE/hqdefault.jpg)](https://youtu.be/aENDY4BFcRE) | [![Panel on ARM with Armada](https://img.youtube.com/vi/1BHufGK6nbo/hqdefault.jpg)](https://youtu.be/1BHufGK6nbo) | [![TV, music and backgrounds with Ambient](https://img.youtube.com/vi/tSKquRbJgeg/hqdefault.jpg)](https://youtu.be/tSKquRbJgeg) |
+|:---:|:---:|:---:|:---:|
+| **The plugin in depth** | **How to install themes** | **Panel on ARM with Armada** | **TV, music and backgrounds** |
 
 ## What it does
 
@@ -44,6 +44,8 @@ FPS you want without wasting battery.
 
 🌀 **Fans.** Live temperatures and RPM, and curves you draw with your finger. Over time it learns
 how hot each game runs and suggests a curve made for it.
+Fans that report only a percentage show that reading instead of RPM.
+Each profile keeps its custom curve when you switch modes and restores it when you return to Custom.
 
 🎨 **Display.** One-tap color modes (Native, Cinema, Vivid, Comfort) or fine tuning if you like to
 tinker, an OLED look for LCD screens, scheduled night mode and HDR where the panel supports it.
@@ -61,8 +63,14 @@ metrics show up, where and in what colors.
 🚀 **Launch options.** Each game's launch options turned into toggles with a plain explanation.
 FSR4, HDR, scaling and more, but only what your Proton version supports.
 
+🎮 **Upscalers.** Pick an installed game to configure upscaling and frame generation. The list
+also recognizes games installed in other Steam library folders.
+
 🧹 **Cleanup.** See how much space your games' Shader Cache and prefixes take up and get it back in
 a moment.
+
+🌄 **Ambient.** Your own Home backgrounds and a player for music, radio, YouTube, Twitch and TV
+that keeps going while you play. More on it below.
 
 ✨ **Themes.** Change how Steam looks from top to bottom with themes you install and update right
 from Panel. Themes in early access show an Early label and install from their zip.
@@ -79,6 +87,23 @@ gets touched. Experimental.
 🧩 **Your way.** Reorder and hide tabs, build your own views and pick an accent color. Everything
 works with the controller, and updates show up on their own in the quick access menu.
 
+## 📺 Ambient
+
+Put your photos, your videos or your games' art behind Home, and let a game's soundtrack play or
+its trailer show when you land on it, and pick which of the two leads. If the covers are hard to read,
+blur or darken the background, or add a vignette, as much as you like.
+
+If you chose to keep a theme’s background, **Show mine anyway** lets Ambient take it back for
+Panel while keeping your images and settings.
+
+It's also a player for everything: your music, radio from around the world on a map, YouTube,
+Twitch or TV channels from M3U lists. Queue it up, pick repeat or shuffle and take it into your game
+in a mini player you control with the gamepad. And instead of typing links with the D-pad, scan a
+QR code with your phone and send them from there.
+
+It starts off, so Steam stays as it is until you turn it on. The
+[video](https://youtu.be/tSKquRbJgeg) shows it in action.
+
 ## 📱 ARM too
 
 Panel isn't just for PCs. With Armada it also runs on ARM consoles, recognizes the model and chip,
@@ -91,15 +116,22 @@ the CPU and keep the GPU high.
 And if you have an AYN Thor, Panel can use the bottom screen as a touch panel while you play on the
 top one.
 
+## 🪟 Also on Windows
+
+Panel is coming to Windows in early access, as an Xbox Game Bar widget and as an app. Themes already
+work in Steam Big Picture just like on Linux, with no CSS Loader: install, enable and tweak them from
+Panel itself. The other sections show what your device reports and will open up over time. If
+something doesn't work as you expected, you can send me a report from Settings.
+
 ## 🕹️ Devices
 
 I test everything on the machines I have at home: **Steam Deck LCD and OLED, ROG Ally, ROG Ally X,
 ROG Xbox Ally X, Legion Go, Legion Go S, Legion Go 2 and MSI Claw 8 AI+**, and on ARM, **AYN Thor,
 AYN Odin 3, AYN Odin 2 Portal, Retroid Pocket 5, Retroid Pocket Nova and Anbernic RG Cube**.
 
-Many more have received support too: OneXFly Apex, GPD Win 5, GPD Win Mini, AOKZOE A1X, MSI Claw A8,
-OneXPlayer X2 Mini Pro and quite a few others, even desktop PCs and the Steam Machine. If your
-device isn't on the list, Panel looks at what it can control on it and shows you that.
+Many more have received support too: OneXFly Apex, GPD Win 5, GPD Win Mini, AOKZOE A1X, MSI Claw A8, MSI Claw 8 EX AI+,
+OneXPlayer X2 Mini Pro and quite a few others, even desktop PCs, the Steam Machine and the PS5 running Linux. If
+your device isn't on the list, Panel looks at what it can control on it and shows you that.
 
 ## 📦 Installation
 

@@ -79,7 +79,11 @@ const themedRadius = {
 // PanelSectionRow (Decky adds a little vertical room; this makes cards breathe).
 // Every card uses this ONE value so section gaps can't drift apart.
 const space = { xs: 4, sm: 8, md: 12, lg: 18, section: 14, card: 6 } as const;
-const font = { caption: 11, body: 13, value: 28 } as const;
+const font = {
+  get caption(): number { return themeSizeOverride("fontCaption") ?? 11; },
+  get body(): number { return themeSizeOverride("fontBody") ?? 13; },
+  get value(): number { return themeSizeOverride("fontValue") ?? 28; },
+};
 
 export const theme = {
   color: themedColor,
@@ -117,7 +121,7 @@ export const theme = {
   // Muted uppercase caption used as a section heading inside the full-screen
   // modals (Customize, Glossary). Shared so the treatment stays consistent.
   sectionLabel: {
-    fontSize: font.caption,
+    get fontSize(): number { return font.caption; },
     get color(): string {
       return themedColor.textMuted;
     },

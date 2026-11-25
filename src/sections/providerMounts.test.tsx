@@ -4,6 +4,7 @@ import type { FC, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const onScope = vi.hoisted(() => vi.fn());
+const profileState = vi.hoisted(() => ({ scope: "global", owner: undefined as any, hasGameProfile: false }));
 
 vi.mock("@decky/ui", () => ({
   Focusable: ({ children, ...props }: { children: ReactNode }) => <div {...props}>{children}</div>,
@@ -12,9 +13,9 @@ vi.mock("@decky/ui", () => ({
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock("../tdp/useTdp", () => ({
   useTdp: () => ({
-    tdp: { supported: false, has_game_profile: false },
+    tdp: { supported: false, has_game_profile: profileState.hasGameProfile, game_power_owner: profileState.owner },
     game: { appid: "42", name: "Dante" },
-    scope: "global",
+    scope: profileState.scope,
     onScope,
     refresh: vi.fn(),
   }),
@@ -45,7 +46,32 @@ const PowerMount = PotenciaProviderMount as FC<{
 describe("PotenciaProviderMount profile scope", () => {
   afterEach(() => {
     onScope.mockReset();
+    profileState.scope = "global";
+    profileState.owner = undefined;
+    profileState.hasGameProfile = false;
     cleanup();
+  });
+
+  it.each([
+    [true, "steam", "steam.performance.profile.game"],
+    [false, "steam", "tdp.inherit"],
+    [true, "pdc", "tdp.inherit"],
+    [undefined, undefined, "tdp.inherit"],
+  ])("shows the actual profile source for supported=%s owner=%s", (supported, owner, hint) => {
+    profileState.scope = "game";
+    profileState.owner = owner ? { supported, owner } : undefined;
+    render(<PowerMount showProfileSelector><div>power-controls</div></PowerMount>);
+    expect(screen.getByText(hint)).toBeTruthy();
+    expect(screen.queryByText(hint === "tdp.inherit" ? "steam.performance.profile.game" : "tdp.inherit")).toBeNull();
+  });
+
+  it("keeps saved PDC profile presence separate from the Steam source hint", () => {
+    profileState.scope = "game";
+    profileState.hasGameProfile = true;
+    profileState.owner = { supported: true, owner: "steam" };
+    render(<PowerMount showProfileSelector><div>power-controls</div></PowerMount>);
+    expect(screen.queryByText("steam.performance.profile.game")).toBeNull();
+    expect(screen.queryByText("tdp.inherit")).toBeNull();
   });
 
   it("does not add a profile selector when no visible block consumes it", () => {

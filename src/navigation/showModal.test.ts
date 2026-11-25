@@ -11,7 +11,7 @@ vi.mock("@decky/ui", () => ({ showModal: decky.show }));
 vi.mock("../themes/runtime/navigationAccess", () => ({ createThemeNavigationAccess: () => ({ focus }) }));
 
 import { setQamDocument } from "../qamDocument";
-import { showModal } from "./showModal";
+import { rememberOpener, showModal } from "./showModal";
 
 function panelControl(label: string, focused = true): HTMLElement {
   const root = document.createElement("div");
@@ -127,5 +127,29 @@ describe("showModal focus return", () => {
     showModal("modal", window);
 
     expect(decky.show.mock.calls[0][2]).toEqual(expect.objectContaining({ strTitle: "Decky Dialog", bHideMainWindowForPopouts: false }));
+  });
+});
+
+describe("context menu focus return", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+    focus.mockClear();
+  });
+
+  it("finds the picker again by its label in the remounted panel, once", () => {
+    const opener = panelControl("Fotogramas extra");
+    setQamDocument(document);
+    const back = rememberOpener();
+    opener.parentElement!.remove();
+    const remounted = panelControl("Fotogramas extra", false);
+
+    back();
+    back();
+
+    return new Promise<void>((resolve) => setTimeout(() => {
+      expect(focus).toHaveBeenCalledOnce();
+      expect(focus).toHaveBeenCalledWith(remounted);
+      resolve();
+    }, 20));
   });
 });

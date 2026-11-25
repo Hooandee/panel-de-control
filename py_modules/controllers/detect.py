@@ -7,45 +7,14 @@ would fight the daemon and break input, the same lesson as the display color
 work); instead it cooperates with whichever manager is present. This module
 identifies it so the Mandos UI can drive the right backend.
 """
-import os
 import subprocess
+
+from pdc_platform.host_env import clean_env, resolve_bin  # noqa: F401 - re-exported for existing callers
 
 HHD = "hhd"
 INPUTPLUMBER = "inputplumber"
 NONE = "none"
 
-# Common absolute locations for system binaries. The Decky plugin backend can run
-# with a MINIMAL PATH (observed on SteamOS: systemctl/busctl not found by name →
-# detection wrongly reported "none"), so we resolve to an absolute path and only
-# fall back to the bare name (PATH) as a last resort.
-_BIN_DIRS = ("/usr/bin", "/bin", "/usr/sbin", "/sbin")
-
-
-def resolve_bin(name: str) -> str:
-    for d in _BIN_DIRS:
-        p = os.path.join(d, name)
-        if os.path.exists(p):
-            return p
-    return name
-
-
-def clean_env(base=None) -> dict:
-    """Env for spawning SYSTEM binaries from Decky's frozen (PyInstaller) backend.
-
-    PyInstaller sets LD_LIBRARY_PATH to its unpacked bundle dir, whose older bundled
-    libs (e.g. libcrypto.so.3) POISON child system binaries: systemctl/busctl link
-    libsystemd→libcrypto and fail with `OPENSSL_x not found` → detection wrongly
-    reported "none". Restore the pre-bundle value PyInstaller saves as
-    LD_LIBRARY_PATH_ORIG (or drop it), and ensure a sane PATH.
-    """
-    env = dict(os.environ if base is None else base)
-    orig = env.pop("LD_LIBRARY_PATH_ORIG", None)
-    if orig:
-        env["LD_LIBRARY_PATH"] = orig
-    else:
-        env.pop("LD_LIBRARY_PATH", None)
-    env.setdefault("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
-    return env
 
 
 def resolve(facts: dict) -> dict:

@@ -70,6 +70,11 @@ _REMOTE_MANIFEST_REQUIRED_KEYS = frozenset({
     "patches",
 })
 _REMOTE_MANIFEST_OPTIONAL_KEYS = frozenset({"description", "target"})
+_MAX_THEME_ACTIONS = 8
+# Entries read before giving up on finding eight usable ones, so a huge list costs little.
+_MAX_THEME_ACTION_ENTRIES = 64
+_THEME_ACTION_ID = re.compile(r"^[a-z0-9-]{1,40}$")
+_MAX_THEME_ACTION_TEXT_CHARS = 240
 _REMOTE_PATCH_KEYS = frozenset({"default", "type", "values"})
 _REMOTE_PATCH_TYPES = frozenset({"checkbox", "dropdown", "none", "slider"})
 _REMOTE_TARGET_NAMES = frozenset({
@@ -595,7 +600,7 @@ def _validate_remote_content(
     _validate_css_resources(source, packaged_css, packaged_assets, theme_name)
 
 
-def _localized_label(value: object) -> dict[str, str]:
+def _localized_label(value: object, maximum: int = _MAX_PATCH_LABEL_CHARS) -> dict[str, str]:
     if not isinstance(value, dict):
         return {}
     return {
@@ -604,7 +609,7 @@ def _localized_label(value: object) -> dict[str, str]:
         if locale in _PATCH_LABEL_LOCALES
         and isinstance(text, str)
         and text.strip()
-        and len(text) <= _MAX_PATCH_LABEL_CHARS
+        and len(text) <= maximum
         and not any(ord(character) < 32 or ord(character) == 127 for character in text)
     }
 
@@ -667,6 +672,55 @@ def theme_patch_labels(themes_root: Path, theme_id: str, theme_name: str) -> dic
         return {}
 
 
+# Buttons a theme declares under `actions` in its panel-theme.json. Install takes any value and
+# reading drops what is malformed or repeated, so a theme never loses its install over an action.
+def _usable_theme_actions(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    actions: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in value[:_MAX_THEME_ACTION_ENTRIES]:
+        if len(actions) >= _MAX_THEME_ACTIONS:
+            break
+        if not isinstance(entry, dict):
+            continue
+        action_id = entry.get("id")
+        if not isinstance(action_id, str) or not _THEME_ACTION_ID.fullmatch(action_id) or action_id in seen:
+            continue
+        label = _localized_label(entry.get("label"))
+        if not label:
+            continue
+        action: dict[str, Any] = {"id": action_id, "label": label}
+        for key in ("description", "confirm"):
+            text = _localized_label(entry.get(key), _MAX_THEME_ACTION_TEXT_CHARS)
+            if text:
+                action[key] = text
+        if entry.get("destructive") is True:
+            action["destructive"] = True
+        seen.add(action_id)
+        actions.append(action)
+    return actions
+
+
+def theme_actions(themes_root: Path, theme_id: str, theme_name: str) -> list[dict[str, Any]]:
+    if (
+        not isinstance(theme_id, str)
+        or not _SAFE_ID.fullmatch(theme_id)
+        or not isinstance(theme_name, str)
+        or not theme_name.strip()
+        or Path(theme_name).name != theme_name
+        or theme_name in {".", ".."}
+    ):
+        return []
+    try:
+        panel = _read_existing_manifest(themes_root / theme_name / "panel-theme.json")
+    except ThemePackageError:
+        return []
+    if panel.get("schemaVersion") != 2 or panel.get("catalogId") != theme_id:
+        return []
+    return _usable_theme_actions(panel.get("actions"))
+
+
 def _extension_receipt(
     source: Path,
     theme_id: str,
@@ -678,7 +732,7 @@ def _extension_receipt(
         raise ThemePackageError("identity_mismatch", "Theme package marker is invalid")
     if "labels" in panel and not _bounded_patch_labels(panel["labels"]):
         raise ThemePackageError("identity_mismatch", "Theme patch labels are invalid")
-    keys = set(panel) - {"labels"}
+    keys = set(panel) - {"labels", "actions"}
     extension = panel.get("extension")
     if extension is None:
         if keys != {"schemaVersion", "catalogId"}:

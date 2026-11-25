@@ -1,8 +1,10 @@
+import { notifyPowerOwnershipChanged } from "./tdp/powerOwnershipInvalidation";
 import type { LevelFrequencies, PowerUnit } from "./tdp/unit";
 import { callable } from "@decky/api";
 import type { LaunchTools } from "./launch/catalog";
 import type { CleanerPlan, CleanerResult, CleanerState } from "./cleaner/types";
 import type { ProtonPlan, ProtonResult, ProtonState } from "./cleaner/protonTypes";
+import type { GameDetail, IniSection, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./upscalers/types";
 
 // callable<[arg types], ReturnType>("exact_backend_method_name")
 // Names must match the Python `async def` on the Plugin class exactly.
@@ -11,7 +13,7 @@ export const getVersion = callable<[], string>("get_version");
 export const getSteamCleanerState = callable<[], CleanerState>("get_steam_cleaner_state");
 export const scanSteamCleaner = callable<[], CleanerState>("scan_steam_cleaner");
 export const prepareSteamCleaner = callable<[
-  scanId: string, entryIds: string[],
+  scanId: string, entryIds: string[], forceEntryIds?: string[],
 ], CleanerPlan>("prepare_steam_cleaner");
 export const executeSteamCleaner = callable<[
   planId: string, confirmCompatdata: boolean,
@@ -42,7 +44,7 @@ export const prepareRemoteThemeInstall = callable<[
 ], unknown>("prepare_remote_theme_install");
 export const checkThemeReleases = callable<[force: boolean], unknown>("check_theme_releases");
 export const checkThemeEarly = callable<[force: boolean], unknown>("check_theme_early");
-export const prepareEarlyThemeInstall = callable<[archivePath: string], unknown>("prepare_early_theme_install");
+export const prepareEarlyThemeInstall = callable<[archivePath: string, catalogId?: string], unknown>("prepare_early_theme_install");
 export const earlyThemeArchiveFolder = callable<[], string>("early_theme_archive_folder");
 export const listThemeExtensions = callable<[], unknown>("list_theme_extensions");
 export const getThemeHealth = callable<[], unknown>("get_theme_health");
@@ -53,10 +55,21 @@ export const getThemePatchLabels = callable<[
   catalogId: string,
   cssLoaderName: string,
 ], unknown>("get_theme_patch_labels");
+export const getThemeActions = callable<[
+  catalogId: string,
+  cssLoaderName: string,
+], unknown>("get_theme_actions");
 export const loadThemeExtension = callable<[
   catalogId: string,
   version: string,
 ], unknown>("load_theme_extension");
+export const getThemeStorage = callable<[catalogId: string, key: string], unknown>("get_theme_storage");
+export const setThemeStorage = callable<[
+  catalogId: string,
+  key: string,
+  value: string,
+], unknown>("set_theme_storage");
+export const forceCloseGame = callable<[appid: string], unknown>("force_close_game");
 export const commitThemeInstall = callable<[transaction: string], unknown>("commit_theme_install");
 export const discardThemeExtensionReceipt = callable<[catalogId: string], unknown>(
   "discard_theme_extension_receipt",
@@ -314,6 +327,9 @@ export interface LowBatteryTdpHoldState {
 }
 
 export interface TdpState {
+  display_source?: "steam_live" | "saved";
+  steam_readback_available?: boolean;
+  game_power_owner?: GamePowerOwnerState;
   supported: boolean;
   // "level" on ARM: values are performance levels, never watts.
   unit?: PowerUnit;
@@ -377,8 +393,17 @@ export interface TdpState {
   // One-time full-screen notices already shown (durable across reboot).
   seen_autotdp_notice: boolean;
   seen_tdp_conflict_takeover: boolean;
+  // The user closed the "Stop controlling TDP" card; Panel keeps control.
+  hide_tdp_steamos_card: boolean;
   // AC kept dropping and coming back; null while power has been steady.
   charger_unstable: ChargerUnstable | null;
+  // The kernel has asus-armoury but no power limits for this board yet, so TDP runs
+  // through the legacy path; null once the kernel supports it.
+  kernel_support: KernelSupport | null;
+}
+
+export interface KernelSupport {
+  visible: boolean;
 }
 
 export interface ChargerUnstable {
@@ -452,7 +477,57 @@ export const setLowBatteryTdpHold = callable<[enabled: boolean], TdpState>(
 export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_watts");
 export const setGpuLevel = callable<[level: number | null, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_gpu_level");
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
-export const setCurrentGame = callable<[appid: string | null, name?: string | null], TdpState>("set_current_game");
+export type SteamPowerProfile = "active" | "inactive" | "unknown";
+export type GamePowerOwner = "steam" | "pdc";
+export interface GamePowerOwnerState {
+  supported?: boolean;
+  reset_pending?: boolean;
+  context_appid: string | null;
+  revision: number;
+  observed: boolean;
+  steam_profile: SteamPowerProfile | null;
+  explicit_owner: GamePowerOwner | null;
+  owner: GamePowerOwner | "unresolved";
+  write_allowed: boolean;
+  reason: string;
+  steam_settings?: Record<string, number | boolean>;
+}
+export interface GamePowerOwnerResult extends GamePowerOwnerState {
+  ok: boolean;
+  detail?: string | null;
+}
+export const getGamePowerOwner = callable<[], GamePowerOwnerState>("get_game_power_owner");
+const requestGamePowerOwner = callable<[appid: string, owner: GamePowerOwner, expected_revision: number, steam_settings?: Record<string, number | boolean>], GamePowerOwnerResult>("set_game_power_owner");
+const requestGameSteamSetting = callable<[appid: string, expected_revision: number, id: string, value: number | boolean], GamePowerOwnerResult>("update_game_steam_setting");
+export async function setGamePowerOwner(...args: Parameters<typeof requestGamePowerOwner>): Promise<GamePowerOwnerResult> {
+  const result = await requestGamePowerOwner(...args);
+  if (result.ok) notifyPowerOwnershipChanged(result);
+  return result;
+}
+export async function updateGameSteamSetting(...args: Parameters<typeof requestGameSteamSetting>): Promise<GamePowerOwnerResult> {
+  const result = await requestGameSteamSetting(...args);
+  if (result.ok) notifyPowerOwnershipChanged(result);
+  return result;
+}
+const requestBeginGamePowerReset = callable<[appid: string | null, expected_revision: number], GamePowerOwnerResult & { token?: string }>("begin_game_power_reset");
+const requestFinishGamePowerReset = callable<[token: string, steam_settings: Record<string, number | boolean>], GamePowerOwnerResult>("finish_game_power_reset");
+const requestAbortGamePowerReset = callable<[token: string], GamePowerOwnerResult>("abort_game_power_reset");
+export async function beginGamePowerReset(...args: Parameters<typeof requestBeginGamePowerReset>) {
+  const result = await requestBeginGamePowerReset(...args);
+  if (result.ok) notifyPowerOwnershipChanged(result);
+  return result;
+}
+export async function abortGamePowerReset(...args: Parameters<typeof requestAbortGamePowerReset>) {
+  const result = await requestAbortGamePowerReset(...args);
+  if (result.ok) notifyPowerOwnershipChanged(result);
+  return result;
+}
+export async function finishGamePowerReset(...args: Parameters<typeof requestFinishGamePowerReset>): Promise<GamePowerOwnerResult> {
+  const result = await requestFinishGamePowerReset(...args);
+  if (result.ok) notifyPowerOwnershipChanged(result);
+  return result;
+}
+export const setCurrentGame = callable<[appid: string | null, name?: string | null, steam_profile?: SteamPowerProfile], TdpState>("set_current_game");
 export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_levels");
 // Sets the boost mode; returns the full new TDP state so the UI updates the segmented
 // control + rails in one round-trip.
@@ -523,6 +598,7 @@ export const getTdpConflict =
     hhd_present: boolean;
     hhd_managing: boolean;
     powerstation_active: boolean;
+    steamos_manager_active?: boolean | null;
   }>("get_tdp_conflict");
 // Hand HHD's TDP module over to us (reversible; saves its previous value).
 export const takeTdpControl =
@@ -534,7 +610,10 @@ export const setSeenAutotdpNotice =
   callable<[seen: boolean], boolean>("set_seen_autotdp_notice");
 export const setSeenTdpConflictTakeover =
   callable<[seen: boolean], boolean>("set_seen_tdp_conflict_takeover");
+export const setHideTdpSteamosCard =
+  callable<[hidden: boolean], boolean>("set_hide_tdp_steamos_card");
 export const dismissChargerNotice = callable<[], boolean>("dismiss_charger_notice");
+export const dismissKernelSupportNotice = callable<[], boolean>("dismiss_kernel_support_notice");
 
 export type FanScope = Scope;
 // "adaptive" = the learned curve (computed live from telemetry). Choosing it IS
@@ -558,6 +637,7 @@ export interface FanCurveState {
   firmware_points: { temp: number; pct: number }[] | null;
   preset: FanPreset;
   points: [number, number][] | null;
+  custom_points?: [number, number][] | null;
   // Silence↔cool bias for the adaptive mode (-100..100, 0 otherwise).
   bias: number;
   global_preset: FanPreset;
@@ -589,10 +669,35 @@ export interface FanCurveState {
   kernel_pending?: boolean;
   device_key?: string | null;
   independent?: boolean;
-  channels?: DesktopFanChannel[];
+  // Desktop PCs: the independent channels. With `split` (ASUS): one entry per fan
+  // (cpu = pwm1, gpu = pwm2) carrying its own curve.
+  channels?: Array<DesktopFanChannel | SplitFanChannel>;
+  // The hardware exposes two independent tables (ASUS) -> "Juntos / Por separado" is offered.
+  split_available?: boolean;
+  // Per-channel mode is active (always false when !split_available).
+  split?: boolean;
+  split_preset?: Exclude<FanPreset, "adaptive">;
+  points_by_channel?: Record<SplitFanKey, [number, number][]> | null;
+  custom_points_by_channel?: Record<SplitFanKey, [number, number][]> | null;
   apply_ok?: boolean;
   rollback_ok?: boolean;
   board_fans?: BoardFanState;
+  target_temp?: FanTargetState;
+}
+
+// PlayStation 5: the firmware drives the fan to hold a target temperature.
+export interface FanTargetState {
+  supported: boolean;
+  celsius: number | null;
+  target: number | null;
+  min: number;
+  max: number;
+  default: number;
+  presets: { id: "quiet" | "balanced" | "cool" | "max"; celsius: number }[];
+  other_controller?: string | null;
+  guard_active?: boolean;
+  ok?: boolean;
+  detail?: string;
 }
 
 // Desktop PCs: opt-in loading of the motherboard's fan driver.
@@ -603,7 +708,16 @@ export interface BoardFanState {
   loaded?: string[];
   loaded_by_panel?: string[];
   channels?: number;
+  control_off?: boolean;
   last?: { action: string; ok: boolean; channels: number; detail: string } | null;
+}
+
+export type SplitFanKey = "cpu" | "gpu";
+
+export interface SplitFanChannel {
+  key: SplitFanKey;
+  preset: Exclude<FanPreset, "adaptive">;
+  points: [number, number][] | null;
 }
 
 export interface DesktopFanChannel {
@@ -652,6 +766,43 @@ export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state
 export const setFanExperimental =
   callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
 export const resetFanControl = callable<[], FanCurveState>("reset_fan_control");
+export interface ConsoleLightPreset {
+  id: string;
+  animated: boolean;
+}
+
+export interface ConsoleState {
+  supported: boolean;
+  temps?: { apu: number | null; ssd: number | null };
+  led?: {
+    supported: boolean;
+    presets: ConsoleLightPreset[];
+    active: string | null;
+    pending: boolean;
+    last: { ok: boolean; preset: string; detail: string } | null;
+  };
+  guard?: {
+    enabled: boolean;
+    threshold: number;
+    effective_threshold: number;
+    blocked: "fan_module_off" | null;
+    alarm: boolean;
+    alarm_supported: boolean;
+    active: boolean;
+    fan_held: boolean;
+    fan_supported: boolean;
+    last_beep: string | null;
+  };
+  ok?: boolean;
+  detail?: string;
+}
+
+export const getConsoleState = callable<[], ConsoleState>("get_console_state");
+export const setConsoleLed = callable<[preset: string], ConsoleState>("set_console_led");
+export const setThermalGuard =
+  callable<[enabled: boolean | null, threshold: number | null, alarm: boolean | null], ConsoleState>("set_thermal_guard");
+export const setFanTargetTemp =
+  callable<[celsius: number | null], FanTargetState>("set_fan_target_temp");
 export const setBoardFanEnabled =
   callable<[enabled: boolean], BoardFanState>("set_board_fan_enabled");
 export const setFanPreset =
@@ -659,7 +810,11 @@ export const setFanPreset =
 export const setFanFollowGlobal =
   callable<[follow: boolean, appid: string | null], FanCurveState>("set_fan_follow_global");
 export const setFanCurvePoints =
-  callable<[points: [number, number][], scope: FanScope, appid: string | null], FanCurveState>("set_fan_curve_points");
+  callable<[points: [number, number][], scope: FanScope, appid: string | null, channel?: SplitFanKey | null],
+    FanCurveState>("set_fan_curve_points");
+// Joined <-> per-channel ("Juntos / Por separado"); only where `split_available`.
+export const setFanSplit =
+  callable<[split: boolean, scope: FanScope, appid: string | null], FanCurveState>("set_fan_split");
 export const setFanCurveAuto =
   callable<[scope: FanScope, appid: string | null], FanCurveState>("set_fan_auto");
 // Adaptive (learned) mode. Selecting it drives the learned curve (or firmware auto
@@ -894,12 +1049,21 @@ export interface ColorState extends ColorPreset {
 }
 
 export interface GpuClockState {
+  display_source?: "steam_live" | "saved";
+  steam_readback_available?: boolean;
+  game_power_owner?: GamePowerOwnerState;
+  appid?: string | null;
+  global_manual?: boolean;
+  global_min?: number | null;
+  global_max?: number | null;
   supported: boolean;
   managed_by_power?: boolean;
   // ARM: the Power level capping the GPU while Power owns its clock.
   power_level?: number | null;
   power_level_split?: boolean;
   manual: boolean;
+  // PS5: the CPU boost makes the firmware ignore the GPU limit.
+  cpu_boost_overrides?: boolean;
   range_min: number | null;
   range_max: number | null;
   // Discrete frequencies (MHz) on table-driven GPUs; null when any MHz value is valid.
@@ -1010,6 +1174,7 @@ export interface ControllerConfig {
   // `buttons` is empty and the UI shows an honest "not calibrated" note.
   device_known?: boolean;
   extra_buttons?: boolean;
+  builtin_controls?: boolean;
   // A button left at its default is lost by the emulated gamepad (read live).
   unmapped_dropped?: boolean;
   buttons?: RemapButton[];
@@ -1109,6 +1274,7 @@ export interface GameProfileRow {
   gpu?: { manual: boolean; min: number | null; max: number | null; follows_global: boolean };
   mandos?: { count: number; follows_global: boolean };
   audio?: { follows_global: boolean };
+  hud?: { enabled: boolean; follows_global: boolean };
 }
 export const listGameProfiles = callable<[], GameProfileRow[]>("list_game_profiles");
 export const resetGameProfiles =
@@ -1119,8 +1285,19 @@ import type { HudModel, HudState } from "./mangohud/model";
 export type { HudModel, HudState } from "./mangohud/model";
 
 export const getHudState = callable<[], HudState>("get_hud_state");
-export const setHudConfig = callable<[model: HudModel], HudState>("set_hud_config");
-export const resetHud = callable<[], HudState>("reset_hud");
+export const setHudConfig = callable<
+  [model: HudModel, scope: Scope, appid: string | null, contextAppid: string | null],
+  HudState
+>("set_hud_config");
+export const resetHud = callable<
+  [scope: Scope, appid: string | null, contextAppid: string | null],
+  HudState
+>("reset_hud");
+export const setHudFollowGlobal = callable<
+  [follow: boolean, appid: string, contextAppid: string | null],
+  HudState
+>("set_hud_follow_global");
+export const listHudGames = callable<[], string[]>("list_hud_games");
 export const reloadHud = callable<[], HudState>("reload_hud");
 export const resolveHudConflict =
   callable<[action: "keep_external" | "use_pdc"], HudState>("resolve_hud_conflict");
@@ -1331,3 +1508,82 @@ export const setAccessoryOnSuspend = callable<[mode: "off" | "pet"], Accessories
 export const accessorySuspend = callable<[], AccessoriesState>("accessory_suspend");
 export const accessoryResume = callable<[], AccessoriesState>("accessory_resume");
 export const setAccessoryAlerts = callable<[prefs: { achievements: boolean }], AccessoriesState>("set_accessory_alerts");
+export const getDuoArtwork = callable<[], Record<string, import("./themes/artwork").GameArtwork>>("get_duo_artwork");
+export const getThemeGroups = callable<[account: string], unknown[]>("get_theme_groups");
+export const setThemeGroups = callable<[account: string, groups: unknown[]], { ok: boolean; error?: string; groups?: unknown[] }>("set_theme_groups");
+export const getTabMasterTabs = callable<[account: string], unknown[]>("get_tab_master_tabs");
+export const setDuoArtwork = callable<[number, import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_duo_artwork");
+export const getThemeArtwork = callable<[store: import("./themes/artwork").ThemeArtworkStore], Record<string, import("./themes/artwork").GameArtwork>>("get_theme_artwork");
+export const setThemeArtwork = callable<[store: import("./themes/artwork").ThemeArtworkStore, appId: number, artwork: import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_theme_artwork");
+
+export interface SelectorInventory { appids: number[]; complete: boolean; rejected?: Record<string, number> }
+export const getUpscalersSelectorInstalls = callable<[libraries: string[]], SelectorInventory>("get_upscalers_selector_installs");
+export const getUpscalersOverview = callable<[], UpscalersOverview>("get_upscalers_overview");
+export interface GameCompat { native: boolean; inputs: string[]; preferred?: string; unavailable?: string }
+export const getUpscalersCompat = callable<[appids: string[], libraries?: string[]], Record<string, GameCompat>>("get_upscalers_compat");
+export const searchUpscalerGames = callable<[term: string], { id: number; name: string }[]>("search_upscaler_games");
+export const setUpscalerIdentity = callable<[appid: string, steamAppid: number | null, name: string | null], GameDetail>("set_upscaler_identity");
+export const getUpscalersGame = callable<[appid: string, hint?: import("./upscalers/shortcutHint").ShortcutHint | null], GameDetail>("get_upscalers_game");
+export const getUpscalerUserFileCandidates = callable<[dependencyId: string], { folder: string; candidates: import("./upscalers/types").UserFileCandidate[] }>("get_upscaler_user_file_candidates");
+export const addUpscalerUserFile = callable<[appid: string, dependencyId: string, path: string], GameDetail>("add_upscaler_user_file");
+export const removeUpscalerUserFile = callable<[appid: string, dependencyId: string], GameDetail>("remove_upscaler_user_file");
+export const getUpscalerModCandidates = callable<[appid: string], { folder: string; candidates: { path: string; filename: string; size: number }[]; downloading?: { filename: string; size: number } | null }>("get_upscaler_mod_candidates");
+export const addUpscalerMod = callable<[appid: string, path: string, password?: string], GameDetail>("add_upscaler_mod");
+export const removeUpscalerMod = callable<[appid: string], GameDetail>("remove_upscaler_mod");
+export const setUpscalersExe = callable<[appid: string, exe: string | null], GameDetail>("set_upscalers_exe");
+export const installUpscaler = callable<[appid: string, choice: UpscalerChoice], UpscalerJob>("install_upscaler");
+export const recordUpscalerArgs = callable<[appid: string, args: string[], overrides?: string[], env?: string[]], { added_args: string[] }>("record_upscaler_args");
+export const beginScalerTransition = callable<[appid: string], { token: string; restore: UpscalerJob["result"] | null; recovery: boolean; previous_mako: MakoProfile | null; helix_removed?: boolean }>("begin_scaler_transition");
+export const finishScalerTransition = callable<[appid: string, token: string, rollback: boolean], UpscalerJob["result"] | null>("finish_scaler_transition");
+export const uninstallUpscaler = callable<[appid: string], UpscalerJob>("uninstall_upscaler");
+export const configureUpscaler = callable<[appid: string, choice: UpscalerChoice | { fg: "off" }], { options: UpscalerChoice; live?: boolean }>("configure_upscaler");
+export const refreshUpscalerWiki = callable<[appid?: string], { updated: boolean; fresh: boolean }>("refresh_upscaler_wiki");
+export interface UpscalerImageSettings {
+  supported: boolean;
+  sharpness: { enabled: boolean | null; value: number | null } | null;
+  int8: "auto" | "on" | "off" | null;
+  managed: boolean;
+  reason?: string;
+}
+export interface UpscalerImagePatch {
+  sharpness?: { enabled: boolean; value: number };
+  int8?: "auto" | "on" | "off";
+}
+export const getUpscalerImageSettings = callable<[appid: string], UpscalerImageSettings>("get_upscaler_image_settings");
+export const setUpscalerImageSettings = callable<[appid: string, values: UpscalerImagePatch], UpscalerImageSettings>("set_upscaler_image_settings");
+export const restoreUpscalerImageSettings = callable<[appid: string], UpscalerImageSettings>("restore_upscaler_image_settings");
+export const getUpscalerIni = callable<[appid: string], { sections: IniSection[] }>("get_upscaler_ini");
+export const setUpscalerIni = callable<[appid: string, key: string, value: string], { key: string; value: string }>("set_upscaler_ini");
+export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] } | null; resolution_source?: "initialization_only" | "unavailable"; fg?: boolean | null; fg_toggle?: boolean; fps?: number | null; fallback?: import("./upscalers/types").ScalerFallback | null; provider_family?: "fsr" | "dlss" | "xess" | null; provider_name?: "FSR" | "DLSS" | "XeSS" | null; provider_version?: string | null; provider_model?: string | null; provider_source?: "optiscaler_log" | "unavailable"; provider_confidence?: "log_provider" | "family_only" | "unknown" }>("get_upscaler_live");
+export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow_scale: number; flow_manual?: boolean; manual_scale?: number | null; performance: boolean }
+export interface EngineUpdate { state: "current" | "available" | "updated" | "deferred" | "failed" | "unmanaged"; version: string; available?: string }
+export const refreshFrameGenEngine = callable<[engine: "mako" | "mako5" | "lsfg", apply?: boolean], EngineUpdate>("refresh_framegen_engine");
+export interface LsfgStatus { version?: string | null; installed: boolean; foreign: boolean; foreign_backup?: boolean; cleared?: string[]; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
+export const adoptForeignLsfg = callable<[], LsfgStatus>("adopt_foreign_lsfg");
+export const restoreForeignLsfg = callable<[], LsfgStatus>("restore_foreign_lsfg");
+export const adoptForeignUpscaler = callable<[appid: string], { moved: string[] }>("adopt_foreign_upscaler");
+export const restoreForeignUpscaler = callable<[appid: string], { restored: string[] }>("restore_foreign_upscaler");
+export const getLsfgStatus = callable<[], LsfgStatus>("get_lsfg_status");
+export const installLsfg = callable<[], LsfgStatus>("install_lsfg");
+export const setLsfgGame = callable<[appid: string, config: Partial<LsfgProfile> | null], { env: Record<string, string>; profile: LsfgProfile | null }>("set_lsfg_game");
+export type MakoFgMode = "quality" | "balanced" | "performance" | "extra-performance";
+export interface MakoProfile { enabled?: boolean; engine?: 4 | 5; fg_mode?: MakoFgMode; flow_scale?: number; scaling_enabled?: boolean; scaling_factor?: number; scaling_sharpness?: number; name?: string; mode: "fixed" | "adaptive"; multiplier: 2 | 3 | 4 | 5; target_fps: number; max_multiplier: 2 | 3 | 4 | 5; flow: "quality" | "balanced" | "performance" | "fastest" | "manual"; performance: boolean }
+export interface MakoStatus { scaler_transition_pending?: boolean; spatial_ready?: boolean; installed: boolean; ready: boolean; supported: boolean; reason: string | null; dll: boolean; foreign: boolean; version: string | null; notice_dismissed?: boolean; v5?: { installed: boolean; ready: boolean; reason: string | null; version: string | null }; profiles: Record<string, MakoProfile> }
+export const getMakoStatus = callable<[appid?: string], MakoStatus>("get_mako_status");
+export const installMako = callable<[line?: 4 | 5], MakoStatus>("install_mako");
+export const dismissMakoNotice = callable<[], MakoStatus>("dismiss_mako_notice");
+export const setMakoGame = callable<[appid: string, config: Partial<MakoProfile> | null], { env: Record<string, string>; wrappers: string[]; profile: MakoProfile | null }>("set_mako_game");
+export const getMakoRuntime = callable<[appid: string], { observed: boolean; active?: boolean | null; scaling_active?: boolean; spatial_resolution?: { render: [number, number]; output: [number, number] } | null; spatial_methods?: { requested_method?: string; active_method?: string }; scaling_inactive_reason?: "gamescope-presentation-target-no-headroom" | null; role?: string; requested?: Record<string, number | boolean | string>; applied?: Record<string, number | boolean | string>; pending?: Partial<Record<"frame_generation_private" | "spatial_private" | "swapchain_recreation" | "process_restart", boolean>>; error?: string | null }>("get_mako_runtime");
+export const getUpscalerLaunchReceipt = callable<[appid: string, owner: string], import("./upscalers/launchOwnership").LaunchReceipt | null>("get_upscaler_launch_receipt");
+export const setUpscalerLaunchReceipt = callable<[appid: string, owner: string, receipt: import("./upscalers/launchOwnership").LaunchReceipt], boolean>("set_upscaler_launch_receipt");
+export type UpscalerKey = "menu" | "fg" | "fps" | "fps_style";
+export const pressUpscalerKey = callable<[appid: string, action: UpscalerKey], { pressed: string }>("press_upscaler_key");
+export const captureUpscalerFrame = callable<[appid: string], import("./upscalers/CompareView").Shot>("capture_upscaler_frame");
+export const verifyUpscaler = callable<[appid: string], VerifyResult>("verify_upscaler");
+export const getUpscalersJob = callable<[], UpscalerJob | null>("get_upscalers_job");
+export const cancelUpscalersJob = callable<[], UpscalerJob | null>("cancel_upscalers_job");
+// A theme's menus over the running game freeze it meanwhile (py_modules/game_freeze.py).
+export const pauseThemeGame = callable<[appid: string, ms: number], boolean>("pause_theme_game");
+export const resumeThemeGame = callable<[], void>("resume_theme_game");
+export const getThemeHltb = callable<[appid: string, name: string], unknown>("get_theme_hltb");
+export const getThemeProtonDb = callable<[appid: string], unknown>("get_theme_protondb");

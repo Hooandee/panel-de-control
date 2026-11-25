@@ -3,6 +3,8 @@
 import os
 import re
 
+from steam_cleaner.vdf import read_text
+
 _ENV_RE = re.compile(r"""check_environment\(\s*["'](PROTON_[A-Z0-9_]+)["']""")
 _OFFICIAL_FSR4_DLL = os.path.join("contrib", "amdxcffx64.dll")
 
@@ -48,15 +50,44 @@ def _builtin_folder(compat_name: str) -> str | None:
     return None
 
 
-def _find_proton_script(compat_name: str, home: str, system_dirs) -> str | None:
-    if not compat_name:
+def _custom_proton_script(directory: str, compat_name: str) -> str | None:
+    manifest = os.path.join(directory, "compatibilitytool.vdf")
+    install_path = "."
+    if os.path.lexists(manifest):
+        try:
+            document = read_text(manifest)
+            tool = document["compatibilitytools"]["compat_tools"][compat_name.lower()]
+            install_path = tool.get("install_path", ".")
+            if not isinstance(install_path, str) or os.path.isabs(install_path):
+                return None
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            return None
+    elif os.path.basename(directory) != compat_name:
         return None
-    # Custom tools (GE-Proton, Proton-CachyOS, …) keep their exact folder name.
+    path = os.path.join(directory, install_path, "proton")
+    return path if os.path.isfile(path) else None
+
+
+def _find_proton_script(compat_name: str, home: str, system_dirs) -> str | None:
+    if not compat_name or os.path.basename(compat_name) != compat_name:
+        return None
     custom_dirs = [os.path.join(root, "compatibilitytools.d") for root in _steam_roots(home)]
-    for d in (*custom_dirs, *system_dirs):
-        p = os.path.join(d, compat_name, "proton")
-        if os.path.isfile(p):
-            return p
+    roots = (*custom_dirs, *system_dirs)
+    for directory in roots:
+        path = _custom_proton_script(os.path.join(directory, compat_name), compat_name)
+        if path:
+            return path
+    for directory in roots:
+        try:
+            entries = sorted(os.listdir(directory))
+        except OSError:
+            continue
+        for entry in entries:
+            if entry == compat_name:
+                continue
+            path = _custom_proton_script(os.path.join(directory, entry), compat_name)
+            if path:
+                return path
     folder = _builtin_folder(compat_name)
     if folder:
         for root in _steam_roots(home):

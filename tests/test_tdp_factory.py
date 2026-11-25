@@ -598,6 +598,7 @@ def test_exact_legion_go_2_83n0_hands_off_to_balanced_when_rearm_fails(
     assert "transaction_lock" not in backend.diagnostics()
     assert backend.diagnostics()["firmware_handoff"] == {
         "profile": "balanced",
+        "observed_profile": "balanced",
         "attempts": 0,
         "retry_in_s": 30,
     }
@@ -631,6 +632,7 @@ def test_exact_legion_go_2_83n0_handoff_retries_with_backoff_until_firmware_answ
     assert "rollback confirmed" in still_stuck.detail
     assert backend.read_profile() == "balanced"
     assert not os.path.exists(lock_path)
+
     assert backend.diagnostics()["firmware_handoff"]["attempts"] == 1
     assert backend.diagnostics()["firmware_handoff"]["retry_in_s"] == 60
 
@@ -1367,6 +1369,8 @@ def test_exact_legion_go_s_83n6_diagnostics_keep_reported_sentinel_max(tmp_path)
     assert backend.diagnostics() == {
         "boost_capped_to_active": True,
         "ignored_live_maxes": {},
+        "ownership_recovery_pending": False,
+        "owns_state": False,
         "probe_live_max_on_ac": True,
         "readback_settle_ms": 750,
         "reported_live_bounds": {
@@ -1463,7 +1467,7 @@ def test_msi_claw_a8_never_uses_intel_msi_firmware_attr(tmp_path):
 
     assert backend.supported is True
     assert backend.name == "ryzenadj"
-    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
+    assert [item["candidate"] for item in backend.probe_trace] == ["msi_a8", "ryzenadj"]
 
 
 def test_msi_claw_a8_without_ryzenadj_fails_closed(tmp_path):
@@ -1477,7 +1481,7 @@ def test_msi_claw_a8_without_ryzenadj_fails_closed(tmp_path):
     )
 
     assert isinstance(backend, NullBackend)
-    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
+    assert [item["candidate"] for item in backend.probe_trace] == ["msi_a8", "ryzenadj"]
 
 
 def test_steam_deck_uses_hwmon(tmp_path):
@@ -2527,3 +2531,209 @@ def test_lock_with_changed_surfaces_and_no_handoff_profile_stays_locked(tmp_path
     assert recovered["ok"] is False
     assert "surfaces changed" in recovered["detail"]
     assert os.path.exists(lock_path)
+
+
+def test_playstation_5_does_not_claim_ryzenadj_from_binary_presence(tmp_path):
+    # ryzenadj on the PS5 APU answers "Fam17h: unsupported model 72"
+    # with exit 255, so a bundled binary must not become a TDP capability.
+    backend = select_backend(
+        _p("playstation_5"), root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert backend.supported is False
+    assert list(backend.probe_trace) == []
+
+
+def test_go2_handoff_reconfirms_fallback_after_profile_changes(tmp_path, monkeypatch):
+    backend, firmware, _lock, clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+    backend.recover_runtime_transaction()
+    backend.set_profile("custom")
+    waiting = backend.set_levels(18, 18, 18, ac=True)
+    assert "handed off to balanced" not in waiting.detail
+    assert backend.diagnostics()["firmware_handoff"]["observed_profile"] == "custom"
+    clock["now"] += 31
+    failed = backend.set_levels(18, 18, 18, ac=True)
+    assert not failed.ok
+    assert failed.failure_kind is None
+    assert backend.read_profile() == "balanced"
+    assert backend.diagnostics()["firmware_handoff"]["retry_in_s"] == 60
+    firmware["arms"] = True
+    clock["now"] += 61
+    assert backend.set_levels(18, 18, 18, ac=True).ok
+    assert backend.read_applied() == 18
+    assert "firmware_handoff" not in backend.diagnostics()
+
+
+@pytest.mark.parametrize("failure", ["write", "readback"])
+def test_go2_failed_fallback_stays_locked_until_confirmed(tmp_path, monkeypatch, failure):
+    backend, _firmware, lock_path, clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+    backend.recover_runtime_transaction()
+    backend.set_profile("custom")
+    model_write = backend._write
+
+    def reject_fallback(path, value):
+        if path.endswith("/profile") and value == "balanced":
+            return failure == "readback"
+        return model_write(path, value)
+
+    backend._write = reject_fallback
+    clock["now"] += 31
+    assert not backend.set_levels(18, 18, 18, ac=True).ok
+    assert backend.safety_locked
+    assert os.path.exists(lock_path)
+    assert backend.diagnostics()["transaction_lock"]["state"] == "handoff_pending"
+    assert not backend.recover_runtime_transaction()["ok"]
+    assert backend.safety_locked
+    backend._write = model_write
+    assert backend.recover_runtime_transaction()["ok"]
+    assert backend.read_profile() == "balanced"
+    assert not backend.safety_locked
+    assert not os.path.exists(lock_path)
+
+
+def test_go2_pending_handoff_recovers_after_plugin_restart(tmp_path, monkeypatch):
+    backend, _firmware, lock_path, clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+    backend.recover_runtime_transaction()
+    backend.set_profile("custom")
+    model_write = backend._write
+    backend._write = lambda path, value: (
+        False if path.endswith("/profile") and value == "balanced"
+        else model_write(path, value)
+    )
+    clock["now"] += 31
+    backend.set_levels(18, 18, 18, ac=True)
+    assert backend.safety_locked
+    restarted = select_backend(
+        _p("legion_go_2"), root=str(tmp_path), ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    assert restarted.safety_locked
+    assert restarted.recover_runtime_transaction()["ok"]
+    assert restarted.read_profile() == "balanced"
+    assert not restarted.safety_locked
+    assert not os.path.exists(lock_path)
+
+
+@pytest.mark.parametrize("failure,stage", [
+    ("write", "profile_write"), ("readback", "profile_readback"),
+    ("clear", "lock_clear"), (None, "confirmed"),
+])
+def test_go2_handoff_journal_identifies_failure_stage(tmp_path, monkeypatch, failure, stage):
+    import journal
+    from types import SimpleNamespace
+    backend, _firmware, _lock, _clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+    events = []
+    monkeypatch.setattr(journal, "active", SimpleNamespace(
+        write=lambda *args, **data: events.append((args, data)),
+    ))
+    original_write = backend._write
+    if failure in ("write", "readback"):
+        backend._write = lambda path, value: (
+            failure == "readback" if path.endswith("/profile")
+            else original_write(path, value)
+        )
+    if failure == "clear":
+        monkeypatch.setattr(backend._safety_lock, "clear", lambda: False)
+    assert backend._hand_off_to_firmware() is (failure is None)
+    event = events[-1][1]
+    assert event["operation"] == "firmware_handoff"
+    assert event["result"]["stage"] == stage
+    if failure == "readback":
+        assert event["result"]["observed_profile"] == "custom"
+
+
+_MSI = "Micro-Star International Co., Ltd."
+
+
+def _mk_claw_ex_dmi(root):
+    d = os.path.join(root, "sys/class/dmi/id")
+    os.makedirs(d, exist_ok=True)
+    for name, value in (
+        ("sys_vendor", _MSI),
+        ("product_name", "Claw 8 EX AI+ CG3EM"),
+        ("board_name", "MS-1T91"),
+    ):
+        with open(os.path.join(d, name), "w") as handle:
+            handle.write(value)
+
+
+def test_claw_8_ex_drives_both_rapl_surfaces_instead_of_unhonored_firmware(tmp_path):
+    # msi-wmi-platform echoes the write while RAPL keeps the firmware 40/50 W.
+    root = str(tmp_path)
+    _mk_claw_ex_dmi(root)
+    _mk_fw(root, "msi-wmi-platform")
+    _mk_rapl(root)
+    _mk_rapl(root, base="intel-rapl/intel-rapl:0")
+
+    backend = select_backend(
+        _p("msi_claw_8_ex_ai_plus"), root=root, ryzenadj_resolve=_NO_RYZENADJ
+    )
+
+    assert backend.supported is True
+    assert backend.name.startswith("intel-rapl")
+    assert backend.auto_tdp_safe is False
+    assert backend.set_tdp(12, False).ok is True
+    for base in ("intel-rapl-mmio/intel-rapl-mmio:0", "intel-rapl/intel-rapl:0"):
+        path = os.path.join(
+            root, "sys/devices/virtual/powercap", base, "constraint_0_power_limit_uw"
+        )
+        with open(path) as handle:
+            assert int(handle.read()) == 12_000_000
+    with open(os.path.join(
+        root,
+        "sys/class/firmware-attributes/msi-wmi-platform/attributes/ppt_pl1_spl/current_value",
+    )) as handle:
+        assert handle.read() == "15"
+
+
+def test_claw_8_ex_keeps_firmware_route_when_rapl_is_absent(tmp_path):
+    root = str(tmp_path)
+    _mk_claw_ex_dmi(root)
+    _mk_fw(root, "msi-wmi-platform")
+
+    backend = select_backend(
+        _p("msi_claw_8_ex_ai_plus"), root=root, ryzenadj_resolve=_NO_RYZENADJ
+    )
+
+    assert backend.supported is True
+    assert "msi-wmi-platform" in backend.name
+    assert [item["candidate"] for item in backend.probe_trace] == ["intel", "msi"]
+
+
+def test_every_intel_handheld_drives_both_rapl_surfaces(tmp_path):
+    root = str(tmp_path)
+    _mk_rapl(root)
+    _mk_rapl(root, base="intel-rapl/intel-rapl:0")
+
+    backend = select_backend(_p("msi_claw_8_ai_plus"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+
+    assert backend.name.startswith("intel-rapl")
+    assert backend.set_tdp(12, False).ok is True
+    for base in ("intel-rapl-mmio/intel-rapl-mmio:0", "intel-rapl/intel-rapl:0"):
+        path = os.path.join(root, "sys/devices/virtual/powercap", base, "constraint_0_power_limit_uw")
+        with open(path) as handle:
+            assert int(handle.read()) == 12_000_000
+    assert backend.release() is True
+    for base, firmware in (
+        ("intel-rapl-mmio/intel-rapl-mmio:0", 30_000_000),
+        ("intel-rapl/intel-rapl:0", 30_000_000),
+    ):
+        path = os.path.join(root, "sys/devices/virtual/powercap", base, "constraint_0_power_limit_uw")
+        with open(path) as handle:
+            assert int(handle.read()) == firmware
+
+
+def test_exact_legion_go_2_83n1_low_battery_pin_does_not_lock_tdp(tmp_path, monkeypatch):
+    # The 83N1 firmware runs its own rails at <=20 % battery and ignores
+    # writes; nothing Panel wrote is left, so TDP must stay available.
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N1", "custom", current=(30, 30, 30))
+    backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    _go_2_firmware_out_of_custom(backend, root)
+    lock_path = os.path.join(root, "run/panel-de-control/firmware-lenovo-wmi-other.lock")
+
+    result = backend.set_levels(17, 17, 17, ac=False)
+
+    assert result.ok is False
+    assert result.failure_kind == "target_not_applied"
+    assert backend.ready() is True
+    assert not os.path.exists(lock_path)

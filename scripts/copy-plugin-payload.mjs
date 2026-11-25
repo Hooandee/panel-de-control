@@ -17,6 +17,7 @@ const PAYLOAD_ENTRIES = [
   "README.en.md",
   "LICENSE",
   "py_modules",
+  "game-recipes",
   "assets",
   "bin",
 ];
@@ -48,6 +49,7 @@ function includePayloadPath(sourceRoot, sourcePath) {
   }
   const segments = path.split(sep);
   if (segments.includes("__pycache__")) return false;
+  if (segments[0] === "game-recipes" && segments.slice(1).some((segment) => segment.startsWith("."))) return false;
   if (segments.some((segment) => FORBIDDEN_DIRECTORIES.has(segment))) return false;
   if (ALLOWED_PAYLOAD_FILES.has(segments.join("/"))) return true;
   const suffix = extname(path).toLowerCase();
