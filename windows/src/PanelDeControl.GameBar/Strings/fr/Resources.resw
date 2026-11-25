@@ -572,6 +572,17 @@
   <data name="UpscalersErrAnrReinstall" xml:space="preserve"><value>ANR demande de réinstaller l'upscaler avec OptiScaler 10.</value></data>
   <data name="UpscalersErrFgRoute" xml:space="preserve"><value>Cette génération d'images n'est pas disponible dans ce jeu.</value></data>
   <data name="UpscalersErrIniChanged" xml:space="preserve"><value>OptiScaler.ini a changé entre-temps. Réessayez.</value></data>
+  <data name="UpscalersVerify" xml:space="preserve"><value>Vérifier maintenant</value></data>
+  <data name="UpscalersVerdict_not_run" xml:space="preserve"><value>Le jeu n'a pas encore été lancé avec l'upscaler</value></data>
+  <data name="UpscalersVerdict_loaded" xml:space="preserve"><value>Chargé ; mise à l'échelle pas encore confirmée</value></data>
+  <data name="UpscalersVerdict_active" xml:space="preserve"><value>Fonctionne</value></data>
+  <data name="UpscalersVerdict_broken" xml:space="preserve"><value>L'installation est cassée</value></data>
+  <data name="UpscalersCancel" xml:space="preserve"><value>Annuler</value></data>
+  <data name="UpscalersExeLabel" xml:space="preserve"><value>Exécutable du jeu (chemin dans son dossier)</value></data>
+  <data name="UpscalersExeSave" xml:space="preserve"><value>Utiliser cet exécutable</value></data>
+  <data name="UpscalersExeAuto" xml:space="preserve"><value>Le détecter automatiquement</value></data>
+  <data name="UpscalersErrInvalidExe" xml:space="preserve"><value>Cet exécutable n'est pas dans le dossier du jeu.</value></data>
+  <data name="UpscalersErrCancelled" xml:space="preserve"><value>Annulé. Le jeu est resté tel quel.</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>Mode DLL</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>En mode DLL, réglez la qualité dans le jeu.</value></data>

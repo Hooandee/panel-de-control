@@ -572,6 +572,17 @@
   <data name="UpscalersErrAnrReinstall" xml:space="preserve"><value>O ANR exige reinstalar o upscaler com o OptiScaler 10.</value></data>
   <data name="UpscalersErrFgRoute" xml:space="preserve"><value>Essa geração de quadros não está disponível neste jogo.</value></data>
   <data name="UpscalersErrIniChanged" xml:space="preserve"><value>O OptiScaler.ini mudou nesse meio-tempo. Tente de novo.</value></data>
+  <data name="UpscalersVerify" xml:space="preserve"><value>Verificar agora</value></data>
+  <data name="UpscalersVerdict_not_run" xml:space="preserve"><value>O jogo ainda não rodou com o upscaler</value></data>
+  <data name="UpscalersVerdict_loaded" xml:space="preserve"><value>Carregado; upscaling ainda não confirmado</value></data>
+  <data name="UpscalersVerdict_active" xml:space="preserve"><value>Funcionando</value></data>
+  <data name="UpscalersVerdict_broken" xml:space="preserve"><value>A instalação está quebrada</value></data>
+  <data name="UpscalersCancel" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="UpscalersExeLabel" xml:space="preserve"><value>Executável do jogo (caminho dentro da pasta)</value></data>
+  <data name="UpscalersExeSave" xml:space="preserve"><value>Usar este executável</value></data>
+  <data name="UpscalersExeAuto" xml:space="preserve"><value>Detectar sozinho</value></data>
+  <data name="UpscalersErrInvalidExe" xml:space="preserve"><value>Esse executável não está dentro da pasta do jogo.</value></data>
+  <data name="UpscalersErrCancelled" xml:space="preserve"><value>Cancelado. O jogo ficou como estava.</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>Modo DLL</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>No modo DLL, altere a qualidade no jogo.</value></data>

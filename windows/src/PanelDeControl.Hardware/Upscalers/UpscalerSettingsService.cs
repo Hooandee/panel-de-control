@@ -20,7 +20,7 @@ public sealed partial class UpscalerService
         lock (settingsLock)
         {
             var appId = request.AppId!;
-            var stored = store.Install(appId) ?? throw new UpscalerException("not_patched");
+            var stored = Stored(appId) ?? throw new UpscalerException("not_patched");
             var install = stored.Install;
             if (install.Engine == "dll")
             {
@@ -326,7 +326,7 @@ public sealed partial class UpscalerService
             }
         }
 
-        var install = store.Install(appId)?.Install;
+        var install = Stored(appId)?.Install;
         var owned = install is not null && install.Engine == "optiscaler";
         // OptiScaler reads its INI only at start and never writes it while running, so Panel's own install can take a
         // new value for the next launch; another tool's files wait for the game to close.
@@ -379,7 +379,7 @@ public sealed partial class UpscalerService
 
     private (InstalledUpscaler Install, string Root) IniInstall(string appId)
     {
-        var install = store.Install(appId)?.Install;
+        var install = Stored(appId)?.Install;
         if (install is null || install.Engine is "helixsr" or "dll")
         {
             throw new UpscalerException("not_patched");

@@ -255,13 +255,33 @@ public sealed class AssetCache
                 }
             }
             File.WriteAllText(Path.Combine(staging, ".complete"), asset.Sha256);
-            Directory.Move(staging, destination);
+            MoveWhenReleased(staging, destination);
         }
         finally
         {
             if (Directory.Exists(staging))
             {
                 Directory.Delete(staging, true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Freshly extracted DLLs are often held open for a moment by the antivirus, and Windows refuses to move a folder
+    /// with open files: the move is retried for a few seconds before giving up.
+    /// </summary>
+    private static void MoveWhenReleased(string source, string destination)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                Directory.Move(source, destination);
+                return;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException && attempt < 20)
+            {
+                Thread.Sleep(250);
             }
         }
     }

@@ -389,6 +389,8 @@ public sealed partial class UpscalersView
         "anr_reinstall" => "UpscalersErrAnrReinstall",
         "fg_route_unavailable" => "UpscalersErrFgRoute",
         "ini_changed" or "image_settings_changed" => "UpscalersErrIniChanged",
+        "invalid_exe" => "UpscalersErrInvalidExe",
+        "cancelled" => "UpscalersErrCancelled",
         _ => null,
     };
 }

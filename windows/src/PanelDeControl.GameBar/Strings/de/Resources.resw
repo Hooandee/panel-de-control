@@ -572,6 +572,17 @@
   <data name="UpscalersErrAnrReinstall" xml:space="preserve"><value>ANR braucht eine Neuinstallation mit OptiScaler 10.</value></data>
   <data name="UpscalersErrFgRoute" xml:space="preserve"><value>Diese Frame Generation ist in diesem Spiel nicht verfügbar.</value></data>
   <data name="UpscalersErrIniChanged" xml:space="preserve"><value>OptiScaler.ini hat sich inzwischen geändert. Versuche es erneut.</value></data>
+  <data name="UpscalersVerify" xml:space="preserve"><value>Jetzt prüfen</value></data>
+  <data name="UpscalersVerdict_not_run" xml:space="preserve"><value>Das Spiel lief noch nicht mit dem Upscaler</value></data>
+  <data name="UpscalersVerdict_loaded" xml:space="preserve"><value>Geladen; Hochskalierung noch nicht bestätigt</value></data>
+  <data name="UpscalersVerdict_active" xml:space="preserve"><value>Funktioniert</value></data>
+  <data name="UpscalersVerdict_broken" xml:space="preserve"><value>Die Installation ist defekt</value></data>
+  <data name="UpscalersCancel" xml:space="preserve"><value>Abbrechen</value></data>
+  <data name="UpscalersExeLabel" xml:space="preserve"><value>Programmdatei des Spiels (Pfad im Spielordner)</value></data>
+  <data name="UpscalersExeSave" xml:space="preserve"><value>Diese Programmdatei verwenden</value></data>
+  <data name="UpscalersExeAuto" xml:space="preserve"><value>Automatisch erkennen</value></data>
+  <data name="UpscalersErrInvalidExe" xml:space="preserve"><value>Diese Programmdatei liegt nicht im Spielordner.</value></data>
+  <data name="UpscalersErrCancelled" xml:space="preserve"><value>Abgebrochen. Das Spiel blieb unverändert.</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>DLL-Modus</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>Im DLL-Modus wird die Qualität im Spiel geändert.</value></data>

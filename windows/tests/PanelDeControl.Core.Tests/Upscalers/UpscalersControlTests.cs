@@ -68,6 +68,14 @@ public sealed class UpscalersControlTests
 
         var restore = Back(UpscalersRequest.RestoreImage("1245620", true));
         Assert.Equal((UpscalersOperation.RestoreImage, true), (restore.Operation, restore.ExperimentalEnabled));
+
+        var exe = Back(UpscalersRequest.SetExe("1245620", "Binaries/Win64/Game.exe", true));
+        Assert.Equal((UpscalersOperation.SetExe, "Binaries/Win64/Game.exe", true), (exe.Operation, exe.Exe, exe.ExperimentalEnabled));
+        Assert.Null(Back(UpscalersRequest.SetExe("1245620", null, true)).Exe);
+        Assert.Equal(UpscalersOperation.Verify, Back(UpscalersRequest.Verify("1245620")).Operation);
+        var cancel = Back(UpscalersRequest.Cancel(true));
+        Assert.Equal((UpscalersOperation.Cancel, null, true), (cancel.Operation, cancel.AppId, cancel.ExperimentalEnabled));
+        Assert.Equal(new[] { 13, 14, 15 }, new[] { UpscalersOperation.SetExe, UpscalersOperation.Verify, UpscalersOperation.Cancel }.Select(op => (int)op));
     }
 
     [Theory]
@@ -88,6 +96,15 @@ public sealed class UpscalersControlTests
     [InlineData("{\"operation\":\"image\",\"appid\":\"1\",\"int8\":\"on\"}")]
     [InlineData("{\"operation\":\"restore_image\",\"appid\":\"1\",\"sharpness_enabled\":true}")]
     [InlineData("{\"operation\":\"install\",\"appid\":\"1\",\"build\":\"fsr-3.1\",\"key\":\"A.B\"}")]
+    [InlineData("{\"operation\":\"set_exe\",\"exe\":\"Game.exe\"}")]
+    [InlineData("{\"operation\":\"set_exe\",\"appid\":\"1\",\"exe\":\"Game.exe\",\"quality\":\"balanced\"}")]
+    [InlineData("{\"operation\":\"set_exe\",\"appid\":\"1\",\"exe\":\"Game\u0000.exe\"}")]
+    [InlineData("{\"operation\":\"install\",\"appid\":\"1\",\"build\":\"fsr-3.1\",\"exe\":\"Game.exe\"}")]
+    [InlineData("{\"operation\":\"verify\"}")]
+    [InlineData("{\"operation\":\"verify\",\"appid\":\"1\",\"experimental\":true}")]
+    [InlineData("{\"operation\":\"verify\",\"appid\":\"1\",\"exe\":\"Game.exe\"}")]
+    [InlineData("{\"operation\":\"cancel\",\"appid\":\"1\"}")]
+    [InlineData("{\"operation\":\"cancel\",\"experimental\":true,\"build\":\"fsr-3.1\"}")]
     public void InvalidSettingsRequestsAreRefused(string payload)
     {
         Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.DeserializeRequest(payload));
@@ -104,6 +121,8 @@ public sealed class UpscalersControlTests
         Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.SetImage("1", null, null, "max", true)));
         Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.SetImage("1", null, null, null, true)));
         Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.Configure("1", "a b", null, false, null, null, true)));
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.SetExe("1", "", true)));
+        Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.SetExe("1", new string('a', UpscalersRequest.MaximumExeLength + 1), true)));
         Assert.ThrowsAny<Exception>(() => UpscalersWireCodec.SerializeRequest(UpscalersRequest.Configure("1", null, null, true, "elsewhere", null, true)));
     }
 

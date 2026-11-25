@@ -15,7 +15,8 @@ public static class PanelInstallRecord
     private static readonly UTF8Encoding Utf8 = new(false);
 
     /// <param name="receipt">The image controls' receipt, kept beside the install so a restore still works after Panel is reinstalled.</param>
-    public static void Write(string target, StoredUpscaler stored, ImageSettingsReceipt? receipt = null)
+    /// <param name="exeOverride">The executable the user chose for this game, kept with the record for the same reason.</param>
+    public static void Write(string target, StoredUpscaler stored, ImageSettingsReceipt? receipt = null, string? exeOverride = null)
     {
         var meta = Path.Combine(target, GameManifest.Folder);
         if (!Directory.Exists(meta) || (File.GetAttributes(meta) & FileAttributes.ReparsePoint) != 0)
@@ -31,6 +32,11 @@ public static class PanelInstallRecord
             if (receipt is not null)
             {
                 document = new DataObject(document.Members.Append(new KeyValuePair<string, DataValue>("image_settings", UpscalerStateStore.WriteReceipt(receipt))).ToList());
+            }
+
+            if (exeOverride is not null)
+            {
+                document = new DataObject(document.Members.Append(new KeyValuePair<string, DataValue>("exe_override", new DataString(exeOverride))).ToList());
             }
 
             File.WriteAllText(temporary, PythonJson.Write(document), Utf8);
@@ -55,6 +61,9 @@ public static class PanelInstallRecord
     /// <summary>The image controls' receipt saved with the record, if any.</summary>
     public static ImageSettingsReceipt? ReadReceipt(string target) =>
         Document(target) is { } document ? UpscalerStateStore.ReadReceipt(document.Get("image_settings")) : null;
+
+    /// <summary>The executable the user chose, saved with the record, if any.</summary>
+    public static string? ReadExeOverride(string target) => (Document(target)?.Get("exe_override") as DataString)?.Value;
 
     /// <summary>Null when there is no record, it is not a regular small file, or it does not parse as an install.</summary>
     public static StoredUpscaler? Read(string target) => Document(target) is { } document ? UpscalerStateStore.ReadInstall(document) : null;

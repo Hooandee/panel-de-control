@@ -19,7 +19,7 @@
     "install_upscaler": {
       "windows": "partial",
       "op": "install",
-      "note": "optiscaler (with sharpness, FG route, ANR, recipe game_files packages, ReShade.ini configuration and game_config settings), dll and helixsr (HLX FSR 4 through HelixSR's own bridge run with python.org's embeddable Python Panel downloads; no latest-release lookup, no game folder relocation); user-supplied recipe files pending"
+      "note": "optiscaler (with sharpness, FG route, ANR, recipe game_files packages, ReShade.ini configuration and game_config settings), dll and helixsr (HLX FSR 4 through HelixSR's own bridge run with python.org's embeddable Python Panel downloads; no latest-release lookup); a game folder moved to another library still removes and reinstalls cleanly (the stored folders are mapped to the current one); user-supplied recipe files pending"
     },
     "uninstall_upscaler": {
       "windows": "done",
@@ -30,7 +30,9 @@
       "op": "job"
     },
     "cancel_upscalers_job": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "cancel",
+      "note": "stops downloads and the checks before the game folder is touched; files already being applied finish, and a HelixSR bridge run is not interrupted"
     },
     "get_upscalers_compat": {
       "windows": "pending"
@@ -39,20 +41,26 @@
       "windows": "pending"
     },
     "search_upscaler_games": {
-      "windows": "pending"
+      "windows": "not_applicable",
+      "note": "identity maps a non-Steam shortcut to a Steam appid; every Windows game is a Steam appmanifest with its real appid, and non-Steam shortcuts are not listed"
     },
     "set_upscaler_identity": {
-      "windows": "pending"
+      "windows": "not_applicable",
+      "note": "as search_upscaler_games: Windows games always carry their own Steam appid, so there is no identity to override"
     },
     "refresh_upscaler_wiki": {
-      "windows": "pending"
+      "windows": "pending",
+      "note": "the wiki recipes ship bundled (recipes_wiki.json) and are never fetched, so there is no cache to refresh yet"
     },
     "set_upscalers_exe": {
-      "windows": "pending"
+      "windows": "done",
+      "op": "set_exe",
+      "note": "kept under the Linux key exe; links are refused, and analysis, install and in-place changes all use it before the recipe's exe"
     },
     "verify_upscaler": {
-      "windows": "partial",
-      "note": "the game page reads the log verdict; no explicit verify call"
+      "windows": "done",
+      "op": "verify",
+      "note": "result and the log facts Windows reads (observed upscaler, provider, fallback); DLL mode has no log and answers not_run"
     },
     "diagnose_upscaler": {
       "windows": "pending"

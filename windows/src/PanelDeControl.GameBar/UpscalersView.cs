@@ -198,6 +198,7 @@ public sealed partial class UpscalersView : UserControl
         AutomationProperties.SetLiveSetting(progressText, AutomationLiveSetting.Polite);
         progressPanel.Children.Add(progressText);
         progressPanel.Children.Add(progressBar);
+        progressPanel.Children.Add(BuildCancelButton());
         resultText.Style = Resource<Style>("PdcCaptionStyle");
         resultText.TextWrapping = TextWrapping.WrapWholeWords;
         AutomationProperties.SetLiveSetting(resultText, AutomationLiveSetting.Polite);
@@ -215,11 +216,13 @@ public sealed partial class UpscalersView : UserControl
             advancedPanel.Children.Add(line);
         }
 
+        advancedPanel.Children.Add(BuildExeEditor());
         advancedPanel.Children.Add(BuildIniEditor());
 
         gamePanel.Children.Add(backButton);
         gamePanel.Children.Add(identity);
         gamePanel.Children.Add(statusCard);
+        gamePanel.Children.Add(BuildVerifyButton());
         gamePanel.Children.Add(pickerPanel);
         gamePanel.Children.Add(qualityPanel);
         gamePanel.Children.Add(hintText);
@@ -740,9 +743,11 @@ public sealed partial class UpscalersView : UserControl
                 title = !string.IsNullOrEmpty(installed.Label)
                     ? string.Format(Localized("UpscalersStatusInstalled"), DllLabel(installed.Build, installed.Label!))
                     : Localized(installed.Build.Length == 0 ? "UpscalersStateInstalledUnknown" : "UpscalersStateInstalled");
-                sub = resultText.Text.Length == 0 && installed.Build.Length != 0
-                    ? Localized(IsDll(installed.Build) ? "UpscalersDllCheck" : "UpscalersStatusPending")
-                    : string.Empty;
+                sub = installed.Verdict is "active" or "loaded"
+                    ? string.Join(" · ", new[] { Localized("UpscalersVerdict_" + installed.Verdict), installed.Provider }.Where(part => !string.IsNullOrEmpty(part)))
+                    : resultText.Text.Length == 0 && installed.Build.Length != 0
+                        ? Localized(IsDll(installed.Build) ? "UpscalersDllCheck" : "UpscalersStatusPending")
+                        : string.Empty;
             }
         }
         else if (detail.Foreign is not null || detail.Game.State == UpscalerGameStates.Foreign)
@@ -1055,6 +1060,7 @@ public sealed partial class UpscalersView : UserControl
         hintText.Text = !jobRunning && reason is not null ? ErrorMessage(reason) : string.Empty;
         actionButton.IsEnabled = detail is not null && !jobRunning && !loadingGame && !settingsBusy && reason is null;
         RenderSettings();
+        RenderGameExtras();
     }
 
     private async void ActionButton_Click(object sender, RoutedEventArgs args)

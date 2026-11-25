@@ -569,6 +569,50 @@ public sealed partial class UpscalerServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task OperationsRecoverTheInstallAfterPanelDataIsWiped()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        File.Delete(StatePath);
+
+        var verify = await Send(Service(), UpscalersRequest.Verify("100"));
+        File.Delete(StatePath);
+        var configure = await Send(Service(), UpscalersRequest.Configure("100", "performance", null, false, null, null, true));
+
+        Assert.Equal(UpscalersResponseStatus.Ok, verify.Status);
+        Assert.Equal(UpscalersResponseStatus.Ok, configure.Status);
+        Assert.Equal("2.00", IniValue(game, "QualityOverrides.QualityRatioQuality"));
+    }
+
+    [Fact]
+    public async Task AChosenExeOutsideTheGameInItsRecordIsIgnored()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        var stored = new UpscalerStateStore(StatePath).Install("100")!;
+        PanelInstallRecord.Write(stored.Install.Target, stored, exeOverride: "../../Other/evil.exe");
+        File.Delete(StatePath);
+
+        await Send(Service(), UpscalersRequest.Verify("100"));
+
+        Assert.Null(new UpscalerStateStore(StatePath).Exe("100"));
+    }
+
+    [Fact]
+    public async Task TheChosenExeSurvivesPanelDataBeingWiped()
+    {
+        AddGame("100", "Plain");
+        await InstallThroughService("100");
+        var exe = new UpscalerStateStore(StatePath).Install("100")!.Install.Exe!;
+        Assert.Equal(UpscalersResponseStatus.Ok, (await Send(Service(), UpscalersRequest.SetExe("100", exe, true))).Status);
+        File.Delete(StatePath);
+
+        await Send(Service(), UpscalersRequest.Verify("100"));
+
+        Assert.Equal(exe, new UpscalerStateStore(StatePath).Exe("100"));
+    }
+
+    [Fact]
     public async Task AReadOnlyIniIsRewrittenAndStaysReadOnly()
     {
         var game = AddGame("100", "Plain");
@@ -878,6 +922,161 @@ public sealed partial class UpscalerServiceTests : IDisposable
         public Stream? OpenRead(string path) => inner.OpenRead(path);
     }
 
+    private sealed class HangingNetwork : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource started;
+
+        public HangingNetwork(TaskCompletionSource started) => this.started = started;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException();
+        }
+    }
+
+    [Fact]
+    public async Task CancellingADownloadLeavesTheGameUntouchedAndTheJobCancelled()
+    {
+        var game = AddGame("100", "Plain");
+        var before = Snapshot(game);
+        var started = new TaskCompletionSource();
+        var service = Service(network: new HangingNetwork(started));
+        await service.HandleAsync(UpscalersRequest.Install("100", "fsr-3.1", "performance", null, true), CancellationToken.None);
+        var finished = RunDeferredAsync();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var refused = await service.HandleAsync(UpscalersRequest.Cancel(false), CancellationToken.None);
+        var cancelled = await service.HandleAsync(UpscalersRequest.Cancel(true), CancellationToken.None);
+        await finished.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal("experimental_required", refused.ErrorCode);
+        Assert.Equal((UpscalersResponseStatus.Ok, "100"), (cancelled.Status, cancelled.Job!.AppId));
+        Assert.Equal((UpscalerJobStates.Error, "cancelled"), (service.Job!.State, service.Job.Error));
+        Assert.Equal(before, Snapshot(game));
+        Assert.Null(new UpscalerStateStore(StatePath).Install("100"));
+        var actions = new UpscalerStateStore(StatePath).Actions("100");
+        Assert.Equal(new[] { "started", "requested", "error" }, actions.Select(action => action.State));
+        Assert.Equal("cancelled", actions.Last().Error);
+        var again = await service.HandleAsync(UpscalersRequest.Cancel(true), CancellationToken.None);
+        Assert.Equal(UpscalerJobStates.Error, again.Job!.State);
+    }
+
+    [Fact]
+    public async Task ACancelWithNothingRunningAnswersWithoutAJob()
+    {
+        var response = await Service().HandleAsync(UpscalersRequest.Cancel(true), CancellationToken.None);
+
+        Assert.Equal(UpscalersResponseStatus.Ok, response.Status);
+        Assert.Null(response.Job);
+    }
+
+    [Fact]
+    public async Task ThePickedExeIsValidatedStoredAndUsedByTheInstall()
+    {
+        var game = AddGame("100", "Plain");
+        Write(game, "Tools/Alt.exe", "alt");
+        Write(game, "Tools/notes.txt", "text");
+        Write(root, "Outside.exe", "outside");
+        var service = Service(prepare: PrepareCache);
+
+        Assert.Equal("experimental_required", (await Send(service, UpscalersRequest.SetExe("100", "Tools/Alt.exe", false))).ErrorCode);
+        foreach (var bad in new[] { "Tools/missing.exe", "Tools/notes.txt", "../../../../Outside.exe", Path.Combine(root, "Outside.exe"), "Tools" })
+        {
+            Assert.Equal("invalid_exe", (await Send(service, UpscalersRequest.SetExe("100", bad, true))).ErrorCode);
+        }
+
+        Assert.Equal("not_installed", (await Send(service, UpscalersRequest.SetExe("999", "Tools/Alt.exe", true))).ErrorCode);
+        Assert.Null(new UpscalerStateStore(StatePath).Exe("100"));
+        var picked = await Send(service, UpscalersRequest.SetExe("100", @"Tools\Alt.exe", true));
+        Assert.Equal("Tools/Alt.exe", picked.Game!.Exe);
+        Assert.Equal("Tools/Alt.exe", new UpscalerStateStore(StatePath).Exe("100"));
+        Assert.Contains("\"exe\": \"Tools/Alt.exe\"", File.ReadAllText(StatePath));
+
+        await Send(service, UpscalersRequest.Install("100", "fsr-3.1", "performance", null, true));
+        await RunDeferredAsync();
+
+        Assert.Equal(UpscalerJobStates.Done, service.Job!.State);
+        Assert.True(File.Exists(Path.Combine(game, "Tools", "dxgi.dll")));
+        Assert.False(File.Exists(Path.Combine(Target(game), "dxgi.dll")));
+        Assert.Equal("Tools/Alt.exe", (await Send(service, UpscalersRequest.Game("100"))).Game!.Install!.Exe);
+
+        await Send(service, UpscalersRequest.Uninstall("100", true));
+        await RunDeferredAsync();
+        var cleared = await Send(service, UpscalersRequest.SetExe("100", null, true));
+        Assert.Equal("Binaries/Win64/Game.exe", cleared.Game!.Exe);
+        Assert.Null(new UpscalerStateStore(StatePath).Exe("100"));
+    }
+
+    [Fact]
+    public async Task AnExeReachedThroughALinkIsRefused()
+    {
+        var game = AddGame("100", "Plain");
+        var outside = Path.Combine(root, "elsewhere");
+        Write(outside, "Linked.exe", "outside");
+        var junction = Path.Combine(game, "Link");
+        using var made = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{junction}\" \"{outside}\"")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+        })!;
+        made.WaitForExit();
+        if (made.ExitCode != 0)
+        {
+            return;
+        }
+
+        var response = await Send(Service(), UpscalersRequest.SetExe("100", "Link/Linked.exe", true));
+
+        Assert.Equal("invalid_exe", response.ErrorCode);
+        Directory.Delete(junction);
+    }
+
+    [Fact]
+    public async Task VerifyAnswersTheLogVerdictAndSettlesTheNewestHistoryEntry()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        var service = Service();
+
+        var quiet = (await Send(service, UpscalersRequest.Verify("100"))).Verify!;
+        Assert.Equal(("not_run", true), (quiet.Result, quiet.Verifiable));
+        Assert.Equal("pending", new UpscalerStateStore(StatePath).History("100").Single().Result);
+
+        File.WriteAllText(Path.Combine(Target(game), "OptiScaler.log"),
+            "[13:19:00.245658] [W] OptiScaler v0.9.4-final (7534ad0) loaded\n" +
+            "[13:21:05.132848] [I] NVSDK_NGX_D3D12_CreateFeature Creating new fsr31 upscaler\n");
+        var active = (await Send(service, UpscalersRequest.Verify("100"))).Verify!;
+        Assert.Equal("active", active.Result);
+        Assert.False(string.IsNullOrEmpty(active.Observed));
+        Assert.Equal("active", new UpscalerStateStore(StatePath).History("100").Single().Result);
+
+        File.Delete(Path.Combine(Target(game), ".pdc-upscaler", "manifest.json"));
+        var broken = (await Send(service, UpscalersRequest.Verify("100"))).Verify!;
+        Assert.Equal("broken", broken.Result);
+        Assert.Equal("broken", new UpscalerStateStore(StatePath).History("100").Single().Result);
+        Assert.Equal("not_patched", (await Send(service, UpscalersRequest.Verify("999"))).ErrorCode);
+    }
+
+    [Fact]
+    public async Task AGameFolderThatMovedStillComesOutOnRemoval()
+    {
+        var game = AddGame("100", "Plain");
+        var before = Snapshot(game);
+        await InstallThroughService("100");
+        var oldTarget = Path.Combine(root, "oldlibrary", "steamapps", "common", "Plain", "Binaries", "Win64");
+        Edit("100", install => install.Target = oldTarget);
+        var service = Service();
+
+        await Send(service, UpscalersRequest.Uninstall("100", true));
+        await RunDeferredAsync();
+
+        Assert.Equal((UpscalerJobStates.Done, null), (service.Job!.State, service.Job.Error));
+        Assert.Equal(before, Snapshot(game));
+        Assert.Null(new UpscalerStateStore(StatePath).Install("100"));
+    }
+
     [Fact]
     public async Task AFailedInstallLeavesAnErrorJobAndAJournalEntry()
     {
@@ -980,7 +1179,7 @@ public sealed partial class UpscalerServiceTests : IDisposable
     }
 
     private UpscalerService Service(Action<UpscalerStateStore>? seed = null, Action? prepare = null, GpuFamilyResult? gpu = null, Func<byte[], int, ScaledCover?>? scaleCover = null,
-        ISteamLaunchOptions? launchOptions = null, HelixSr? helix = null, bool noHelix = false)
+        ISteamLaunchOptions? launchOptions = null, HelixSr? helix = null, bool noHelix = false, HttpMessageHandler? network = null)
     {
         var store = new UpscalerStateStore(StatePath);
         seed?.Invoke(store);
@@ -988,7 +1187,7 @@ public sealed partial class UpscalerServiceTests : IDisposable
         return new UpscalerService(
             Data,
             store,
-            new AssetCache(Path.Combine(root, "cache"), "tar", new NoNetwork(), _ => long.MaxValue, new[] { TimeSpan.Zero }),
+            new AssetCache(Path.Combine(root, "cache"), "tar", network ?? new NoNetwork(), _ => long.MaxValue, new[] { TimeSpan.Zero }),
             PhysicalFileSystem.Instance,
             new SteamGames(PhysicalFileSystem.Instance, () => new[] { library }),
             () => running.ToList(),
