@@ -35,7 +35,7 @@ import game_freeze
 import theme_hltb
 import theme_protondb
 from gamescope_perf import GamescopePerf
-from user_session import UserSession, spawn_args
+from user_session import UserSession, session_for_uid, spawn_args
 from pdc_platform.user_session import find_session
 from gamescope_stats import GamescopeStats
 import osinfo
@@ -564,6 +564,7 @@ DEFAULTS = {
     # monitor-only, handing TDP to another tool.
     "tdp_control_enabled": True,
     "flip_ds_tdp_control_enabled": False,
+    "flip_ds_low_battery_tdp_hold": False,
     "low_battery_tdp_hold": False,
     # Modules the user turned off in the customization editor (generic ids only;
     # power/learning are folded from tdp_control_enabled/telemetry_enabled).
@@ -713,6 +714,9 @@ class Plugin(AmbientRpc):
         self._tdp_profiles = ProfileStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "tdp_profiles.json"),
             default_watts=self._device.tdp_default or 15,
+            auto_enabled_key=(
+                "flip_ds_auto_tdp" if self._capped_ryzenadj_max() is not None else "auto_tdp"
+            ),
         )
         self._power_ownership = PowerOwnershipStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "power_ownership.json")
@@ -729,7 +733,7 @@ class Plugin(AmbientRpc):
         # One-time migration: auto-TDP and GPU clock used to be flat global settings.
         # Seed them into the global Potencia profile so they take part in per-game scope.
         if not self._settings.get("_potencia_scope_migrated"):
-            if self._settings.get("auto_tdp"):
+            if self._capped_ryzenadj_max() is None and self._settings.get("auto_tdp"):
                 self._tdp_profiles.set_auto_tdp("global", True)
             if self._settings.get("gpu_clock_manual"):
                 self._tdp_profiles.set_gpu_clock(
@@ -4488,11 +4492,49 @@ class Plugin(AmbientRpc):
             else "external_owner"
         )
 
+    def _flip_ds_service_owners_clear(self) -> bool:
+        import pwd
+
+        user = getattr(decky, "DECKY_USER", None)
+        if not user:
+            return False
+        try:
+            session = session_for_uid(pwd.getpwnam(user).pw_uid)
+        except KeyError:
+            return False
+        if session is None:
+            return False
+        args = ["list-units", "--type=service", "--state=active,activating,deactivating",
+                "--no-legend", "--plain", "--no-pager"]
+        systemctl = controller_detect.resolve_bin("systemctl")
+        user_command, user_env, identity = spawn_args(session, ["systemctl", "--user", *args])
+        probes = (
+            ([systemctl, *args], controller_detect.clean_env(), {}),
+            (user_command, user_env, identity),
+        )
+        for command, env, kwargs in probes:
+            try:
+                result = subprocess.run(
+                    command, capture_output=True, text=True, timeout=2, env=env, **kwargs,
+                )
+            except (OSError, subprocess.SubprocessError) as error:
+                decky.logger.warning("FLIP 1S DS TDP service check failed: %s", error)
+                return False
+            if result.returncode != 0:
+                decky.logger.warning("FLIP 1S DS TDP service check exited %s", result.returncode)
+                return False
+            for line in result.stdout.splitlines():
+                fields = line.split()
+                if fields and fields[0] in {"fercds-menu.service", "fercds-backend.service"}:
+                    return False
+        return True
+
     def _capped_tdp_owner_clear(self) -> bool:
         return (
             self._powerstation_detector.tdp_active() is False
             and (self._controller_backend.manager != controller_detect.HHD
                  or self._hhd_tdp_client.current_tdp_enable() is False)
+            and self._flip_ds_service_owners_clear()
         )
 
     def _tdp_write_authorized(self) -> bool:
@@ -8353,6 +8395,9 @@ class Plugin(AmbientRpc):
     def _apply_tdp_targets(self, target, on_ac, auto_tdp):
         if not self._game_power_write_allowed():
             return TdpResult(target.get("pl1", 0), None, False, "game-power-owner")
+        if self._capped_ryzenadj_max() is not None:
+            if not self._tdp_control_on() or not self._tdp_write_authorized():
+                return TdpResult(target.get("pl1", 0), None, False, "tdp-ownership-unconfirmed")
         self._tdp_backend_used = True
         apply_targets = getattr(
             self._tdp_backend,
@@ -8857,8 +8902,13 @@ class Plugin(AmbientRpc):
             return configured
         return None
 
+    def _low_battery_hold_setting(self) -> str:
+        if self._capped_ryzenadj_max() is not None:
+            return "flip_ds_low_battery_tdp_hold"
+        return "low_battery_tdp_hold"
+
     def _low_battery_hold_decision(self, on_ac=None):
-        enabled = self._settings.get("low_battery_tdp_hold") is True
+        enabled = self._settings.get(self._low_battery_hold_setting()) is True
         strategy = (
             self._low_battery_hold_strategy()
             if enabled
@@ -13769,9 +13819,10 @@ class Plugin(AmbientRpc):
     async def set_low_battery_tdp_hold(self, enabled: bool) -> dict:
         self._init()
         available = bool(self._low_battery_hold_capability_strategy())
-        self._settings["low_battery_tdp_hold"] = bool(enabled) and available
+        setting = self._low_battery_hold_setting()
+        self._settings[setting] = bool(enabled) and available
         self._save()
-        if self._settings["low_battery_tdp_hold"]:
+        if self._settings[setting]:
             await self._apply_tdp_now("low-battery-hold-toggle")
             await self._offload_call(self._tdp_guard_tick)
         else:
@@ -13867,7 +13918,7 @@ class Plugin(AmbientRpc):
         low_battery_hold = self._low_battery_hold_decision(ac)
         hold_available = bool(self._low_battery_hold_capability_strategy())
         hold_enabled = (
-            self._settings.get("low_battery_tdp_hold") is True
+            self._settings.get(self._low_battery_hold_setting()) is True
             and hold_available
         )
         sidecar_active = self._low_battery_sidecar_active()
@@ -14941,7 +14992,7 @@ class Plugin(AmbientRpc):
             ),
             "low_battery_hold": {
                 "strategy": self._low_battery_hold_capability_strategy(),
-                "enabled": self._settings.get("low_battery_tdp_hold") is True,
+                "enabled": self._settings.get(self._low_battery_hold_setting()) is True,
                 "active": hold_active,
                 "verified": hold_active and hold_verified,
                 "recovery_pending": self._low_battery_hold_recovery_pending,

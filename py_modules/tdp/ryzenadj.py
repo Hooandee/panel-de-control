@@ -134,6 +134,8 @@ class RyzenadjBackend(TDPBackend):
             )
         self._fallback = fallback
         self._hard_write_max_mw = hard_write_max_mw
+        if hard_write_max_mw is not None:
+            self.read_tolerance_w = 0
         self._write_limits = fallback.with_cooler(write_max).with_ac_max(write_max_ac)
         self.manual_write_max_ac = self._write_limits.max_ac_w
         self._runner = runner
@@ -152,16 +154,14 @@ class RyzenadjBackend(TDPBackend):
             and all(rail in unverified_hold_restore for rail in ("pl1", "pl2", "pl3"))
             else None
         )
-        self.auto_tdp_supported = hard_write_max_mw is None and not (
+        self.auto_tdp_supported = not (
             self._power_only_retry and not self._require_readback
         )
         self._hold_rail_floors = dict(hold_rail_floors or {})
         self.low_battery_hold_capable = bool(
             self._allow_unverified_hold and self._bin
         )
-        self.low_battery_hold_strategy = (
-            "primary" if self._require_readback and hard_write_max_mw is None else None
-        )
+        self.low_battery_hold_strategy = "primary" if self._require_readback else None
         self.auto_tdp_safe = self._require_readback or not self._power_only_retry
         self._unreadable_reads = 0
         self._auto_readback = (
@@ -871,9 +871,26 @@ class RyzenadjBackend(TDPBackend):
     def read_applied(self) -> int | None:
         return self._read_applied()
 
+    def apply_auto_targets(self, targets: dict[str, int], ac: bool) -> TdpResult:
+        if self._hard_write_max_mw is None:
+            return super().apply_auto_targets(targets, ac)
+        watts = targets["pl1"]
+        if any(targets.get(rail) != watts for rail in ("pl2", "pl3")):
+            return TdpResult(watts, None, False, "ryzenadj capped Auto-TDP requires equal rail targets")
+        return self.set_tdp(watts, ac)
+
     def observe(self) -> TdpObservation:
         if not self._require_readback:
             return self._observe_normal()
+        if self._hard_write_max_mw is not None:
+            snapshot = self._read_snapshot(require_zero_exit=True, milliwatts=True)
+            if snapshot is None:
+                return TdpObservation(readable=False)
+            return self._snapshot_observation({
+                rail: value // 1000
+                if value % 1000 == 0 and value <= self._hard_write_max_mw else None
+                for rail, value in snapshot.items()
+            })
         snapshot = self._read_snapshot(require_zero_exit=True)
         if snapshot is None:
             return TdpObservation(readable=False)

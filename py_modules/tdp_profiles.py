@@ -74,8 +74,9 @@ class ProfileStore(ScopedProfileStore):
     off2/off3-shape profiles; the old silent derived-boost default migrates to ESTABLE so
     a stale install stops over-drawing on the next apply."""
 
-    def __init__(self, path, default_watts):
+    def __init__(self, path, default_watts, *, auto_enabled_key="auto_tdp"):
         self._default = int(default_watts)
+        self._auto_enabled_key = auto_enabled_key
         self._sanitize_pending = False
         fresh_install = not os.path.exists(path)
         super().__init__(path)
@@ -136,8 +137,9 @@ class ProfileStore(ScopedProfileStore):
     def _clean_global(self, raw):
         base = self._clean_values(raw)
         if isinstance(raw, dict):
-            if raw.get("auto_tdp"):
-                base["auto_tdp"] = True
+            auto_enabled = raw.get(self._auto_enabled_key)
+            if auto_enabled is True or (self._auto_enabled_key == "auto_tdp" and auto_enabled):
+                base[self._auto_enabled_key] = True
             base["auto_target_fps"] = _auto_target_fps(
                 raw.get("auto_target_fps")
             )
@@ -239,12 +241,12 @@ class ProfileStore(ScopedProfileStore):
     # Auto-TDP and GPU-clock are part of the Potencia profile: per-scope, gated by the
     # same follow_global as the TDP value (one tab governs the whole section).
     def auto_tdp(self, appid):
-        return bool(self._effective_prof(appid).get("auto_tdp", False))
+        return bool(self._effective_prof(appid).get(self._auto_enabled_key, False))
 
     def auto_config(self, appid):
         prof = self._effective_prof(appid)
         return {
-            "enabled": bool(prof.get("auto_tdp", False)),
+            "enabled": bool(prof.get(self._auto_enabled_key, False)),
             "target_fps": _auto_target_fps(prof.get("auto_target_fps")),
             "initial_tdp": _auto_initial_tdp(
                 prof.get("auto_initial_tdp"),
@@ -255,7 +257,7 @@ class ProfileStore(ScopedProfileStore):
         }
 
     def set_auto_tdp(self, scope, enabled, appid=None):
-        self._target(scope, appid)["auto_tdp"] = bool(enabled)
+        self._target(scope, appid)[self._auto_enabled_key] = bool(enabled)
         self._save()
 
     def set_auto_config(

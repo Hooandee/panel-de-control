@@ -185,8 +185,12 @@ def test_flip_ds_lifecycle_requires_opt_in_and_restores_tdp(tmp_path, monkeypatc
         path.write_text(value)
     (tmp_path / "state.json").write_text(json.dumps({
         "tdp_control_enabled": True, "hhd_tdp_takeover": True, "hhd_tdp_prev": True,
+        "auto_tdp": True, "low_battery_tdp_hold": True,
         "gpu_handoff_pending": True, "fan_release_pending": True,
         "desktop_mode_enabled": True, "desktop_power_mode": "performance",
+    }))
+    (tmp_path / "tdp_profiles.json").write_text(json.dumps({
+        "global": {"watts": 15, "auto_tdp": True},
     }))
 
     plugin = _make_plugin(tmp_path, monkeypatch, fake_tdp=False)
@@ -224,6 +228,10 @@ def test_flip_ds_lifecycle_requires_opt_in_and_restores_tdp(tmp_path, monkeypatc
     monkeypatch.setattr(
         main.powerstation_conflict.Detector, "tdp_active", lambda self: conflict,
     )
+    fercds_active = True
+    monkeypatch.setattr(
+        main.Plugin, "_flip_ds_service_owners_clear", lambda self: not fercds_active,
+    )
     detect = main.device_registry.detect
     monkeypatch.setattr(main.device_registry, "detect", partial(detect, root=root))
     for name in ("CoreControl", "SmtControl", "select_boost", "FanReader"):
@@ -244,7 +252,7 @@ def test_flip_ds_lifecycle_requires_opt_in_and_restores_tdp(tmp_path, monkeypatc
     monkeypatch.setattr(main.controller_hhd, "set_tdp_enable", reject_write)
 
     async def exercise():
-        nonlocal conflict
+        nonlocal conflict, fercds_active
         await plugin._main()
         try:
             assert (await plugin.get_device())["key"] == "ayaneo_flip_1s_ds"
@@ -260,10 +268,36 @@ def test_flip_ds_lifecycle_requires_opt_in_and_restores_tdp(tmp_path, monkeypatc
             assert rail_writes == []
 
             conflict = False
+            assert "power" in (await plugin.set_ui_module("power", False))["disabled"]
+            assert rail_writes == []
+            fercds_active = False
             assert "power" not in (await plugin.set_ui_module("power", False))["disabled"]
             assert await plugin.get_tdp_control_enabled()
+            state = await plugin.get_tdp_state()
+            assert state["supports_auto_tdp"]
+            assert not state["auto_config"]["enabled"]
+            assert state["low_battery_hold"]["available"]
+            assert not state["low_battery_hold"]["enabled"]
+
+            assert (await plugin.set_auto_tdp(True))["auto_tdp"]
+            assert (await plugin.get_tdp_state())["auto_config"]["enabled"]
+            assert not (await plugin.set_auto_tdp(False))["auto_tdp"]
+
+            monkeypatch.setattr(main, "read_on_ac", lambda: False)
+            monkeypatch.setattr(plugin._battery, "read", lambda: {
+                "present": True, "percent": 20, "status": "Discharging",
+            })
             assert (await plugin.set_tdp_watts(25, "global"))["ok"]
             assert limits == (25000, 25000, 25000)
+            hold = (await plugin.set_low_battery_tdp_hold(True))["low_battery_hold"]
+            assert hold["enabled"] and hold["active"] and hold["verified"]
+            conflict = True
+            write_count = len(rail_writes)
+            await plugin._offload_call(plugin._tdp_guard_tick)
+            hold = (await plugin.get_tdp_state())["low_battery_hold"]
+            assert not hold["active"] and hold["reason"] == "external_owner"
+            assert len(rail_writes) == write_count
+            conflict = False
             write_count = len(rail_writes)
             for setter in (plugin.set_tdp_watts, plugin.apply_power_preset):
                 result = await setter(26, "global")

@@ -872,6 +872,40 @@ def test_capped_ryzenadj_rejects_over_limit_request_without_reading_or_writing(t
     assert runner.calls == []
 
 
+def test_capped_auto_tdp_uses_the_same_transaction_as_manual_tdp(tmp_path):
+    baseline = _snapshot_info(20, fast=24, slow=22)
+    at_cap = _snapshot_info(25)
+    runner = ScriptedRun(
+        write_rcs=[0, 0, 0],
+        infos=[baseline, at_cap, at_cap, _snapshot_info(15), _snapshot_info(15), baseline],
+    )
+    backend = _capped_backend(tmp_path, runner)
+
+    assert backend.auto_tdp_supported
+    for targets in (dict(pl1=25, pl2=24, pl3=25), dict(pl1=26, pl2=26, pl3=26)):
+        assert not backend.apply_auto_targets(targets, ac=True).ok
+    assert runner.calls == []
+    assert backend.apply_auto_targets(dict(pl1=25, pl2=25, pl3=25), ac=True).ok
+    assert backend.apply_auto_targets(dict(pl1=15, pl2=15, pl3=15), ac=False).ok
+    assert backend.release()
+    assert [argv[2::2] for argv in runner.writes] == [
+        ["25000", "25000", "25000"],
+        ["15000", "15000", "15000"],
+        ["20000", "24000", "22000"],
+    ]
+    assert not (tmp_path / "ryzenadj.lock").exists()
+
+
+def test_capped_observation_does_not_confirm_rounded_rail_values(tmp_path):
+    info = _snapshot_info(25).replace("25.000 | fast-limit", "25.001 | fast-limit")
+    info = info.replace("25.000 | slow-limit", "24.999 | slow-limit")
+    backend = _capped_backend(tmp_path, ScriptedRun(write_rcs=[], infos=[info]))
+
+    rails = backend.observe().surfaces[backend.name]
+
+    assert [rails[rail].applied_w for rail in ("pl1", "pl2", "pl3")] == [25, None, None]
+
+
 def test_capped_ryzenadj_rejects_fractionally_over_limit_baseline(tmp_path):
     baseline = _snapshot_info(25).replace("25.000 | fast-limit", "25.001 | fast-limit")
     runner = ScriptedRun(write_rcs=[], infos=[baseline])
