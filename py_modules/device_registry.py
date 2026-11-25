@@ -130,7 +130,7 @@ _AMD_PCI = {
     # Discrete Radeon: RX 6000, RX 7000, RX 9000
     "0x73bf": "rdna2", "0x73df": "rdna2", "0x73ef": "rdna2", "0x73ff": "rdna2", "0x743f": "rdna2",
     "0x744c": "rdna3", "0x747e": "rdna3", "0x7480": "rdna3", "0x7483": "rdna3",
-    "0x7550": "rdna4", "0x7590": "rdna4",
+    "0x7550": "rdna4", "0x7551": "rdna4", "0x7590": "rdna4",  # Navi 48 (RX 9070, R9700), Navi 44 (RX 9060)
 }
 
 
@@ -141,6 +141,7 @@ def pci_gpu_generation(root: str = "/") -> str:
     except OSError:
         return "unknown"
     amd = False
+    first = ""
     for card in cards:
         device = os.path.join(base, card, "device")
         try:
@@ -154,10 +155,12 @@ def pci_gpu_generation(root: str = "/") -> str:
             return "intel"
         if vendor == "0x1002":
             amd = True
-            if identifier in _AMD_PCI:
-                return _AMD_PCI[identifier]
+            generation = _AMD_PCI.get(identifier, "")
+            if generation == "rdna4":
+                return generation
+            first = first or generation
     # An AMD GPU this table doesn't know yet: newer than the table, so RDNA 3 class at least.
-    return "rdna3" if amd else "unknown"
+    return first or ("rdna3" if amd else "unknown")
 
 
 def gpu_pci(root: str = "/") -> list[dict]:
@@ -187,6 +190,9 @@ def gpu_pci(root: str = "/") -> list[dict]:
 def gpu_facts(vendor: str, chip: str, root: str = "/") -> dict:
     """The generation Panel uses and where it came from: the chip's name, its PCI id, or neither."""
     by_name = gpu_generation(vendor, chip)
+    # RDNA 4 only exists as a discrete card: it wins over the APU the CPU name points at.
+    if pci_gpu_generation(root) == "rdna4" and (vendor or "").lower() != "intel":
+        return {"generation": "rdna4", "source": "pci", "pci": gpu_pci(root)}
     generation = by_name if by_name != "unknown" else gpu_generation(vendor, chip, root)
     source = "name" if by_name != "unknown" else "pci" if generation != "unknown" else "unknown"
     return {"generation": generation, "source": source, "pci": gpu_pci(root)}
