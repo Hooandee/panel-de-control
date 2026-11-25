@@ -2199,3 +2199,21 @@ def test_report_publishes_the_recorded_game_before_the_slow_disk_reads(steam, fa
         worker.join(5)
     assert partial["games"][0].get("scanned") is not False
     assert partial["games"][0]["elapsed_ms"] >= 0
+
+
+def test_helixsr_leaves_the_fsr31_library_a_recipe_keeps_untouched(steam, helix_catalog, proc, monkeypatch):
+    # PDC-ZVD4 (#1509): GoWR with HLX FSR 4 lost FSR from its menu; the recipe says amd_fidelityfx_dx12.dll stays the game's.
+    from dataclasses import replace
+
+    from upscalers import recipes
+
+    _, game = steam
+    folder = game / "bin/x64_dx12"
+    (folder / "amd_fidelityfx_upscaler_dx12.dll").unlink()
+    legacy = _write(folder / "amd_fidelityfx_dx12.dll", b"ffx 1.0.1")
+    monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["2322010"], appid=APPID))
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    with pytest.raises(UpscalerError, match="helixsr_recipe_blocked"):
+        service.install(APPID, {"build": "hlx-fsr4"})
+    assert service.helix.calls == [] and legacy.read_bytes() == b"ffx 1.0.1"
