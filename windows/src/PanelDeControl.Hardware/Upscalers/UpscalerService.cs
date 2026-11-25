@@ -391,9 +391,11 @@ public sealed partial class UpscalerService : IUpscalersController
         // Everything that can refuse the request runs before the job starts: a job is only ever left by Finish or Fail.
         GameGuards.EnsureCanInstall(app, runningImages());
         UpscalerJobStatus job;
+        CancellationTokenSource cancel;
         lock (settingsLock)
         {
             job = jobs.Begin("install", appId);
+            cancel = NewJobCancel();
         }
 
 
@@ -405,7 +407,6 @@ public sealed partial class UpscalerService : IUpscalersController
             FrameGen = request.FrameGen == true,
             FrameGenRoute = request.FrameGenRoute,
         };
-        var cancel = NewJobCancel();
         _ = start(async () =>
         {
             try
@@ -430,12 +431,13 @@ public sealed partial class UpscalerService : IUpscalersController
         }
 
         UpscalerJobStatus job;
+        CancellationTokenSource cancel;
         lock (settingsLock)
         {
             job = jobs.Begin("uninstall", appId);
+            cancel = NewJobCancel();
         }
 
-        var cancel = NewJobCancel();
         _ = start(async () =>
         {
             try
@@ -462,9 +464,15 @@ public sealed partial class UpscalerService : IUpscalersController
             var previous = store.Install(appId);
             if (previous is not null)
             {
+                var before = previous.Install.Target;
                 InstallRelocation.Apply(previous.Install, app.Root);
+                if (!string.Equals(before, previous.Install.Target, StringComparison.OrdinalIgnoreCase))
+                {
+                    store.SetInstall(appId, previous.Install, previous.InstalledAt);
+                }
             }
 
+            var helixRemoved = false;
             if (previous?.Install.Engine == "helixsr" && plan.Engine != "helixsr")
             {
                 // Everything is downloaded first, so a cancel or a failed download never leaves the game without HelixSR and without the new build.
@@ -485,11 +493,14 @@ public sealed partial class UpscalerService : IUpscalersController
 
                 store.ClearInstall(appId);
                 previous = null;
+                helixRemoved = true;
             }
 
+            // Once HelixSR is out nothing may stop halfway: the game would be left with no upscaler at all.
+            var installCancel = helixRemoved ? CancellationToken.None : cancel;
             var install = plan.Engine == "helixsr"
-                ? await InstallHelixAsync(app, plan, choice, recipe, previous?.Install, cancel).ConfigureAwait(false)
-                : await InstallOptiScalerAsync(app, plan, choice, recipe, automatic, previous?.Install, cancel).ConfigureAwait(false);
+                ? await InstallHelixAsync(app, plan, choice, recipe, previous?.Install, installCancel).ConfigureAwait(false)
+                : await InstallOptiScalerAsync(app, plan, choice, recipe, automatic, previous?.Install, installCancel).ConfigureAwait(false);
             install.AddedArgs = previous?.Install.AddedArgs ?? Array.Empty<string>();
             try
             {
@@ -1091,9 +1102,12 @@ public sealed partial class UpscalerService : IUpscalersController
                     store.SetImageReceipt(app.AppId, receipt);
                 }
 
-                if (store.Exe(app.AppId) is null && PanelInstallRecord.ReadExeOverride(target) is { } exe)
+                if (store.Exe(app.AppId) is null && PanelInstallRecord.ReadExeOverride(target) is { } exe
+                    && ExeOverride.Relative(app.Root, exe) is { } relative
+                    && fileSystem.IsFile(Path.Combine(app.Root, relative.Replace('/', Path.DirectorySeparatorChar)))
+                    && !HasLink(app.Root, relative))
                 {
-                    store.SetExe(app.AppId, exe);
+                    store.SetExe(app.AppId, relative);
                 }
 
                 log("upscalers.recovered", app.AppId);
@@ -1232,7 +1246,7 @@ public sealed partial class UpscalerService : IUpscalersController
     // The scan reads executables: it is kept per game until the folder or Steam's state changes.
     private GameAnalysis Scan(SteamApp app, GameRecipe? recipe, bool force = false)
     {
-        var stamp = Stamp(app);
+        var stamp = Stamp(app) ^ (store.Exe(app.AppId) is { } chosen ? StringComparer.OrdinalIgnoreCase.GetHashCode(chosen) : 0);
         lock (scanLock)
         {
             if (!force && scans.TryGetValue(app.AppId, out var cached) && cached.Stamp == stamp)

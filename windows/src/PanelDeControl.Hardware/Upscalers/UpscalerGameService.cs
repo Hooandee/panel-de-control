@@ -106,7 +106,7 @@ public sealed partial class UpscalerService
             return stored;
         }
 
-        if (steam.Find(appId) is { } app)
+        if (jobs.Snapshot() is not { State: UpscalerJobStates.Running } && steam.Find(appId) is { } app)
         {
             Recover(app, Scan(app, null));
         }

@@ -42,7 +42,7 @@ public static class InstallRelocation
             }
         }
 
-        var game = ancestors.FirstOrDefault(folder => string.Equals(Path.GetFileName(Path.GetDirectoryName(folder) ?? ""), "common", StringComparison.OrdinalIgnoreCase))
+        var game = ancestors.LastOrDefault(folder => string.Equals(Path.GetFileName(Path.GetDirectoryName(folder) ?? ""), "common", StringComparison.OrdinalIgnoreCase))
             ?? ancestors.LastOrDefault();
         var full = Normalize(path);
         if (game is null || !Inside(full, game))

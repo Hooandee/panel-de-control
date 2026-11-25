@@ -22,6 +22,20 @@ public sealed class InstallRelocationTests : IDisposable
     }
 
     [Fact]
+    public void AnInnerFolderNamedLikeTheGameNeverWinsOverTheGameItself()
+    {
+        var oldGame = Path.Combine(_root, "old", "steamapps", "common", "Plain");
+        var game = Game("new");
+        var inner = Path.Combine(game, "common", "Plain", "bin");
+        Directory.CreateDirectory(inner);
+        var install = new InstalledUpscaler { Target = Path.Combine(oldGame, "common", "Plain", "bin") };
+
+        InstallRelocation.Apply(install, game);
+
+        Assert.Equal(inner, install.Target);
+    }
+
+    [Fact]
     public void AMovedGameFolderMapsTheTargetAndHelixPathsToTheCurrentOne()
     {
         var oldGame = Path.Combine(_root, "old", "steamapps", "common", "Plain");

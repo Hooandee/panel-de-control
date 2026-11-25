@@ -585,6 +585,20 @@ public sealed partial class UpscalerServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AChosenExeOutsideTheGameInItsRecordIsIgnored()
+    {
+        var game = AddGame("100", "Plain");
+        await InstallThroughService("100");
+        var stored = new UpscalerStateStore(StatePath).Install("100")!;
+        PanelInstallRecord.Write(stored.Install.Target, stored, exeOverride: "../../Other/evil.exe");
+        File.Delete(StatePath);
+
+        await Send(Service(), UpscalersRequest.Verify("100"));
+
+        Assert.Null(new UpscalerStateStore(StatePath).Exe("100"));
+    }
+
+    [Fact]
     public async Task TheChosenExeSurvivesPanelDataBeingWiped()
     {
         AddGame("100", "Plain");
