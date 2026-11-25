@@ -31,7 +31,7 @@ internal static class Skins
     public static void ApplySaved()
     {
         var saved = Read();
-        if (saved != PdcSkin.Glass)
+        if (saved != Current)
         {
             Load(saved);
         }

@@ -882,6 +882,14 @@ class DesignSystemTests(unittest.TestCase):
         )
         self.assertLessEqual(assignments, 16)
 
+    def test_saved_skin_loads_right_before_the_first_page(self):
+        # In the App constructor the merged dictionaries are not ready and the swap is lost (cold start shows the
+        # saved skin's layout on Glass styles); it has to happen on activation, before navigating.
+        app = APP_CODE.read_text(encoding="utf-8")
+        constructor = app[app.index("public App()"):app.index("protected override void OnActivated")]
+        self.assertNotIn("Skins.ApplySaved", constructor)
+        self.assertEqual(2, len(re.findall(r"Skins\.ApplySaved\(\);\s+(?:var frame = new Frame\(\);|frame\.Navigate)", app)))
+
     def test_every_skin_defines_the_same_keys(self):
         key = re.compile(r'x:Key="([^"]+)"')
         skins = {

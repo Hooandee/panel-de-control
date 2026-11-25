@@ -22,7 +22,6 @@ sealed partial class App : Application
         try
         {
             InitializeComponent();
-            Skins.ApplySaved();
         }
         catch (Exception exception)
         {
@@ -57,6 +56,8 @@ sealed partial class App : Application
             return;
         }
 
+        // Application resources are only ready to swap once activation starts, not in the constructor.
+        Skins.ApplySaved();
         var frame = new Frame();
         Window.Current.Content = frame;
         widget = new XboxGameBarWidget(
@@ -76,6 +77,7 @@ sealed partial class App : Application
         Window.Current.Content = frame;
         if (frame.Content is null)
         {
+            Skins.ApplySaved();
             frame.Navigate(typeof(ControlPanelWidget));
         }
 

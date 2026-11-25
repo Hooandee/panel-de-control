@@ -813,13 +813,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         SetRing(BatteryRing, battery, batteryColor, RingOuterSize);
         SetRing(CpuRing, FindReading(snapshot, "cpu.load"), cpuColor, RingOuterSize - (2 * RingInset));
         SetRing(GpuRing, FindReading(snapshot, "gpu.load"), gpuColor, RingOuterSize - (4 * RingInset));
-        BatteryValue.Foreground = new SolidColorBrush(batteryColor);
-        TileCpuValue.Foreground = new SolidColorBrush(cpuColor);
-        TileGpuValue.Foreground = new SolidColorBrush(gpuColor);
+        ShowReading(BatteryValue, battery, batteryColor);
+        ShowReading(TileCpuValue, FindReading(snapshot, "cpu.load"), cpuColor);
+        ShowReading(TileGpuValue, FindReading(snapshot, "gpu.load"), gpuColor);
         ApplyEnergy(snapshot);
         PowerSourceValue.Text = FormatPowerSource(snapshot);
         SystemBatteryValue.Text = Format(snapshot, "battery.level", "0", "%");
-        SystemBatteryValue.Foreground = new SolidColorBrush(batteryColor);
+        ShowReading(SystemBatteryValue, battery, batteryColor);
         SystemBatteryDetail.Text = PowerDrawDetail.Text;
         ApplyBatteryHealth(snapshot);
         ApplyFan(FanOneValue, snapshot, "fan.cpu.rpm");
@@ -2109,6 +2109,21 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             value.Style = Components.Style(value.Text.Any(char.IsDigit) ? "PdcValueSmallStyle" : "PdcLabelStyle");
         }
+    }
+
+    // A number takes the value style in the colour of what it measures; a status text (no sensor, unsupported
+    // device) takes the fallback style, which fits where a short number goes.
+    private static void ShowReading(TextBlock target, TelemetryReading? reading, Color color)
+    {
+        if (reading?.Status == ReadingStatus.Available && reading.Value.HasValue)
+        {
+            target.Style = Components.Style("PdcValueMediumStyle");
+            target.Foreground = new SolidColorBrush(color);
+            return;
+        }
+
+        target.Style = Components.Style("PdcValueFallbackStyle");
+        target.ClearValue(TextBlock.ForegroundProperty);
     }
 
     private static void ApplyFan(TextBlock target, HardwareSnapshot snapshot, string id)
