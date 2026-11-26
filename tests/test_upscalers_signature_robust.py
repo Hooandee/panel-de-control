@@ -54,10 +54,14 @@ def test_a_game_folder_named_vanguard_is_not_a_protection(tmp_path):
     assert not analysis["anti_cheat"] and analysis["anti_cheat_kind"] is None
 
 
-def test_eac_makes_the_signed_build_preferred_where_one_is_supported():
-    plain = catalog.preferred_build("rdna2")
-    signed = catalog.preferred_build("rdna2", prefer_signed=True)
-    assert plain == "fsr-4.1.2-beta" and catalog.build_signed(catalog.BUILDS[signed]) and signed != plain
+def test_eac_does_not_trade_the_family_for_a_signature():
+    assert catalog.preferred_build("rdna2", "steam_deck_lcd", prefer_signed=True) == "fsr-4.1.2-beta"
+    assert catalog.preferred_build("rdna2", prefer_signed=True) == "fsr-4.1.2-beta"
+
+
+def test_a_failed_default_falls_to_another_fsr_not_to_xess():
+    assert catalog.preferred_build("rdna3", failed={"fsr-4.1.1"}) == "fsr-4.1.2-beta"
+    assert catalog.preferred_build("rdna2", failed={"fsr-4.1.2-beta"}) != "xess"
 
 
 def test_required_signed_matches_the_curated_recipe_choice_on_rdna2():
@@ -73,9 +77,8 @@ def test_measured_signature_wins_over_the_declared_one():
     assert not catalog.build_signed(build)
 
 
-def test_a_failed_build_is_skipped_and_signed_ones_come_first():
+def test_a_failed_build_is_skipped():
     assert catalog.preferred_build("rdna2", failed={"fsr-4.1.2-beta"}) != "fsr-4.1.2-beta"
-    assert catalog.build_signed(catalog.BUILDS[catalog.preferred_build("rdna2", failed={"fsr-4.1.2-beta"})])
 
 
 @pytest.fixture(autouse=True)

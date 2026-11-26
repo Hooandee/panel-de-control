@@ -431,16 +431,16 @@ def preferred_build(gpu: str, recipe=None, device: str = "", *, require_signed: 
     chosen = [build for build in ordered if usable(build)]
     pool = [build for build in BUILDS.values() if build.engine == "optiscaler" and usable(build)]
 
-    def best(builds):
-        return max(builds, key=lambda b: (build_signed(b), b.image, -b.cost)).id
+    family = getattr(BUILDS.get(default), "family", "")
 
-    if prefer_signed:
-        signed = [build for build in chosen if build_signed(build)]
-        if signed:
-            return signed[0].id
-        signed = [build for build in pool if build_signed(build)]
-        if signed:
-            return best(signed)
+    def best(builds):
+        return max(builds, key=lambda b: (required and build_signed(b), b.family == family, b.image, -b.cost)).id
+
+    if prefer_signed and chosen:
+        top = chosen[0]
+        peers = [b for b in (*chosen, *pool) if b.family == top.family and b.image == top.image and build_signed(b)]
+        if peers and not build_signed(top):
+            return best(peers)
     if chosen:
         return chosen[0].id
     if (required or failed) and pool:
