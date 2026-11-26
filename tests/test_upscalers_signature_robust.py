@@ -106,7 +106,7 @@ def declare_signed(monkeypatch):
     monkeypatch.setitem(catalog.ASSETS, "extra", replace(catalog.ASSETS["extra"], signed=True))
 
 
-def test_unsigned_optiscaler_dll_refuses_the_install_and_recommends_the_next_signed_build(steam, fake_catalog, proc, monkeypatch):
+def test_unsigned_optiscaler_dll_installs_when_chosen_and_the_next_signed_build_stays_recommended(steam, fake_catalog, proc, monkeypatch):
     game = blizzard_game(steam)
     declare_signed(monkeypatch)
     second_signed_build(monkeypatch)
@@ -114,11 +114,9 @@ def test_unsigned_optiscaler_dll_refuses_the_install_and_recommends_the_next_sig
     make_pe(unpacked / "OptiScaler.dll", signed=False)
     service = _service(steam, fake_catalog, proc)
     assert service.game(APPID)["preferred"] == "fsr-test"
-    with pytest.raises(UpscalerError) as refused:
-        service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
-    assert refused.value.code == "unsigned_build" and refused.value.detail == "OptiScaler.dll"
+    service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
     target = game / "bin/x64_dx12"
-    assert not (target / "dxgi.dll").exists() and not (target / "OptiScaler.ini").exists()
+    assert (target / "dxgi.dll").exists() and (target / "OptiScaler.ini").exists()
     detail = service.game(APPID)
     assert detail["preferred"] == "fsr-other"
     saved = json.loads(service.state_path.read_text())["signatures"]
@@ -141,8 +139,7 @@ def test_measurements_survive_a_restart(steam, fake_catalog, proc, monkeypatch):
     declare_signed(monkeypatch)
     unpacked = Path(fake_catalog) / "cache" / catalog.ASSETS[catalog.OPTISCALER_ARCHIVE].sha256 / "unpacked"
     make_pe(unpacked / "OptiScaler.dll", signed=False)
-    with pytest.raises(UpscalerError):
-        _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
     catalog.MEASURED.clear()
     _service(steam, fake_catalog, proc)
     assert not catalog.build_signed(catalog.BUILDS["fsr-test"])
@@ -266,19 +263,17 @@ def test_a_signed_only_install_brings_the_packages_ffx_library_to_a_game_without
     assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == (unpacked / "amd_fidelityfx_upscaler_dx12.dll").read_bytes()
 
 
-def test_an_unsigned_library_in_the_package_refuses_a_signed_only_install(steam, fake_catalog, proc, monkeypatch):
+def test_an_unsigned_library_in_the_package_is_copied_when_the_user_chose_an_unsigned_build(steam, fake_catalog, proc, monkeypatch):
     game = blizzard_game(steam)
     declare_signed(monkeypatch)
     unpacked = package(fake_catalog)
     make_pe(unpacked / "OptiScaler.dll", signed=True)
     make_pe(unpacked / "libxess.dll", signed=False)
-    with pytest.raises(UpscalerError) as refused:
-        _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
-    assert refused.value.code == "unsigned_build" and refused.value.detail == "libxess.dll"
-    assert not (game / "bin/x64_dx12/dxgi.dll").exists()
+    _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    assert (game / "bin/x64_dx12/dxgi.dll").exists() and (game / "bin/x64_dx12/libxess.dll").exists()
 
 
-def test_a_build_swapped_after_the_old_install_is_measured_too(steam, fake_catalog, proc, monkeypatch):
+def test_a_build_swapped_after_the_old_install_is_measured_and_still_installs(steam, fake_catalog, proc, monkeypatch):
     game = blizzard_game(steam)
     declare_signed(monkeypatch)
     make_pe(package(fake_catalog) / "OptiScaler.dll", signed=True)
@@ -296,19 +291,16 @@ def test_a_build_swapped_after_the_old_install_is_measured_too(steam, fake_catal
         return build if len(calls) == 1 else replace(build, archive=later.id)
 
     monkeypatch.setattr(catalog, "for_game", swap)
-    with pytest.raises(UpscalerError) as refused:
-        _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
-    assert refused.value.code == "unsigned_build" and len(calls) >= 2
-    assert not (game / "bin/x64_dx12/dxgi.dll").exists()
+    _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    assert len(calls) >= 2 and (game / "bin/x64_dx12/dxgi.dll").exists()
 
 
-def test_standalone_dll_builds_are_refused_for_a_signed_only_game(steam, dll_catalog, proc):
+def test_standalone_dll_builds_install_for_a_signed_only_game(steam, dll_catalog, proc):
     game = blizzard_game(steam)
     original = game / "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
     before = original.read_bytes()
-    with pytest.raises(UpscalerError) as refused:
-        _service(steam, dll_catalog, proc).install(APPID, {"build": "dll-test", "confirm_anti_cheat": True})
-    assert refused.value.code == "unsigned_build" and original.read_bytes() == before
+    _service(steam, dll_catalog, proc).install(APPID, {"build": "dll-test", "confirm_anti_cheat": True})
+    assert original.read_bytes() != before
 
 
 @pytest.mark.parametrize("probes", ["not_sampled", [], [{"at": 5, "reaper": True, "processes": 2, "names": []}]])
@@ -369,19 +361,36 @@ def test_assets_sharing_one_archive_sha_keep_their_own_measurement():
 
 
 @pytest.mark.parametrize("signed", [False, True])
-def test_a_recipes_game_files_pass_the_signature_barrier_too(steam, fake_catalog, proc, monkeypatch, tmp_path, signed):
+def test_a_recipes_game_files_are_copied_signed_or_not(steam, fake_catalog, proc, monkeypatch, tmp_path, signed):
     from upscalers import auto_recipes
     game = blizzard_game(steam)
     declare_signed(monkeypatch)
     unpacked = Path(fake_catalog) / "cache" / catalog.ASSETS[catalog.OPTISCALER_ARCHIVE].sha256 / "unpacked"
     make_pe(unpacked / "OptiScaler.dll", signed=True)
     extra = make_pe(tmp_path / "mod.dll", signed=signed) or tmp_path / "mod.dll"
-    monkeypatch.setattr(auto_recipes, "sources", lambda selected, paths, store=None: {"bin/x64_dx12/mod.dll": extra})
+    monkeypatch.setattr(auto_recipes, "sources", lambda selected, paths, store=None: {"mod.dll": extra})
     service = _service(steam, fake_catalog, proc)
-    if signed:
-        service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
-        return
-    with pytest.raises(UpscalerError) as refused:
-        service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
-    assert refused.value.code == "unsigned_build" and refused.value.detail == "mod.dll"
-    assert not (game / "bin/x64_dx12/mod.dll").exists() and not (game / "bin/x64_dx12/dxgi.dll").exists()
+    service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    assert (game / "bin/x64_dx12/mod.dll").exists() and (game / "bin/x64_dx12/dxgi.dll").exists()
+
+
+def test_policy_a_signed_only_game_installs_the_unsigned_nightly_in_full_once_the_warning_is_accepted(steam, fake_catalog, proc, monkeypatch):
+    game = blizzard_game(steam)
+    declare_signed(monkeypatch)
+    unpacked = package(fake_catalog)
+    make_pe(unpacked / "OptiScaler.dll", signed=False)
+    make_pe(unpacked / "libxess.dll", signed=False)
+    make_pe(unpacked / "fakenvapi.dll", signed=False)
+    service = _service(steam, fake_catalog, proc)
+    assert any(item["id"] == "fsr-test" and item["supported"] for item in service.game(APPID)["builds"])
+    service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    names = {p.name for p in (game / "bin/x64_dx12").iterdir() if p.is_file()}
+    assert {"dxgi.dll", "libxess.dll", "fakenvapi.dll", "OptiScaler.ini"} <= names
+
+
+def test_policy_no_build_is_hidden_by_signature_and_no_path_raises_unsigned_build():
+    from pathlib import Path as P
+    for build in catalog.BUILDS.values():
+        assert catalog.build_supported(build, "rdna3", "", None, require_signed=True) == catalog.build_supported(build, "rdna3", "")
+    source = (P(__file__).parent.parent / "py_modules/upscalers/service.py").read_text()
+    assert "unsigned_build" not in source and "helixsr_recipe_blocked" not in source

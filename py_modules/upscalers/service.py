@@ -832,7 +832,7 @@ class UpscalerService:
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         entry = self._game_state(appid)
         recipe = self._recipe(appid, self._identity(installed, entry), installed)
-        required = self._require_signed(build, analysis, recipe)
+        required, _prefer = _signing(recipe, analysis)
         try:
             automatic = auto_recipes.plan(recipe, installed)
         except auto_recipes.RecipeError as error:
@@ -867,7 +867,9 @@ class UpscalerService:
         # A signed-only recipe is validated against the catalog's own files: a newer OptiScaler fails to hook the signed FSR 4.
         pinned_only: set[str] = {asset.id for asset in needed(effective_build, recipe)} if required else set()
         paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
-        self._check_signatures(effective_build, needed(effective_build, recipe), paths, chosen, required)
+        self._check_signatures(effective_build, needed(effective_build, recipe), paths, chosen)
+        # Unsigned helpers nothing needs stay out only when the chosen build itself is signed; an unsigned build goes in whole.
+        required = required and catalog.build_signed(effective_build)
         if wants_anr:
             try:
                 _anr_sources(paths[catalog.ANR_FG], "")
@@ -909,8 +911,8 @@ class UpscalerService:
             if required:
                 pinned_only |= {asset.id for asset in assets}
             paths, chosen = self._fetch_assets(assets, pinned_only)
-            if required:
-                self._check_signatures(build, assets, paths, chosen, required)
+            self._check_signatures(build, assets, paths, chosen)
+            required = required and catalog.build_signed(build)
 
         self._update_job(phase="copy")
         archive_asset = catalog.ASSETS[build.archive]
@@ -944,8 +946,6 @@ class UpscalerService:
         except auto_recipes.RecipeError as error:
             raise UpscalerError(error.code) from None
         extra.update(recipe_files)
-        if required:
-            self._check_copied(extra, target)
         sources = {**recipe_files, **sources}
         panel_names = {name.casefold() for name in (*sources, "OptiScaler.ini")}
         if any(name.casefold() in panel_names for name in mod_sources):
@@ -1103,23 +1103,18 @@ class UpscalerService:
                                 "args": entry["install"]["args"], **_launch_result(entry["install"])}, left)
 
     def _check_signatures(self, build: catalog.Build, assets: list[catalog.Asset], paths: dict[str, Path],
-                          chosen: dict[str, catalog.Asset], required: bool) -> None:
-        """Measures the Authenticode signature of each downloaded binary and remembers it by sha256; a game whose
-        protection closes on unsigned code gets nothing copied when one of them is not signed."""
-        unsigned = None
+                          chosen: dict[str, catalog.Asset]) -> None:
+        """Measures the Authenticode signature of each downloaded binary and remembers it by sha256; it only
+        informs which build is recommended and which unsigned helpers are left out, never what may be installed."""
         changed = False
         for asset in assets:
             path = paths.get(asset.id)
             if path is None:
                 continue
-            copied = True
             if path.is_dir():
                 if asset.id != build.archive:
                     continue
-                path, copied = path / "OptiScaler.dll", not build.injector
-                name = "OptiScaler.dll"
-            else:
-                name = asset.filename
+                path = path / "OptiScaler.dll"
             is_pe, signed = pe_sign.inspect(path)
             if not is_pe:
                 continue
@@ -1133,28 +1128,12 @@ class UpscalerService:
                         del self.state["signatures"][stale]
                     changed = True
             catalog.record_signature(asset.id, sha, signed)
-            if required and copied and not signed and unsigned is None:
-                unsigned = name
         if changed:
             self._save()
-        if unsigned is not None:
-            if self.logger:
-                self.logger.warning("Unsigned file %s refused for a game that requires signed builds", unsigned)
-            raise UpscalerError("unsigned_build", unsigned)
-
-    def _check_copied(self, files: dict[str, Path], target: Path) -> None:
-        for name, path in files.items():
-            if _exists_nocase(target, name):
-                continue
-            is_pe, signed = pe_sign.inspect(path)
-            if is_pe and not signed:
-                if self.logger:
-                    self.logger.warning("Unsigned file %s refused for a game that requires signed builds", name)
-                raise UpscalerError("unsigned_build", Path(name).name)
 
     def _signed_package(self, package: dict[str, Path], target: Path) -> dict[str, Path]:
         """The release's own files for a game whose protection closes on unsigned code: what the game already ships
-        stays untouched, unsigned helpers nothing needs are left out, and any other unsigned binary stops the install."""
+        stays untouched and unsigned helpers nothing needs are left out."""
         kept: dict[str, Path] = {}
         for name, path in package.items():
             if _exists_nocase(target, name):
@@ -1163,9 +1142,6 @@ class UpscalerService:
             if is_pe and not signed:
                 if Path(name).name.casefold() in _UNSIGNED_HELPERS or Path(name).name.casefold().startswith("fakenvapi."):
                     continue
-                if self.logger:
-                    self.logger.warning("Unsigned file %s refused for a game that requires signed builds", name)
-                raise UpscalerError("unsigned_build", Path(name).name)
             kept[name] = path
         return kept
 
@@ -1299,15 +1275,8 @@ class UpscalerService:
                         {"source": "pinned", "fallback": self._fallbacks.get(asset.id, "unresolved")})
         return item
 
-    def _require_signed(self, build: catalog.Build, analysis: dict, recipe) -> bool:
-        required, _prefer = _signing(recipe, analysis)
-        if required and not catalog.build_supported(build, self.gpu, self.device, recipe, require_signed=True):
-            raise UpscalerError("unsigned_build")
-        return required
-
     def _install_dll(self, appid: str, build: catalog.Build, choice: dict) -> dict:
         installed, analysis, _target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
-        self._require_signed(build, analysis, self._recipe(appid, self._identity(installed, self._game_state(appid)), installed))
         name = "amd_fidelityfx_upscaler_dx12.dll"
         loader = "amd_fidelityfx_loader_dx12.dll"
         framegen = "amd_fidelityfx_framegeneration_dx12.dll"
@@ -1405,11 +1374,8 @@ class UpscalerService:
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         entry = self._game_state(appid)
         recipe = self._recipe(appid, self._identity(installed, entry), installed)
-        self._require_signed(build, analysis, recipe)
         if build.way == "fsr" and "fsr31" not in analysis["inputs"]:
             raise UpscalerError("helixsr_no_fsr")
-        if recipe and not recipe.legacy_ffx_swap and analysis.get("dll_blocked") == "recipe_legacy_ffx":
-            raise UpscalerError("helixsr_recipe_blocked")
         pinned = catalog.ASSETS[build.archive]
         newest = self.latest.resolve(pinned) if self.helix.ready() else None
         if not self.helix.ready() or (newest and (self.helix.digest() or pinned.sha256) != newest.sha256):

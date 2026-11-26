@@ -430,7 +430,7 @@ def preferred_build(gpu: str, recipe=None, device: str = "", *, require_signed: 
 
     def usable(build) -> bool:
         return bool(build and build.available and build.id not in failed
-                    and build_supported(build, gpu, device, recipe, require_signed=required))
+                    and build_supported(build, gpu, device, recipe) and (not required or build_signed(build)))
 
     default = PREFERRED.get(gpu, "fsr-3.1")
     ordered = [BUILDS.get(getattr(recipe, "recommended_build", None)), BUILDS.get(default)]
@@ -461,11 +461,8 @@ _SIGNED_ONLY_GPUS = {"fsr-4.1.1": ("rdna2",)}
 
 
 def build_supported(build: Build, gpu: str, device: str = "", recipe=None, *, require_signed: bool = False) -> bool:
-    if require_signed or signed_only(recipe):
-        if not build_signed(build):
-            return False
-        if gpu in _SIGNED_ONLY_GPUS.get(build.id, ()):
-            return True
+    if (require_signed or signed_only(recipe)) and gpu in _SIGNED_ONLY_GPUS.get(build.id, ()):
+        return True
     if build.id in _DGPU_CYBOMAN:
         return gpu == "rdna3" and device == "steam_machine"
     if build.id == "fsr-4.1.2-lite-igpu-dll":

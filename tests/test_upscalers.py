@@ -2220,7 +2220,7 @@ def test_report_publishes_the_recorded_game_before_the_slow_disk_reads(steam, fa
     assert partial["games"][0]["elapsed_ms"] >= 0
 
 
-def test_helixsr_leaves_the_fsr31_library_a_recipe_keeps_untouched(steam, helix_catalog, proc, monkeypatch):
+def test_helixsr_installs_when_chosen_even_if_the_recipe_keeps_the_fsr31_library(steam, helix_catalog, proc, monkeypatch):
     _, game = steam
     folder = game / "bin/x64_dx12"
     (folder / "amd_fidelityfx_upscaler_dx12.dll").unlink()
@@ -2228,12 +2228,11 @@ def test_helixsr_leaves_the_fsr31_library_a_recipe_keeps_untouched(steam, helix_
     monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["2322010"], appid=APPID))
     service = _service(steam, helix_catalog, proc)
     service.helix = FakeHelix()
-    with pytest.raises(UpscalerError, match="helixsr_recipe_blocked"):
-        service.install(APPID, {"build": "hlx-fsr4"})
-    assert service.helix.calls == [] and legacy.read_bytes() == b"ffx 1.0.1"
+    service.install(APPID, {"build": "hlx-fsr4"})
+    assert service.helix.calls
 
 
-def test_helixsr_sees_the_legacy_library_beyond_the_first_four_fsr31_copies(steam, helix_catalog, proc, monkeypatch):
+def test_helixsr_installs_when_the_legacy_library_is_beyond_the_first_four_fsr31_copies(steam, helix_catalog, proc, monkeypatch):
     _, game = steam
     for index in range(5):
         _write(game / f"a{index}/amd_fidelityfx_upscaler_dx12.dll", b"ffx")
@@ -2241,8 +2240,8 @@ def test_helixsr_sees_the_legacy_library_beyond_the_first_four_fsr31_copies(stea
     monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["2322010"], appid=APPID))
     service = _service(steam, helix_catalog, proc)
     service.helix = FakeHelix()
-    with pytest.raises(UpscalerError, match="helixsr_recipe_blocked"):
-        service.install(APPID, {"build": "hlx-fsr4"})
+    service.install(APPID, {"build": "hlx-fsr4"})
+    assert service.helix.calls
 
 
 @pytest.fixture
@@ -2308,11 +2307,11 @@ def test_a_games_protection_applies_whatever_platform_its_entry_targets(platform
 REAL_BUILDS = dict(catalog.BUILDS)
 
 
-def test_signed_only_recipe_offers_the_signed_fsr_411_on_rdna2_and_hides_the_nightly():
+def test_signed_only_recipe_lists_every_supported_build_and_recommends_the_signed_fsr_411_on_rdna2():
     recipe = recipes.recipe_for("2344520", platform="linux", arch="x86_64")
     offered = {row["id"] for row in catalog.describe("rdna2", "steam_deck_lcd", recipe) if row["supported"]}
-    assert "fsr-4.1.1" in offered and "fsr-4.1.2-beta" not in offered and "fsr-4.1.1-rdna2" not in offered
-    assert not any(catalog.BUILDS[name].engine == "dll" for name in offered)
+    plain = {row["id"] for row in catalog.describe("rdna2", "steam_deck_lcd") if row["supported"]}
+    assert "fsr-4.1.1" in offered and plain <= offered
     assert catalog.preferred_build("rdna2", recipe) == "fsr-4.1.1"
 
 
@@ -2333,8 +2332,7 @@ def test_signed_only_install_writes_only_signed_pieces(steam, fake_catalog, proc
     monkeypatch.setattr(recipes, "RECIPES", {**recipes.RECIPES, APPID: replace(base, anti_cheat=True, signed_only=True)})
     service = _service(steam, fake_catalog, proc)
     assert service.game(APPID)["preferred"] == "fsr-4.1.1"
-    with pytest.raises(UpscalerError, match="unsigned_build"):
-        service.install(APPID, {"build": "unsigned", "confirm_anti_cheat": True})
+    service.install(APPID, {"build": "unsigned", "confirm_anti_cheat": True})
     service.install(APPID, {"build": "fsr-4.1.1", "confirm_anti_cheat": True})
     target = game / "bin/x64_dx12"
     names = {p.name for p in target.iterdir() if p.is_file()}

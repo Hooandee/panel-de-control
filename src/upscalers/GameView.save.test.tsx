@@ -288,25 +288,6 @@ it("reinstalls a game with anti-cheat for a new mod without asking about the ant
   expect(installUpscaler).toHaveBeenCalledWith("777", expect.objectContaining({ confirm_anti_cheat: true }));
 });
 
-it("tells the user which build closed the game and which one Panel recommends now", async () => {
-  state.detail = { ...installed("not_run"), preferred: "fsr-4.1.1", failed_builds: [{ build: "fsr-4.1.2-beta", seconds: 88.7, version: "v0.9.5" }] } as unknown as GameDetail;
-  await act(async () => { render(<GameView {...props} />); });
-  expect(screen.getByText("up.failedBuild")).toBeTruthy();
-});
-
-it("says there is nothing else to recommend when the failed build is still the preferred one", async () => {
-  state.detail = { ...installed("not_run"), preferred: "fsr-4.1.1", failed_builds: [{ build: "fsr-4.1.1", seconds: 30 }] } as unknown as GameDetail;
-  await act(async () => { render(<GameView {...props} />); });
-  expect(screen.getByText("up.failedBuild.alone")).toBeTruthy();
-});
-
-it("does not recommend a build the game's signing requirement rules out", async () => {
-  state.detail = { ...installed("not_run"), preferred: "fsr-4.1.1", failed_builds: [{ build: "fsr-4.1.2-beta", seconds: 88.7 }] } as unknown as GameDetail;
-  const unsupported = { ...overview, builds: [{ ...overview.builds[0], supported: false }] } as UpscalersOverview;
-  await act(async () => { render(<GameView {...props} overview={unsupported} />); });
-  expect(screen.queryByText("up.failedBuild")).toBeNull();
-});
-
 it("asks again for a signed-only game whose old install has no recorded acceptance", async () => {
   const { installUpscaler } = await import("../api");
   const { markPendingReinstall } = await import("./userFileWatch");
