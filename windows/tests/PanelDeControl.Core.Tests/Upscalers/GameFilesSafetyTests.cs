@@ -146,6 +146,20 @@ public sealed class GameFilesSafetyTests : IDisposable
         Assert.Equal("keep", File.ReadAllText(Path.Combine(_game, "unrelated.txt")));
     }
 
+    [Fact]
+    public void TheGamesOwnSettingsAndAnotherToolsLibrariesSurviveARemovalEvenWhenCreatedAfterTheInstall()
+    {
+        GameFiles.Apply(_game, Sources(("dinput8.dll", "panel fw"), (ReframeworkConfig.FileName, "REFrameworkConfig_MenuOpen=false")), "[OptiScaler]");
+        File.WriteAllText(Path.Combine(_game, "config.ini"), "game settings");
+        Directory.CreateDirectory(Path.Combine(_game, "_storage_"));
+        File.WriteAllText(Path.Combine(_game, "_storage_", "amd_fidelityfx_upscaler_dx12.dll"), "helix");
+
+        Assert.Empty(GameFiles.Remove(_game));
+
+        Assert.Equal("game settings", File.ReadAllText(Path.Combine(_game, "config.ini")));
+        Assert.Equal("helix", File.ReadAllText(Path.Combine(_game, "_storage_", "amd_fidelityfx_upscaler_dx12.dll")));
+    }
+
     [Theory]
     [InlineData("data/settings.json", false)]
     [InlineData("autorun/mine.lua", true)]

@@ -53,7 +53,7 @@ public static class GameFiles
         var journal = Path.Combine(meta, GameManifest.FileName);
         if (sources.Any(pair => GameManifest.PathComparer.Equals(pair.Key, ReframeworkConfig.FileName)))
         {
-            manifest.Preexisting = RuntimeNames(target).ToList();
+            manifest.Preexisting = RuntimeNames(target);
         }
         // Every move is journaled before it happens, so an install killed mid-copy leaves a manifest that restores the
         // game's originals instead of mistaking Panel's own files for them on the next attempt.
@@ -316,8 +316,8 @@ public static class GameFiles
         return kept;
     }
 
-    /// <summary>The files and folders REFramework creates in the game folder while it runs.</summary>
-    private static IEnumerable<string> RuntimeNames(string target)
+    /// <summary>The files and folders REFramework creates in the game folder while it runs; null when the folder could not be read.</summary>
+    private static List<string>? RuntimeNames(string target)
     {
         var names = new List<string>();
         try
@@ -328,7 +328,7 @@ public static class GameFiles
                 var folder = (entry.Attributes & FileAttributes.Directory) != 0;
                 var match = folder
                     ? name.Equals("_storage_", StringComparison.OrdinalIgnoreCase) || name.Equals("reframework", StringComparison.OrdinalIgnoreCase)
-                    : name.Equals("config.ini", StringComparison.OrdinalIgnoreCase) || name.Equals("ref_ui.ini", StringComparison.OrdinalIgnoreCase)
+                    : name.Equals("ref_ui.ini", StringComparison.OrdinalIgnoreCase)
                         || (name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) && (name.IndexOf("_framework_log", StringComparison.OrdinalIgnoreCase) >= 0
                             || name.StartsWith("reframework_", StringComparison.OrdinalIgnoreCase)))
                         || (name.EndsWith(".dmp", StringComparison.OrdinalIgnoreCase) && name.StartsWith("reframework_", StringComparison.OrdinalIgnoreCase));
@@ -340,6 +340,7 @@ public static class GameFiles
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            return null;
         }
         return names;
     }
@@ -347,7 +348,7 @@ public static class GameFiles
     /// <summary>Takes out what REFramework generated during this install; anything the game folder had before stays.</summary>
     private static void RemoveRuntime(string target, GameManifest manifest)
     {
-        foreach (var name in RuntimeNames(target))
+        foreach (var name in RuntimeNames(target) ?? new List<string>())
         {
             try
             {
@@ -357,6 +358,11 @@ public static class GameFiles
                 }
                 var path = Join(target, name);
                 // Scripts and plugins in REFramework's folder are the user's own: the folder only goes while it holds none.
+                if (Directory.Exists(path) && string.Equals(name, "_storage_", StringComparison.OrdinalIgnoreCase)
+                    && Directory.EnumerateFiles(path, "*.dll", SearchOption.AllDirectories).Any())
+                {
+                    continue;
+                }
                 if (Directory.Exists(path) && string.Equals(name, "reframework", StringComparison.OrdinalIgnoreCase)
                     && Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Any(file => file.EndsWith(".lua", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
                 {
