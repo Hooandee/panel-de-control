@@ -12585,9 +12585,16 @@ class Plugin(AmbientRpc):
             baseline = backend.resume_baseline() or {}
         except Exception:  # noqa: BLE001
             return
-        loop.call_later(
+        self._cancel_controller_resume_probe()
+        self._controller_resume_probe_handle = loop.call_later(
             _CONTROLLER_RESUME_PROBE_S, self._run_controller_resume_probe, token, backend, baseline
         )
+
+    def _cancel_controller_resume_probe(self) -> None:
+        handle = getattr(self, "_controller_resume_probe_handle", None)
+        self._controller_resume_probe_handle = None
+        if handle is not None:
+            handle.cancel()
 
     def _run_controller_resume_probe(self, token, backend, baseline) -> None:
         if getattr(self, "_shutting_down", False) or token != getattr(self, "_resume_token", None):
@@ -12615,9 +12622,13 @@ class Plugin(AmbientRpc):
             except Exception:  # noqa: BLE001
                 pass
 
+        self._controller_resume_probe_handle = None
         # Default executor, not the serial apply one: several busctl calls must not queue
         # TDP or CPU writes behind them.
-        asyncio.get_running_loop().run_in_executor(None, work)
+        try:
+            asyncio.get_running_loop().run_in_executor(None, work)
+        except RuntimeError:
+            pass
 
     def _hold_cores_after_resume(
         self, intent: dict, *, allow_cores=False, allow_smt=False,
@@ -16536,6 +16547,7 @@ class Plugin(AmbientRpc):
         self._cancel_charge_limit_reconcile("shutdown")
         self._stop_charge_limit_full_once_monitor()
         self._shutting_down = True
+        self._cancel_controller_resume_probe()
         if not getattr(self, "_hud_shutdown", False):
             self._hud_shutdown = True
             self._hud_generation = int(getattr(self, "_hud_generation", 0)) + 1

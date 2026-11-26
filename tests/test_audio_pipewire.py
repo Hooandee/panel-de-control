@@ -3618,14 +3618,96 @@ def test_unconfirmable_pending_restore_is_dropped_after_bounded_attempts(tmp_pat
     assert blocked["pending_restore"]["sink"] == _QJ9J_HDMI
     assert eq.apply_diagnostics()["ok"] is True
     assert eq._route_state() is None or eq._route_state()["pending_restores"] == []
-    assert fake._volume_channels[_QJ9J_HDMI] == ("70%",) * 8
+    assert fake._volume_channels[_QJ9J_HDMI] == ("80%",) * 8
     decisions = [
         fields for args, fields in written
         if args[1:3] == ("audio", "pending_restore")
     ]
     assert [fields["decision"] for fields in decisions] == ["retry"] * (
         len(decisions) - 1
-    ) + ["dropped"]
+    ) + ["uniform"]
     assert decisions[-1]["sink"] == _QJ9J_HDMI
-    assert decisions[-1]["after"] == ["70%"] * 8
+    assert decisions[-1]["after"] == ["80%"] * 8
     assert decisions[-1]["attempt"] == pipewire._PENDING_RESTORE_MAX_ATTEMPTS
+    assert eq._pending_restore_failures == {}
+
+
+class _QuirkyHdmiRunner(_ChannelRunner):
+    """The HDMI sink of the report, either without a volume yet (just appeared after a
+    resume) or ignoring every write."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.unreadable = set()
+        self.stuck = set()
+
+    def __call__(self, argv, timeout=8):
+        if argv[:2] == ["pactl", "get-sink-volume"] and argv[2] in self.unreadable:
+            self.calls.append(argv)
+            return ""
+        if argv[:2] == ["pactl", "set-sink-volume"] and argv[2] in self.stuck:
+            self.calls.append(argv)
+            return ""
+        return super().__call__(argv, timeout)
+
+
+def _quirky_eq(tmp_path, hdmi_volume="70%"):
+    fake = _QuirkyHdmiRunner(
+        {_QJ9J_HDMI: 8, _QJ9J_SPEAKER: 2, _QJ9J_BLUEZ: 1},
+        {_QJ9J_HDMI: hdmi_volume, _QJ9J_SPEAKER: "61%", _QJ9J_BLUEZ: "100%"},
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    return fake, eq
+
+
+def test_unreadable_volume_after_resume_is_not_a_failed_restore(tmp_path):
+    fake, eq = _quirky_eq(tmp_path)
+    fake.unreadable.add(_QJ9J_HDMI)
+    eq._pending_restores = [{"sink": _QJ9J_HDMI, "volumes": ["50%", "50%"], "muted": False}]
+
+    for _ in range(pipewire._PENDING_RESTORE_MAX_ATTEMPTS + 1):
+        assert eq._restore_pending_routes({_QJ9J_HDMI}) is False
+    assert eq._pending_restore_blocker["attempt"] == 0
+
+    fake.unreadable.clear()
+    assert eq._restore_pending_routes({_QJ9J_HDMI}) is True
+    assert fake._volume_channels[_QJ9J_HDMI] == ("50%",) * 8
+    assert eq._pending_restores == [] and eq._pending_restore_failures == {}
+
+
+def test_unconfirmable_restore_is_dropped_without_raising_the_volume(tmp_path):
+    fake, eq = _quirky_eq(tmp_path, hdmi_volume="70%")
+    fake.stuck.add(_QJ9J_HDMI)
+    eq._pending_restores = [{"sink": _QJ9J_HDMI, "volumes": ["100%", "80%"], "muted": False}]
+
+    for _ in range(pipewire._PENDING_RESTORE_MAX_ATTEMPTS - 1):
+        assert eq._restore_pending_routes({_QJ9J_HDMI}) is False
+    assert eq._restore_pending_routes({_QJ9J_HDMI}) is True
+
+    assert fake.volume_sets(_QJ9J_HDMI)[-1] == ["pactl", "set-sink-volume", _QJ9J_HDMI, "80%"]
+    assert fake._volume_channels[_QJ9J_HDMI] == ("70%",) * 8
+    assert eq._pending_restores == [] and eq._pending_restore_failures == {}
+
+
+def test_dropped_restore_leaves_the_list_and_a_fresh_one_starts_at_zero(tmp_path):
+    fake, eq = _quirky_eq(tmp_path)
+    fake.stuck.update({_QJ9J_HDMI, _QJ9J_SPEAKER})
+    hdmi = {"sink": _QJ9J_HDMI, "volumes": ["100%", "80%"], "muted": False}
+    speaker = {"sink": _QJ9J_SPEAKER, "volumes": ["40%", "40%"], "muted": False}
+    names = {_QJ9J_HDMI, _QJ9J_SPEAKER}
+    eq._pending_restores = [hdmi]
+    for _ in range(pipewire._PENDING_RESTORE_MAX_ATTEMPTS - 1):
+        assert eq._restore_pending_routes(names) is False
+    eq._pending_restores.append(speaker)
+
+    assert eq._restore_pending_routes(names) is False
+    assert eq._pending_restore_blocker == {"sink": _QJ9J_SPEAKER, "attempt": 1}
+    assert eq._pending_restores == [speaker]
+
+    fake.stuck.discard(_QJ9J_SPEAKER)
+    assert eq._restore_pending_routes(names) is True
+    assert eq._pending_restore_failures == {}
+
+    eq._pending_restores = [dict(hdmi)]
+    assert eq._restore_pending_routes(names) is False
+    assert eq._pending_restore_blocker == {"sink": _QJ9J_HDMI, "attempt": 1}

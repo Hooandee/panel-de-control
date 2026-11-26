@@ -277,7 +277,58 @@ public sealed class SteamThemeEngineTests : IDisposable
         Assert.Equal(nameof(SteamThemeConnection.DebuggingOff), status.Diagnostics!.Connection);
         Assert.Empty(status.Diagnostics.Targets);
         Assert.Contains("Hooandee Eclipse", status.Diagnostics.Themes.Keys);
-        Assert.NotNull(engine.LastEnabledDiagnostics);
+        Assert.Null(engine.LastEnabledDiagnostics);
+    }
+
+    [Fact]
+    public async Task SteamClosingKeepsTheLastSnapshotThatSawSteam()
+    {
+        devTools.Targets = new[] { Shared(), Page("bp", "SP", BigPictureUrl) };
+        var engine = Engine(Theme());
+        var connected = await engine.CycleAsync(default);
+        Assert.Equal(SteamThemeConnection.Connected, connected.Connection);
+
+        devTools.Targets = null;
+        steam.Running = false;
+        var closed = await engine.CycleAsync(default);
+
+        Assert.Equal(SteamThemeConnection.SteamNotRunning, closed.Connection);
+        Assert.Equal(connected.Diagnostics!.At, engine.LastEnabledDiagnostics!.At);
+        Assert.NotEmpty(engine.LastEnabledDiagnostics.Targets);
+    }
+
+    [Fact]
+    public void ReportKeepsSteamUiTargetsAndOnlyTheHostOfWebPages()
+    {
+        var diagnostics = new ThemeDiagnostics(
+            DateTimeOffset.UnixEpoch,
+            nameof(SteamThemeConnection.Connected),
+            new[]
+            {
+                new ThemeTargetDiagnostics("page", SteamThemeEngine.SharedContextTitle, "https://steamloopback.host/index.html", false, null, null),
+                new ThemeTargetDiagnostics("page", "QuickAccess_uid2", "about:blank", false, 1, 1),
+                new ThemeTargetDiagnostics("page", "SP", "about:blank", true, 2, 2),
+                new ThemeTargetDiagnostics("page", "Steam Community :: Hooandee", "https://steamcommunity.com/profiles/76561197960287930", false, null, null),
+                new ThemeTargetDiagnostics("page", "Friend Name - Chat", "https://steamcommunity.com/chat/friend@example.com", false, null, null),
+            },
+            new ThemeHostStatus(true, true, Array.Empty<string>(), Array.Empty<string>()),
+            new Dictionary<string, ThemeApplication>(),
+            null,
+            null,
+            null);
+
+        var targets = diagnostics.ToJson()["targets"]!.AsArray();
+        var json = targets.ToJsonString();
+
+        Assert.Equal("https://steamloopback.host/index.html", targets[0]!["url"]!.GetValue<string>());
+        Assert.Equal("QuickAccess_uid2", targets[1]!["title"]!.GetValue<string>());
+        Assert.Equal("SP", targets[2]!["title"]!.GetValue<string>());
+        Assert.Null(targets[3]!["title"]);
+        Assert.Equal("https://steamcommunity.com", targets[3]!["url"]!.GetValue<string>());
+        Assert.Null(targets[4]!["title"]);
+        Assert.DoesNotContain("76561197960287930", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("Friend Name", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("example.com", json, StringComparison.Ordinal);
     }
 
     private SteamThemeEngine Engine(InstalledTheme theme, IClassTableSource? table = null, bool extension = false) => new(

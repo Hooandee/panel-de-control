@@ -269,7 +269,11 @@ public sealed class SteamThemeEngine
     internal async Task<ThemeEngineStatus> CycleAsync(CancellationToken cancellationToken)
     {
         var result = await RunCycleAsync(cancellationToken).ConfigureAwait(false);
-        if (result.Diagnostics is { Themes.Count: > 0 } diagnostics)
+        // A closed or restarting Steam still lists the enabled themes; that empty snapshot
+        // must not replace the last one that saw Steam.
+        if (result.Diagnostics is { Themes.Count: > 0 } diagnostics
+            && (result.Connection is SteamThemeConnection.Connected or SteamThemeConnection.WaitingForBigPicture
+                || diagnostics.Targets.Count > 0))
         {
             lock (statusGate)
             {

@@ -119,16 +119,41 @@ def test_report_drop_27_to_22_is_recorded_with_names_and_flagged(tmp_path):
 def test_nodes_and_stale_hide_rules_are_listed_with_ids(tmp_path):
     result, _ = _collect(tmp_path)
 
-    nodes = {row["node"]: row for row in result["nodes"]}
+    nodes = {f'{row["kind"]}{row["index"]}': row for row in result["nodes"]}
     assert (nodes["hidraw3"]["mode"], nodes["hidraw3"]["id"], nodes["hidraw3"]["hidden"]) == (
         "0000", "0b05:1abe", True)
     assert (nodes["hidraw4"]["id"], nodes["hidraw4"]["virtual"], nodes["hidraw4"]["hidden"]) == (
         "28de:12fd", True, False)
     assert (nodes["event17"]["id"], nodes["event17"]["virtual"]) == ("28de:11ff", True)
+    assert {row["owner"] for row in result["nodes"]} <= {"root", "other"}
     assert result["udev_rules"] == [
-        {"name": "96-inputplumber-hide-hidraw3.rules", "mtime": 1_794_139_000,
-         "node": "hidraw3", "node_present": True},
+        {"name": "96-inputplumber-hide-hidrawN.rules", "mtime": 1_794_139_000,
+         "kind": "hidraw", "index": 3, "node_present": True},
     ]
+
+
+def test_hidraw_numbers_grown_by_resumes_stay_readable_after_redaction(tmp_path):
+    result, _ = _collect(tmp_path)
+    dev, sys_root, rules = tmp_path / "dev", tmp_path / "sys", tmp_path / "rules"
+    real = sys_root / "devices" / "pci0000:00" / "usb1" / "hidraw14"
+    (real / "device").mkdir(parents=True)
+    (real / "device" / "uevent").write_text("HID_ID=0003:00000B05:00001ABE\n")
+    os.symlink(real, sys_root / "class" / "hidraw" / "hidraw14")
+    (dev / "hidraw14").write_text("")
+    (rules / "96-inputplumber-hide-hidraw14.rules").write_text("")
+    record = {
+        "t": 1.0, "l": "I", "s": "controller", "m": "resume_probe",
+        "nodes": resume_probe.nodes(str(dev), str(sys_root)),
+        "udev_rules": resume_probe.udev_rules(str(rules), str(dev)),
+    }
+    bundle = redact_obj({"journal": {"recent": [json.loads(json.dumps(record))], "older": []}})
+
+    kept = bundle["journal"]["recent"][0]
+    assert "[serial]" not in json.dumps(kept)
+    assert {(row["kind"], row["index"]) for row in kept["nodes"]} >= {("hidraw", 14)}
+    rule = next(row for row in kept["udev_rules"] if row["index"] == 14)
+    assert (rule["name"], rule["kind"], rule["node_present"]) == (
+        "96-inputplumber-hide-hidrawN.rules", "hidraw", True)
 
 
 @pytest.mark.parametrize("version,device_key,before", [
@@ -153,7 +178,14 @@ def test_unreachable_daemon_is_not_reported_as_a_loss(tmp_path):
         device_key="rog_ally", dev_root=str(dev), sys_root=str(sys_root), rules_dir=str(rules),
     )
     assert result["caps_read_ok"] is False and result["advisory"] is None
+    assert result["caps_lost"] is None and result["caps_gained"] is None
     assert result["composite_after"] is None and result["targets"] is None
+
+
+def test_unknown_baseline_is_not_compared(tmp_path):
+    result, _ = _collect(tmp_path, before=[])
+    assert result["before_known"] is False
+    assert result["caps_lost"] is None and result["caps_gained"] is None
 
 
 def test_backend_flag_is_exposed_in_diagnostics_and_sticks(tmp_path):
@@ -177,14 +209,13 @@ def test_journal_record_survives_redaction_with_enum_names_and_no_serial_paths(t
     assert "[serial]" not in json.dumps(kept)
 
 
-def test_resume_schedules_one_read_only_probe_off_the_loop(tmp_path, monkeypatch):
+def _probe_plugin(tmp_path, monkeypatch, bus):
     from tests.test_gpu_clock_rpc import _make_plugin
 
     plugin, _ = _make_plugin(tmp_path, monkeypatch)
     import main
 
     monkeypatch.setattr(main, "_CONTROLLER_RESUME_PROBE_S", 0.0)
-    bus = _Bus()
     monkeypatch.setattr(main, "IpDbus", lambda *a, **k: IpDbus(run=bus))
     written = []
     monkeypatch.setattr(main.journal, "active", SimpleNamespace(
@@ -201,6 +232,12 @@ def test_resume_schedules_one_read_only_probe_off_the_loop(tmp_path, monkeypatch
     plugin._controller = {"manager": "inputplumber", "version": "0.83.1"}
     plugin._controller_backend = IpBackend(
         store=None, dbus=prior, version="0.83.1", device_key="rog_ally")
+    return plugin, written
+
+
+def test_resume_schedules_one_read_only_probe_off_the_loop(tmp_path, monkeypatch):
+    bus = _Bus()
+    plugin, written = _probe_plugin(tmp_path, monkeypatch, bus)
     bus.calls.clear()
 
     async def scenario():
@@ -213,3 +250,33 @@ def test_resume_schedules_one_read_only_probe_off_the_loop(tmp_path, monkeypatch
     level, _source, _message, fields = written[0]
     assert level == "WARNING" and fields["caps_lost"] == LOST
     assert all(call[1] in ("tree", "get-property") for call in bus.calls)
+
+
+def test_inputplumber_silent_at_probe_time_is_info_not_a_loss(tmp_path, monkeypatch):
+    plugin, written = _probe_plugin(tmp_path, monkeypatch, lambda args: _result("", 1))
+
+    async def scenario():
+        plugin._on_resume_detected(2575)
+        await asyncio.sleep(0.3)
+
+    asyncio.run(scenario())
+
+    level, _source, _message, fields = written[0]
+    assert level == "INFO" and fields["caps_lost"] is None
+
+
+def test_shutdown_cancels_a_pending_probe(tmp_path, monkeypatch):
+    import main
+
+    plugin, written = _probe_plugin(tmp_path, monkeypatch, _Bus())
+    monkeypatch.setattr(main, "_CONTROLLER_RESUME_PROBE_S", 0.05)
+
+    async def scenario():
+        plugin._on_resume_detected(2575)
+        handle = plugin._controller_resume_probe_handle
+        plugin._prepare_shutdown()
+        await asyncio.sleep(0.2)
+        return handle
+
+    handle = asyncio.run(scenario())
+    assert handle.cancelled() and written == []

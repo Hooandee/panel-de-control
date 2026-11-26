@@ -1095,10 +1095,17 @@ class PipeWireEq:
         self._downstream_mutes.pop(previous, None)
         return True
 
+    def _prune_restore_failures(self):
+        pending = {item["sink"] for item in self._pending_restores}
+        for sink in list(self._pending_restore_failures):
+            if sink not in pending:
+                del self._pending_restore_failures[sink]
+
     def _restore_pending_routes(self, names):
         remaining = []
         self._pending_restore_blocker = None
-        for item in self._pending_restores:
+        self._prune_restore_failures()
+        for item in list(self._pending_restores):
             sink = item["sink"]
             if sink not in names:
                 remaining.append(item)
@@ -1111,14 +1118,35 @@ class PipeWireEq:
                 self._downstream_volumes.pop(sink, None)
                 self._downstream_mutes.pop(sink, None)
                 continue
-            attempt = self._pending_restore_failures.get(sink, 0) + 1
-            self._pending_restore_failures[sink] = attempt
-            dropped = attempt >= _PENDING_RESTORE_MAX_ATTEMPTS
+            failures = self._pending_restore_failures.setdefault(
+                sink, {"attempts": 0, "unreadable": 0}
+            )
             readback = self._sink_volume_pcts(sink)
+            # A sink that just appeared (or a resume) has no volume yet; that is
+            # not a failed write.
+            if readback is None:
+                failures["unreadable"] += 1
+            else:
+                failures["attempts"] += 1
+            attempt = failures["attempts"]
+            exhausted = (
+                attempt >= _PENDING_RESTORE_MAX_ATTEMPTS
+                or failures["unreadable"] >= _DEFAULT_UNREADABLE_RETRIES
+            )
+            decision = "retry"
+            if exhausted:
+                decision = "dropped"
+                # Never leave the output louder than the user had it.
+                quietest = min(item["volumes"], key=lambda value: int(str(value).rstrip("%")))
+                if self._set_sink_volume_confirmed(
+                    sink, quietest
+                ) and self._set_sink_mute_confirmed(sink, item["muted"]):
+                    decision = "uniform"
+                readback = self._sink_volume_pcts(sink)
             muted = self._sink_muted(sink)
             if journal.active is not None:
                 journal.active.write(
-                    "WARNING",
+                    "INFO" if decision == "uniform" else "WARNING",
                     "audio",
                     "pending_restore",
                     sink=sink,
@@ -1127,15 +1155,21 @@ class PipeWireEq:
                     after=list(readback) if readback else None,
                     after_muted=muted,
                     attempt=attempt,
-                    decision="dropped" if dropped else "retry",
+                    unreadable=failures["unreadable"],
+                    decision=decision,
                 )
-            if not dropped:
+            if decision == "retry":
                 self._pending_restore_blocker = {"sink": sink, "attempt": attempt}
                 return False
-            # A sink that is not the route and never confirms would otherwise
-            # reject every apply; its current volume is left untouched.
-            self._pending_restore_failures.pop(sink, None)
+            # Out of the list now, so a later blocker cannot restart its count; the
+            # count stays until the list without it is persisted.
+            self._pending_restores = [i for i in self._pending_restores if i is not item]
+            if decision == "uniform":
+                self._pending_restore_failures.pop(sink, None)
+                self._downstream_volumes.pop(sink, None)
+                self._downstream_mutes.pop(sink, None)
         self._pending_restores = remaining
+        self._prune_restore_failures()
         return True
 
     def _retry_blocked(self, request, downstream):
@@ -1430,6 +1464,7 @@ class PipeWireEq:
                             ),
                             "muted": restart_state["physical_muted"],
                         })
+                    self._prune_restore_failures()
                     preserve_state = (
                         restart_state["phase"] == "active"
                         or restart_state["sink"] == downstream
@@ -2192,6 +2227,7 @@ class PipeWireEq:
                 self._pending_restores.append({
                     "sink": sink, "volumes": list(volumes), "muted": muted,
                 })
+        self._prune_restore_failures()
         released_pending = list(self._pending_restores)
         if state is not None and not self._persist_released_state(state):
             return self._defer_failure(

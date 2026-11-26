@@ -74,18 +74,6 @@ def _input_id(sys_root, name):
     return f"{vendor.strip().lower().zfill(4)[-4:]}:{product.strip().lower().zfill(4)[-4:]}"
 
 
-def _owner(st):
-    try:
-        import grp
-        import pwd
-
-        user = pwd.getpwuid(st.st_uid).pw_name
-        group = grp.getgrgid(st.st_gid).gr_name
-        return f"{user}:{group}"
-    except Exception:  # noqa: BLE001
-        return f"{st.st_uid}:{st.st_gid}"
-
-
 def _node_rows(directory, prefix, klass, ident, sys_root):
     try:
         names = sorted(
@@ -102,10 +90,12 @@ def _node_rows(directory, prefix, klass, ident, sys_root):
         except OSError:
             continue
         mode = st.st_mode & 0o777
+        # Kind and index apart: `hidraw14` would be redacted as a serial.
         rows.append({
-            "node": name,
+            "kind": prefix,
+            "index": int(name[len(prefix):]),
             "mode": f"{mode:04o}",
-            "owner": _owner(st),
+            "owner": "root" if st.st_uid == 0 else "other",
             "id": ident(sys_root, name),
             "virtual": "/virtual/" in real,
             "hidden": mode == 0,
@@ -134,10 +124,11 @@ def udev_rules(rules_dir=RULES_DIR, dev_root="/dev") -> list:
         row = {"name": name, "mtime": mtime}
         node = _RULE_NODE.search(name)
         if node:
-            target = node.group(0)
-            parent = os.path.join(dev_root, "input") if node.group(1) == "event" else dev_root
-            row["node"] = target
-            row["node_present"] = os.path.exists(os.path.join(parent, target))
+            kind, index = node.group(1), int(node.group(2))
+            parent = os.path.join(dev_root, "input") if kind == "event" else dev_root
+            row["name"] = _RULE_NODE.sub(r"\1N", name, count=1)
+            row["kind"], row["index"] = kind, index
+            row["node_present"] = os.path.exists(os.path.join(parent, f"{kind}{index}"))
         rows.append(row)
     return rows
 
@@ -177,8 +168,10 @@ def collect(
         "nodes": nodes(dev_root, sys_root),
         "udev_rules": udev_rules(rules_dir, dev_root),
     }
-    diff = capability_diff(before, after)
+    result["before_known"] = bool(before)
+    comparable = result["caps_read_ok"] and result["before_known"]
+    diff = capability_diff(before, after) if comparable else {"lost": None, "gained": None}
     result["caps_lost"] = diff["lost"]
     result["caps_gained"] = diff["gained"]
-    result["advisory"] = advisory(device_key, version, before, after) if result["caps_read_ok"] else None
+    result["advisory"] = advisory(device_key, version, before, after) if comparable else None
     return result

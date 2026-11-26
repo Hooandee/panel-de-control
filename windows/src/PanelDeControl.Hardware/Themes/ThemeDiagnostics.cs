@@ -25,6 +25,29 @@ public sealed record ThemeDiagnostics(
         return kept.Length > MaximumUrlLength ? kept.Substring(0, MaximumUrlLength) : kept;
     }
 
+    /// <summary>
+    /// Steam's own UI keeps its title and path. Any other target is a web page (a profile
+    /// carries the SteamID64, a chat the friend's name), so it keeps scheme and host only.
+    /// </summary>
+    private static (string? Title, string? Url) Private(ThemeTargetDiagnostics target)
+    {
+        if (target.BigPicture
+            || target.Title == SteamThemeEngine.SharedContextTitle
+            || target.Url.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
+        {
+            return (target.Title, target.Url);
+        }
+
+        if (!Uri.TryCreate(target.Url, UriKind.Absolute, out var uri))
+        {
+            return (null, null);
+        }
+
+        return string.Equals(uri.Host, "steamloopback.host", StringComparison.OrdinalIgnoreCase)
+            ? (target.Title, target.Url)
+            : (null, $"{uri.Scheme}://{uri.Host}");
+    }
+
     public JsonObject ToJson()
     {
         var themes = new JsonArray();
@@ -43,11 +66,12 @@ public sealed record ThemeDiagnostics(
         var targets = new JsonArray();
         foreach (var target in Targets)
         {
+            var (title, url) = Private(target);
             targets.Add(new JsonObject
             {
                 ["type"] = target.Type,
-                ["title"] = target.Title,
-                ["url"] = target.Url,
+                ["title"] = title,
+                ["url"] = url,
                 ["big_picture"] = target.BigPicture,
                 ["sheets_expected"] = target.SheetsExpected,
                 ["sheets_applied"] = target.SheetsApplied,
