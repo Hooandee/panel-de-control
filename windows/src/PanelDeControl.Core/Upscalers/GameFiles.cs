@@ -51,6 +51,10 @@ public static class GameFiles
                 new DataObject(file.Value.Select(change => new KeyValuePair<string, DataValue>(change.Key, new DataString(change.Value))).ToList()))).ToList());
         }
         var journal = Path.Combine(meta, GameManifest.FileName);
+        if (sources.Any(pair => GameManifest.PathComparer.Equals(pair.Key, ReframeworkConfig.FileName)))
+        {
+            manifest.Preexisting = RuntimeNames(target).ToList();
+        }
         // Every move is journaled before it happens, so an install killed mid-copy leaves a manifest that restores the
         // game's originals instead of mistaking Panel's own files for them on the next attempt.
         try
@@ -238,6 +242,10 @@ public static class GameFiles
                 }
             }
         }
+        if (manifest.Preexisting is not null && manifest.Engine != "dll" && manifest.Owns(ReframeworkConfig.FileName))
+        {
+            RemoveRuntime(target, manifest);
+        }
         foreach (var directory in manifest.Dirs.Where(name => name.Contains("custom/") && name.EndsWith("/dlssg", StringComparison.Ordinal)))
         {
             // ANR FG writes a log per launch beside its provider.
@@ -306,6 +314,72 @@ public static class GameFiles
             DeleteTree(meta);
         }
         return kept;
+    }
+
+    /// <summary>The files and folders REFramework creates in the game folder while it runs.</summary>
+    private static IEnumerable<string> RuntimeNames(string target)
+    {
+        var names = new List<string>();
+        try
+        {
+            foreach (var entry in new DirectoryInfo(target).EnumerateFileSystemInfos())
+            {
+                var name = entry.Name;
+                var folder = (entry.Attributes & FileAttributes.Directory) != 0;
+                var match = folder
+                    ? name.Equals("_storage_", StringComparison.OrdinalIgnoreCase) || name.Equals("reframework", StringComparison.OrdinalIgnoreCase)
+                    : name.Equals("config.ini", StringComparison.OrdinalIgnoreCase) || name.Equals("ref_ui.ini", StringComparison.OrdinalIgnoreCase)
+                        || (name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) && (name.IndexOf("_framework_log", StringComparison.OrdinalIgnoreCase) >= 0
+                            || name.StartsWith("reframework_", StringComparison.OrdinalIgnoreCase)))
+                        || (name.EndsWith(".dmp", StringComparison.OrdinalIgnoreCase) && name.StartsWith("reframework_", StringComparison.OrdinalIgnoreCase));
+                if (match)
+                {
+                    names.Add(name);
+                }
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+        }
+        return names;
+    }
+
+    /// <summary>Takes out what REFramework generated during this install; anything the game folder had before stays.</summary>
+    private static void RemoveRuntime(string target, GameManifest manifest)
+    {
+        foreach (var name in RuntimeNames(target))
+        {
+            try
+            {
+                if (manifest.Preexisting!.Contains(name, GameManifest.PathComparer) || manifest.Owns(name) || manifest.Backups.Contains(name, GameManifest.PathComparer))
+                {
+                    continue;
+                }
+                var path = Join(target, name);
+                // Scripts and plugins in REFramework's folder are the user's own: the folder only goes while it holds none.
+                if (Directory.Exists(path) && string.Equals(name, "reframework", StringComparison.OrdinalIgnoreCase)
+                    && Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Any(file => file.EndsWith(".lua", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+                if (IsLink(path))
+                {
+                    continue;
+                }
+                if (Directory.Exists(path))
+                {
+                    DeleteTree(path);
+                }
+                else if (File.Exists(path))
+                {
+                    Writable(path);
+                    File.Delete(path);
+                }
+            }
+            catch (Exception)
+            {
+            }
+        }
     }
 
     /// <summary>Takes one manifest file out; false when it stays because something else changed it since.</summary>

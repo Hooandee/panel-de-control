@@ -23,6 +23,9 @@ public sealed class GameManifest
     /// <summary>Files that are Panel's whatever their hash now (a user's mod the game rewrites); removed regardless.</summary>
     public List<string> Owned { get; } = new();
 
+    /// <summary>REFramework's runtime files the game folder already had at install; null when no snapshot was taken, so nothing generated is cleaned.</summary>
+    public List<string>? Preexisting { get; set; }
+
     public bool Incomplete { get; set; }
 
     public string? Engine { get; set; }
@@ -78,6 +81,10 @@ public sealed class GameManifest
             manifest.Configuration = configuration;
         }
         manifest.Owned.AddRange(DataValue.StringItems(document.Get("owned")));
+        if (document.Get("preexisting") is DataArray)
+        {
+            manifest.Preexisting = DataValue.StringItems(document.Get("preexisting")).ToList();
+        }
         manifest.Incomplete = document.Get("incomplete") is DataBool { Value: true };
         manifest.Engine = (document.Get("engine") as DataString)?.Value;
         manifest.ReadOnly = document.Get("read_only") is DataBool { Value: true };
@@ -105,6 +112,10 @@ public sealed class GameManifest
         if (ReadOnly)
         {
             members.Add(Member("read_only", new DataBool(true)));
+        }
+        if (Preexisting is not null)
+        {
+            members.Add(Member("preexisting", new DataArray(Preexisting.Select(name => (DataValue)new DataString(name)).ToList())));
         }
         return PythonJson.Write(new DataObject(members));
     }
