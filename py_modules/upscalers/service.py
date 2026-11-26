@@ -934,13 +934,19 @@ class UpscalerService:
             if recipe.optipatcher:
                 sources[f"{prefix}plugins/OptiPatcher.asi"] = paths[catalog.OPTIPATCHER]
             sources = _with_root_files(sources, prefix, recipe.optiscaler_root_files)
+        extra: dict[str, Path] = {}
         if wants_anr:
-            sources.update(_anr_sources(paths[catalog.ANR_FG], prefix))
+            extra.update(_anr_sources(paths[catalog.ANR_FG], prefix))
+            sources.update(extra)
 
         try:
-            sources = {**auto_recipes.sources(automatic, paths, self.user_files), **sources}
+            recipe_files = auto_recipes.sources(automatic, paths, self.user_files)
         except auto_recipes.RecipeError as error:
             raise UpscalerError(error.code) from None
+        extra.update(recipe_files)
+        if required:
+            self._check_copied(extra, target)
+        sources = {**recipe_files, **sources}
         panel_names = {name.casefold() for name in (*sources, "OptiScaler.ini")}
         if any(name.casefold() in panel_names for name in mod_sources):
             raise UpscalerError("mod_conflict")
@@ -1135,6 +1141,16 @@ class UpscalerService:
             if self.logger:
                 self.logger.warning("Unsigned file %s refused for a game that requires signed builds", unsigned)
             raise UpscalerError("unsigned_build", unsigned)
+
+    def _check_copied(self, files: dict[str, Path], target: Path) -> None:
+        for name, path in files.items():
+            if _exists_nocase(target, name):
+                continue
+            is_pe, signed = pe_sign.inspect(path)
+            if is_pe and not signed:
+                if self.logger:
+                    self.logger.warning("Unsigned file %s refused for a game that requires signed builds", name)
+                raise UpscalerError("unsigned_build", Path(name).name)
 
     def _signed_package(self, package: dict[str, Path], target: Path) -> dict[str, Path]:
         """The release's own files for a game whose protection closes on unsigned code: what the game already ships

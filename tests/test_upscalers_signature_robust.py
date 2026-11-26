@@ -366,3 +366,22 @@ def test_assets_sharing_one_archive_sha_keep_their_own_measurement():
     two = Asset("member-two", "b.dll", "c" * 64, 1, ("http://invalid",), True, signed=True, member="b.dll")
     catalog.record_signature("member-one", "c" * 64, False)
     assert not catalog.asset_signed(one) and catalog.asset_signed(two)
+
+
+@pytest.mark.parametrize("signed", [False, True])
+def test_a_recipes_game_files_pass_the_signature_barrier_too(steam, fake_catalog, proc, monkeypatch, tmp_path, signed):
+    from upscalers import auto_recipes
+    game = blizzard_game(steam)
+    declare_signed(monkeypatch)
+    unpacked = Path(fake_catalog) / "cache" / catalog.ASSETS[catalog.OPTISCALER_ARCHIVE].sha256 / "unpacked"
+    make_pe(unpacked / "OptiScaler.dll", signed=True)
+    extra = make_pe(tmp_path / "mod.dll", signed=signed) or tmp_path / "mod.dll"
+    monkeypatch.setattr(auto_recipes, "sources", lambda selected, paths, store=None: {"bin/x64_dx12/mod.dll": extra})
+    service = _service(steam, fake_catalog, proc)
+    if signed:
+        service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+        return
+    with pytest.raises(UpscalerError) as refused:
+        service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    assert refused.value.code == "unsigned_build" and refused.value.detail == "mod.dll"
+    assert not (game / "bin/x64_dx12/mod.dll").exists() and not (game / "bin/x64_dx12/dxgi.dll").exists()
