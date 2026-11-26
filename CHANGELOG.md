@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.97.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.96.0...panel-de-control-v0.97.0) (2026-11-26)
+
+
+### Features
+
+* **upscalers:** handle games that need signed software, recover from crashing builds and fix reported upscaler issues ([#1508](https://github.com/Hooandee/panel-de-control/issues/1508)) ([47bcbb8](https://github.com/Hooandee/panel-de-control/commit/47bcbb8c95406f2c576648f30a2ea91da6739cce))
+
 ## [0.96.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.95.1...panel-de-control-v0.96.0) (2026-11-25)
 
 
