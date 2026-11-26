@@ -305,7 +305,7 @@ export const GameView: FC<{
   const dropsAnr = scalerChoice.fg_route === "anr" && !selected?.anr;
   // Accepting the anti-cheat warning sticks to the install it was given for, so reinstalling that game (a new mod or user
   // file, another version) doesn't ask again; installs from before the flag existed only went in after the warning.
-  const antiCheatAccepted = confirmAntiCheat || !!(install && (install.anti_cheat_accepted ?? detail?.analysis.anti_cheat));
+  const antiCheatAccepted = confirmAntiCheat || !!(install && (install.anti_cheat_accepted ?? (detail?.analysis.anti_cheat && detail.analysis.anti_cheat_kind !== "signed_only")));
   const antiCheatApplies = !!detail?.analysis.anti_cheat && !(selected?.engine && detail.analysis.anti_cheat_exempt?.includes(selected.engine));
   const installSelected = () => startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
     ...scalerChoice, ...(replacesFsr || dropsAnr ? { fg: "off" as const } : {}), confirm_anti_cheat: antiCheatAccepted,
@@ -525,7 +525,7 @@ export const GameView: FC<{
   const inputs = solution?.inputs ?? detail?.analysis.inputs ?? {};
   const blockedBuilds = builds.filter((b) => b.available && b.supported && buildBlocker(b, inputs, protonEnv));
   const coming = builds.filter((b) => !b.available && b.supported);
-  const preferredBuild = builds.find((b) => b.id === preferred && b.available);
+  const preferredBuild = builds.find((b) => b.id === preferred && b.available && b.supported);
   const failedBuild = detail?.failed_builds?.[0];
   const recommendedAfterFailure = !!failedBuild && !!preferredBuild && !detail?.failed_builds?.some((f) => f.build === preferred);
   const runs = badgeLabel(installedBuild, install?.options.model, install?.build ?? "").full;

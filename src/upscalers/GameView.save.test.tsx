@@ -306,3 +306,14 @@ it("does not recommend a build the game's signing requirement rules out", async 
   await act(async () => { render(<GameView {...props} overview={unsupported} />); });
   expect(screen.queryByText("up.failedBuild")).toBeNull();
 });
+
+it("asks again for a signed-only game whose old install has no recorded acceptance", async () => {
+  const { installUpscaler } = await import("../api");
+  const { markPendingReinstall } = await import("./userFileWatch");
+  const detail = installed();
+  state.detail = { ...detail, analysis: { ...detail.analysis, anti_cheat: true, anti_cheat_kind: "signed_only" } } as unknown as GameDetail;
+  markPendingReinstall("777");
+  await act(async () => { render(<GameView {...props} />); });
+  await act(async () => { await Promise.resolve(); });
+  expect(installUpscaler).not.toHaveBeenCalledWith("777", expect.objectContaining({ confirm_anti_cheat: true }));
+});
