@@ -56,7 +56,9 @@ let ghost: { image: string; opacity: number } | null = null;
 const listeners = new Set<() => void>();
 
 function emit(): void {
-  for (const listener of listeners) listener();
+  for (const listener of [...listeners]) {
+    try { listener(); } catch { /* a theme's listener must not cut the broadcast */ }
+  }
 }
 
 /** Publishes what Escaladores knows so covers and the in-game pill follow it without polling. */

@@ -201,6 +201,21 @@ describe("cover badge for themes that paint covers", () => {
   });
 });
 
+describe("cover badge listeners", () => {
+  it("keep being called when another one throws", async () => {
+    const { subscribeCoverBadges, writeCoverBadges } = await import("./overlays");
+    const good = vi.fn();
+    writeCoverBadges(true);
+    const stopBad = subscribeCoverBadges(() => { throw new Error("theme"); });
+    const stopGood = subscribeCoverBadges(good);
+    publishOverview({ builds: [{ id: "fsr-4.1.2-beta", engine: "optiscaler", family: "fsr", version: "4.1.2", models: ["lite"] }],
+      installs: { "99": { build: "fsr-4.1.2-beta", status: "installed", options: { model: "lite" } } } } as unknown as UpscalersOverview);
+    expect(good).toHaveBeenCalledTimes(1);
+    stopBad(); stopGood();
+    publishOverview({ builds: [], installs: {} } as unknown as UpscalersOverview);
+  });
+});
+
 describe("cover pill when FSR 4 fell back", () => {
   const overview = (fallback: unknown) => ({
     builds: [{ id: "fsr-4.1.2-beta", family: "fsr", version: "4.1.2", models: ["lite", "full"], engine: "optiscaler" }],
