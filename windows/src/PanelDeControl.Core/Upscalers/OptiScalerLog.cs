@@ -467,7 +467,7 @@ public static class OptiScalerLog
 
         var head = new byte[HeadBytes];
         var read = ReadFully(stream, head);
-        var end = Array.LastIndexOf(head, (byte)'\n', read - 1) + 1;
+        var end = read == 0 ? 0 : Array.LastIndexOf(head, (byte)'\n', read - 1) + 1;
         var utf8 = new UTF8Encoding(false, false);
         return utf8.GetString(head, 0, end) + DecodeTail(stream, MaximumBytes);
     }
