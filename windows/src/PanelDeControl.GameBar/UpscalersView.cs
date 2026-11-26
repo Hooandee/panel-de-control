@@ -227,6 +227,7 @@ public sealed partial class UpscalersView : UserControl
         gamePanel.Children.Add(BuildForeignButtons());
         gamePanel.Children.Add(pickerPanel);
         gamePanel.Children.Add(qualityPanel);
+        gamePanel.Children.Add(BuildNeedsPanel());
         gamePanel.Children.Add(hintText);
         gamePanel.Children.Add(actionButton);
         gamePanel.Children.Add(progressPanel);
@@ -1065,6 +1066,7 @@ public sealed partial class UpscalersView : UserControl
         RenderSettings();
         RenderGameExtras();
         RenderSources();
+        RenderNeeds();
     }
 
     private async void ActionButton_Click(object sender, RoutedEventArgs args)
