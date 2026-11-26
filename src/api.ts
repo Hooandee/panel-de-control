@@ -1393,6 +1393,116 @@ export const closeRemoteAccessPairing = callable<[], RemoteAccessState>("close_r
 export const answerRemoteAccessPairing = callable<[accept: boolean], RemoteAccessState>("answer_remote_access_pairing");
 export const forgetRemoteAccessKeys = callable<[], RemoteAccessState>("forget_remote_access_keys");
 
+export interface AccessorySceneMeta {
+  id: string;
+  category: string;
+  labelKey: string;
+  options: string[];
+}
+export interface NightSchedule {
+  enabled: boolean;
+  from: string;
+  to: string;
+}
+export interface AccessoriesState {
+  ok?: boolean;
+  error?: string;
+  supported: boolean;
+  enabled: boolean;
+  present: boolean;
+  port: string | null;
+  bus_port: string | null;
+  strong_supply: boolean | null;
+  busy_by: string | null;
+  scene: string | null;
+  options: Record<string, unknown>;
+  brightness: number;
+  pwm: number | null;
+  power: boolean;
+  night: NightSchedule;
+  night_active: boolean;
+  game_scene: string | null;
+  game_options?: Record<string, unknown>;
+  showing: string | null;
+  shown_options?: Record<string, unknown>;
+  last_layout?: { blocks?: unknown[] } | null;
+  refused?: boolean;
+  alerts: { achievements: boolean };
+  on_suspend: "off" | "pet";
+  speedrun_paused?: boolean;
+  suspended: boolean;
+  catalog: AccessorySceneMeta[];
+}
+export interface PixelFrames {
+  ok?: boolean;
+  error?: string;
+  palette: number[][];
+  frames: string[];
+  delays: number[];
+  firmwareAnimation: number | null;
+  ready?: boolean;
+}
+export const getAccessoriesState = callable<[], AccessoriesState>("get_accessories_state");
+export const setAccessoryScene = callable<[sceneId: string, options: Record<string, unknown>], AccessoriesState>("set_accessory_scene");
+export const setAccessoryLanguage = callable<[language: string], AccessoriesState>("set_accessory_language");
+export const setAccessoryBrightness = callable<[percent: number], AccessoriesState>("set_accessory_brightness");
+export const setAccessoryPower = callable<[on: boolean], AccessoriesState>("set_accessory_power");
+export const previewAccessoryScene = callable<[sceneId: string, options: Record<string, unknown>], PixelFrames>("preview_accessory_scene");
+export interface ComposedLayout extends PixelFrames {
+  blocks: Record<string, unknown>[];
+  boxes: { x: number; y: number; w: number; h: number }[];
+  mode: "static" | "animated" | "clock" | "live";
+}
+export const composeAccessoryLayout = callable<[layout: { blocks: unknown[] }, place: number | null], ComposedLayout>("compose_accessory_layout");
+export const getAccessoryStickers = callable<[], { palette: Record<string, number[]>; stickers: Record<string, string[][]> }>("get_accessory_stickers");
+export const accessoryEvent = callable<[name: string, data: Record<string, unknown>], boolean>("accessory_event");
+export interface WeatherCity {
+  name: string;
+  detail: string;
+  lat: number;
+  lon: number;
+}
+export const searchAccessoryCities = callable<[query: string, language: string], { cities: WeatherCity[] }>("search_accessory_cities");
+export const locateAccessoryCity = callable<[], { city: WeatherCity | null }>("locate_accessory_city");
+export interface DrawingSummary {
+  id: string;
+  name: string;
+  frames: number;
+  fps: number;
+  thumb: string;
+}
+export const listAccessoryDrawings = callable<[], { drawings: DrawingSummary[] }>("list_accessory_drawings");
+export const saveAccessoryDrawing = callable<[drawing: { id?: string; name: string; frames: string[]; fps: number }], { ok: boolean; id?: string; error?: string }>("save_accessory_drawing");
+export const deleteAccessoryDrawing = callable<[id: string], { ok: boolean }>("delete_accessory_drawing");
+export const readAccessoryImage = callable<[path: string], { ok: boolean; mime?: string; data?: string; error?: string }>("read_accessory_image");
+export const loadAccessoryDrawing = callable<[id: string], { ok: boolean; id?: string; name?: string; frames?: string[]; fps?: number }>("load_accessory_drawing");
+export const pauseJsauxApp = callable<[], { ok: boolean }>("pause_jsaux_app");
+export const setAccessoryNight = callable<[night: NightSchedule], AccessoriesState>("set_accessory_night");
+export const setAccessoryGameScene = callable<[sceneId: string | null, options?: Record<string, unknown>], AccessoriesState>("set_accessory_game_scene");
+export interface PetNeeds {
+  hunger: number;
+  energy: number;
+  fun: number;
+  love: number;
+}
+export interface PetState {
+  name: string;
+  needs: PetNeeds;
+  traits: Record<string, number>;
+  asleep: boolean;
+  favourite: string | null;
+  age_days: number;
+  achievements: number;
+  usual_hours: [number, number] | null;
+}
+export type PetAction = "feed" | "play" | "pet" | "sleep" | "wake";
+export const getAccessoryPet = callable<[], PetState>("get_accessory_pet");
+export const accessoryPetAction = callable<[kind: PetAction], { ok: boolean; reaction?: string; pet?: PetState; error?: string }>("accessory_pet_action");
+export const renameAccessoryPet = callable<[name: string], PetState>("rename_accessory_pet");
+export const setAccessoryOnSuspend = callable<[mode: "off" | "pet"], AccessoriesState>("set_accessory_on_suspend");
+export const accessorySuspend = callable<[], AccessoriesState>("accessory_suspend");
+export const accessoryResume = callable<[], AccessoriesState>("accessory_resume");
+export const setAccessoryAlerts = callable<[prefs: { achievements: boolean }], AccessoriesState>("set_accessory_alerts");
 export const getDuoArtwork = callable<[], Record<string, import("./themes/artwork").GameArtwork>>("get_duo_artwork");
 export const getThemeGroups = callable<[account: string], unknown[]>("get_theme_groups");
 export const setThemeGroups = callable<[account: string, groups: unknown[]], { ok: boolean; error?: string; groups?: unknown[] }>("set_theme_groups");

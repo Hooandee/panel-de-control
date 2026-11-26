@@ -78,6 +78,12 @@ desde su zip.
 🎮 **Mandos.** Remapeo de botones que se entiende con Handheld Daemon e InputPlumber. Todavía en
 beta.
 
+🟪 **Accesorios.** Si llevas la carcasa JSAUX PIXEL en la Steam Machine, Panel la controla sin
+instalar nada más: relojes, arte animado, la carátula y los datos del juego al que estás jugando,
+el tiempo de tu ciudad, una mascota que reacciona a lo que haces y un modo dibujo para crear y
+animar lo tuyo con el mando. Las animaciones corren solas en la pantalla, así que su memoria
+apenas se toca. Experimental.
+
 🧩 **A tu manera.** Ordena y oculta pestañas, crea tus propias vistas y elige el color de acento.
 Todo se maneja con el mando, y las actualizaciones llegan solas al menú rápido.
 
@@ -150,6 +156,11 @@ Si tienes un equipo que yo no tengo, tus reportes son lo que más me ayuda a pul
 
 Panel aprende de cómo juegas para afinar sus sugerencias, pero todo se queda en tu equipo. Puedes
 desactivarlo o borrarlo cuando quieras desde Ajustes.
+
+Si pones la escena del tiempo en la pantalla JSAUX PIXEL, Panel consulta en Open-Meteo el tiempo
+de la ciudad que eliges. Es lo único que sale del equipo, y solo mientras esa escena está puesta.
+Si pulsas «Usar mi ubicación» al buscar ciudad, Panel pregunta a ipwho.is una ciudad aproximada
+según tu IP, solo esa vez.
 
 > [!WARNING]
 > Panel funciona con permisos de root y cambia ajustes de potencia, temperatura y firmware. Está

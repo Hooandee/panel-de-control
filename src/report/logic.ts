@@ -17,6 +17,7 @@ export const REPORT_CATEGORIES = [
   "upscalers",
   "themes",
   "ambient",
+  "accessories",
   "other",
 ] as const;
 

@@ -56,6 +56,9 @@ import { reloadDeckyAfterClosingMenus } from "./system/reloadDecky";
 import { recordUiEvent as queueUiEvent, setUiEventSink } from "./system/uiEvents";
 import { startSteamPerformanceOwnership } from "./steam/performanceOwnership";
 import { startGameWatcher } from "./tdp/gameWatcher";
+import { startAccessoryArtWatcher } from "./accessories/gameArt";
+import { startAccessorySteamEvents } from "./accessories/steamEvents";
+import { closeAccessoryEditor } from "./accessories/editorRoute";
 import { startCollectionsHeal } from "./steam/healCollections";
 import { resumePendingInstalls } from "./upscalers/pendingInstall";
 import { startEcoAmbient } from "./system/ecoAmbient";
@@ -243,6 +246,8 @@ export default definePlugin(() => {
     });
   });
   const stopGameWatcher = startGameWatcher();
+  const stopAccessoryArtWatcher = startAccessoryArtWatcher();
+  const stopAccessorySteamEvents = startAccessorySteamEvents();
   const stopCollectionsHeal = startCollectionsHeal(
     () => (globalThis as { collectionStore?: object }).collectionStore,
     (healed) => recordUntilJournalOpen("steam", "collections_heal", JSON.stringify({ healed })),
@@ -342,6 +347,9 @@ export default definePlugin(() => {
       shutdownUiActivity();
       stopSteamPerformanceOwnership();
       stopGameWatcher();
+      stopAccessoryArtWatcher();
+      stopAccessorySteamEvents();
+      closeAccessoryEditor();
       stopFrontendErrorReporting();
       setStaleBackendSink(null);
       setUiEventSink(null);

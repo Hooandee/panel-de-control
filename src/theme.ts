@@ -118,6 +118,25 @@ export const theme = {
       return `inset 0 0 0 1px ${themedColor.outline}`;
     },
   },
+  // The JSAUX PIXEL LED matrix as drawn in the Accessories editors: the dark face, an unlit
+  // LED, the edit cursor, the magnetic snap guide and the swatches of the panel's own colour
+  // themes (they mirror the backend palettes, so they don't follow the accent).
+  pixel: {
+    face: "#0a090b",
+    offLed: "rgb(30,26,30)",
+    cursor: "#ffffff",
+    guide: "#40dcff",
+    onSwatch: "#140f1e",
+    shadow: "0 12px 40px rgba(0,0,0,0.5)",
+    swatch: {
+      aurora: "linear-gradient(90deg,#b078ff,#40dcff)",
+      sunset: "linear-gradient(90deg,#ff963c,#ff4678)",
+      mint: "linear-gradient(90deg,#5af0aa,#3caaff)",
+      mono: "linear-gradient(90deg,#ebe8fa,#c8c4e1)",
+      ledbar: "linear-gradient(90deg,#ff71ce,#01cdfe)",
+      original: "conic-gradient(#ff5a6e,#ffd23c,#5ae66e,#3c78ff,#aa64ff,#ff5a6e)",
+    } as Record<string, string>,
+  },
   // Muted uppercase caption used as a section heading inside the full-screen
   // modals (Customize, Glossary). Shared so the treatment stays consistent.
   sectionLabel: {

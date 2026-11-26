@@ -53,6 +53,7 @@ import theme_storage
 import theme_transport
 from version import read_version
 from json_store import atomic_json_save
+from accessories.jsaux_pixel.runtime import Runtime as PixelRuntime
 from settings_store import SettingsStore
 import theme_artwork
 import theme_groups
@@ -266,6 +267,13 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "cleaner": (("_steam_cleaner_diagnostics", ("phase", "interrupted", "persistence_error")),),
     "upscalers": (("_support_upscalers_state", None),),
     "ambient": (("_support_ambient_state", None),),
+    "accessories": (
+        ("_accessories_report_state", (
+            "supported", "present", "busy_by", "port", "bus_port", "strong_supply", "scene", "options", "showing",
+            "brightness", "pwm", "power", "night", "night_active", "game_scene", "game_options", "alerts",
+            "on_suspend", "suspended", "last_upload", "writes",
+        )),
+    ),
     "themes": (
         ("_theme_report_diagnostics", (
             "early_themes", "installed", "other_active_themes", "other_active_targets", "activation_phase",
@@ -519,6 +527,15 @@ def _kiosk_journal(level: str, event: str, **fields) -> None:
     diary = journal.active
     if diary is not None:
         diary.write(level, "kiosk", event, **fields)
+
+
+_PIXEL_BUILD_LOCK = threading.Lock()
+
+
+def _accessories_journal(level: str, event: str, **fields) -> None:
+    diary = journal.active
+    if diary is not None:
+        diary.write(level, "accessories", event, **fields)
 
 
 DEFAULTS = {
@@ -3290,6 +3307,7 @@ class Plugin(AmbientRpc):
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
             "upscalers": await self._upscalers_report(context),
             "ambient": self.ambient_diagnostics(),
+            "accessories": await _safe(self._accessories_report_state()),
             "themes": self._with_theme_display(
                 await _safe(self._offload_theme_call(self._theme_report_diagnostics)), context
             ),
@@ -6442,8 +6460,11 @@ class Plugin(AmbientRpc):
         return int(current) if current and str(current).isdigit() else None
 
     def _kiosk_wants_fps(self) -> bool:
-        polled = getattr(self, "_kiosk_fps_at", None)
-        return polled is not None and time.monotonic() - polled < _KIOSK_FPS_HOLD_S
+        now = time.monotonic()
+        return any(
+            polled is not None and now - polled < _KIOSK_FPS_HOLD_S
+            for polled in (getattr(self, "_kiosk_fps_at", None), getattr(self, "_pixel_fps_at", None))
+        )
 
     async def _apply_stats_reader(self):
         kiosk = self._kiosk_wants_fps()
@@ -11697,6 +11718,185 @@ class Plugin(AmbientRpc):
             self._apply_hud,
         )
 
+    def _pixel_runtime(self) -> PixelRuntime:
+        runtime = getattr(self, "_pixel", None)
+        if runtime is not None:
+            return runtime
+        with _PIXEL_BUILD_LOCK:
+            runtime = getattr(self, "_pixel", None)
+            if runtime is not None:
+                return runtime
+            self._init()
+            runtime = PixelRuntime(
+                settings_dir=decky.DECKY_PLUGIN_SETTINGS_DIR,
+                device_key=getattr(getattr(self, "_device", None), "key", None),
+                user_home=_user_home(),
+                user=getattr(decky, "DECKY_USER", None) or "deck",
+                log=_accessories_journal,
+                context_source=self._pixel_context,
+            )
+            self._pixel = runtime
+        return runtime
+
+    def _pixel_context(self) -> dict:
+        appid = getattr(self, "_current_appid", None)
+        game = None
+        if appid:
+            game = {"appid": appid, "name": getattr(self, "_current_game_name", None),
+                    "started_at": self._pixel_game_started(appid)}
+        readings: dict = {}
+        perf = getattr(self, "_gamescope_perf", None)
+        fps = perf.fps() if perf is not None and self._pixel_runtime().wants_fps(playing=bool(appid)) else None
+        if fps is not None:
+            readings["fps"] = fps
+        reader = getattr(self, "_fan_reader", None)
+        if reader is not None:
+            try:
+                rpms = reader.fan_rpms()
+            except Exception:  # noqa: BLE001
+                rpms = None
+            if rpms:
+                readings["fan_rpm"] = max(rpms)
+        return {"game": game, "metrics": readings}
+
+    async def pause_jsaux_app(self) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().pause_official_app)
+
+    async def list_accessory_drawings(self) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().list_drawings)
+
+    async def load_accessory_drawing(self, drawing_id) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().load_drawing, str(drawing_id))
+
+    async def save_accessory_drawing(self, drawing) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().save_drawing, dict(drawing or {}))
+
+    async def delete_accessory_drawing(self, drawing_id) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().delete_drawing, str(drawing_id))
+
+    async def read_accessory_image(self, path) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().read_image, str(path))
+
+    async def search_accessory_cities(self, query, language="es") -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().search_cities, str(query or "")[:60], str(language or "es")[:5])
+
+    async def locate_accessory_city(self) -> dict:
+        result = await asyncio.to_thread(self._pixel_runtime().locate_city)
+        _accessories_journal("INFO", "locate_city", found=result.get("city") is not None)
+        return result
+
+    def _pixel_game_started(self, appid) -> int | None:
+        since = getattr(self, "_current_appid_at", None)
+        cached = getattr(self, "_pixel_started", None)
+        if cached and cached[0] == (appid, since):
+            return cached[1]
+        started = round(time.time() - (time.monotonic() - since)) if since is not None else None
+        self._pixel_started = ((appid, since), started)
+        return started
+
+    async def accessory_event(self, name, data=None) -> bool:
+        return await asyncio.to_thread(self._pixel_runtime().notify, str(name), dict(data) if isinstance(data, dict) else None)
+
+    def _start_pixel_fps_keeper(self) -> None:
+        async def keep() -> None:
+            wanted = False
+            while not getattr(self, "_shutting_down", False):
+                now_wanted = self._pixel_runtime().wants_fps(playing=bool(getattr(self, "_current_appid", None)))
+                if now_wanted:
+                    self._pixel_fps_at = time.monotonic()
+                elif wanted:
+                    self._pixel_fps_at = None
+                if now_wanted or wanted:
+                    await self._apply_stats_reader()
+                wanted = now_wanted
+                await asyncio.sleep(3)
+
+        self._pixel_fps_task = asyncio.create_task(keep())
+
+    async def _pixel_call(self, fn, *args) -> dict:
+        try:
+            return {"ok": True, **await asyncio.to_thread(fn, *args)}
+        except ValueError as error:
+            return {"ok": False, "error": str(error)}
+
+    async def get_accessories_state(self) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().state)
+
+    async def _accessories_report_state(self) -> dict:
+        """The panel's state for logs and reports: no shared scene catalog, and the weather city
+        reduced to whether one is set, since it is where the user lives."""
+        state = await self.get_accessories_state()
+
+        def private(options):
+            if not isinstance(options, dict) or "city" not in options:
+                return options
+            return {**options, "city": bool(options.get("city"))}
+
+        return {key: private(value) if key in ("options", "game_options", "shown_options") else value
+                for key, value in state.items() if key != "catalog"}
+
+    async def set_accessory_scene(self, scene_id, options=None) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_scene, str(scene_id), dict(options or {}))
+
+    async def set_accessory_language(self, language) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_language, str(language or ""))
+
+    async def set_accessory_brightness(self, percent) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_brightness, int(percent))
+
+    async def set_accessory_game_scene(self, scene_id=None, options=None) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_game_scene, str(scene_id) if scene_id else None,
+                                      dict(options) if isinstance(options, dict) else None)
+
+    async def set_accessory_alerts(self, prefs) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_alerts, dict(prefs or {}))
+
+    async def set_accessory_on_suspend(self, mode) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_on_suspend, str(mode))
+
+    async def accessory_suspend(self) -> dict:
+        return await self._pixel_call(self._pixel_runtime().suspend)
+
+    async def accessory_resume(self) -> dict:
+        return await self._pixel_call(self._pixel_runtime().resume)
+
+    async def compose_accessory_layout(self, layout, place=None) -> dict:
+        return await self._pixel_call(self._pixel_runtime().compose, dict(layout or {}),
+                                      place if isinstance(place, int) else None)
+
+    async def get_accessory_stickers(self) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().sticker_book)
+
+    async def get_accessory_pet(self) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().pet_state)
+
+    async def accessory_pet_action(self, kind) -> dict:
+        try:
+            return {"ok": True, **await asyncio.to_thread(self._pixel_runtime().pet_action, str(kind))}
+        except ValueError as error:
+            _accessories_journal("WARNING", "pet_action_rejected", error=str(error))
+            return {"ok": False, "error": str(error)}
+
+    async def rename_accessory_pet(self, name) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().rename_pet, str(name or ""))
+
+    async def set_accessory_night(self, night) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_night, dict(night or {}))
+
+    async def set_accessory_power(self, on) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_power, bool(on))
+
+    async def preview_accessory_scene(self, scene_id, options=None) -> dict:
+        return await self._pixel_call(self._pixel_runtime().preview, str(scene_id), dict(options or {}))
+
+    async def _stop_pixel(self) -> None:
+        task = getattr(self, "_pixel_fps_task", None)
+        if task is not None:
+            task.cancel()
+        runtime = getattr(self, "_pixel", None)
+        if runtime is not None:
+            await asyncio.to_thread(runtime.stop)
+
     async def get_hud_state(self) -> dict:
         self._init()
         def refresh_pending_state():
@@ -15970,6 +16170,11 @@ class Plugin(AmbientRpc):
             self._start_auto_loop()
             self._start_audio_loop()
             self._start_support_watch()
+            # Built off the loop: it reads the catalog, the library and the pet from disk.
+            await asyncio.to_thread(self._pixel_runtime)
+            self._pixel_runtime().start()
+            if self._pixel_runtime().supported:
+                self._start_pixel_fps_keeper()
             self._start_steam_inventory_compat()
             self._kiosk_task = asyncio.create_task(self._kiosk.supervise())
             if self._developer_options_on() and self._settings.get("remote_access_enabled"):
@@ -16001,6 +16206,8 @@ class Plugin(AmbientRpc):
             stage("screen")
         await self._stop_kiosk()
         stage("kiosk")
+        await self._stop_pixel()
+        stage("accessories")
         await self._stop_remote_access()
         stage("remote")
         try:
@@ -16511,6 +16718,7 @@ class Plugin(AmbientRpc):
         decky.logger.info("Shutdown stage uninstall:begin")
         self._stop_pulse()
         self._prepare_shutdown()
+        await self._stop_pixel()
         try:
             drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
             if drained:
@@ -16532,6 +16740,7 @@ journal.trace_calls(
     Plugin,
     untraced=frozenset({
         "set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result", "set_eco_screen",
+        "get_accessories_state", "preview_accessory_scene", "list_accessory_drawings", "load_accessory_drawing",
         "get_theme_storage", "set_theme_storage", "force_close_game", "pause_theme_game", "resume_theme_game",
     }),
     automatic=frozenset({"load_theme_extension"}),
@@ -16539,6 +16748,9 @@ journal.trace_calls(
         "submit_report", "set_aside_theme_leftovers", "add_upscaler_mod", "prepare_early_theme_install",
         "commit_theme_install", "rollback_theme_install", "acknowledge_theme_install_rollback",
         "begin_theme_activation", "settle_theme_activation", "acknowledge_theme_activation",
+        "save_accessory_drawing", "accessory_event",
+        # Weather options carry the user's city.
+        "set_accessory_scene", "set_accessory_game_scene", "search_accessory_cities",
     }),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

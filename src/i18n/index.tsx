@@ -23,6 +23,7 @@ import { it } from "./it";
 import { de } from "./de";
 import { ptBR } from "./ptBR";
 import { fr } from "./fr";
+import { ACCESSORIES_STRINGS } from "./accessories";
 import { SUPPORTED_LANGUAGES, type Lang } from "./languages";
 
 export { SUPPORTED_LANGUAGES, type Lang } from "./languages";
@@ -1990,6 +1991,7 @@ const es: Record<string, string> = {
   "report.cat.upscalers": "Escaladores",
   "report.cat.themes": "Temas",
   "report.cat.ambient": "Ambiente",
+  "report.cat.accessories": "Accesorios",
   "report.cat.other": "Otro",
   "report.section.describe": "Cuéntame qué pasó (obligatorio)",
   "report.section.describe.feature": "Cuéntame qué te gustaría (obligatorio)",
@@ -3975,6 +3977,7 @@ const en: Record<string, string> = {
   "report.cat.upscalers": "Upscalers",
   "report.cat.themes": "Themes",
   "report.cat.ambient": "Ambient",
+  "report.cat.accessories": "Accessories",
   "report.cat.other": "Other",
   "report.section.describe": "Tell me what happened (required)",
   "report.section.describe.feature": "Tell me what you would like (required)",
@@ -4131,12 +4134,12 @@ const themeIt: Record<string, string> = {
 };
 
 export const DICTS: Record<Lang, Record<string, string>> = {
-  es,
-  en,
-  it: { ...it, ...themeIt },
-  de,
-  "pt-BR": ptBR,
-  fr,
+  es: { ...es, ...ACCESSORIES_STRINGS.es },
+  en: { ...en, ...ACCESSORIES_STRINGS.en },
+  it: { ...it, ...themeIt, ...ACCESSORIES_STRINGS.it },
+  de: { ...de, ...ACCESSORIES_STRINGS.de },
+  "pt-BR": { ...ptBR, ...ACCESSORIES_STRINGS["pt-BR"] },
+  fr: { ...fr, ...ACCESSORIES_STRINGS.fr },
 };
 
 /** Lets a domain ship its own strings; English stays the fallback for any missing key. */

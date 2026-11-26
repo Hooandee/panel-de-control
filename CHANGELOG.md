@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.96.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.95.1...panel-de-control-v0.96.0) (2026-11-25)
+
+
+### Español
+
+* **La pantalla JSAUX PIXEL de la Steam Machine, desde Panel de Control:** En Accesorios eliges qué muestra el panel LED: relojes, el tiempo de tu ciudad, el rendimiento del equipo, animaciones o una mascota que vive contigo. También ajustas el brillo, lo apagas, programas un horario de noche y decides qué hace al suspender. Si la app de JSAUX está usando el panel, un botón te lo devuelve.
+* **Cambia solo cuando juegas:** Puedes elegir qué se ve durante una partida, como la portada del juego, el tiempo de sesión, los FPS o un cronómetro de speedrun, y al salir vuelve tu escena. Los logros aparecen un momento en el panel.
+* **Dibuja y monta tus propias pantallas:** Hay un editor de dibujo con fotogramas para animar y otro para combinar reloj, métricas, texto, pegatinas y tus dibujos. Los dos se manejan bien con el mando y tienen deshacer. También puedes importar una imagen o un GIF.
+* **El panel se cuida solo:** Solo se escribe en la pantalla cuando de verdad cambia algo, para no desgastarla. Los textos del panel salen en el idioma de Panel de Control.
+
+### English
+
+* **The Steam Machine's JSAUX PIXEL display, from Panel de Control:** In Accessories you pick what the LED panel shows: clocks, the weather in your city, how your system is running, animations or a pet that lives with you. You can also set the brightness, turn it off, schedule a night window and choose what it does when the system sleeps. If the JSAUX app is using the panel, one button hands it back.
+* **It switches on its own when you play:** You can choose what shows during a game, like the game's cover, session time, FPS or a speedrun timer, and your scene comes back when you quit. Achievements pop up on the panel for a moment.
+* **Draw and build your own screens:** There is a drawing editor with frames to animate and another one to combine clocks, stats, text, stickers and your drawings. Both work well with a controller and have undo. You can also import an image or a GIF.
+* **The panel looks after itself:** The display is only written when something really changes, so it doesn't wear out. Text on the panel follows Panel de Control's language.
+
+### Italiano
+
+* **Il display JSAUX PIXEL della Steam Machine, da Panel de Control:** In Accessori scegli cosa mostra il pannello LED: orologi, il meteo della tua città, le prestazioni del sistema, animazioni o un animaletto che vive con te. Puoi anche regolare la luminosità, spegnerlo, programmare una fascia notturna e scegliere cosa fa quando il sistema va in sospensione. Se l'app di JSAUX sta usando il pannello, un pulsante te lo restituisce.
+* **Cambia da solo quando giochi:** Puoi scegliere cosa si vede durante una partita, come la copertina del gioco, il tempo di sessione, gli FPS o un cronometro da speedrun, e quando esci torna la tua scena. Gli obiettivi compaiono per un momento sul pannello.
+* **Disegna e componi le tue schermate:** C'è un editor di disegno con fotogrammi per animare e un altro per combinare orologio, statistiche, testo, adesivi e i tuoi disegni. Entrambi si usano bene con il controller e hanno l'annulla. Puoi anche importare un'immagine o una GIF.
+* **Il pannello si protegge da solo:** Il display viene scritto solo quando cambia davvero qualcosa, così non si consuma. I testi sul pannello seguono la lingua di Panel de Control.
+
+### Deutsch
+
+* **Das JSAUX-PIXEL-Display der Steam Machine, direkt aus Panel de Control:** Unter Zubehör wählst du, was das LED-Panel zeigt: Uhren, das Wetter in deiner Stadt, die Leistung deines Systems, Animationen oder ein Haustier, das bei dir wohnt. Du kannst auch die Helligkeit einstellen, es ausschalten, eine Nachtzeit planen und festlegen, was im Standby passiert. Wenn die JSAUX-App das Panel benutzt, holst du es dir mit einem Knopf zurück.
+* **Es wechselt von selbst, wenn du spielst:** Du kannst wählen, was während eines Spiels zu sehen ist, etwa das Cover, die Sitzungszeit, die FPS oder ein Speedrun-Timer, und beim Beenden kommt deine Szene zurück. Erfolge erscheinen kurz auf dem Panel.
+* **Zeichne und baue deine eigenen Anzeigen:** Es gibt einen Zeicheneditor mit Einzelbildern zum Animieren und einen zweiten, um Uhr, Werte, Text, Sticker und deine Zeichnungen zu kombinieren. Beide lassen sich gut mit dem Controller bedienen und haben Rückgängig. Du kannst auch ein Bild oder ein GIF importieren.
+* **Das Panel schont sich selbst:** Auf das Display wird nur geschrieben, wenn sich wirklich etwas ändert, damit es sich nicht abnutzt. Texte auf dem Panel folgen der Sprache von Panel de Control.
+
+### Português (Brasil)
+
+* **A tela JSAUX PIXEL do Steam Machine, pelo Panel de Control:** Em Acessórios você escolhe o que o painel de LED mostra: relógios, o clima da sua cidade, o desempenho do sistema, animações ou um bichinho que vive com você. Também dá para ajustar o brilho, desligar, programar um horário noturno e escolher o que acontece quando o sistema entra em suspensão. Se o app da JSAUX estiver usando o painel, um botão devolve o controle para você.
+* **Muda sozinho quando você joga:** Você pode escolher o que aparece durante uma partida, como a capa do jogo, o tempo de sessão, os FPS ou um cronômetro de speedrun, e ao sair sua cena volta. As conquistas aparecem por um momento no painel.
+* **Desenhe e monte suas próprias telas:** Tem um editor de desenho com quadros para animar e outro para juntar relógio, métricas, texto, adesivos e seus desenhos. Os dois funcionam bem com o controle e têm desfazer. Você também pode importar uma imagem ou um GIF.
+* **O painel se cuida sozinho:** A tela só é gravada quando algo muda de verdade, para não se desgastar. Os textos do painel seguem o idioma do Panel de Control.
+
+### Français
+
+* **L'écran JSAUX PIXEL de la Steam Machine, depuis Panel de Control :** Dans Accessoires, vous choisissez ce qu'affiche le panneau LED : horloges, la météo de votre ville, les performances du système, des animations ou un petit compagnon qui vit avec vous. Vous pouvez aussi régler la luminosité, l'éteindre, programmer une plage de nuit et choisir ce qu'il fait quand le système se met en veille. Si l'application JSAUX utilise le panneau, un bouton vous le rend.
+* **Il change tout seul quand vous jouez :** Vous pouvez choisir ce qui s'affiche pendant une partie, comme la jaquette du jeu, le temps de session, les FPS ou un chrono de speedrun, et votre scène revient quand vous quittez. Les succès s'affichent un instant sur le panneau.
+* **Dessinez et composez vos propres écrans :** Il y a un éditeur de dessin avec des images pour animer et un autre pour assembler horloge, statistiques, texte, autocollants et vos dessins. Les deux se pilotent bien à la manette et permettent d'annuler. Vous pouvez aussi importer une image ou un GIF.
+* **Le panneau se ménage tout seul :** L'écran n'est réécrit que quand quelque chose change vraiment, pour ne pas l'user. Les textes du panneau suivent la langue de Panel de Control.
+
 ## [0.95.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.95.0...panel-de-control-v0.95.1) (2026-11-24)
 
 
