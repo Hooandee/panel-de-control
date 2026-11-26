@@ -2217,7 +2217,6 @@ def test_helixsr_leaves_the_fsr31_library_a_recipe_keeps_untouched(steam, helix_
 
 def test_helixsr_sees_the_legacy_library_beyond_the_first_four_fsr31_copies(steam, helix_catalog, proc, monkeypatch):
     _, game = steam
-    folder = game / "bin/x64_dx12"
     for index in range(5):
         _write(game / f"a{index}/amd_fidelityfx_upscaler_dx12.dll", b"ffx")
     _write(game / "z/amd_fidelityfx_dx12.dll", b"ffx 1.0.1")
