@@ -1,5 +1,80 @@
 # Changelog
 
+## [0.97.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.96.0...panel-de-control-v0.97.0) (2026-11-26)
+
+
+### Español
+
+* **FSR 4 en Diablo IV:** Si tu gráfica lo admite, Panel de Control usa el FSR 4 de Proton, que no toca los archivos del juego. En el resto, instala una versión de OptiScaler que el juego acepta, porque con otras se cerraba a los pocos minutos de entrar en partida.
+* **Juegos que se cierran con mods:** En los juegos con antitrampas que cierran al detectar programas no firmados, Panel de Control recomienda ahora una versión que el juego acepta. Si un escalador hace que un juego se cierre nada más arrancar, la próxima vez te recomienda otro. Puedes seguir instalando el que quieras.
+* **FSR 4 con las versiones nuevas de OptiScaler:** Con OptiScaler 0.9.5 o posterior, FSR 4 podía acabar funcionando como FSR 3 sin avisar. Ya se configura bien.
+* **Gráficas RX 9060 y RX 9070 junto a una gráfica integrada:** Panel de Control ya reconoce la gráfica dedicada y ofrece FSR 4 en su versión completa.
+* **FSR 4.1.2 Lite al día:** Las DLL de FSR 4.1.2 Lite se actualizan a su última versión. En gráficas dedicadas RX 7000 hay dos variantes: una idéntica a la de AMD y otra más rápida que no da exactamente la misma imagen.
+* **Atajos de otras tiendas:** Los juegos de otras tiendas en los que no se puede instalar un escalador ya aparecen en la lista con el motivo, en vez de desaparecer. Los atajos con algún dato repetido ya no impiden encontrar el resto.
+* **God of War Ragnarök:** Panel de Control ya no recomienda HelixSR en este juego, porque hacía desaparecer FSR de su menú de gráficos.
+* **Etiqueta del escalador en más temas:** Los temas que dibujan las portadas a su manera ya pueden mostrar qué escalador tiene cada juego.
+* **Lossless Scaling en consolas ARM:** Si ya tienes instalada la versión para ARM, Panel de Control la usa y configura cada juego, en vez de descargar una que no funciona ahí.
+
+### English
+
+* **FSR 4 in Diablo IV:** If your graphics card supports it, Panel de Control uses Proton's FSR 4, which doesn't touch the game's files. Otherwise it installs a version of OptiScaler the game accepts, because with other versions it closed a few minutes into a match.
+* **Games that close with mods:** In games with anti-cheat that close when they spot unsigned software, Panel de Control now recommends a version the game accepts. If an upscaler makes a game close right after it starts, it recommends a different one next time. You can still install whichever you want.
+* **FSR 4 with newer OptiScaler versions:** With OptiScaler 0.9.5 or later, FSR 4 could quietly end up running as FSR 3. It's now set up correctly.
+* **RX 9060 and RX 9070 cards next to integrated graphics:** Panel de Control now recognises the dedicated card and offers the full version of FSR 4.
+* **FSR 4.1.2 Lite up to date:** The FSR 4.1.2 Lite DLLs are updated to their latest version. Dedicated RX 7000 cards get two variants: one identical to AMD's and a faster one that doesn't give exactly the same image.
+* **Shortcuts from other stores:** Games from other stores where an upscaler can't be installed now show up in the list with the reason instead of disappearing. Shortcuts with a repeated field no longer stop the rest from being found.
+* **God of War Ragnarök:** Panel de Control no longer recommends HelixSR in this game, because it made FSR disappear from its graphics menu.
+* **Upscaler label in more themes:** Themes that draw covers their own way can now show which upscaler each game has.
+* **Lossless Scaling on ARM consoles:** If you already have the ARM version installed, Panel de Control uses it and sets up each game, instead of downloading one that doesn't work there.
+
+### Italiano
+
+* **FSR 4 in Diablo IV:** Se la tua scheda video lo supporta, Panel de Control usa l'FSR 4 di Proton, che non tocca i file del gioco. Altrimenti installa una versione di OptiScaler che il gioco accetta, perché con le altre si chiudeva dopo pochi minuti di partita.
+* **Giochi che si chiudono con le mod:** Nei giochi con anticheat che si chiudono quando trovano programmi non firmati, Panel de Control ora consiglia una versione che il gioco accetta. Se un upscaler fa chiudere un gioco appena avviato, la volta dopo te ne consiglia un altro. Puoi comunque installare quello che vuoi.
+* **FSR 4 con le versioni nuove di OptiScaler:** Con OptiScaler 0.9.5 o successivo, FSR 4 poteva finire a funzionare come FSR 3 senza avvisare. Ora viene configurato bene.
+* **Schede RX 9060 e RX 9070 insieme a una grafica integrata:** Panel de Control ora riconosce la scheda dedicata e offre FSR 4 nella versione completa.
+* **FSR 4.1.2 Lite aggiornato:** Le DLL di FSR 4.1.2 Lite passano all'ultima versione. Sulle schede dedicate RX 7000 ci sono due varianti: una identica a quella di AMD e una più veloce che non dà esattamente la stessa immagine.
+* **Scorciatoie di altri store:** I giochi di altri store dove non si può installare un upscaler ora compaiono nella lista con il motivo, invece di sparire. Le scorciatoie con un dato ripetuto non impediscono più di trovare le altre.
+* **God of War Ragnarök:** Panel de Control non consiglia più HelixSR in questo gioco, perché faceva sparire FSR dal suo menu grafico.
+* **Etichetta dell'upscaler in più temi:** I temi che disegnano le copertine a modo loro ora possono mostrare quale upscaler ha ogni gioco.
+* **Lossless Scaling sulle console ARM:** Se hai già installato la versione per ARM, Panel de Control la usa e configura ogni gioco, invece di scaricarne una che lì non funziona.
+
+### Deutsch
+
+* **FSR 4 in Diablo IV:** Wenn deine Grafikkarte es unterstützt, nutzt Panel de Control das FSR 4 von Proton, das die Spieldateien nicht anfasst. Sonst installiert es eine OptiScaler-Version, die das Spiel akzeptiert, denn mit anderen schloss es sich nach ein paar Minuten im Spiel.
+* **Spiele, die sich bei Mods schließen:** In Spielen mit Anti-Cheat, die sich bei nicht signierter Software schließen, empfiehlt Panel de Control jetzt eine Version, die das Spiel akzeptiert. Wenn ein Upscaler ein Spiel direkt nach dem Start schließt, empfiehlt es beim nächsten Mal einen anderen. Du kannst trotzdem installieren, was du willst.
+* **FSR 4 mit neueren OptiScaler-Versionen:** Mit OptiScaler 0.9.5 oder neuer konnte FSR 4 unbemerkt als FSR 3 laufen. Das wird jetzt richtig eingestellt.
+* **RX 9060 und RX 9070 neben integrierter Grafik:** Panel de Control erkennt jetzt die dedizierte Karte und bietet die volle Version von FSR 4 an.
+* **FSR 4.1.2 Lite aktuell:** Die DLLs von FSR 4.1.2 Lite sind auf dem neuesten Stand. Dedizierte RX-7000-Karten bekommen zwei Varianten: eine, die mit der von AMD identisch ist, und eine schnellere, die nicht ganz dasselbe Bild liefert.
+* **Verknüpfungen aus anderen Stores:** Spiele aus anderen Stores, in denen sich kein Upscaler installieren lässt, erscheinen jetzt mit dem Grund in der Liste, statt zu verschwinden. Verknüpfungen mit einem doppelten Eintrag verhindern nicht mehr, dass die anderen gefunden werden.
+* **God of War Ragnarök:** Panel de Control empfiehlt in diesem Spiel kein HelixSR mehr, weil damit FSR aus dem Grafikmenü verschwand.
+* **Upscaler-Hinweis in mehr Themes:** Themes, die Cover auf ihre eigene Art zeichnen, können jetzt zeigen, welchen Upscaler jedes Spiel hat.
+* **Lossless Scaling auf ARM-Konsolen:** Wenn du die ARM-Version schon installiert hast, nutzt Panel de Control sie und richtet jedes Spiel ein, statt eine herunterzuladen, die dort nicht läuft.
+
+### Português (Brasil)
+
+* **FSR 4 no Diablo IV:** Se a sua placa de vídeo suporta, o Panel de Control usa o FSR 4 do Proton, que não mexe nos arquivos do jogo. Nos outros casos, instala uma versão do OptiScaler que o jogo aceita, porque com outras ele fechava poucos minutos depois de entrar na partida.
+* **Jogos que fecham com mods:** Em jogos com anticheat que fecham ao detectar programas sem assinatura, o Panel de Control agora recomenda uma versão que o jogo aceita. Se um upscaler faz um jogo fechar logo depois de abrir, na próxima vez ele recomenda outro. Você continua podendo instalar o que quiser.
+* **FSR 4 com as versões novas do OptiScaler:** Com o OptiScaler 0.9.5 ou mais novo, o FSR 4 podia acabar funcionando como FSR 3 sem avisar. Agora ele é configurado direito.
+* **Placas RX 9060 e RX 9070 junto com gráfico integrado:** O Panel de Control agora reconhece a placa dedicada e oferece o FSR 4 na versão completa.
+* **FSR 4.1.2 Lite atualizado:** As DLLs do FSR 4.1.2 Lite foram atualizadas para a versão mais recente. Nas placas dedicadas RX 7000 há duas variantes: uma idêntica à da AMD e outra mais rápida que não dá exatamente a mesma imagem.
+* **Atalhos de outras lojas:** Jogos de outras lojas em que não dá para instalar um upscaler agora aparecem na lista com o motivo, em vez de sumir. Atalhos com algum dado repetido não impedem mais que os outros sejam encontrados.
+* **God of War Ragnarök:** O Panel de Control não recomenda mais o HelixSR neste jogo, porque ele fazia o FSR sumir do menu de gráficos.
+* **Etiqueta do upscaler em mais temas:** Temas que desenham as capas do seu próprio jeito agora podem mostrar qual upscaler cada jogo tem.
+* **Lossless Scaling em consoles ARM:** Se você já tem a versão para ARM instalada, o Panel de Control usa ela e configura cada jogo, em vez de baixar uma que não funciona ali.
+
+### Français
+
+* **FSR 4 dans Diablo IV :** Si votre carte graphique le permet, Panel de Control utilise le FSR 4 de Proton, qui ne touche pas aux fichiers du jeu. Sinon, il installe une version d'OptiScaler que le jeu accepte, car avec les autres il se fermait au bout de quelques minutes de partie.
+* **Jeux qui se ferment avec des mods :** Dans les jeux avec anti-triche qui se ferment quand ils repèrent un programme non signé, Panel de Control recommande maintenant une version que le jeu accepte. Si un upscaler fait fermer un jeu juste après son lancement, il en recommande un autre la fois suivante. Vous pouvez toujours installer celui que vous voulez.
+* **FSR 4 avec les nouvelles versions d'OptiScaler :** Avec OptiScaler 0.9.5 ou plus récent, FSR 4 pouvait finir par tourner comme FSR 3 sans prévenir. Il est maintenant bien configuré.
+* **Cartes RX 9060 et RX 9070 avec une puce graphique intégrée :** Panel de Control reconnaît maintenant la carte dédiée et propose FSR 4 dans sa version complète.
+* **FSR 4.1.2 Lite à jour :** Les DLL de FSR 4.1.2 Lite passent à leur dernière version. Les cartes dédiées RX 7000 ont deux variantes : une identique à celle d'AMD et une plus rapide qui ne donne pas exactement la même image.
+* **Raccourcis d'autres boutiques :** Les jeux d'autres boutiques où l'on ne peut pas installer d'upscaler apparaissent maintenant dans la liste avec la raison, au lieu de disparaître. Les raccourcis avec une donnée en double n'empêchent plus de trouver les autres.
+* **God of War Ragnarök :** Panel de Control ne recommande plus HelixSR dans ce jeu, car il faisait disparaître FSR de son menu graphique.
+* **Étiquette de l'upscaler dans plus de thèmes :** Les thèmes qui dessinent les jaquettes à leur façon peuvent maintenant afficher l'upscaler de chaque jeu.
+* **Lossless Scaling sur les consoles ARM :** Si vous avez déjà installé la version pour ARM, Panel de Control l'utilise et configure chaque jeu, au lieu d'en télécharger une qui n'y fonctionne pas.
+
 ## [0.96.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.95.1...panel-de-control-v0.96.0) (2026-11-25)
 
 
