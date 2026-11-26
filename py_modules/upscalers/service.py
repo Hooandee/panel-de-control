@@ -1175,7 +1175,8 @@ class UpscalerService:
         if (not isinstance(record, dict) or record.get("start") != "launch" or record.get("ended_by") != "game_stopped"
                 or record.get("outcome") not in ("short", "normal")):
             return
-        appid = str(record.get("appid"))
+        appid = self._live_appid(record.get("appid"))
+        record = {**record, "appid": appid}
         self.session_started(appid)
         if record["outcome"] == "short":
             if not _game_ran(record):
@@ -1190,10 +1191,15 @@ class UpscalerService:
         with self._image_lock:
             self._mark_outcome(record)
 
+    def _live_appid(self, key) -> str:
+        """Sessions of a non-Steam shortcut arrive under its stable `ns:<name>` key; the installs live under its appid."""
+        key = str(key)
+        return (games.shortcut_appid(self.home, key) or key) if key.startswith("ns:") else key
+
     def session_started(self, appid) -> None:
         """A relaunch right after a short session is a restart (RestartAppIfNecessary, a bootstrapper), not a failure."""
         with self._state_lock:
-            timer = self._pending_marks.pop(str(appid), None)
+            timer = self._pending_marks.pop(self._live_appid(appid), None)
         if timer is not None:
             timer.cancel()
 
@@ -2603,8 +2609,10 @@ class UpscalerService:
 
     def session_injections(self, appid) -> dict:
         """Which scalers Panel had configured for the game, as read when its session started."""
-        appid = str(appid)
-        found = dict(self._engine_summaries().get(appid) or {})
+        key = str(appid)
+        appid = self._live_appid(key)
+        summaries = self._engine_summaries()
+        found = dict(summaries.get(key) or summaries.get(appid) or {})
         install = (self.state["games"].get(appid) or {}).get("install")
         if isinstance(install, dict):
             options = install.get("options") if isinstance(install.get("options"), dict) else {}

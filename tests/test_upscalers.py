@@ -609,6 +609,24 @@ def test_non_steam_shortcut_installs_like_any_game(steam, fake_catalog, proc):
     assert (folder / "bin/dxgi.dll").read_bytes() == b"injector"
 
 
+def test_a_shortcuts_sessions_resolve_its_stable_key_to_the_live_appid(steam, fake_catalog, proc):
+    home, _ = steam
+    folder = home / "Games/Cracked Game"
+    exe = _write(folder / "bin/game.exe", b"MZ" + b"\0" * 64)
+    shortcut_id = 3123456789
+    _write(home / ".local/share/Steam/userdata/123/config/shortcuts.vdf", _shortcuts_vdf([
+        {"appid": shortcut_id, "name": "Cracked  Game", "exe": f'"{exe}"', "start": f'"{folder}"'},
+    ]))
+    service = _service(steam, fake_catalog, proc)
+    service.mark_delay = 0
+    service.install(str(shortcut_id), {"build": "fsr-test"})
+    assert service.session_injections("ns:cracked game")["optiscaler"]["build"] == "fsr-test"
+    service.session_outcome({"appid": "ns:cracked game", "start": "launch", "ended_by": "game_stopped", "outcome": "short",
+                             "seconds": 20, "injections": {"optiscaler": {"build": "fsr-test"}},
+                             "process": [{"names": ["game.exe"]}]})
+    assert [item["build"] for item in service.game(str(shortcut_id))["failed_builds"]] == ["fsr-test"]
+
+
 def test_clean_name_drops_release_tags():
     from upscalers.identify import clean_name
     assert clean_name("Cyberpunk.2077.v2.13-[FitGirl Repack]") == "Cyberpunk 2077"

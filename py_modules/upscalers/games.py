@@ -303,6 +303,26 @@ def _script_shortcut(home: str, appid: str, name: str, exe: str, launch_options:
     return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
 
 
+def shortcut_appid(home: str, key: str) -> str | None:
+    """The live appid of the non-Steam shortcut a stable `ns:<name>` key stands for."""
+    wanted = " ".join(key[3:].lower().split())
+    for root in steam_roots(home):
+        try:
+            profiles = [p for p in (root / "userdata").iterdir() if p.name.isdecimal()]
+        except OSError:
+            continue
+        for profile in profiles:
+            try:
+                shortcuts = vdf.read_shortcuts(profile / "config/shortcuts.vdf", lenient=True)
+            except (OSError, ValueError, UnicodeError):
+                continue
+            for entry in shortcuts.values() if isinstance(shortcuts, dict) else ():
+                if isinstance(entry, dict) and entry.get("appid") is not None \
+                        and " ".join(str(entry.get("appname") or "").lower().split()) == wanted:
+                    return str(entry["appid"])
+    return None
+
+
 def find_shortcut(home: str, appid: str) -> Installed | None:
     """A non-Steam shortcut: any executable added to Steam, wherever it came from."""
     for root in steam_roots(home):
