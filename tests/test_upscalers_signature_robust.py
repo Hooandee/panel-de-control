@@ -216,3 +216,75 @@ def test_required_signed_with_no_signed_build_recommends_nothing(monkeypatch):
     monkeypatch.setattr(catalog, "build_signed", lambda build: False)
     assert catalog.preferred_build("rdna2", require_signed=True) == ""
     assert catalog.preferred_build("rdna2") != ""
+
+
+def package(fake_catalog):
+    return Path(fake_catalog) / "cache" / catalog.ASSETS[catalog.OPTISCALER_ARCHIVE].sha256 / "unpacked"
+
+
+def test_a_signed_only_install_keeps_the_rest_of_the_package_but_never_the_games_own_files(steam, fake_catalog, proc, monkeypatch):
+    game = blizzard_game(steam)
+    declare_signed(monkeypatch)
+    unpacked = package(fake_catalog)
+    make_pe(unpacked / "OptiScaler.dll", signed=True)
+    make_pe(unpacked / "libxess.dll", signed=True)
+    make_pe(unpacked / "amd_fidelityfx_upscaler_dx12.dll", signed=True)
+    make_pe(unpacked / "fakenvapi.dll", signed=False)
+    make_pe(unpacked / "dlssg_to_fsr3_amd_is_better.dll", signed=False)
+    target = game / "bin/x64_dx12"
+    ships = _write(target / "amd_fidelityfx_loader_dx12.dll", b"loader")
+    own = target / "amd_fidelityfx_upscaler_dx12.dll"
+    before = own.read_bytes()
+    _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    assert (target / "libxess.dll").is_file() and (target / "D3D12_Optiscaler/D3D12Core.dll").is_file()
+    assert (target / "dxgi.dll").is_file() and (target / "amdxcffx64.dll").is_file()
+    assert not (target / "fakenvapi.dll").exists() and not (target / "dlssg_to_fsr3_amd_is_better.dll").exists()
+    assert own.read_bytes() == before and ships.read_bytes() == b"loader"
+
+
+def test_a_signed_only_install_brings_the_packages_ffx_library_to_a_game_without_one(steam, fake_catalog, proc, monkeypatch):
+    game = blizzard_game(steam)
+    declare_signed(monkeypatch)
+    unpacked = package(fake_catalog)
+    make_pe(unpacked / "OptiScaler.dll", signed=True)
+    make_pe(unpacked / "amd_fidelityfx_upscaler_dx12.dll", signed=True)
+    target = game / "bin/x64_dx12"
+    (target / "amd_fidelityfx_upscaler_dx12.dll").unlink()
+    _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == (unpacked / "amd_fidelityfx_upscaler_dx12.dll").read_bytes()
+
+
+def test_an_unsigned_library_in_the_package_refuses_a_signed_only_install(steam, fake_catalog, proc, monkeypatch):
+    game = blizzard_game(steam)
+    declare_signed(monkeypatch)
+    unpacked = package(fake_catalog)
+    make_pe(unpacked / "OptiScaler.dll", signed=True)
+    make_pe(unpacked / "libxess.dll", signed=False)
+    with pytest.raises(UpscalerError) as refused:
+        _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    assert refused.value.code == "unsigned_build" and refused.value.detail == "libxess.dll"
+    assert not (game / "bin/x64_dx12/dxgi.dll").exists()
+
+
+def test_a_build_swapped_after_the_old_install_is_measured_too(steam, fake_catalog, proc, monkeypatch):
+    game = blizzard_game(steam)
+    declare_signed(monkeypatch)
+    make_pe(package(fake_catalog) / "OptiScaler.dll", signed=True)
+    later = Asset("later-archive", "later.7z", "c" * 64, 1, ("http://invalid",), True, signed=True)
+    monkeypatch.setitem(catalog.ASSETS, later.id, later)
+    unpacked = Path(fake_catalog) / "cache" / later.sha256 / "unpacked"
+    unpacked.mkdir(parents=True)
+    make_pe(unpacked / "OptiScaler.dll", signed=False)
+    _write(unpacked / "OptiScaler.ini", "[FSR]\n")
+    _write(unpacked / ".complete", later.sha256)
+    calls = []
+
+    def swap(build, *args):
+        calls.append(build.id)
+        return build if len(calls) == 1 else replace(build, archive=later.id)
+
+    monkeypatch.setattr(catalog, "for_game", swap)
+    with pytest.raises(UpscalerError) as refused:
+        _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    assert refused.value.code == "unsigned_build" and len(calls) >= 2
+    assert not (game / "bin/x64_dx12/dxgi.dll").exists()

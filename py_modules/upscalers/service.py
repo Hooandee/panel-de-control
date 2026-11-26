@@ -23,6 +23,7 @@ HISTORY_LIMIT = 20
 REPORT_BUDGET_S = 2.0
 _JUNK = {"setup_linux.sh", "setup_windows.bat"}
 _ARCHIVE_DIRS = ("D3D12_Optiscaler",)
+_UNSIGNED_HELPERS = frozenset({"dlssg_to_fsr3_amd_is_better.dll"})
 _GENERATED = ("OptiScaler.log",)
 # REFramework opens its menu over the game on first launch unless its config says otherwise; handhelds have no
 # Insert key to close it, so Panel writes these keys into its config (uninstall puts the old values back).
@@ -903,7 +904,11 @@ class UpscalerService:
         build = catalog.for_game(build, analysis["inputs"], self.gpu, recipe)
         assets = needed(build, recipe)
         if any(asset.id not in paths for asset in assets):
+            if required:
+                pinned_only |= {asset.id for asset in assets}
             paths, chosen = self._fetch_assets(assets, pinned_only)
+            if required:
+                self._check_signatures(build, assets, paths, chosen, required)
 
         self._update_job(phase="copy")
         archive_asset = catalog.ASSETS[build.archive]
@@ -912,7 +917,7 @@ class UpscalerService:
         base_ini = sources.pop("OptiScaler.ini").read_text(encoding="utf-8", errors="replace")
         injector = sources.pop("OptiScaler.dll")
         if required:
-            sources = {}
+            sources = self._signed_package(sources, target)
         if build.injector:
             injector = paths[build.injector]
         sources[proxy] = injector
@@ -1125,6 +1130,23 @@ class UpscalerService:
             if self.logger:
                 self.logger.warning("Unsigned file %s refused for a game that requires signed builds", unsigned)
             raise UpscalerError("unsigned_build", unsigned)
+
+    def _signed_package(self, package: dict[str, Path], target: Path) -> dict[str, Path]:
+        """The release's own files for a game whose protection closes on unsigned code: what the game already ships
+        stays untouched, unsigned helpers nothing needs are left out, and any other unsigned binary stops the install."""
+        kept: dict[str, Path] = {}
+        for name, path in package.items():
+            if _exists_nocase(target, name):
+                continue
+            is_pe, signed = pe_sign.inspect(path)
+            if is_pe and not signed:
+                if Path(name).name.casefold() in _UNSIGNED_HELPERS or Path(name).name.casefold().startswith("fakenvapi."):
+                    continue
+                if self.logger:
+                    self.logger.warning("Unsigned file %s refused for a game that requires signed builds", name)
+                raise UpscalerError("unsigned_build", Path(name).name)
+            kept[name] = path
+        return kept
 
     def session_outcome(self, record: dict) -> None:
         """A launch that ended within the short window with Panel's injection active marks that build for the game;
@@ -2728,6 +2750,18 @@ def _requested_fg(solution, choice):
     if choice.get("fg") == "on" and plan is None:
         raise UpscalerError("fg_route_unavailable")
     return plan
+
+
+def _exists_nocase(root: Path, relative: str) -> bool:
+    current = root
+    for part in relative.split("/"):
+        try:
+            current = next((item for item in current.iterdir() if item.name.casefold() == part.casefold()), None)
+        except OSError:
+            return False
+        if current is None:
+            return False
+    return True
 
 
 def _with_root_files(sources: dict, prefix: str, names) -> dict:
