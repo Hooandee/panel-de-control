@@ -132,6 +132,8 @@ export interface GameDetail {
     target: string | null;
     inputs: Partial<Record<"fsr31" | "fsr2" | "dlss" | "xess" | "streamline", string[]>>;
     anti_cheat: boolean;
+    /** Engines that write nothing into the game and skip the warning when it comes from a recipe. */
+    anti_cheat_exempt?: string[];
     foreign: boolean;
     foreign_identity?: { engine: "helixsr" | "optiscaler" | "unknown"; variant: "dlss" | "fsr" | "unknown"; evidence: string[]; manifest_error: boolean } | null;
   };

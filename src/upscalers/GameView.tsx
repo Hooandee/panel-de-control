@@ -306,6 +306,7 @@ export const GameView: FC<{
   // Accepting the anti-cheat warning sticks to the install it was given for, so reinstalling that game (a new mod or user
   // file, another version) doesn't ask again; installs from before the flag existed only went in after the warning.
   const antiCheatAccepted = confirmAntiCheat || !!(install && (install.anti_cheat_accepted ?? detail?.analysis.anti_cheat));
+  const antiCheatApplies = !!detail?.analysis.anti_cheat && !(selected?.engine && detail.analysis.anti_cheat_exempt?.includes(selected.engine));
   const installSelected = () => startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
     ...scalerChoice, ...(replacesFsr || dropsAnr ? { fg: "off" as const } : {}), confirm_anti_cheat: antiCheatAccepted,
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
@@ -326,7 +327,7 @@ export const GameView: FC<{
   const adoptAndInstall = async () => {
     if (foreignPending.current || running || gameRunning || !selected?.available
       || !detail?.analysis.target || detail.updating || buildBlocker(selected, detail.analysis.inputs, protonEnv)
-      || (detail.analysis.anti_cheat && !confirmAntiCheat)) return;
+      || (antiCheatApplies && !confirmAntiCheat)) return;
     foreignPending.current = true;
     setForeignBusy(true);
     try {
@@ -520,7 +521,7 @@ export const GameView: FC<{
   const render = facts?.resolution?.render[1] ?? null;
   const output = facts?.resolution?.output[1] ?? null;
   const blocked = switchingScaler || foreignBusy || !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
-    || (detail.analysis.anti_cheat && !install && !confirmAntiCheat);
+    || (antiCheatApplies && !install && !confirmAntiCheat);
   const inputs = solution?.inputs ?? detail?.analysis.inputs ?? {};
   const blockedBuilds = builds.filter((b) => b.available && b.supported && buildBlocker(b, inputs, protonEnv));
   const coming = builds.filter((b) => !b.available && b.supported);
@@ -675,7 +676,7 @@ export const GameView: FC<{
       {detail && !detail.native && (
         <>
           {detail.analysis.foreign && detail.analysis.foreign_identity?.engine !== "helixsr" && !install && (
-            <Row><ActionButton label={t("up.foreign.adopt")} busy={foreignBusy} disabled={running || gameRunning || !selected?.available || !detail.analysis.target || !!detail.updating || !!buildBlocker(selected, detail.analysis.inputs, protonEnv) || (detail.analysis.anti_cheat && !confirmAntiCheat)} onPress={() => void adoptAndInstall()} /></Row>
+            <Row><ActionButton label={t("up.foreign.adopt")} busy={foreignBusy} disabled={running || gameRunning || !selected?.available || !detail.analysis.target || !!detail.updating || !!buildBlocker(selected, detail.analysis.inputs, protonEnv) || (antiCheatApplies && !confirmAntiCheat)} onPress={() => void adoptAndInstall()} /></Row>
           )}
           {!detail.analysis.target && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.error.no_exe")}</Notice>}
           {detail.updating && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Notice>}
@@ -699,7 +700,7 @@ export const GameView: FC<{
           {detail.recipe_info && (
             <WikiFacts appid={appid} info={detail.recipe_info} installed={!!install} onApplied={() => void load()} />
           )}
-          {detail.analysis.anti_cheat && !install && (
+          {antiCheatApplies && !install && (
             <>
               <Notice icon={<LuTriangleAlert size={16} />} tone="danger">{t("up.error.anti_cheat")}</Notice>
               <SegmentRow

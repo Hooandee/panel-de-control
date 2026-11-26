@@ -4,6 +4,7 @@ import os
 import shlex
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -2217,3 +2218,39 @@ def test_helixsr_leaves_the_fsr31_library_a_recipe_keeps_untouched(steam, helix_
     with pytest.raises(UpscalerError, match="helixsr_recipe_blocked"):
         service.install(APPID, {"build": "hlx-fsr4"})
     assert service.helix.calls == [] and legacy.read_bytes() == b"ffx 1.0.1"
+
+
+@pytest.fixture
+def silent_anti_cheat(monkeypatch):
+    base = recipes.RECIPES.get(APPID) or recipes.Recipe(APPID)
+    monkeypatch.setattr(recipes, "RECIPES", {**recipes.RECIPES, APPID: replace(base, anti_cheat=True)})
+
+
+def test_a_recipe_anti_cheat_asks_the_warning_for_engines_that_change_game_files(steam, proton_catalog, proc, silent_anti_cheat):
+    service = _service(steam, proton_catalog, proc)
+    assert service.game(APPID)["analysis"]["anti_cheat"] is True
+    with pytest.raises(UpscalerError, match="anti_cheat"):
+        service.install(APPID, {"build": "fsr-test"})
+    service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+
+
+def test_a_recipe_anti_cheat_does_not_block_proton_fsr4_which_writes_nothing(steam, proton_catalog, proc, silent_anti_cheat):
+    service = _service(steam, proton_catalog, proc)
+    assert "proton" in service.game(APPID)["analysis"]["anti_cheat_exempt"]
+    assert service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})["env"] == {"FSR4_UPGRADE": "1"}
+
+
+def test_file_anti_cheat_still_asks_the_warning_for_proton_fsr4(steam, proton_catalog, proc):
+    _, game = steam
+    _write(game / "EasyAntiCheat/EasyAntiCheat_EOS_Setup.exe", b"MZ")
+    service = _service(steam, proton_catalog, proc)
+    assert "anti_cheat_exempt" not in service.game(APPID)["analysis"]
+    with pytest.raises(UpscalerError, match="anti_cheat"):
+        service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})
+
+
+def test_diablo_iv_recipe_prefers_proton_fsr4_on_rdna3_and_4_and_lite_on_rdna2():
+    recipe = recipes.recipe_for("2344520", platform="linux", arch="x86_64")
+    assert recipe.anti_cheat and recipe.recommended_input == "dlss" and recipe.args == ("-dx12",)
+    assert [catalog.preferred_build(gpu, recipe) for gpu in ("rdna2", "rdna3", "rdna4")] == [
+        "fsr-4.1.2-beta", "proton-fsr4", "proton-fsr4"]

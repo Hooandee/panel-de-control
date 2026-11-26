@@ -352,11 +352,13 @@ class UpscalerService:
                 cached = (stamp, {"native": installed.native,
                                   "inputs": [] if installed.native else games.shipped_upscalers(installed.root)})
                 self._compat[installed.appid] = cached
+            recipe = recipes.recipe_for(installed.appid, game_build=installed.build_id)
+            refused = False
             try:
-                automatic = auto_recipes.plan(recipes.recipe_for(installed.appid, game_build=installed.build_id), installed)
+                automatic = auto_recipes.plan(recipe, installed)
             except auto_recipes.RecipeError:
-                automatic = None
-            result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, automatic)}
+                automatic, refused = None, True
+            result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, _recommending(recipe, automatic, refused))}
         if self.logger:
             reasons = Counter(row["unavailable"] for row in result.values() if row.get("unavailable"))
             if dict(reasons) != self._unactionable_logged:
@@ -434,8 +436,8 @@ class UpscalerService:
         entry = self._game_state(appid)
         identity = self._identity(installed, entry)
         recipe = self._recipe(appid, identity, installed)
-        analysis = NATIVE_ANALYSIS if installed.native else _dll_route(games.analyze(
-            installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe), recipe)
+        analysis = NATIVE_ANALYSIS if installed.native else _recipe_anti_cheat(_dll_route(games.analyze(
+            installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe), recipe), recipe)
         install = entry.get("install")
         automatic = None
         recipe_info = _recipe_info(recipe)
@@ -463,7 +465,7 @@ class UpscalerService:
         selected = solutions.get((install or {}).get("build")) or solution_plan.resolve(self.gpu, analysis, recipe)
         return {
             "solution": selected, "solutions": solutions,
-            "preferred": catalog.preferred_build(self.gpu, automatic),
+            "preferred": catalog.preferred_build(self.gpu, _recommending(recipe, automatic, bool(recipe_info and recipe_info.get("blocked")))),
             "appid": appid,
             "name": installed.name,
             "updating": games.update_state(installed.state_flags),
@@ -774,7 +776,7 @@ class UpscalerService:
                 raise UpscalerError("transition_conflict") from None
 
     # ---- install -------------------------------------------------------------
-    def _guard(self, appid: str, confirm_anti_cheat: bool = False) -> tuple[games.Installed, dict, Path]:
+    def _guard(self, appid: str, confirm_anti_cheat: bool = False, engine: str | None = None) -> tuple[games.Installed, dict, Path]:
         installed = self._find(appid)
         if installed is None:
             raise UpscalerError("not_installed")
@@ -786,11 +788,11 @@ class UpscalerService:
         if games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
         recipe = self._recipe(appid, self._identity(installed, self._game_state(appid)), installed)
-        analysis = _dll_route(games.analyze(installed.root, self._game_state(appid).get("exe"),
-                                            recipe.exe if recipe else installed.exe), recipe)
+        analysis = _recipe_anti_cheat(_dll_route(games.analyze(installed.root, self._game_state(appid).get("exe"),
+                                                              recipe.exe if recipe else installed.exe), recipe), recipe)
         if not analysis["target"]:
             raise UpscalerError("no_exe")
-        if analysis["anti_cheat"] and not confirm_anti_cheat:
+        if analysis["anti_cheat"] and not confirm_anti_cheat and engine not in analysis.get("anti_cheat_exempt", ()):
             raise UpscalerError("anti_cheat")
         return installed, analysis, Path(analysis["target"])
 
@@ -812,7 +814,7 @@ class UpscalerService:
         if wants_anr and not catalog.anr_capable(build, self.gpu):
             raise UpscalerError("anr_build")
 
-        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
+        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         entry = self._game_state(appid)
         recipe = self._recipe(appid, self._identity(installed, entry), installed)
         try:
@@ -1119,7 +1121,7 @@ class UpscalerService:
         return item
 
     def _install_dll(self, appid: str, build: catalog.Build, choice: dict) -> dict:
-        installed, analysis, _target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
+        installed, analysis, _target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         name = "amd_fidelityfx_upscaler_dx12.dll"
         loader = "amd_fidelityfx_loader_dx12.dll"
         framegen = "amd_fidelityfx_framegeneration_dx12.dll"
@@ -1213,7 +1215,7 @@ class UpscalerService:
         return _with_leftovers({"files": len(sources), "overrides": [], "args": []}, left)
 
     def _install_helix(self, appid: str, build: catalog.Build, choice: dict) -> dict:
-        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
+        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         if build.way == "fsr" and "fsr31" not in analysis["inputs"]:
             raise UpscalerError("helixsr_no_fsr")
         entry = self._game_state(appid)
@@ -1280,7 +1282,7 @@ class UpscalerService:
         env = str(choice.get("env") or "")
         if env not in PROTON_FSR4_ENVS:
             raise UpscalerError("proton_env")
-        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
+        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         if "fsr31" not in analysis["inputs"]:
             raise UpscalerError("proton_no_fsr")
         entry = self._game_state(appid)
@@ -2514,6 +2516,18 @@ def _dll_route(analysis: dict, recipe) -> dict:
     targets = analysis.get("dll_targets", [])
     kept = [path for path in targets if Path(path).name.lower() != "amd_fidelityfx_dx12.dll"]
     return analysis if len(kept) == len(targets) else {**analysis, "dll_targets": kept, "dll_blocked": "recipe_legacy_ffx"}
+
+
+def _recommending(recipe, automatic, refused: bool):
+    """What may recommend a build: the catalog entry a dependency plan resolved, or a recipe with nothing to install."""
+    return automatic or (recipe if recipe and not recipe.dependencies and not refused else None)
+
+
+def _recipe_anti_cheat(analysis: dict, recipe) -> dict:
+    """A recipe's anti-cheat the files don't show; Proton builds write nothing into the game and skip the warning."""
+    if not (recipe and recipe.anti_cheat) or analysis["anti_cheat"]:
+        return analysis
+    return {**analysis, "anti_cheat": True, "anti_cheat_exempt": ["proton"]}
 
 
 def _recipe_proxy(recipe) -> str | None:

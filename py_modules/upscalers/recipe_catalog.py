@@ -84,6 +84,8 @@ class GameRecipe:
     optiscaler_fg: bool = True
     # Options the user must change in the game's own menu, as (setting, value) in the game's words.
     game_settings: tuple[tuple[str, str], ...] = ()
+    # Anti-cheat that leaves no files for Panel's analysis to find: engines that change the game's files ask for the warning.
+    anti_cheat: bool = False
 
 
 @dataclass(frozen=True)
@@ -294,7 +296,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
     for appid, item in raw['games'].items():
         if not isinstance(appid, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', appid):
             raise CatalogError('invalid_appid')
-        item = _object(item, ('name', 'revision', 'conditions', 'args', 'ini', 'dependencies', 'source_urls'), ('exe', 'tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings'))
+        item = _object(item, ('name', 'revision', 'conditions', 'args', 'ini', 'dependencies', 'source_urls'), ('exe', 'tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings', 'anti_cheat'))
         conditions = _object(item['conditions'], ('engine', 'platform', 'arch'), ('game_builds',))
         allowed = {'engine': _ENGINES, 'platform': _PLATFORMS, 'arch': _ARCHES}
         parsed_conditions = {}
@@ -347,7 +349,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
         if any('/' in name or not name.lower().endswith('.dll') for name in root_files):
             raise CatalogError('invalid_root_files')
         flags = {}
-        for key, default in (('reframework_upscaler', False), ('optiscaler_fg', True)):
+        for key, default in (('reframework_upscaler', False), ('optiscaler_fg', True), ('anti_cheat', False)):
             flags[key] = item.get(key, default)
             if type(flags[key]) is not bool:
                 raise CatalogError('invalid_' + key)
@@ -368,7 +370,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
                 raise CatalogError('invalid_test_date') from None
         entries[appid] = GameRecipe(appid, _text(item['name'], 160), _integer(item['revision'], 2**31 - 1),
                                    parsed_conditions, _path(item['exe']) if 'exe' in item else None, args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
-                                   flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings))
+                                   flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings), flags['anti_cheat'])
     catalog = Catalog(1, version, assets, dependencies, entries)
     catalog.dependency_order(dependencies)
     return catalog
