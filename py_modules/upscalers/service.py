@@ -192,8 +192,8 @@ class UpscalerService:
                         facts.setdefault("initial_resolution", facts.pop("resolution"))
                         facts["resolution_source"] = "initialization_only"
         signatures = data.get("signatures") if isinstance(data, dict) else None
-        signatures = {sha: item for sha, item in (signatures.items() if isinstance(signatures, dict) else ())
-                      if isinstance(item, dict) and isinstance(item.get("id"), str) and isinstance(item.get("signed"), bool)}
+        signatures = {key: item for key, item in (signatures.items() if isinstance(signatures, dict) else ())
+                      if ":" in str(key) and isinstance(item, dict) and isinstance(item.get("id"), str) and isinstance(item.get("signed"), bool)}
         catalog.MEASURED.update(signatures)
         return {"games": games_state if isinstance(games_state, dict) else {}, "signatures": signatures,
                 "global_actions": data.get("global_actions", [])[-20:] if isinstance(data, dict) and isinstance(data.get("global_actions"), list) else []}
@@ -1118,10 +1118,11 @@ class UpscalerService:
             if not is_pe:
                 continue
             sha = chosen[asset.id].sha256
+            key = catalog.signature_key(sha, asset.id)
             with self._state_lock:
-                if self.state.setdefault("signatures", {}).get(sha) != {"id": asset.id, "signed": signed}:
-                    self.state["signatures"].pop(sha, None)
-                    self.state["signatures"][sha] = {"id": asset.id, "signed": signed}
+                if self.state.setdefault("signatures", {}).get(key) != {"id": asset.id, "signed": signed}:
+                    self.state["signatures"].pop(key, None)
+                    self.state["signatures"][key] = {"id": asset.id, "signed": signed}
                     for stale in list(self.state["signatures"])[:-64]:
                         del self.state["signatures"][stale]
                     changed = True

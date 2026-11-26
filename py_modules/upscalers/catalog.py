@@ -390,17 +390,23 @@ def signed_only(recipe) -> bool:
     return bool(getattr(recipe, "signed_only", False))
 
 
-# What Panel measured in the files it unpacked, keyed by sha256: the declared Asset.signed only stands in until then.
+# What Panel measured in the files it unpacked, keyed by sha256 and asset id (several assets are members of one archive):
+# the declared Asset.signed only stands in until then.
 MEASURED: dict[str, dict] = {}
 
 
+def signature_key(sha256: str, asset_id: str) -> str:
+    return f"{sha256}:{asset_id}"
+
+
 def record_signature(asset_id: str, sha256: str, signed: bool) -> None:
-    MEASURED.pop(sha256, None)
-    MEASURED[sha256] = {"id": asset_id, "signed": bool(signed)}
+    key = signature_key(sha256, asset_id)
+    MEASURED.pop(key, None)
+    MEASURED[key] = {"id": asset_id, "signed": bool(signed)}
 
 
 def asset_signed(asset: Asset) -> bool:
-    measured = MEASURED.get(asset.sha256)
+    measured = MEASURED.get(signature_key(asset.sha256, asset.id))
     return asset.signed if measured is None else measured["signed"]
 
 

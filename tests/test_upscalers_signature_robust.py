@@ -359,3 +359,10 @@ def test_state_writes_wait_for_the_state_lock(steam, fake_catalog, proc):
         thread.start()
         assert not done.wait(0.3)
     assert done.wait(2)
+
+
+def test_assets_sharing_one_archive_sha_keep_their_own_measurement():
+    one = Asset("member-one", "a.dll", "c" * 64, 1, ("http://invalid",), True, signed=True, member="a.dll")
+    two = Asset("member-two", "b.dll", "c" * 64, 1, ("http://invalid",), True, signed=True, member="b.dll")
+    catalog.record_signature("member-one", "c" * 64, False)
+    assert not catalog.asset_signed(one) and catalog.asset_signed(two)
