@@ -143,7 +143,6 @@ class UpscalerService:
         self.gpu = gpu
         self.device = device
         self.logger = logger
-        self._unactionable_logged: dict = {}
         self.proc = proc
         self.drm = drm
         self.search = identify.store_search
@@ -364,12 +363,6 @@ class UpscalerService:
             except auto_recipes.RecipeError:
                 automatic, refused = None, True
             result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, _recommending(recipe, automatic, refused), self.device)}
-        if self.logger:
-            reasons = Counter(row["unavailable"] for row in result.values() if row.get("unavailable"))
-            if dict(reasons) != self._unactionable_logged:
-                self._unactionable_logged = dict(reasons)
-                if reasons:
-                    self.logger.info("Selector shortcuts not actionable: %s", dict(reasons))
         return result
 
     def _locate(self, appid: str, lookup: Counter | None = None) -> games.Installed | None:
@@ -2621,7 +2614,7 @@ def _recommending(recipe, automatic, refused: bool):
 
 def _recipe_anti_cheat(analysis: dict, recipe) -> dict:
     """A recipe's anti-cheat the files don't show; Proton builds write nothing into the game and skip the warning."""
-    if recipe and recipe.signed_only and analysis.get("anti_cheat_kind") != "signed_only":
+    if catalog.signed_only(recipe) and analysis.get("anti_cheat_kind") != "signed_only":
         analysis = {**analysis, "anti_cheat_kind": "signed_only"}
     if not (recipe and recipe.anti_cheat) or analysis["anti_cheat"]:
         return analysis

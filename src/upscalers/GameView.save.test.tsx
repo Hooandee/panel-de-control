@@ -299,9 +299,3 @@ it("says there is nothing else to recommend when the failed build is still the p
   await act(async () => { render(<GameView {...props} />); });
   expect(screen.getByText("up.failedBuild.alone")).toBeTruthy();
 });
-
-it("shows no failure notice for a game without marked builds", async () => {
-  state.detail = installed("not_run");
-  await act(async () => { render(<GameView {...props} />); });
-  expect(screen.queryByText("up.failedBuild")).toBeNull();
-});

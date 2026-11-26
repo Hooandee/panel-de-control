@@ -1,10 +1,7 @@
-"""One record per game session: how long it lasted and which injections were active when it started.
+"""One record per game session: its duration and the injections active when it started.
 
-Reports such as "the game does not start with any scaler" carry no launch outcome: Steam only exposes the running
-app id. A session that ends within SHORT_SESSION_S while Mako, Lossless Scaling or OptiScaler were active is the
-signal to read next to the per-engine state; the process probes say whether a game process ever existed.
-A short/normal outcome is only claimed for sessions whose start Panel observed as a launch; a game already running
-when Panel loaded, or a context set by a profile editor, is reported with start "attached" and no outcome.
+An outcome (short/normal) is only claimed for sessions whose start Panel observed as a launch; a game already running
+when Panel loaded, or a context set by a profile editor, is "attached" with no outcome.
 """
 
 import threading

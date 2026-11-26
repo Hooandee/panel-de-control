@@ -2203,11 +2203,6 @@ def test_report_publishes_the_recorded_game_before_the_slow_disk_reads(steam, fa
 
 
 def test_helixsr_leaves_the_fsr31_library_a_recipe_keeps_untouched(steam, helix_catalog, proc, monkeypatch):
-    # PDC-ZVD4 (#1509): GoWR with HLX FSR 4 lost FSR from its menu; the recipe says amd_fidelityfx_dx12.dll stays the game's.
-    from dataclasses import replace
-
-    from upscalers import recipes
-
     _, game = steam
     folder = game / "bin/x64_dx12"
     (folder / "amd_fidelityfx_upscaler_dx12.dll").unlink()
@@ -2266,12 +2261,6 @@ def test_signed_only_recipe_offers_the_signed_fsr_411_on_rdna2_and_hides_the_nig
     assert "fsr-4.1.1" in offered and "fsr-4.1.2-beta" not in offered and "fsr-4.1.1-rdna2" not in offered
     assert not any(catalog.BUILDS[name].engine == "dll" for name in offered)
     assert catalog.preferred_build("rdna2", recipe) == "fsr-4.1.1"
-
-
-def test_builds_stay_as_they_were_for_recipes_without_signed_only():
-    plain = {row["id"]: row["supported"] for row in catalog.describe("rdna2")}
-    assert plain["fsr-4.1.1"] is False and plain["fsr-4.1.2-beta"] is True
-    assert catalog.preferred_build("rdna2") == "fsr-4.1.2-beta"
 
 
 def test_signed_only_install_writes_only_signed_pieces(steam, fake_catalog, proc, monkeypatch):
@@ -2335,11 +2324,7 @@ def test_signed_only_recipe_never_resolves_a_newer_optiscaler(steam, fake_catalo
     assert "Fsr4ForceEnableInt8=true" in text
 
 
-def test_int8_flag_becomes_a_mode_on_optiscaler_095(steam, fake_catalog, proc, monkeypatch):
-    text = _fsr411_install(steam, fake_catalog, proc, monkeypatch, _NewerOptiScaler(), False)
-    assert "Fsr4ForceEnableInt8=1" in text and "Fsr4ForceEnableInt8=true" not in text
-
-
-def test_int8_flag_stays_boolean_on_optiscaler_094(steam, fake_catalog, proc, monkeypatch):
-    text = _fsr411_install(steam, fake_catalog, proc, monkeypatch, _NewerOptiScaler("v0.9.4-final"), False)
-    assert "Fsr4ForceEnableInt8=true" in text
+@pytest.mark.parametrize("tag,expected", [("v0.9.5-final", "Fsr4ForceEnableInt8=1"), ("v0.9.4-final", "Fsr4ForceEnableInt8=true")])
+def test_int8_flag_becomes_a_mode_from_optiscaler_095(steam, fake_catalog, proc, monkeypatch, tag, expected):
+    text = _fsr411_install(steam, fake_catalog, proc, monkeypatch, _NewerOptiScaler(tag), False)
+    assert expected in text

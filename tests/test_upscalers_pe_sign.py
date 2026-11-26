@@ -1,5 +1,7 @@
 import struct
 
+import pytest
+
 from upscalers import pe_sign
 
 
@@ -19,14 +21,10 @@ def make_pe(path, signed, pe32=False, dirs=16):
     return path
 
 
-def test_signed_and_unsigned_pe32_plus(tmp_path):
-    assert pe_sign.inspect(make_pe(tmp_path / "a.dll", True)) == (True, True)
-    assert pe_sign.inspect(make_pe(tmp_path / "b.dll", False)) == (True, False)
-
-
-def test_signed_and_unsigned_pe32(tmp_path):
-    assert pe_sign.is_signed(make_pe(tmp_path / "a.dll", True, pe32=True))
-    assert not pe_sign.is_signed(make_pe(tmp_path / "b.dll", False, pe32=True))
+@pytest.mark.parametrize("pe32", [False, True])
+def test_signed_and_unsigned_pe(tmp_path, pe32):
+    assert pe_sign.inspect(make_pe(tmp_path / "a.dll", True, pe32=pe32)) == (True, True)
+    assert pe_sign.inspect(make_pe(tmp_path / "b.dll", False, pe32=pe32)) == (True, False)
 
 
 def test_few_data_directories_means_unsigned(tmp_path):

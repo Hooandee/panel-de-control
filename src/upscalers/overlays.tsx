@@ -104,13 +104,9 @@ function useCoverLabels(): Record<string, Badge> {
   return useMemo(() => shown ? { ...engines, ...installed } : NO_COVERS, [engines, installed, shown]);
 }
 
-export interface CoverBadge {
-  label: string;
-  short: string;
-  state: string;
-}
+export type CoverBadge = Pick<Badge, "label" | "short" | "state">;
 
-/** What the cover pill of a game says, for themes that paint covers themselves; null when none or when the user hides pills. */
+/** What the cover pill of a game says; null when none or when the user hides pills. */
 export function coverBadgeFor(appid: string): CoverBadge | null {
   if (!readCoverBadges()) return null;
   const badge = installs[appid] ?? engineCovers[appid];
@@ -123,7 +119,7 @@ function coverBadgeSignature(): string {
   return `${pick(engineCovers)};${pick(installs)}`;
 }
 
-/** Calls back only when a cover pill appears, goes or changes (install, removal, fallback, the Escaladores option). */
+/** Calls back only when a cover pill appears, goes or changes. */
 export function subscribeCoverBadges(listener: () => void): () => void {
   let last = coverBadgeSignature();
   const check = () => {
@@ -187,7 +183,7 @@ export function writeCoverBadges(shown: boolean): void {
 export interface CoverScan { labelled: number; images: number; placed: number; skipped: Record<string, number> }
 let lastScan: CoverScan | null = null;
 
-/** What the last pass found: themes that paint covers in a canvas leave `images` at 0 while `labelled` games exist. */
+/** What the last pass found; canvas-painted shelves leave `images` at 0 while `labelled` games exist. */
 export function coverScan(): CoverScan | null {
   return lastScan;
 }

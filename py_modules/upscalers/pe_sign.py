@@ -39,7 +39,3 @@ def inspect(path) -> tuple[bool, bool]:
             return True, size > 0
     except (OSError, ValueError, struct.error):
         return False, False
-
-
-def is_signed(path) -> bool:
-    return inspect(path)[1]

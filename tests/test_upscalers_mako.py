@@ -332,8 +332,6 @@ def test_runtime_rejections_keep_identity_protections(setup, monkeypatch, change
 
 
 def test_unlocked_writer_reports_that_the_layer_ran_and_ended(setup, monkeypatch):
-    # Bundle PDC-2YXZ / PDC-JR75: observed=false with rejections={writer_unlocked: 1} is a valid state file
-    # whose writer already exited, not a layer that never loaded.
     manager, _, _, _ = setup
     ended = (time.time() - 90) * 1000
     data = {'schema_version': 5, 'pid': 3714, 'process_start_ticks': 898084, 'role': 'frame-generation',

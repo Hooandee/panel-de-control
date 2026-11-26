@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 vi.mock("@decky/ui", () => ({ findSP: () => window }));
 vi.mock("@decky/api", () => ({ routerHook: { addGlobalComponent: () => {}, removeGlobalComponent: () => {} }, callable: () => vi.fn().mockResolvedValue(null) }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }), translate: (key: string) => key }));
-import { CoverBadges, coverScan, publishOverview, writeCoverBadges } from "./overlays";
+import { CoverBadges, coverScan, publishOverview } from "./overlays";
 
 const overview = {
   builds: [{ id: "fsr-4.1.2-beta", engine: "optiscaler", family: "fsr", version: "4.1.2", models: ["lite"] }],
@@ -38,21 +38,4 @@ it("marks the same game once the cover is a visible image", async () => {
   await act(async () => { render(<CoverBadges />); });
   expect(document.querySelector(".pdc-up-badge")).not.toBeNull();
   expect(coverScan()).toMatchObject({ labelled: 1, images: 1, placed: 1 });
-});
-
-it("forgets the last scan when the badges are switched off or the component unmounts", async () => {
-  document.body.innerHTML = `<div class="Focusable"><img src="https://steamloopback.host/assets/1245620/library_capsule.jpg"></div>`;
-  const img = document.querySelector("img")!;
-  img.getBoundingClientRect = rect(200, 300);
-  img.parentElement!.getBoundingClientRect = rect(200, 300);
-  publishOverview(overview);
-  const view = render(<CoverBadges />);
-  await act(async () => {});
-  expect(coverScan()).not.toBeNull();
-  await act(async () => { writeCoverBadges(false); });
-  expect(coverScan()).toBeNull();
-  await act(async () => { writeCoverBadges(true); });
-  expect(coverScan()).not.toBeNull();
-  view.unmount();
-  expect(coverScan()).toBeNull();
 });

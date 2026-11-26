@@ -46,12 +46,11 @@ def setup_function():
     cancelled.clear()
 
 
-# Session boundaries of PDC-JR75 (Legion Go S, Panel 0.95.1) as the journal recorded them for Detroit.
-JR75_SESSIONS = [(596079.9, 597101.6, 'vanilla'), (597298.5, 597351.0, 'optiscaler+mako'),
+SESSIONS = [(596079.9, 597101.6, 'vanilla'), (597298.5, 597351.0, 'optiscaler+mako'),
                  (597381.2, 597405.6, 'vanilla'), (597435.7, 597512.3, 'vanilla')]
 
 
-def test_jr75_sessions_are_classified_with_the_injections_active_at_launch():
+def test_sessions_are_classified_with_the_injections_active_at_launch():
     clock, records = Clock(), []
     injections = {
         'vanilla': {},
@@ -61,7 +60,7 @@ def test_jr75_sessions_are_classified_with_the_injections_active_at_launch():
     current = {}
     sessions = tracker(clock, records, injections=lambda appid: injections[current['kind']])
     previous = None
-    for start, end, kind in JR75_SESSIONS:
+    for start, end, kind in SESSIONS:
         current['kind'] = kind
         clock.now = start
         sessions.transition(previous, '1222140', launch=True)

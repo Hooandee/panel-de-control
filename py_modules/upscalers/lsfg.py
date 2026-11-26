@@ -424,7 +424,6 @@ class Lsfg:
         finally:
             tmp.unlink(missing_ok=True)
 
-
     def _write_native_config(self, data: dict) -> None:
         dll = find_dll(str(self.home), NATIVE_DLL_NAME)
         lines = [MARKER, "version = 1", "", "[global]"]

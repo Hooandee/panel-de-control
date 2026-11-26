@@ -7,10 +7,8 @@
  * `howLongToBeat` asks howlongtobeat.com through Panel (Steam's client cannot reach it): hours to finish the main
  * story, with extras and everything; null when the game is not there or the site cannot be reached.
  * `protonDb` asks protondb.com the same way: its tier for the game, null when nobody rated it or it is out of reach.
- * `upscalerBadge` is the text of the pill Panel puts on a game's cover (the same one Escaladores shows), null when the game
- * has no scaler or the user hid the pills; `onUpscalerBadges` calls back when any of them appears, goes or changes, for
- * themes that paint covers themselves (Loop, on WebGL) where Panel's DOM pill has nothing to hang from. Both are absent
- * on a Panel that does not offer them.
+ * `upscalerBadge` is the text of the pill on a game's cover (null when the game has no scaler or the user hid the pills);
+ * `onUpscalerBadges` calls back when any of them changes. Both are absent on a Panel that does not offer them.
  */
 export type ThemeForceCloseResult = "not_found" | "terminated" | "killed" | "failed" | "unavailable";
 
