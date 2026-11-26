@@ -2623,10 +2623,9 @@ def _recipe_anti_cheat(analysis: dict, recipe) -> dict:
     """A recipe's anti-cheat the files don't show; Proton builds write nothing into the game and skip the warning."""
     if catalog.signed_only(recipe) and analysis.get("anti_cheat_kind") != "signed_only":
         analysis = {**analysis, "anti_cheat_kind": "signed_only"}
-    if not (recipe and recipe.anti_cheat) or analysis["anti_cheat"]:
-        return analysis
-    return {**analysis, "anti_cheat": True, "anti_cheat_kind": analysis.get("anti_cheat_kind") or "warn",
-            "anti_cheat_exempt": ["proton"]}
+    if recipe and recipe.anti_cheat and not analysis["anti_cheat"]:
+        analysis = {**analysis, "anti_cheat": True, "anti_cheat_kind": analysis.get("anti_cheat_kind") or "warn"}
+    return {**analysis, "anti_cheat_exempt": ["proton"]} if analysis["anti_cheat"] else analysis
 
 
 _INJECTED_ENGINES = frozenset({"optiscaler", "dll", "helixsr"})

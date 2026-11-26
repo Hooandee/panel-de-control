@@ -2235,13 +2235,14 @@ def test_a_recipe_anti_cheat_does_not_block_proton_fsr4_which_writes_nothing(ste
     assert service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})["env"] == {"FSR4_UPGRADE": "1"}
 
 
-def test_file_anti_cheat_still_asks_the_warning_for_proton_fsr4(steam, proton_catalog, proc):
+def test_file_anti_cheat_does_not_block_proton_fsr4_but_still_asks_for_file_writers(steam, proton_catalog, proc):
     _, game = steam
     _write(game / "EasyAntiCheat/EasyAntiCheat_EOS_Setup.exe", b"MZ")
     service = _service(steam, proton_catalog, proc)
-    assert "anti_cheat_exempt" not in service.game(APPID)["analysis"]
+    assert service.game(APPID)["analysis"]["anti_cheat_exempt"] == ["proton"]
+    assert service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})["env"] == {"FSR4_UPGRADE": "1"}
     with pytest.raises(UpscalerError, match="anti_cheat"):
-        service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})
+        service.install(APPID, {"build": "fsr-test"})
 
 
 def test_diablo_iv_recipe_prefers_proton_fsr4_on_rdna3_and_4_and_lite_on_rdna2():
