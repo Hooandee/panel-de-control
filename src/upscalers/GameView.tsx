@@ -526,6 +526,8 @@ export const GameView: FC<{
   const blockedBuilds = builds.filter((b) => b.available && b.supported && buildBlocker(b, inputs, protonEnv));
   const coming = builds.filter((b) => !b.available && b.supported);
   const preferredBuild = builds.find((b) => b.id === preferred && b.available);
+  const failedBuild = detail?.failed_builds?.[0];
+  const recommendedAfterFailure = !!failedBuild && !!preferredBuild && !detail?.failed_builds?.some((f) => f.build === preferred);
   const runs = badgeLabel(installedBuild, install?.options.model, install?.build ?? "").full;
   const uses = [...new Set(Object.keys(inputs).map((k) => INPUT_NAMES[k]).filter(Boolean))];
   // Turning the game's quality off goes back to Panel's last quality, not to Native.
@@ -699,6 +701,15 @@ export const GameView: FC<{
           {recipeBlocked && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.blocked")}</Notice>}
           {detail.recipe_info && (
             <WikiFacts appid={appid} info={detail.recipe_info} installed={!!install} onApplied={() => void load()} />
+          )}
+          {failedBuild && (
+            <Notice icon={<LuTriangleAlert size={16} />} tone="warn">
+              {t(recommendedAfterFailure ? "up.failedBuild" : "up.failedBuild.alone", {
+                build: badgeLabel(builds.find((b) => b.id === failedBuild.build), null, failedBuild.build).full,
+                seconds: Math.round(failedBuild.seconds ?? 0),
+                recommended: recommendedAfterFailure ? badgeLabel(preferredBuild, null, preferred).full : "",
+              })}
+            </Notice>
           )}
           {antiCheatApplies && !install && (
             <>

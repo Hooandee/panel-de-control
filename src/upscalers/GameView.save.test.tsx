@@ -287,3 +287,21 @@ it("reinstalls a game with anti-cheat for a new mod without asking about the ant
   await act(async () => { await Promise.resolve(); });
   expect(installUpscaler).toHaveBeenCalledWith("777", expect.objectContaining({ confirm_anti_cheat: true }));
 });
+
+it("tells the user which build closed the game and which one Panel recommends now", async () => {
+  state.detail = { ...installed("not_run"), preferred: "fsr-4.1.1", failed_builds: [{ build: "fsr-4.1.2-beta", seconds: 88.7, version: "v0.9.5" }] } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.getByText("up.failedBuild")).toBeTruthy();
+});
+
+it("says there is nothing else to recommend when the failed build is still the preferred one", async () => {
+  state.detail = { ...installed("not_run"), preferred: "fsr-4.1.1", failed_builds: [{ build: "fsr-4.1.1", seconds: 30 }] } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.getByText("up.failedBuild.alone")).toBeTruthy();
+});
+
+it("shows no failure notice for a game without marked builds", async () => {
+  state.detail = installed("not_run");
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.queryByText("up.failedBuild")).toBeNull();
+});

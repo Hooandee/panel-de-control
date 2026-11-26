@@ -116,8 +116,17 @@ export interface HistoryEntry {
   facts?: { fallback?: ScalerFallback; fg?: string; upscaler?: string; fsr4?: string; version?: string; resolution?: { render: number[]; output: number[] }; initial_resolution?: { render: number[]; output: number[] } };
 }
 
+/** A build that closed the game within the short window of a launch with Panel's injection active. */
+export interface FailedBuild {
+  build: string;
+  version?: string | null;
+  seconds?: number | null;
+  at?: number;
+}
+
 export interface GameDetail {
   preferred?: string;
+  failed_builds?: FailedBuild[];
   builds?: BuildInfo[];
   solution?: ResolvedSolution | null;
   solutions?: Record<string, ResolvedSolution>;
@@ -133,6 +142,8 @@ export interface GameDetail {
     target: string | null;
     inputs: Partial<Record<"fsr31" | "fsr2" | "dlss" | "xess" | "streamline", string[]>>;
     anti_cheat: boolean;
+    /** `signed_only`: the protection closes the game on unsigned code; `warn`: a plain anti-cheat. */
+    anti_cheat_kind?: "signed_only" | "warn" | null;
     /** Engines that write nothing into the game and skip the warning when it comes from a recipe. */
     anti_cheat_exempt?: string[];
     foreign: boolean;

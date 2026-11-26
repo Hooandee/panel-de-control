@@ -342,6 +342,8 @@ export const de: Record<string, string> = {
   "up.error.anr_layout": "Die veröffentlichte ANR-Version hat ein anderes Format und die vorherige ließ sich nicht verwenden.",
   "up.error.anr_build": "ANR braucht OptiScaler 10, das für diese GPU nicht verfügbar ist.",
   "up.error.unsigned_build": "Dieses Spiel beendet sich bei unsignierten Dateien: nur signierte Builds sind erlaubt.",
+  "up.failedBuild": "{build} hat das Spiel {seconds} s nach dem Start beendet. Probiere {recommended}, das bisher nicht fehlgeschlagen ist.",
+  "up.failedBuild.alone": "{build} hat das Spiel {seconds} s nach dem Start beendet. Panel hat für dieses Spiel keinen anderen Build zu empfehlen.",
   "up.fg.pick.optiscaler": "OptiScaler",
   "up.fg.pick.lsfg.caption": "Funktioniert in jedem Spiel, mit etwas mehr Latenz",
   "up.fg.experimental": "Experimentell",

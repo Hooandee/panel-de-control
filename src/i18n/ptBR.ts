@@ -342,6 +342,8 @@ export const ptBR: Record<string, string> = {
   "up.error.anr_layout": "A versão publicada do ANR mudou de formato e a anterior não pôde ser usada.",
   "up.error.anr_build": "O ANR precisa do OptiScaler 10, que não está disponível para esta GPU.",
   "up.error.unsigned_build": "Este jogo fecha com arquivos não assinados: só são permitidas builds assinadas.",
+  "up.failedBuild": "{build} fechou o jogo {seconds} s após iniciar. Experimente {recommended}, que ainda não falhou.",
+  "up.failedBuild.alone": "{build} fechou o jogo {seconds} s após iniciar. O Panel não tem outra build para recomendar a este jogo.",
   "up.fg.pick.optiscaler": "OptiScaler",
   "up.fg.pick.lsfg.caption": "Funciona em qualquer jogo, com um pouco mais de latência",
   "up.fg.experimental": "Experimental",
