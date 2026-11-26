@@ -145,7 +145,7 @@ def test_measurements_survive_a_restart(steam, fake_catalog, proc, monkeypatch):
 
 
 def launch(appid, build, seconds, engine="optiscaler"):
-    return {"appid": appid, "start": "launch", "seconds": seconds, "outcome": "short" if seconds < 90 else "normal",
+    return {"appid": appid, "start": "launch", "seconds": seconds, "ended_by": "game_stopped", "outcome": "short" if seconds < 90 else "normal",
             "injections": {engine: {"build": build}}}
 
 
@@ -193,6 +193,13 @@ def test_attached_sessions_and_vanilla_launches_are_never_marked(steam, fake_cat
     service = installed_service(steam, fake_catalog, proc)
     service.session_outcome({**launch(APPID, "fsr-test", 20), "start": "attached", "outcome": None})
     service.session_outcome({**launch(APPID, "fsr-test", 20), "injections": {}})
+    assert service.game(APPID)["failed_builds"] == []
+
+
+@pytest.mark.parametrize("ended_by", ["context_change", "plugin_unload", None])
+def test_only_a_stopped_game_ends_a_session_that_marks_a_build(steam, fake_catalog, proc, ended_by):
+    service = installed_service(steam, fake_catalog, proc)
+    service.session_outcome({**launch(APPID, "fsr-test", 20), "ended_by": ended_by})
     assert service.game(APPID)["failed_builds"] == []
 
 

@@ -1149,8 +1149,13 @@ class UpscalerService:
     def session_outcome(self, record: dict) -> None:
         """A launch that ended within the short window with Panel's injection active marks that build for the game;
         a normal launch with the same build clears it."""
-        if not isinstance(record, dict) or record.get("start") != "launch" or record.get("outcome") not in ("short", "normal"):
+        if (not isinstance(record, dict) or record.get("start") != "launch" or record.get("ended_by") != "game_stopped"
+                or record.get("outcome") not in ("short", "normal")):
             return
+        with self._image_lock:
+            self._mark_outcome(record)
+
+    def _mark_outcome(self, record: dict) -> None:
         appid = str(record.get("appid"))
         injections = record.get("injections") if isinstance(record.get("injections"), dict) else {}
         builds = {str(item.get("build")) for key, item in injections.items()

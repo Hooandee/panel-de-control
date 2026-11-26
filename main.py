@@ -1721,7 +1721,7 @@ class Plugin(AmbientRpc):
                 decky.logger.warning("Game session close failed: %s", type(error).__name__)
         sessions = getattr(self, "_game_session_executor", None)
         if sessions is not None:
-            sessions.shutdown(wait=False, cancel_futures=True)
+            sessions.shutdown(wait=False)
 
     async def get_launch_tools(self) -> dict:
         self._init()
@@ -11979,6 +11979,12 @@ class Plugin(AmbientRpc):
         def emit(record):
             decky.logger.info("GAME_SESSION %s", json.dumps(record, sort_keys=True, separators=(",", ":"), default=str))
             _upscalers_journal("INFO", "game_session", **record)
+            service = getattr(self, "_upscaler_service", None)
+            if service is not None:
+                try:
+                    service.session_outcome(record)
+                except Exception as error:  # noqa: BLE001 — a mark never hides the session
+                    decky.logger.warning("Session outcome failed: %s", type(error).__name__)
 
         def submit(job):
             try:
@@ -15240,7 +15246,7 @@ class Plugin(AmbientRpc):
         self._init()
         next_appid = str(appid) if appid is not None else None
         next_name = str(name) if (appid is not None and name) else None
-        launch = next_appid is not None and getattr(self, "_game_idle_reported", False)
+        launch = next_appid is not None and self._current_appid is None and getattr(self, "_game_idle_reported", False)
         if next_appid is None:
             self._game_idle_reported = True
         leaving_game = self._current_appid is not None and next_appid is None

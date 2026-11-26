@@ -58,7 +58,7 @@ class GameSessions:
                     "injections": None, "reason": "not_captured", "probes": [], "timers": []}
         if ended is not None:
             self._cancel(ended)
-            ended["ended"], ended["ended_by"] = now, "context_change"
+            ended["ended"], ended["ended_by"] = now, "game_stopped" if current is None else "context_change"
             self._submit(lambda: self._finish(ended))
         if started is not None:
             self._submit(lambda: self._capture(started))

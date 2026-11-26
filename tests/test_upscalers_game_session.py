@@ -102,6 +102,15 @@ def test_a_game_that_dies_before_the_first_probe_is_still_sampled_at_finish():
     assert cancelled == [5, 20]
 
 
+def test_a_session_ends_as_game_stopped_only_when_no_game_follows():
+    clock, records = Clock(), []
+    sessions = tracker(clock, records)
+    sessions.transition(None, '1', launch=True)
+    sessions.transition('1', '2')
+    sessions.transition('2', None)
+    assert [record['ended_by'] for record in records] == ['context_change', 'game_stopped']
+
+
 def test_sessions_not_seen_starting_claim_no_outcome():
     clock, records = Clock(), []
     sessions = tracker(clock, records)
@@ -250,3 +259,52 @@ def test_only_a_report_after_an_observed_idle_counts_as_a_launch(plugin, monkeyp
         asyncio.run(plugin.set_current_game(None))
     first, second = _plugin_records(plugin, monkeypatch, act)
     assert (first['start'], second['start']) == ('attached', 'launch')
+
+
+class _Service:
+    def __init__(self):
+        self.records = []
+
+    def session_outcome(self, record):
+        self.records.append(record)
+
+
+def test_the_tracker_hands_each_finished_session_to_the_upscaler_service(plugin, monkeypatch):
+    service = _Service()
+    plugin._upscaler_service = service
+
+    def act():
+        plugin._set_current_appid('1', True)
+        plugin._set_current_appid('2')
+        plugin._set_current_appid(None)
+    _plugin_records(plugin, monkeypatch, act)
+    assert [(item['appid'], item['ended_by']) for item in service.records] == [('1', 'context_change'), ('2', 'game_stopped')]
+    assert service.records[0]['start'] == 'launch'
+
+
+def test_a_context_change_after_an_idle_report_does_not_open_a_launch(plugin, monkeypatch):
+    import asyncio
+
+    def act():
+        asyncio.run(plugin.set_current_game(None))
+        asyncio.run(plugin.set_current_game('1'))
+        asyncio.run(plugin.set_current_game('2'))
+        asyncio.run(plugin.set_current_game(None))
+    first, second = _plugin_records(plugin, monkeypatch, act)
+    assert (first['start'], second['start']) == ('launch', 'attached')
+
+
+def test_unload_still_emits_the_session_that_was_queued_behind_a_running_job(plugin, monkeypatch):
+    import threading
+    release = threading.Event()
+
+    def act():
+        plugin._game_session_tracker()
+        plugin._game_session_executor.submit(release.wait, 5)
+        plugin._set_current_appid('1', True)
+        plugin._set_current_appid(None)
+        plugin._set_current_appid('2', True)
+        plugin._close_upscalers_sync()
+        release.set()
+    records = _plugin_records(plugin, monkeypatch, act)
+    assert sorted(record['appid'] for record in records) == ['1', '2']
