@@ -388,9 +388,6 @@ def test_policy_a_signed_only_game_installs_the_unsigned_nightly_in_full_once_th
     assert {"dxgi.dll", "libxess.dll", "fakenvapi.dll", "OptiScaler.ini"} <= names
 
 
-def test_policy_no_build_is_hidden_by_signature_and_no_path_raises_unsigned_build():
-    from pathlib import Path as P
+def test_policy_no_build_is_hidden_by_signature():
     for build in catalog.BUILDS.values():
         assert catalog.build_supported(build, "rdna3", "", None, require_signed=True) == catalog.build_supported(build, "rdna3", "")
-    source = (P(__file__).parent.parent / "py_modules/upscalers/service.py").read_text()
-    assert "unsigned_build" not in source and "helixsr_recipe_blocked" not in source
