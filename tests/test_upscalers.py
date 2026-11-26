@@ -2299,3 +2299,47 @@ def test_signed_only_install_writes_only_signed_pieces(steam, fake_catalog, proc
     assert not (target / "D3D12_Optiscaler").exists()
     text = (target / "OptiScaler.ini").read_text()
     assert "Fsr4Update=true" in text and "Fsr4ForceEnableInt8=true" in text and "Dx12Upscaler=fsr31" in text
+
+
+class _NewerOptiScaler:
+    def __init__(self, tag="v0.9.5-final", fail=False):
+        self.tag, self.fail, self.resolved = tag, fail, False
+
+    def tracked(self, asset):
+        return asset.id == catalog.OPTISCALER_ARCHIVE
+
+    def resolve(self, asset):
+        assert not self.fail, "signed_only must not resolve latest"
+        self.resolved = True
+        return asset
+
+    def version(self, asset):
+        return self.tag if self.resolved and self.tracked(asset) else None
+
+
+def _fsr411_install(steam, fake_catalog, proc, monkeypatch, latest, signed):
+    _, game = steam
+    monkeypatch.setitem(catalog.ASSETS, catalog.OPTISCALER_ARCHIVE, replace(catalog.ASSETS[catalog.OPTISCALER_ARCHIVE], signed=True))
+    monkeypatch.setitem(catalog.ASSETS, "extra", replace(catalog.ASSETS["extra"], signed=True))
+    monkeypatch.setitem(catalog.BUILDS, "fsr-4.1.1", replace(REAL_BUILDS["fsr-4.1.1"], assets=("extra",)))
+    base = recipes.RECIPES.get(APPID) or recipes.Recipe(APPID)
+    monkeypatch.setattr(recipes, "RECIPES", {**recipes.RECIPES, APPID: replace(base, anti_cheat=True, signed_only=signed)})
+    service = _service(steam, fake_catalog, proc)
+    service.latest = latest
+    service.install(APPID, {"build": "fsr-4.1.1", "confirm_anti_cheat": True})
+    return (game / "bin/x64_dx12" / "OptiScaler.ini").read_text()
+
+
+def test_signed_only_recipe_never_resolves_a_newer_optiscaler(steam, fake_catalog, proc, monkeypatch):
+    text = _fsr411_install(steam, fake_catalog, proc, monkeypatch, _NewerOptiScaler(fail=True), True)
+    assert "Fsr4ForceEnableInt8=true" in text
+
+
+def test_int8_flag_becomes_a_mode_on_optiscaler_095(steam, fake_catalog, proc, monkeypatch):
+    text = _fsr411_install(steam, fake_catalog, proc, monkeypatch, _NewerOptiScaler(), False)
+    assert "Fsr4ForceEnableInt8=1" in text and "Fsr4ForceEnableInt8=true" not in text
+
+
+def test_int8_flag_stays_boolean_on_optiscaler_094(steam, fake_catalog, proc, monkeypatch):
+    text = _fsr411_install(steam, fake_catalog, proc, monkeypatch, _NewerOptiScaler("v0.9.4-final"), False)
+    assert "Fsr4ForceEnableInt8=true" in text

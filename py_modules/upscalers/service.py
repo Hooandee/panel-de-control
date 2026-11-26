@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 import threading
 import tempfile
@@ -851,8 +852,9 @@ class UpscalerService:
         # Everything is downloaded before the current install comes out: a failed or cancelled download leaves
         # the game exactly as it was.
         self._recover_orphan(target)
-        pinned_only: set[str] = set()
-        paths, chosen = self._fetch_assets(needed(effective_build, recipe))
+        # A signed-only recipe is validated against the catalog's own files: a newer OptiScaler fails to hook the signed FSR 4.
+        pinned_only: set[str] = {asset.id for asset in needed(effective_build, recipe)} if catalog.signed_only(recipe) else set()
+        paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
         if wants_anr:
             try:
                 _anr_sources(paths[catalog.ANR_FG], "")
@@ -935,6 +937,7 @@ class UpscalerService:
             **catalog.model_overrides(build, choice.get("model")),
             **catalog.fg_overrides(fg_plan, choice.get("fg") == "on", bool(previous.get("anr"))),
         }
+        panel = _int8_for_release(panel, self.latest.version(chosen[build.archive]))
         managed = sorted(panel)
         # The wiki's settings are a starting point the user may change in the editor; Panel's own keys win over them
         # and hand edits from the advanced editor survive a repair or a new version.
@@ -2477,6 +2480,14 @@ def _owned_env(install: dict) -> dict:
     if "added_env" in install and install["env"] not in install["added_env"]:
         return {}
     return {install["env"]: None}
+
+
+def _int8_for_release(panel: dict, tag: str | None) -> dict:
+    """OptiScaler 0.9.5 turned Fsr4ForceEnableInt8 from a boolean into a mode (1 = INT8); a boolean no longer enables it."""
+    match = re.match(r"v?(\d+)\.(\d+)\.(\d+)", tag or "")
+    if match and panel.get("FSR.Fsr4ForceEnableInt8") == "true" and tuple(map(int, match.groups())) >= (0, 9, 5):
+        return {**panel, "FSR.Fsr4ForceEnableInt8": "1"}
+    return panel
 
 
 def _with_leftovers(result: dict, left: dict | None) -> dict:
