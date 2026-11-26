@@ -46,6 +46,9 @@ INPUTS = {
     "xefg": ("libxess_fg.dll",),
 }
 ANTI_CHEAT = ("easyanticheat", "battleye", "eac_launcher", "beservice")
+# Protections that close the game on unsigned code; matched against paths inside the game folder only.
+SIGNED_ONLY_PROTECTION = ("blizzarderror", "battle.net", "vgk", "vanguard", "xigncode", "gameguard", "nprotect",
+                          "ace-base", "anticheatexpert", "hoyokprotect", "mhyprot")
 FOREIGN_MARKERS = ("OptiScaler.ini", "OptiScaler.log", "FRAMEGEN_PATCH", "helixsr-install.json", "HelixSR-Scaler.files")
 # What other tools leave beside the exe: OptiScaler's own files, Decky-Framegen's marker, HelixSR's records.
 FOREIGN_ITEMS = (
@@ -654,14 +657,19 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
     inputs: dict[str, list[str]] = {key: [] for key in INPUTS}
     dll_targets: list[str] = []
     anti_cheat = False
+    protected = False
     for current, files in _walk(root):
         ours = _installed_by_panel(current)
         lower_dir = current.as_posix().lower()
         if any(marker in lower_dir for marker in ANTI_CHEAT):
             anti_cheat = True
+        if any(marker in current.relative_to(root).as_posix().lower() for marker in SIGNED_ONLY_PROTECTION):
+            protected = True
         for file in files:
             lower = file.lower()
             path = current / file
+            if any(marker in lower for marker in SIGNED_ONLY_PROTECTION):
+                protected = True
             # Combined libraries need a loader plus effect providers, checked against the chosen build.
             if lower in {"amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_dx12.dll"} and lower not in ours and path.is_file() and not path.is_symlink():
                 dll_targets.append(path.relative_to(root).as_posix())
@@ -727,7 +735,8 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
         "inputs": {kind: sorted(paths)[:4] for kind, paths in inputs.items() if paths},
         "dll_targets": sorted(dll_targets),
         "streamline": streamline_major(root / sorted(inputs["streamline"])[0]) if inputs["streamline"] else None,
-        "anti_cheat": anti_cheat,
+        "anti_cheat": anti_cheat or protected,
+        "anti_cheat_kind": "signed_only" if protected else "warn" if anti_cheat else None,
         "foreign": foreign,
         "foreign_identity": foreign_identity(target) if foreign else None,
     }

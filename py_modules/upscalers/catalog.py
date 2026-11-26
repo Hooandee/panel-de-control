@@ -390,6 +390,22 @@ def signed_only(recipe) -> bool:
     return bool(getattr(recipe, "signed_only", False))
 
 
+# What Panel measured in the files it unpacked, keyed by sha256: the declared Asset.signed only stands in until then.
+MEASURED: dict[str, dict] = {}
+
+
+def record_signature(asset_id: str, sha256: str, signed: bool) -> None:
+    MEASURED.pop(sha256, None)
+    MEASURED[sha256] = {"id": asset_id, "signed": bool(signed)}
+
+
+def asset_signed(asset: Asset) -> bool:
+    measured = MEASURED.get(asset.sha256)
+    if measured is None:
+        measured = next((item for item in reversed(MEASURED.values()) if item["id"] == asset.id), None)
+    return asset.signed if measured is None else measured["signed"]
+
+
 def build_signed(build: Build) -> bool:
     """Whether every binary the build writes into the game is signed: engines that write nothing qualify."""
     if build.engine == "proton":
@@ -399,19 +415,38 @@ def build_signed(build: Build) -> bool:
     ids = [build.archive, *build.assets, *build.replace.values()]
     if build.injector:
         ids.append(build.injector)
-    return all(ASSETS[asset_id].signed for asset_id in ids)
+    return all(asset_signed(ASSETS[asset_id]) for asset_id in ids)
 
 
-def preferred_build(gpu: str, recipe=None, device: str = "") -> str:
-    recommended = BUILDS.get(getattr(recipe, "recommended_build", None))
-    if recommended and recommended.available and build_supported(recommended, gpu, device, recipe):
-        return recommended.id
+def preferred_build(gpu: str, recipe=None, device: str = "", *, require_signed: bool = False, prefer_signed: bool = False,
+                    failed=frozenset()) -> str:
+    """The build to recommend: a recipe's pick, else the GPU's default; signed ones when the game's protection asks
+    for them (or merely likes them), and never one that already closed this game early."""
+    required = require_signed or signed_only(recipe)
+
+    def usable(build) -> bool:
+        return bool(build and build.available and build.id not in failed
+                    and build_supported(build, gpu, device, recipe, require_signed=required))
+
     default = PREFERRED.get(gpu, "fsr-3.1")
-    fallback = BUILDS.get(default)
-    if signed_only(recipe) and not (fallback and fallback.available and build_supported(fallback, gpu, device, recipe)):
-        eligible = [b for b in BUILDS.values() if b.available and b.engine == "optiscaler" and build_supported(b, gpu, device, recipe)]
-        if eligible:
-            return max(eligible, key=lambda b: (b.image, -b.cost)).id
+    ordered = [BUILDS.get(getattr(recipe, "recommended_build", None)), BUILDS.get(default)]
+    chosen = [build for build in ordered if usable(build)]
+    pool = [build for build in BUILDS.values() if build.engine == "optiscaler" and usable(build)]
+
+    def best(builds):
+        return max(builds, key=lambda b: (build_signed(b), b.image, -b.cost)).id
+
+    if prefer_signed:
+        signed = [build for build in chosen if build_signed(build)]
+        if signed:
+            return signed[0].id
+        signed = [build for build in pool if build_signed(build)]
+        if signed:
+            return best(signed)
+    if chosen:
+        return chosen[0].id
+    if (required or failed) and pool:
+        return best(pool)
     return default
 
 
@@ -421,8 +456,8 @@ _DGPU_CYBOMAN = frozenset({"fsr-4.1.2-lite-dgpu-dll", "fsr-4.1.2-lite-dgpu-lossy
 _SIGNED_ONLY_GPUS = {"fsr-4.1.1": ("rdna2",)}
 
 
-def build_supported(build: Build, gpu: str, device: str = "", recipe=None) -> bool:
-    if signed_only(recipe):
+def build_supported(build: Build, gpu: str, device: str = "", recipe=None, *, require_signed: bool = False) -> bool:
+    if require_signed or signed_only(recipe):
         if not build_signed(build):
             return False
         if gpu in _SIGNED_ONLY_GPUS.get(build.id, ()):
@@ -463,7 +498,7 @@ def may_fallback(build: Build, gpu: str) -> str | None:
     return "3.1.6" if build.id in _FP8_SDK and gpu != "rdna4" else None
 
 
-def describe(gpu: str, device: str = "", recipe=None) -> list[dict]:
+def describe(gpu: str, device: str = "", recipe=None, *, require_signed: bool = False) -> list[dict]:
     return [
         {
             "id": build.id,
@@ -473,7 +508,7 @@ def describe(gpu: str, device: str = "", recipe=None) -> list[dict]:
             "cost": build.cost,
             "available": build.available,
             "channel": build.channel,
-            "supported": build_supported(build, gpu, device, recipe),
+            "supported": build_supported(build, gpu, device, recipe, require_signed=require_signed),
             "download_bytes": sum({asset.sha256: asset.size for asset in build_assets(build)}.values()) if build.available else 0,
             "models": [model for model, _ in build.models],
             "dll_names": list(build.replace) if build.engine == "dll" else [],
