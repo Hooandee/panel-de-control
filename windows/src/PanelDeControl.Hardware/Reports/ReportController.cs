@@ -18,14 +18,17 @@ public sealed class ReportController : IReportController
     private readonly IDeviceIdentityReader identityReader;
     private readonly ReportSender sender;
     private readonly Func<IReadOnlyList<ReportLogSource>> logs;
+    private readonly Func<JsonNode?>? themeEngine;
 
     public ReportController(
         Func<ThemesResponse> themes,
         Func<CapabilityInventory> capabilityInventory,
         IDeviceIdentityReader identityReader,
         ReportSender sender,
-        Func<IReadOnlyList<ReportLogSource>> logs)
+        Func<IReadOnlyList<ReportLogSource>> logs,
+        Func<JsonNode?>? themeEngine = null)
     {
+        this.themeEngine = themeEngine;
         this.themes = themes;
         this.capabilityInventory = capabilityInventory;
         this.identityReader = identityReader;
@@ -82,7 +85,8 @@ public sealed class ReportController : IReportController
             logs(),
             new ReportRedactor(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                Environment.MachineName));
+                Environment.MachineName),
+            themeEngine is null ? null : Safe(themeEngine));
     }
 
     /// <summary>Logs a report carries: the companion's and the widget's crash log.</summary>

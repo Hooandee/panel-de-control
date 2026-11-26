@@ -228,6 +228,58 @@ public sealed class SteamThemeEngineTests : IDisposable
         Assert.Equal(0, devTools.Pages.TryGetValue("qam", out var qam) ? qam.Applies : 0);
     }
 
+    [Fact]
+    public async Task ReportsWhatEachTargetAndTheHostDocumentSawAndKeepsItAfterThemesAreOff()
+    {
+        devTools.Targets = new[] { Shared(), Page("bp", "Steam", BigPictureUrl), Page("menu", "MainMenu_uid2") };
+        var theme = Theme();
+        var enabled = true;
+        var engine = new SteamThemeEngine(
+            devTools,
+            steam,
+            () => Inputs(enabled ? new[] { new ThemeSelection(theme, new Dictionary<string, string>()) } : Array.Empty<ThemeSelection>(), extension: true),
+            () => "host-bundle",
+            new FixedTable(null));
+
+        var status = await engine.CycleAsync(default);
+
+        var diagnostics = status.Diagnostics!;
+        var bigPicture = diagnostics.Targets.Single(target => target.Title == "Steam");
+        Assert.True(bigPicture.BigPicture);
+        Assert.Equal((2, 2), (bigPicture.SheetsExpected, bigPicture.SheetsApplied));
+        Assert.Equal("about:blank", bigPicture.Url);
+        Assert.Null(diagnostics.Targets.Single(target => target.Title == "MainMenu_uid2").SheetsExpected);
+        Assert.Equal(new ThemeApplication(1, 1, true, true), diagnostics.Themes["Hooandee Eclipse"]);
+        Assert.Equal(new HostDocumentInfo("Steam", "https://steamloopback.host/routes/library/home", "hidden", 1280, 720), diagnostics.Host.Document);
+
+        enabled = false;
+        var off = await engine.InvalidateAndCycleAsync();
+
+        Assert.Empty(off.Diagnostics!.Themes);
+        Assert.Equal(diagnostics.At, engine.LastEnabledDiagnostics!.At);
+        var report = ThemeDiagnostics.Report(off.Diagnostics, engine.LastEnabledDiagnostics);
+        Assert.Empty(report["current"]!["themes"]!.AsArray());
+        var kept = report["last_while_enabled"]!;
+        Assert.Equal("hidden", kept["host"]!["document"]!["visibility_state"]!.GetValue<string>());
+        Assert.Equal(1, kept["themes"]![0]!["pages_applied"]!.GetValue<int>());
+        Assert.DoesNotContain("useragent", report.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DiagnosticsSurviveSteamBeingUnreachable()
+    {
+        devTools.Targets = null;
+        steam.Debugging = false;
+        var engine = Engine(Theme());
+
+        var status = await engine.CycleAsync(default);
+
+        Assert.Equal(nameof(SteamThemeConnection.DebuggingOff), status.Diagnostics!.Connection);
+        Assert.Empty(status.Diagnostics.Targets);
+        Assert.Contains("Hooandee Eclipse", status.Diagnostics.Themes.Keys);
+        Assert.NotNull(engine.LastEnabledDiagnostics);
+    }
+
     private SteamThemeEngine Engine(InstalledTheme theme, IClassTableSource? table = null, bool extension = false) => new(
         devTools,
         steam,
@@ -420,7 +472,8 @@ public sealed class SteamThemeEngineTests : IDisposable
         }
 
         private JsonElement HostStatus() => Json($$"""
-            {"hostVersion":{{HostVersionInSteam}},"revision":{{hostRevision}},"steamDocument":true,"qamDocument":true,
+            {"hostVersion":{{HostVersionInSteam}},"revision":{{hostRevision}},"steamDocument":true,
+             "steamDocumentInfo":{"title":"Steam","location":"https://steamloopback.host/routes/library/home","visibilityState":"hidden","innerWidth":1280,"innerHeight":720},"qamDocument":true,
              "mounted":{{(hostRevision > 0 ? "[\"hooandee-eclipse@0.2.5\"]" : "[]")}},"errors":[]{{(StorageStatus is null ? "" : $",\"storage\":{StorageStatus}")}}}
             """);
 

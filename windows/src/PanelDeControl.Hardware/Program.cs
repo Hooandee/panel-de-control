@@ -99,7 +99,8 @@ public static class Program
                         reportHttp,
                         new Uri(Environment.GetEnvironmentVariable("PDC_REPORT_URL") ?? ReportSender.DefaultServiceUrl),
                         ReportSender.DefaultOfflineFolder),
-                    ReportController.DefaultLogs),
+                    ReportController.DefaultLogs,
+                    () => ThemeDiagnostics.Report(themeEngine.Status.Diagnostics, themeEngine.LastEnabledDiagnostics)),
                 PackageNamedPipeServerFactory.CreateControl);
 
             using var brokerLifetime = new CancellationTokenSource();

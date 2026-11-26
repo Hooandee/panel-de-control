@@ -20,7 +20,7 @@ import {
   type WindowsStorageWrite,
 } from "./storage";
 
-export const WINDOWS_THEME_HOST_VERSION = 13;
+export const WINDOWS_THEME_HOST_VERSION = 14;
 
 export interface WindowsThemeHostState {
   revision: number;
@@ -30,10 +30,20 @@ export interface WindowsThemeHostState {
   picturesDirectory?: string | null;
 }
 
+/** What the host sees of the Big Picture document it mounts on; the location carries no query. */
+export interface WindowsDocumentInfo {
+  title: string;
+  location: string;
+  visibilityState: string;
+  innerWidth: number;
+  innerHeight: number;
+}
+
 export interface WindowsThemeHostStatus {
   hostVersion: number;
   revision: number;
   steamDocument: boolean;
+  steamDocumentInfo: WindowsDocumentInfo | null;
   qamDocument: boolean;
   mounted: readonly string[];
   errors: readonly string[];
@@ -102,6 +112,19 @@ export function findBigPictureDocument(scope: typeof globalThis = globalThis): D
 
 export function findQuickAccessDocument(scope: typeof globalThis = globalThis): Document | null {
   return treeDocument(scope, (id) => id.startsWith("QuickAccess"));
+}
+
+export function describeDocument(doc: Document | null): WindowsDocumentInfo | null {
+  if (!doc) return null;
+  const location = doc.location;
+  const view = doc.defaultView;
+  return {
+    title: doc.title ?? "",
+    location: location ? `${location.protocol}${location.host ? `//${location.host}` : ""}${location.pathname}` : "",
+    visibilityState: doc.visibilityState ?? "",
+    innerWidth: view?.innerWidth ?? 0,
+    innerHeight: view?.innerHeight ?? 0,
+  };
 }
 
 function extensionKey(payload: Pick<ThemeExtensionPayload, "catalogId" | "version">): string {
@@ -226,6 +249,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     hostVersion: WINDOWS_THEME_HOST_VERSION,
     revision: state.revision,
     steamDocument: findBigPictureDocument(scope) !== null,
+    steamDocumentInfo: describeDocument(findBigPictureDocument(scope)),
     qamDocument: findQuickAccessDocument(scope) !== null,
     mounted: [...mounted].sort(),
     errors: [...errors],
