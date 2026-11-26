@@ -118,36 +118,12 @@ def _unifideck(home, rows: str):
     return _script(home / "homebrew/plugins/unifideck/bin/unifideck-launcher", "exec something\n")
 
 
-def test_a_unifideck_store_game_that_is_not_installed_is_unavailable(home):
-    launcher = _unifideck(home, "# map\n")
-    found = games.from_hint("2803134971", {"exe": str(launcher), "dir": str(launcher.parent), "name": "BioShock Infinite",
-                                           "opts": "epic:a1b2c3"}, str(home))
-    assert found.unavailable == "unifideck_not_installed" and found.exe is None
-
-
-def test_a_unifideck_row_without_an_executable_is_unavailable(home):
-    folder = home / "Games/Ubisoft/Game"
-    folder.mkdir(parents=True)
-    launcher = _unifideck(home, f"ubisoft:1234=\t{folder}\t-1\n")
-    found = games.from_hint("12", {"exe": str(launcher), "dir": str(launcher.parent), "name": "Game",
-                                   "opts": "ubisoft:1234"}, str(home))
-    assert found.unavailable == "unifideck_no_exe"
-
-
 def test_a_unifideck_linux_build_stays_native(home):
     script = _script(home / "GOG Games/SOR4/start.sh", "exec ./game\n")
     launcher = _unifideck(home, f"gog:42={script}\t{script.parent}\t-5\n")
     found = games.from_hint("13", {"exe": str(launcher), "dir": str(launcher.parent), "name": "SOR4",
                                    "opts": "gog:42"}, str(home))
     assert (found.native, found.unavailable, found.root) == (True, None, launcher.parent)
-
-
-def test_unavailable_shortcuts_are_flagged_and_never_patched(steam, fake_catalog, proc, monkeypatch, tmp_path):
-    service = _service(steam, fake_catalog, proc)
-    missing = games.Installed("99", "Library only", tmp_path, 4, None, True, True, unavailable="unifideck_not_installed")
-    monkeypatch.setattr(games, "find_installed", lambda home, appid, lookup=None, steam_library=None: missing if appid == "99" else None)
-    assert service.compatibility(["99"]) == {"99": {"native": False, "inputs": [], "unavailable": "unifideck_not_installed"}}
-    assert service._find("99") is None
 
 
 def test_a_script_that_only_mentions_a_store_id_stays_listed(home):

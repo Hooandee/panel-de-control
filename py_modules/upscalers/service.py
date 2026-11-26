@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 import threading
 import tempfile
@@ -14,7 +15,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, game_config, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, recipe_catalog, recipes, scaler_transition, user_deps, user_mods, wiki
+from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, game_config, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, pe_sign, recipe_catalog, recipes, scaler_transition, user_deps, user_mods, wiki
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -22,6 +23,7 @@ HISTORY_LIMIT = 20
 REPORT_BUDGET_S = 2.0
 _JUNK = {"setup_linux.sh", "setup_windows.bat"}
 _ARCHIVE_DIRS = ("D3D12_Optiscaler",)
+_UNSIGNED_HELPERS = frozenset({"dlssg_to_fsr3_amd_is_better.dll"})
 _GENERATED = ("OptiScaler.log",)
 # REFramework opens its menu over the game on first launch unless its config says otherwise; handhelds have no
 # Insert key to close it, so Panel writes these keys into its config (uninstall puts the old values back).
@@ -74,7 +76,7 @@ HELIX_INSTALL_FILE = "helixsr-install.json"
 # Native Linux games run without Proton; OptiScaler only hooks Windows executables.
 NATIVE_ANALYSIS = {
     "candidates": [], "exe": None, "apis": [], "manual": False, "target": None,
-    "inputs": {}, "dll_targets": [], "anti_cheat": False, "foreign": False, "foreign_identity": None,
+    "inputs": {}, "dll_targets": [], "anti_cheat": False, "anti_cheat_kind": None, "foreign": False, "foreign_identity": None,
 }
 
 
@@ -142,6 +144,7 @@ class UpscalerService:
         self.gpu = gpu
         self.device = device
         self.logger = logger
+        self._unactionable_logged: dict = {}
         self.proc = proc
         self.drm = drm
         self.search = identify.store_search
@@ -154,6 +157,9 @@ class UpscalerService:
         self.mako = mako.Mako(home, Path(state_dir))
         self._engine_lock = threading.RLock()
         self._image_lock = threading.RLock()
+        self._state_lock = threading.RLock()
+        self.mark_delay = MARK_DELAY_S
+        self._pending_marks: dict[str, threading.Timer] = {}
         self._engine_checks = {}
         self.engine_game_running = lambda: False
         self.launch_receipts = launch_state.LaunchReceipts(Path(state_dir))
@@ -185,12 +191,17 @@ class UpscalerService:
                         # Older releases persisted initialization dimensions as current resolution.
                         facts.setdefault("initial_resolution", facts.pop("resolution"))
                         facts["resolution_source"] = "initialization_only"
-        return {"games": games_state if isinstance(games_state, dict) else {},
+        signatures = data.get("signatures") if isinstance(data, dict) else None
+        signatures = {key: item for key, item in (signatures.items() if isinstance(signatures, dict) else ())
+                      if ":" in str(key) and isinstance(item, dict) and isinstance(item.get("id"), str) and isinstance(item.get("signed"), bool)}
+        catalog.MEASURED.update(signatures)
+        return {"games": games_state if isinstance(games_state, dict) else {}, "signatures": signatures,
                 "global_actions": data.get("global_actions", [])[-20:] if isinstance(data, dict) and isinstance(data.get("global_actions"), list) else []}
 
     def _save(self) -> None:
-        self.state_path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_json_save(str(self.state_path), self.state)
+        with self._state_lock:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_json_save(str(self.state_path), self.state)
 
     def _game_state(self, appid: str) -> dict:
         entry = self.state["games"].setdefault(appid, {})
@@ -351,11 +362,19 @@ class UpscalerService:
                 cached = (stamp, {"native": installed.native,
                                   "inputs": [] if installed.native else games.shipped_upscalers(installed.root)})
                 self._compat[installed.appid] = cached
+            recipe = recipes.recipe_for(installed.appid, game_build=installed.build_id)
+            refused = False
             try:
-                automatic = auto_recipes.plan(recipes.recipe_for(installed.appid, game_build=installed.build_id), installed)
+                automatic = auto_recipes.plan(recipe, installed)
             except auto_recipes.RecipeError:
-                automatic = None
-            result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, automatic)}
+                automatic, refused = None, True
+            result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, _recommending(recipe, automatic, refused), self.device)}
+        if self.logger:
+            reasons = Counter(row["unavailable"] for row in result.values() if row.get("unavailable"))
+            if dict(reasons) != self._unactionable_logged:
+                self._unactionable_logged = dict(reasons)
+                if reasons:
+                    self.logger.info("Selector shortcuts not actionable: %s", dict(reasons))
         return result
 
     def _locate(self, appid: str, lookup: Counter | None = None) -> games.Installed | None:
@@ -427,8 +446,8 @@ class UpscalerService:
         entry = self._game_state(appid)
         identity = self._identity(installed, entry)
         recipe = self._recipe(appid, identity, installed)
-        analysis = NATIVE_ANALYSIS if installed.native else _dll_route(games.analyze(
-            installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe), recipe)
+        analysis = NATIVE_ANALYSIS if installed.native else _recipe_anti_cheat(_dll_route(games.analyze(
+            installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe), recipe), recipe)
         install = entry.get("install")
         automatic = None
         recipe_info = _recipe_info(recipe)
@@ -449,6 +468,8 @@ class UpscalerService:
             except auto_recipes.RecipeError:
                 recipe_info["automatic"] = []
                 recipe_info["blocked"] = True
+        required, prefer = _signing(recipe, analysis)
+        failed = _failed_builds(entry)
         solutions = {}
         for candidate in catalog.BUILDS.values():
             solutions[candidate.id] = _build_solution(self.gpu, analysis, recipe, candidate, automatic,
@@ -456,7 +477,10 @@ class UpscalerService:
         selected = solutions.get((install or {}).get("build")) or solution_plan.resolve(self.gpu, analysis, recipe)
         return {
             "solution": selected, "solutions": solutions,
-            "preferred": catalog.preferred_build(self.gpu, automatic),
+            "preferred": catalog.preferred_build(self.gpu, _recommending(recipe, automatic, bool(recipe_info and recipe_info.get("blocked"))),
+                                                 self.device, require_signed=required, prefer_signed=prefer, failed=frozenset(failed)),
+            "failed_builds": [{**item, "build": build_id} for build_id, item in failed.items()],
+            **({"builds": catalog.describe(self.gpu, self.device, recipe, require_signed=required)} if required else {}),
             "appid": appid,
             "name": installed.name,
             "updating": games.update_state(installed.state_flags),
@@ -767,7 +791,7 @@ class UpscalerService:
                 raise UpscalerError("transition_conflict") from None
 
     # ---- install -------------------------------------------------------------
-    def _guard(self, appid: str, confirm_anti_cheat: bool = False) -> tuple[games.Installed, dict, Path]:
+    def _guard(self, appid: str, confirm_anti_cheat: bool = False, engine: str | None = None) -> tuple[games.Installed, dict, Path]:
         installed = self._find(appid)
         if installed is None:
             raise UpscalerError("not_installed")
@@ -779,11 +803,11 @@ class UpscalerService:
         if games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
         recipe = self._recipe(appid, self._identity(installed, self._game_state(appid)), installed)
-        analysis = _dll_route(games.analyze(installed.root, self._game_state(appid).get("exe"),
-                                            recipe.exe if recipe else installed.exe), recipe)
+        analysis = _recipe_anti_cheat(_dll_route(games.analyze(installed.root, self._game_state(appid).get("exe"),
+                                                              recipe.exe if recipe else installed.exe), recipe), recipe)
         if not analysis["target"]:
             raise UpscalerError("no_exe")
-        if analysis["anti_cheat"] and not confirm_anti_cheat:
+        if analysis["anti_cheat"] and not confirm_anti_cheat and engine not in analysis.get("anti_cheat_exempt", ()):
             raise UpscalerError("anti_cheat")
         return installed, analysis, Path(analysis["target"])
 
@@ -805,9 +829,10 @@ class UpscalerService:
         if wants_anr and not catalog.anr_capable(build, self.gpu):
             raise UpscalerError("anr_build")
 
-        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
+        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         entry = self._game_state(appid)
         recipe = self._recipe(appid, self._identity(installed, entry), installed)
+        required, _prefer = _signing(recipe, analysis)
         try:
             automatic = auto_recipes.plan(recipe, installed)
         except auto_recipes.RecipeError as error:
@@ -839,8 +864,12 @@ class UpscalerService:
         # Everything is downloaded before the current install comes out: a failed or cancelled download leaves
         # the game exactly as it was.
         self._recover_orphan(target)
-        pinned_only: set[str] = set()
-        paths, chosen = self._fetch_assets(needed(effective_build, recipe))
+        # A signed-only recipe is validated against the catalog's own files: a newer OptiScaler fails to hook the signed FSR 4.
+        pinned_only: set[str] = {asset.id for asset in needed(effective_build, recipe)} if required else set()
+        paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
+        self._check_signatures(effective_build, needed(effective_build, recipe), paths, chosen)
+        # Unsigned helpers nothing needs stay out only when the chosen build itself is signed; an unsigned build goes in whole.
+        required = required and catalog.build_signed(effective_build)
         if wants_anr:
             try:
                 _anr_sources(paths[catalog.ANR_FG], "")
@@ -879,7 +908,11 @@ class UpscalerService:
         build = catalog.for_game(build, analysis["inputs"], self.gpu, recipe)
         assets = needed(build, recipe)
         if any(asset.id not in paths for asset in assets):
+            if required:
+                pinned_only |= {asset.id for asset in assets}
             paths, chosen = self._fetch_assets(assets, pinned_only)
+            self._check_signatures(build, assets, paths, chosen)
+            required = required and catalog.build_signed(build)
 
         self._update_job(phase="copy")
         archive_asset = catalog.ASSETS[build.archive]
@@ -887,6 +920,8 @@ class UpscalerService:
         sources = _archive_sources(archive, archive_asset.generation)
         base_ini = sources.pop("OptiScaler.ini").read_text(encoding="utf-8", errors="replace")
         injector = sources.pop("OptiScaler.dll")
+        if required:
+            sources = self._signed_package(sources, target)
         if build.injector:
             injector = paths[build.injector]
         sources[proxy] = injector
@@ -901,13 +936,17 @@ class UpscalerService:
             if recipe.optipatcher:
                 sources[f"{prefix}plugins/OptiPatcher.asi"] = paths[catalog.OPTIPATCHER]
             sources = _with_root_files(sources, prefix, recipe.optiscaler_root_files)
+        extra: dict[str, Path] = {}
         if wants_anr:
-            sources.update(_anr_sources(paths[catalog.ANR_FG], prefix))
+            extra.update(_anr_sources(paths[catalog.ANR_FG], prefix))
+            sources.update(extra)
 
         try:
-            sources = {**auto_recipes.sources(automatic, paths, self.user_files), **sources}
+            recipe_files = auto_recipes.sources(automatic, paths, self.user_files)
         except auto_recipes.RecipeError as error:
             raise UpscalerError(error.code) from None
+        extra.update(recipe_files)
+        sources = {**recipe_files, **sources}
         panel_names = {name.casefold() for name in (*sources, "OptiScaler.ini")}
         if any(name.casefold() in panel_names for name in mod_sources):
             raise UpscalerError("mod_conflict")
@@ -921,6 +960,7 @@ class UpscalerService:
             **catalog.model_overrides(build, choice.get("model")),
             **catalog.fg_overrides(fg_plan, choice.get("fg") == "on", bool(previous.get("anr"))),
         }
+        panel = _int8_for_release(panel, self.latest.version(chosen[build.archive]))
         managed = sorted(panel)
         # The wiki's settings are a starting point the user may change in the editor; Panel's own keys win over them
         # and hand edits from the advanced editor survive a repair or a new version.
@@ -1007,13 +1047,15 @@ class UpscalerService:
                                    protect=bool(recipe and recipe.protect_dlls))
 
         now = time.time()
+        with self._state_lock:
+            entry.get("failed_builds", {}).pop(build.id, None)
         entry["install"] = {
             "build": build.id, "archive": build.archive, "proxy": proxy, "target": str(target), "exe": analysis["exe"],
             "installed_at": now, "options": _clean_options(choice), "solution": solution,
             "native_dlls": sorted({*(recipe.native_dlls if recipe else ()), *user_mods.native_dlls(mod_sources)}),
             "mod": {"filename": mod.get("filename"), "id": mod.get("id")} if mod and mod_sources else None,
             "launch": self._launch_swap(recipe.mod_launch_exe) if mod_sources and recipe and recipe.mod_launch_exe else None,
-            "anti_cheat_accepted": bool(analysis.get("anti_cheat") and choice.get("confirm_anti_cheat")),
+            "anti_cheat_accepted": _anti_cheat_accepted(analysis, choice, build.engine),
             "game_build": installed.build_id,
             "recipe_revision": automatic.revision if automatic else None,
             "recipe_configuration": dict(getattr(automatic, "configuration", {})) if automatic else {},
@@ -1059,6 +1101,128 @@ class UpscalerService:
         self._save()
         return _with_leftovers({"files": len(manifest["files"]), "overrides": _overrides(entry["install"]),
                                 "args": entry["install"]["args"], **_launch_result(entry["install"])}, left)
+
+    def _check_signatures(self, build: catalog.Build, assets: list[catalog.Asset], paths: dict[str, Path],
+                          chosen: dict[str, catalog.Asset]) -> None:
+        """Measures the Authenticode signature of each downloaded binary and remembers it by sha256; it only
+        informs which build is recommended and which unsigned helpers are left out, never what may be installed."""
+        changed = False
+        for asset in assets:
+            path = paths.get(asset.id)
+            if path is None:
+                continue
+            if path.is_dir():
+                if asset.id != build.archive:
+                    continue
+                path = path / "OptiScaler.dll"
+            is_pe, signed = pe_sign.inspect(path)
+            if not is_pe:
+                continue
+            sha = chosen[asset.id].sha256
+            key = catalog.signature_key(sha, asset.id)
+            with self._state_lock:
+                if self.state.setdefault("signatures", {}).get(key) != {"id": asset.id, "signed": signed}:
+                    self.state["signatures"].pop(key, None)
+                    self.state["signatures"][key] = {"id": asset.id, "signed": signed}
+                    for stale in list(self.state["signatures"])[:-64]:
+                        del self.state["signatures"][stale]
+                    changed = True
+            catalog.record_signature(asset.id, sha, signed)
+        if changed:
+            self._save()
+
+    def _signed_package(self, package: dict[str, Path], target: Path) -> dict[str, Path]:
+        """The release's own files for a game whose protection closes on unsigned code: what the game already ships
+        stays untouched and unsigned helpers nothing needs are left out."""
+        kept: dict[str, Path] = {}
+        for name, path in package.items():
+            if _exists_nocase(target, name):
+                continue
+            is_pe, signed = pe_sign.inspect(path)
+            if is_pe and not signed:
+                if Path(name).name.casefold() in _UNSIGNED_HELPERS or Path(name).name.casefold().startswith("fakenvapi."):
+                    continue
+            kept[name] = path
+        return kept
+
+    def session_outcome(self, record: dict) -> None:
+        """A launch that ended within the short window, with the game itself seen running and no relaunch right after,
+        marks that build for the game; a normal launch with the same build clears it."""
+        if (not isinstance(record, dict) or record.get("start") != "launch" or record.get("ended_by") != "game_stopped"
+                or record.get("outcome") not in ("short", "normal")):
+            return
+        appid = self._live_appid(record.get("appid"))
+        record = {**record, "appid": appid}
+        self.session_started(appid)
+        if record["outcome"] == "short":
+            if not _game_ran(record):
+                return
+            if self.mark_delay > 0:
+                timer = threading.Timer(self.mark_delay, self._fire_mark, (appid, record))
+                timer.daemon = True
+                with self._state_lock:
+                    self._pending_marks[appid] = timer
+                timer.start()
+                return
+        with self._image_lock:
+            self._mark_outcome(record)
+
+    def _live_appid(self, key) -> str:
+        """Sessions of a non-Steam shortcut arrive under its stable `ns:<name>` key; the installs live under its appid."""
+        key = str(key)
+        return (games.shortcut_appid(self.home, key) or key) if key.startswith("ns:") else key
+
+    def session_started(self, appid) -> None:
+        """A relaunch right after a short session is a restart (RestartAppIfNecessary, a bootstrapper), not a failure."""
+        with self._state_lock:
+            timer = self._pending_marks.pop(self._live_appid(appid), None)
+        if timer is not None:
+            timer.cancel()
+
+    def _fire_mark(self, appid: str, record: dict) -> None:
+        with self._state_lock:
+            if self._pending_marks.get(appid) is not threading.current_thread():
+                return
+            del self._pending_marks[appid]
+        try:
+            with self._image_lock:
+                self._mark_outcome(record)
+        except Exception as error:  # noqa: BLE001
+            if self.logger:
+                self.logger.warning("Deferred build mark failed: %s", type(error).__name__)
+
+    def _mark_outcome(self, record: dict) -> None:
+        appid = str(record.get("appid"))
+        injections = record.get("injections") if isinstance(record.get("injections"), dict) else {}
+        builds = {str(item.get("build")) for key, item in injections.items()
+                  if key in _INJECTED_ENGINES and isinstance(item, dict) and item.get("build")}
+        entry = self.state["games"].get(appid)
+        if not builds or not isinstance(entry, dict):
+            return
+        with self._state_lock:
+            self._apply_outcome(entry, record, builds)
+
+    def _apply_outcome(self, entry: dict, record: dict, builds: set[str]) -> None:
+        marks = entry.setdefault("failed_builds", {})
+        install = entry.get("install") if isinstance(entry.get("install"), dict) else {}
+        if record["outcome"] == "normal":
+            if not builds & set(marks):
+                if not marks:
+                    entry.pop("failed_builds", None)
+                return
+            for build_id in builds:
+                marks.pop(build_id, None)
+        else:
+            components = {item.get("id"): item for item in install.get("components", []) if isinstance(item, dict)}
+            archive = components.get(install.get("archive")) or {}
+            for build_id in builds:
+                known = catalog.BUILDS.get(build_id)
+                marks[build_id] = {
+                    "version": archive.get("version") or (known.version if known else None), "archive": install.get("archive"),
+                    "sha256": archive.get("sha256"), "seconds": record.get("seconds"), "at": time.time()}
+        if not marks:
+            entry.pop("failed_builds", None)
+        self._save()
 
     def _launch_swap(self, swap: tuple[str, str]) -> dict:
         """Panel's launcher that starts the game's exe instead of its anti-cheat launcher, as the mod's author does."""
@@ -1112,7 +1276,7 @@ class UpscalerService:
         return item
 
     def _install_dll(self, appid: str, build: catalog.Build, choice: dict) -> dict:
-        installed, analysis, _target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
+        installed, analysis, _target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         name = "amd_fidelityfx_upscaler_dx12.dll"
         loader = "amd_fidelityfx_loader_dx12.dll"
         framegen = "amd_fidelityfx_framegeneration_dx12.dll"
@@ -1199,6 +1363,7 @@ class UpscalerService:
             "target": str(root), "exe": analysis["exe"], "dll_targets": targets,
             "installed_at": now, "options": _clean_options({"fg": "off"}),
             "native_dlls": [], "fg_plan": None, "args": [], "added_args": [],
+            "anti_cheat_accepted": _anti_cheat_accepted(analysis, choice, build.engine),
         }
         entry["history"].append({"build": build.id, "proxy": None, "at": now, "result": "not_run", "exe": analysis["exe"]})
         entry["history"] = entry["history"][-HISTORY_LIMIT:]
@@ -1206,10 +1371,10 @@ class UpscalerService:
         return _with_leftovers({"files": len(sources), "overrides": [], "args": []}, left)
 
     def _install_helix(self, appid: str, build: catalog.Build, choice: dict) -> dict:
-        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
+        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
+        entry = self._game_state(appid)
         if build.way == "fsr" and "fsr31" not in analysis["inputs"]:
             raise UpscalerError("helixsr_no_fsr")
-        entry = self._game_state(appid)
         pinned = catalog.ASSETS[build.archive]
         newest = self.latest.resolve(pinned) if self.helix.ready() else None
         if not self.helix.ready() or (newest and (self.helix.digest() or pinned.sha256) != newest.sha256):
@@ -1247,6 +1412,7 @@ class UpscalerService:
             "helix_file": str(log.parent / HELIX_INSTALL_FILE),
             "installed_at": now, "options": options, "native_dlls": [], "fg_plan": None,
             "args": [], "added_args": [],
+            "anti_cheat_accepted": _anti_cheat_accepted(analysis, choice, build.engine),
         }
         entry["history"].append({"build": build.id, "proxy": entry["install"]["proxy"], "at": now,
                                  "result": "pending", "exe": analysis["exe"]})
@@ -1269,7 +1435,7 @@ class UpscalerService:
         env = str(choice.get("env") or "")
         if env not in PROTON_FSR4_ENVS:
             raise UpscalerError("proton_env")
-        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
+        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         if "fsr31" not in analysis["inputs"]:
             raise UpscalerError("proton_no_fsr")
         entry = self._game_state(appid)
@@ -1279,6 +1445,7 @@ class UpscalerService:
             "build": build.id, "engine": "proton", "env": env, "proxy": None, "target": str(target),
             "exe": analysis["exe"], "installed_at": now, "options": _clean_options({**choice, "fg": "off"}),
             "native_dlls": [], "fg_plan": None, "args": [], "added_args": [],
+            "anti_cheat_accepted": _anti_cheat_accepted(analysis, choice, build.engine),
         }
         entry["history"].append({"build": build.id, "proxy": None, "at": now, "result": "pending", "exe": analysis["exe"]})
         entry["history"] = entry["history"][-HISTORY_LIMIT:]
@@ -1291,6 +1458,7 @@ class UpscalerService:
         if not isinstance(old, dict):
             return None
         entry["previous"] = diagnostics.snapshot(old, excerpt=True)
+        self._forget_mark(entry, old)
         self._drop(old, installed.root)
         if old.get("launcher"):
             try:
@@ -1811,6 +1979,7 @@ class UpscalerService:
         if _is_helix(install) and installed is None:
             raise UpscalerError("not_installed")
         entry["previous"] = diagnostics.snapshot(install, excerpt=True)
+        self._forget_mark(entry, install)
         kept = self._drop(install, installed.root if installed else Path(install["target"]))
         if install.get("launcher") and installed:
             try:
@@ -1826,6 +1995,14 @@ class UpscalerService:
         entry["install"] = None
         self._save()
         return result
+
+    def _forget_mark(self, entry: dict, install: dict) -> None:
+        with self._state_lock:
+            marks = entry.get("failed_builds")
+            if isinstance(marks, dict):
+                marks.pop(install.get("build"), None)
+                if not marks:
+                    entry.pop("failed_builds", None)
 
     def _launcher_overrides(self, installed: games.Installed, install: dict, remove: bool) -> None:
         """Heroic/Lutris keep their own per-game environment; Steam's launch options never reach Wine."""
@@ -2015,7 +2192,7 @@ class UpscalerService:
             current = status.get("version") or (mako.VERSION if engine == "mako" else mako.VERSION5 if engine == "mako5" else catalog.LSFG_ARCHIVE.removeprefix("lsfg-vk-"))
             current = current.removeprefix("lsfg-vk-")
             result = {"state": "current", "version": current}
-            if engine == "lsfg" and status.get("foreign") or engine != "lsfg" and not status.get("supported"):
+            if engine == "lsfg" and (status.get("foreign") or status.get("arm")) or engine != "lsfg" and not status.get("supported"):
                 return {**result, "state": "unmanaged"}
             try:
                 cached = self._engine_checks.get(engine)
@@ -2058,6 +2235,11 @@ class UpscalerService:
     def lsfg_install(self) -> dict:
         if self.lsfg.status()["installed"]:
             return self.lsfg.status()
+        if self.lsfg.arm:
+            try:
+                return self.lsfg.install_native()
+            except lsfg.LsfgError as error:
+                raise UpscalerError(error.code) from None
         asset = catalog.ASSETS[catalog.LSFG_ARCHIVE]
         try:
             unpacked = self.cache.ensure(asset, lambda _done: None, lambda: False)
@@ -2390,6 +2572,26 @@ class UpscalerService:
         result["elapsed_ms"] = round((time.monotonic() - started) * 1000)
         return result
 
+    def session_injections(self, appid) -> dict:
+        """Which scalers Panel had configured for the game, as read when its session started."""
+        key = str(appid)
+        appid = self._live_appid(key)
+        summaries = self._engine_summaries()
+        found = dict(summaries.get(key) or summaries.get(appid) or {})
+        install = (self.state["games"].get(appid) or {}).get("install")
+        if isinstance(install, dict):
+            options = install.get("options") if isinstance(install.get("options"), dict) else {}
+            found["optiscaler" if install.get("engine", "optiscaler") == "optiscaler" else str(install.get("engine"))[:20]] = {
+                "build": install.get("build"), "proxy": install.get("proxy"), "fg": options.get("fg"),
+                "quality": options.get("quality")}
+        return found
+
+    def session_mako_runtime(self, appid) -> dict:
+        try:
+            return self.mako_runtime(appid)
+        except UpscalerError:
+            return {}
+
     def support_state(self) -> dict:
         mako_status = self.mako.status()
         return {
@@ -2438,6 +2640,14 @@ def _owned_env(install: dict) -> dict:
     return {install["env"]: None}
 
 
+def _int8_for_release(panel: dict, tag: str | None) -> dict:
+    """OptiScaler 0.9.5 turned Fsr4ForceEnableInt8 from a boolean into a mode (1 = INT8); a boolean no longer enables it."""
+    match = re.match(r"v?(\d+)\.(\d+)\.(\d+)", tag or "")
+    if match and panel.get("FSR.Fsr4ForceEnableInt8") == "true" and tuple(map(int, match.groups())) >= (0, 9, 5):
+        return {**panel, "FSR.Fsr4ForceEnableInt8": "1"}
+    return panel
+
+
 def _with_leftovers(result: dict, left: dict | None) -> dict:
     """Launch-option entries the replaced install added and the new one does not reuse."""
     if not left:
@@ -2480,6 +2690,45 @@ def _dll_route(analysis: dict, recipe) -> dict:
     targets = analysis.get("dll_targets", [])
     kept = [path for path in targets if Path(path).name.lower() != "amd_fidelityfx_dx12.dll"]
     return analysis if len(kept) == len(targets) else {**analysis, "dll_targets": kept, "dll_blocked": "recipe_legacy_ffx"}
+
+
+def _recommending(recipe, automatic, refused: bool):
+    """What may recommend a build: the catalog entry a dependency plan resolved, or a recipe with nothing to install."""
+    return automatic or (recipe if recipe and not recipe.dependencies and not refused else None)
+
+
+def _recipe_anti_cheat(analysis: dict, recipe) -> dict:
+    """A recipe's anti-cheat the files don't show; Proton builds write nothing into the game and skip the warning."""
+    if catalog.signed_only(recipe) and analysis.get("anti_cheat_kind") != "signed_only":
+        analysis = {**analysis, "anti_cheat_kind": "signed_only"}
+    if recipe and recipe.anti_cheat and not analysis["anti_cheat"]:
+        analysis = {**analysis, "anti_cheat": True, "anti_cheat_kind": analysis.get("anti_cheat_kind") or "warn"}
+    return {**analysis, "anti_cheat_exempt": ["proton"]} if analysis["anti_cheat"] else analysis
+
+
+_INJECTED_ENGINES = frozenset({"optiscaler", "dll", "helixsr"})
+MARK_DELAY_S = 30
+
+
+def _game_ran(record: dict) -> bool:
+    probes = record.get("process")
+    return isinstance(probes, list) and any(isinstance(item, dict) and item.get("names") for item in probes)
+
+
+def _signing(recipe, analysis: dict) -> tuple[bool, bool]:
+    """(required, preferred): a curated recipe or a protection that closes on unsigned code requires signed builds;
+    a plain anti-cheat only makes them the recommended ones."""
+    kind = analysis.get("anti_cheat_kind")
+    return bool(catalog.signed_only(recipe) or kind == "signed_only"), kind in ("warn", "signed_only")
+
+
+def _anti_cheat_accepted(analysis: dict, choice: dict, engine: str) -> bool:
+    return bool(analysis.get("anti_cheat") and choice.get("confirm_anti_cheat") and engine not in analysis.get("anti_cheat_exempt", ()))
+
+
+def _failed_builds(entry: dict) -> dict[str, dict]:
+    marks = entry.get("failed_builds")
+    return {build_id: item for build_id, item in marks.items() if isinstance(item, dict)} if isinstance(marks, dict) else {}
 
 
 def _recipe_proxy(recipe) -> str | None:
@@ -2568,6 +2817,18 @@ def _requested_fg(solution, choice):
     if choice.get("fg") == "on" and plan is None:
         raise UpscalerError("fg_route_unavailable")
     return plan
+
+
+def _exists_nocase(root: Path, relative: str) -> bool:
+    current = root
+    for part in relative.split("/"):
+        try:
+            current = next((item for item in current.iterdir() if item.name.casefold() == part.casefold()), None)
+        except OSError:
+            return False
+        if current is None:
+            return False
+    return True
 
 
 def _with_root_files(sources: dict, prefix: str, names) -> dict:

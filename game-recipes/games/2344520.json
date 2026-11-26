@@ -1,0 +1,27 @@
+{
+  "name": "Diablo IV",
+  "revision": 1,
+  "conditions": {
+    "engine": [
+      "optiscaler"
+    ],
+    "platform": [
+      "linux"
+    ],
+    "arch": [
+      "x86_64"
+    ]
+  },
+  "args": [
+    "-dx12"
+  ],
+  "ini": {},
+  "dependencies": [],
+  "source_urls": [
+    "https://github.com/optiscaler/OptiScaler/wiki/Diablo-4"
+  ],
+  "recommended_input": "dlss",
+  "recommended_build": "proton-fsr4",
+  "anti_cheat": true,
+  "signed_only": true
+}

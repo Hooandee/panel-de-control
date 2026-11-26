@@ -262,9 +262,10 @@ export const FrameGenRow: FC<{
     }
   }, !selectedActive && current !== "off");
 
-  const needBranch = current === "lsfg" && !!status && status.lossless && !status.dll;
+  const lsfgUnavailable = current === "lsfg" && !!status?.unavailable;
+  const needBranch = current === "lsfg" && !!status && !status.arm && status.lossless && !status.dll;
   const foreignBackup = !!status && !status.foreign && !!status.foreign_backup;
-  const showControls = !!mako || !!offer.own || !!installedRoute || offer.options.length > 0 || !!profile || !!status?.foreign || foreignBackup || needBranch;
+  const showControls = !!mako || !!offer.own || !!installedRoute || offer.options.length > 0 || !!profile || !!status?.foreign || foreignBackup || needBranch || lsfgUnavailable;
 
   const optionLabel = (label: string, icon?: ReactNode) => (
     <span ref={showFrameGenIcon} style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs }}>
@@ -349,6 +350,7 @@ export const FrameGenRow: FC<{
             <Row><ActionButton label={t("up.mako.leftover.clear")} busy={busy} disabled={disabled || gameRunning} onPress={() => void run(makoLeftover.clear)} /></Row>
           </>
         )}
+        {lsfgUnavailable && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.lsfg.armNoLayer")}</Notice>}
         {current === "lsfg" && status?.foreign && (
           <>
             <Notice icon={<LuArrowLeftRight size={16} />}>{t("up.lsfg.foreign")}</Notice>
@@ -359,7 +361,7 @@ export const FrameGenRow: FC<{
           <ActionButton
             label={enginePhase ? t(`up.engine.${enginePhase}`) : activating ? t("up.activating") : t(selectedActive || current === "off" ? "up.deactivate" : installedRoute || profile || makoProfile ? "up.save" : "up.activate", { name: isMako ? MAKO_NAME[current] : current === "off" && makoPick ? MAKO_NAME[makoPick] : current === "lsfg" || (current === "off" && profile) ? "Lossless Scaling" : t(`up.fg.pick.${current === "off" ? installedRoute ?? "optiscaler" : current}`) })}
             busy={busy || enginePhase !== null}
-            disabled={disabled || (isMako ? (!selectedActive && (!mako?.supported || (makoEngine === 4 && !mako.dll) || mako.reason === "mako_identity_ambiguous" || (!makoProfile && !!installedRoute && !onApplyOptiscaler))) : current === "lsfg" ? (!profile && (!status?.dll || (!!installedRoute && !onApplyOptiscaler))) : !(current === "off" && (profile || makoProfile) && !installedRoute) && (!onApplyOptiscaler || optiscalerDisabled))}
+            disabled={disabled || (isMako ? (!selectedActive && (!mako?.supported || (makoEngine === 4 && !mako.dll) || mako.reason === "mako_identity_ambiguous" || (!makoProfile && !!installedRoute && !onApplyOptiscaler))) : current === "lsfg" ? (lsfgUnavailable || !profile && (!status?.dll || (!!installedRoute && !onApplyOptiscaler))) : !(current === "off" && (profile || makoProfile) && !installedRoute) && (!onApplyOptiscaler || optiscalerDisabled))}
             onPress={() => void applySelection()}
           />
         )}

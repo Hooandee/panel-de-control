@@ -7,6 +7,8 @@
  * `howLongToBeat` asks howlongtobeat.com through Panel (Steam's client cannot reach it): hours to finish the main
  * story, with extras and everything; null when the game is not there or the site cannot be reached.
  * `protonDb` asks protondb.com the same way: its tier for the game, null when nobody rated it or it is out of reach.
+ * `upscalerBadge` is the text of the pill on a game's cover (null when the game has no scaler or the user hid the pills);
+ * `onUpscalerBadges` calls back when any of them changes. Both are absent on a Panel that does not offer them.
  */
 export type ThemeForceCloseResult = "not_found" | "terminated" | "killed" | "failed" | "unavailable";
 
@@ -24,6 +26,16 @@ export interface ThemeExtensionGamesAccess {
   resume(): Promise<void>;
   howLongToBeat(appid: number | string, name: string): Promise<ThemeHowLongToBeat | null>;
   protonDb(appid: number | string): Promise<ThemeProtonDb | null>;
+  upscalerBadge?(appid: number | string): ThemeUpscalerBadge | null;
+  onUpscalerBadges?(listener: () => void): () => void;
+}
+
+export interface ThemeUpscalerBadge {
+  // Full name ("FSR 4.1.2 Lite") and the short one ("FSR 4 Lite").
+  label: string;
+  short: string;
+  // "fallback" when another scaler runs than the one requested; otherwise the install's status.
+  state: string;
 }
 
 export type ThemeProtonDbTier = "platinum" | "gold" | "silver" | "bronze" | "borked" | "native";
@@ -40,6 +52,8 @@ export interface ThemeGamesBackend {
   resume?(): Promise<unknown>;
   howLongToBeat?(appid: string, name: string): Promise<unknown>;
   protonDb?(appid: string): Promise<unknown>;
+  upscalerBadge?(appid: string): unknown;
+  subscribeUpscalerBadges?(listener: () => void): () => void;
 }
 
 const PROTON_TIERS = new Set<string>(["platinum", "gold", "silver", "bronze", "borked", "native"]);
@@ -86,8 +100,35 @@ export function createThemeGamesAccess(backend: ThemeGamesBackend): Readonly<The
       }
     }
     : undefined;
+  const badge = backend.upscalerBadge;
+  const subscribe = backend.subscribeUpscalerBadges;
   return Object.freeze({
     ...(forceClose ? { forceClose } : {}),
+    ...(badge ? {
+      upscalerBadge(appid: number | string): ThemeUpscalerBadge | null {
+        const id = decimalAppId(appid);
+        if (!id) return null;
+        try {
+          const reply = badge.call(backend, id);
+          if (typeof reply !== "object" || reply === null) return null;
+          const { label, short, state } = reply as Record<string, unknown>;
+          if (typeof label !== "string" || !label || typeof short !== "string" || typeof state !== "string") return null;
+          return { label, short, state };
+        } catch {
+          return null;
+        }
+      },
+    } : {}),
+    ...(subscribe ? {
+      onUpscalerBadges(listener: () => void): () => void {
+        try {
+          const stop = subscribe.call(backend, listener);
+          return typeof stop === "function" ? stop : () => {};
+        } catch {
+          return () => {};
+        }
+      },
+    } : {}),
     async pause(ms: number): Promise<boolean> {
       const appid = runningAppId();
       if (!appid || !backend.pause || !Number.isFinite(ms) || ms <= 0) return false;

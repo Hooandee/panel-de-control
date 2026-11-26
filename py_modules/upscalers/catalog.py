@@ -28,6 +28,8 @@ class Asset:
     archive: bool = False
     member: str | None = None
     generation: int = 9
+    # The shipped binary carries a valid Authenticode signature.
+    signed: bool = False
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,7 @@ ASSETS: dict[str, Asset] = {
             ("https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/"
              "Optiscaler_0.9.4-final.20260718._MM.7z",),
             archive=True,
+            signed=True,
         ),
         # OptiScaler 10 nightly: bundled files move to an `OptiScaler/` subfolder; FFX upscaler 4.1.2.4555.
         Asset(
@@ -134,6 +137,7 @@ ASSETS: dict[str, Asset] = {
             "a2b136b6affd35a49b141a936be935f7d5ddc8d8f9b8c9afbe62ff9ddb2538a0",
             66830768,
             (f"{_BLEEDING}/fsr-4-1-1/amdxcffx64.dll",),
+            signed=True,
         ),
         Asset(
             "amdxcffx64-4.1.1-valve",
@@ -179,16 +183,28 @@ ASSETS: dict[str, Asset] = {
             member="amd_fidelityfx_framegeneration_dx12.dll",
         ),
         Asset(
-            "fsr-4.1.2-lite-cyboman-dll", "fsr4.1.2-igpu-cyboman-rdna2-2026-11-05.7z",
-            "da7c7681bffe7ac60a01e859d5b107900d963557793ef67ddcfd03a832e1c03f", 9567439,
-            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/fsr4.1.2-igpu-cyboman-rdna2-2026-11-05.7z",),
+            "fsr-4.1.2-lite-cyboman-dll", "fsr4.1.2-igpu-cyboman-rdna2-2026-11-22.7z",
+            "8dd65d22b20f968f0d6529716cbcd05b12ca93d8e543f1e878fc5e08bbb1099c", 9889144,
+            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-22/fsr4.1.2-igpu-cyboman-rdna2-2026-11-22.7z",),
             member="4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll",
         ),
         Asset(
-            "fsr-4.1.2-lite-igpu-cyboman-dll", "fsr4.1.2-igpu-cyboman-rdna3-2026-11-05.7z",
-            "6553cfeaa824fd1fa36985278e5ce835d27bbb758e99a1db5efaf331fe72dc4f", 9553046,
-            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/fsr4.1.2-igpu-cyboman-rdna3-2026-11-05.7z",),
+            "fsr-4.1.2-lite-igpu-cyboman-dll", "fsr4.1.2-igpu-cyboman-rdna3-2026-11-22.7z",
+            "0443047f44cbfb9670dbc719e069df77be37cabcde02b76176d59f682d79091d", 9826318,
+            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-22/fsr4.1.2-igpu-cyboman-rdna3-2026-11-22.7z",),
             member="4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll",
+        ),
+        Asset(
+            "fsr-4.1.2-lite-dgpu-cyboman-dll", "fsr4.1.2-cyboman-rx7000-2026-11-22.7z",
+            "bcd719dca0bfb791aec8987bad796eceb65fc887b3d1d45a4969d7b55e6f195d", 13284673,
+            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-22/fsr4.1.2-cyboman-rx7000-2026-11-22.7z",),
+            member="4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll",
+        ),
+        Asset(
+            "fsr-4.1.2-lite-dgpu-lossy-cyboman-dll", "fsr4.1.2-cyboman-rx7000-2026-11-22.7z",
+            "bcd719dca0bfb791aec8987bad796eceb65fc887b3d1d45a4969d7b55e6f195d", 13284673,
+            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-22/fsr4.1.2-cyboman-rx7000-2026-11-22.7z",),
+            member="4.1.2l-lossy/amd_fidelityfx_upscaler_dx12.dll",
         ),
         Asset(
             "fsr-4.1.1-lite-exact-dll", "FSR4_INT8_4.1.1_Lite_Exact.zip",
@@ -231,6 +247,17 @@ BUILDS: dict[str, Build] = {
         Build(
             "fsr-4.1.2-lite-igpu-dll", "fsr", "4.1.2", ("rdna3",), image=3, cost=2, engine="dll", way="fsr",
             replace={"amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-igpu-cyboman-dll"}, models=(("lite", {}),),
+            legacy_replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.2-dll-{part}" for part in ("loader", "framegeneration")},
+        ),
+        Build(
+            "fsr-4.1.2-lite-dgpu-dll", "fsr", "4.1.2", ("rdna3",), image=3, cost=2, engine="dll", way="fsr",
+            replace={"amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-dgpu-cyboman-dll"}, models=(("lite", {}),),
+            legacy_replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.2-dll-{part}" for part in ("loader", "framegeneration")},
+        ),
+        # Retrained weights: close to AMD's Lite picture, not identical. Never the default.
+        Build(
+            "fsr-4.1.2-lite-dgpu-lossy-dll", "fsr", "4.1.2", ("rdna3",), image=3, cost=2, engine="dll", way="fsr",
+            replace={"amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-dgpu-lossy-cyboman-dll"}, models=(("lossy", {}),),
             legacy_replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.2-dll-{part}" for part in ("loader", "framegeneration")},
         ),
         Build(
@@ -359,14 +386,85 @@ def for_game(build: Build, inputs: dict, gpu: str, recipe=None) -> Build:
     return replace(build, archive=OPTISCALER_BETA, extra_dir="OptiScaler", ini={**ini, "FSR.Fsr4GpuSupport": "4"})
 
 
-def preferred_build(gpu: str, recipe=None) -> str:
-    recommended = BUILDS.get(getattr(recipe, "recommended_build", None))
-    if recommended and recommended.available and gpu in recommended.gpus:
-        return recommended.id
-    return PREFERRED.get(gpu, "fsr-3.1")
+def signed_only(recipe) -> bool:
+    return bool(getattr(recipe, "signed_only", False))
 
 
-def build_supported(build: Build, gpu: str, device: str = "") -> bool:
+# What Panel measured in the files it unpacked, keyed by sha256 and asset id (several assets are members of one archive):
+# the declared Asset.signed only stands in until then.
+MEASURED: dict[str, dict] = {}
+
+
+def signature_key(sha256: str, asset_id: str) -> str:
+    return f"{sha256}:{asset_id}"
+
+
+def record_signature(asset_id: str, sha256: str, signed: bool) -> None:
+    key = signature_key(sha256, asset_id)
+    MEASURED.pop(key, None)
+    MEASURED[key] = {"id": asset_id, "signed": bool(signed)}
+
+
+def asset_signed(asset: Asset) -> bool:
+    measured = MEASURED.get(signature_key(asset.sha256, asset.id))
+    return asset.signed if measured is None else measured["signed"]
+
+
+def build_signed(build: Build) -> bool:
+    """Whether every binary the build writes into the game is signed: engines that write nothing qualify."""
+    if build.engine == "proton":
+        return True
+    if build.engine != "optiscaler":
+        return False
+    ids = [build.archive, *build.assets, *build.replace.values()]
+    if build.injector:
+        ids.append(build.injector)
+    return all(asset_signed(ASSETS[asset_id]) for asset_id in ids)
+
+
+def preferred_build(gpu: str, recipe=None, device: str = "", *, require_signed: bool = False, prefer_signed: bool = False,
+                    failed=frozenset()) -> str:
+    """The build to recommend: a recipe's pick, else the GPU's default; signed ones when the game's protection asks
+    for them (or merely likes them), and never one that already closed this game early."""
+    required = require_signed or signed_only(recipe)
+
+    def usable(build) -> bool:
+        return bool(build and build.available and build.id not in failed
+                    and build_supported(build, gpu, device, recipe, require_signed=required) and (not required or build_signed(build)))
+
+    default = PREFERRED.get(gpu, "fsr-3.1")
+    ordered = [BUILDS.get(getattr(recipe, "recommended_build", None)), BUILDS.get(default)]
+    chosen = [build for build in ordered if usable(build)]
+    pool = [build for build in BUILDS.values() if build.engine == "optiscaler" and usable(build)]
+
+    family = getattr(BUILDS.get(default), "family", "")
+
+    def best(builds):
+        return max(builds, key=lambda b: (required and build_signed(b), b.family == family, b.image, -b.cost)).id
+
+    if prefer_signed and chosen:
+        top = chosen[0]
+        peers = [b for b in (*chosen, *pool) if b.family == top.family and b.image == top.image and build_signed(b)]
+        if peers and not build_signed(top):
+            return best(peers)
+    if chosen:
+        return chosen[0].id
+    if (required or failed) and pool:
+        return best(pool)
+    return "" if required else default
+
+
+_DGPU_CYBOMAN = frozenset({"fsr-4.1.2-lite-dgpu-dll", "fsr-4.1.2-lite-dgpu-lossy-dll"})
+
+
+_SIGNED_ONLY_GPUS = {"fsr-4.1.1": ("rdna2",)}
+
+
+def build_supported(build: Build, gpu: str, device: str = "", recipe=None, *, require_signed: bool = False) -> bool:
+    if (require_signed or signed_only(recipe)) and gpu in _SIGNED_ONLY_GPUS.get(build.id, ()):
+        return True
+    if build.id in _DGPU_CYBOMAN:
+        return gpu == "rdna3" and device == "steam_machine"
     if build.id == "fsr-4.1.2-lite-igpu-dll":
         return gpu == "rdna3" and device in ("rog_ally", "rog_ally_x", "legion_go", "legion_go_s")
     if build.id == "fsr-4.1.2-dll" and device in ("steam_deck_lcd", "steam_deck_oled"):
@@ -401,7 +499,7 @@ def may_fallback(build: Build, gpu: str) -> str | None:
     return "3.1.6" if build.id in _FP8_SDK and gpu != "rdna4" else None
 
 
-def describe(gpu: str, device: str = "") -> list[dict]:
+def describe(gpu: str, device: str = "", recipe=None, *, require_signed: bool = False) -> list[dict]:
     return [
         {
             "id": build.id,
@@ -411,7 +509,7 @@ def describe(gpu: str, device: str = "") -> list[dict]:
             "cost": build.cost,
             "available": build.available,
             "channel": build.channel,
-            "supported": build_supported(build, gpu, device),
+            "supported": build_supported(build, gpu, device, recipe, require_signed=require_signed),
             "download_bytes": sum({asset.sha256: asset.size for asset in build_assets(build)}.values()) if build.available else 0,
             "models": [model for model, _ in build.models],
             "dll_names": list(build.replace) if build.engine == "dll" else [],

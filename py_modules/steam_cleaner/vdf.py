@@ -60,7 +60,7 @@ def parse_text(raw):
     return object_value()
 
 
-def read_shortcuts(path):
+def read_shortcuts(path, lenient=False):
     with open(path, "rb") as source:
         raw = source.read(MAX_BYTES + 1)
     if len(raw) > MAX_BYTES:
@@ -98,6 +98,8 @@ def read_shortcuts(path):
             else:
                 raise ValueError("malformed_vdf")
             if key in result:
+                if lenient:
+                    continue
                 raise ValueError("duplicate_vdf_key")
             result[key] = value
         raise ValueError("malformed_vdf")

@@ -187,6 +187,7 @@ from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
 from upscalers import UpscalerError, UpscalerService
 from upscalers import diagnostics as upscaler_diagnostics
+from upscalers import game_session as upscaler_game_session
 from upscalers import games as upscaler_games
 from upscalers.service import REPORT_BUDGET_S as UPSCALER_REPORT_BUDGET_S
 from kiosk.controller import KioskController
@@ -1410,7 +1411,7 @@ class Plugin(AmbientRpc):
         service = UpscalerService(
             _user_home(),
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "upscalers"),
-            device_registry.gpu_generation(self._device.vendor, chip, "/"),
+            device_registry.gpu_facts(self._device.vendor, chip, "/")["generation"],
             logger=decky.logger, device=self._device.key,
         )
         service.engine_game_running = lambda: bool(getattr(self, "_current_appid", None))
@@ -1729,6 +1730,15 @@ class Plugin(AmbientRpc):
         if executor is not None:
             executor.shutdown(wait=False, cancel_futures=True)
             self._upscaler_executor = None
+        tracker = getattr(self, "_game_sessions", None)
+        if tracker is not None:
+            try:
+                tracker.close()
+            except Exception as error:  # noqa: BLE001 — diagnostics never block unload
+                decky.logger.warning("Game session close failed: %s", type(error).__name__)
+        sessions = getattr(self, "_game_session_executor", None)
+        if sessions is not None:
+            sessions.shutdown(wait=False)
 
     async def get_launch_tools(self) -> dict:
         self._init()
@@ -12149,7 +12159,59 @@ class Plugin(AmbientRpc):
             caller = sys._getframe(3).f_code.co_name
         diary.write("WARNING", "rpc", "ignored", call=caller, reason=reason, **fields)
 
-    def _set_current_appid(self, appid) -> None:
+    def _game_session_tracker(self):
+        tracker = getattr(self, "_game_sessions", None)
+        if tracker is not None:
+            return tracker
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="game-session")
+        self._game_session_executor = executor
+
+        def service_call(name, default):
+            def call(appid):
+                service = getattr(self, "_upscaler_service", None)
+                return getattr(service, name)(appid) if service is not None else default
+            return call
+
+        def probe(appid):
+            return upscaler_game_session.process_summary(
+                game_force_close.process_table(), appid, game_force_close.game_tree)
+
+        def emit(record):
+            decky.logger.info("GAME_SESSION %s", json.dumps(record, sort_keys=True, separators=(",", ":"), default=str))
+            _upscalers_journal("INFO", "game_session", **record)
+            service = getattr(self, "_upscaler_service", None)
+            if service is not None:
+                try:
+                    service.session_outcome(record)
+                except Exception as error:  # noqa: BLE001 — a mark never hides the session
+                    decky.logger.warning("Session outcome failed: %s", type(error).__name__)
+
+        def submit(job):
+            try:
+                executor.submit(job)
+            except RuntimeError:
+                pass
+
+        def submit_later(delay, job):
+            timer = threading.Timer(delay, lambda: submit(job))
+            timer.daemon = True
+            timer.start()
+            return timer
+
+        tracker = upscaler_game_session.GameSessions(
+            injections=service_call("session_injections", None), runtime=service_call("session_mako_runtime", {}),
+            probe=probe, emit=emit, submit=submit, submit_later=submit_later,
+            on_start=service_call("session_started", None))
+        self._game_sessions = tracker
+        return tracker
+
+    def _track_game_session(self, previous, current, launch=False) -> None:
+        try:
+            self._game_session_tracker().transition(previous, current, launch)
+        except Exception as error:  # noqa: BLE001 — diagnostics never break a game context change
+            decky.logger.warning("Game session tracking failed: %s", type(error).__name__)
+
+    def _set_current_appid(self, appid, launch=False) -> None:
         current = str(appid) if appid is not None else None
         if current == getattr(self, "_current_appid", None):
             return
@@ -12165,8 +12227,10 @@ class Plugin(AmbientRpc):
             else:
                 ownership.set_context(current)
             self._advance_tdp_generation()
+        previous = getattr(self, "_current_appid", None)
         self._current_appid = current
         self._current_appid_at = time.monotonic()
+        self._track_game_session(previous, current, launch)
         if getattr(self, "_auto_controller", None) is not None:
             self._reset_auto_session("context_changed")
         self._next_gpu_generation()
@@ -15383,6 +15447,9 @@ class Plugin(AmbientRpc):
         self._init()
         next_appid = str(appid) if appid is not None else None
         next_name = str(name) if (appid is not None and name) else None
+        launch = next_appid is not None and self._current_appid is None and getattr(self, "_game_idle_reported", False)
+        if next_appid is None:
+            self._game_idle_reported = True
         leaving_game = self._current_appid is not None and next_appid is None
         if not self._game_power_ownership_supported() and not self._game_power_ownership_has_context():
             steam_profile = _RPC_CONTEXT_UNSET
@@ -15392,7 +15459,7 @@ class Plugin(AmbientRpc):
             before = self._power_ownership.state()
             self._game_power_context_transition = True
             try:
-                self._set_current_appid(next_appid)
+                self._set_current_appid(next_appid, launch)
                 after = self._power_ownership.observe(next_appid, steam_profile)
                 if before != after:
                     self._advance_tdp_generation()
@@ -15409,7 +15476,7 @@ class Plugin(AmbientRpc):
             self._current_game_name = next_name
             await self._refresh_pdc_metrics()
             return await self.get_tdp_state()
-        self._set_current_appid(next_appid)
+        self._set_current_appid(next_appid, launch)
         self._current_game_name = next_name
         self._reset_auto_session("context_changed")
         self._reapply_ticks = 0        # fresh ~30 min re-fit window for the new game

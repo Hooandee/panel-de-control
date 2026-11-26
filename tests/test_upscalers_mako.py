@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import time
 import subprocess
 import tarfile
 from pathlib import Path
@@ -324,7 +325,45 @@ def test_runtime_rejections_keep_identity_protections(setup, monkeypatch, change
     def unexpected_lookup(*args):
         pytest.fail('Rejected state must not trigger a process scan')
     monkeypatch.setattr(manager, '_process_matches', unexpected_lookup)
-    assert manager.runtime('123') == {'observed': False, 'active': None, 'rejections': {reason: 1}}
+    result = manager.runtime('123')
+    last_run = result.pop('last_run', None)
+    assert result == {'observed': False, 'active': None, 'rejections': {reason: 1}}
+    assert (last_run is not None) == (reason == 'writer_unlocked')
+
+
+def test_unlocked_writer_reports_that_the_layer_ran_and_ended(setup, monkeypatch):
+    manager, _, _, _ = setup
+    ended = (time.time() - 90) * 1000
+    data = {'schema_version': 5, 'pid': 3714, 'process_start_ticks': 898084, 'role': 'frame-generation',
+            'updated_unix_ms': ended, 'requested': {'name': 'pdc-870780'}, 'frame_generation_active': True}
+    write(manager.config_root / '870780/runtime-state/state.json', json.dumps(data).encode())
+    monkeypatch.setattr(manager, '_runtime_locked', lambda path: False)
+    result = manager.runtime('870780')
+    assert result['observed'] is False
+    assert result['rejections'] == {'writer_unlocked': 1}
+    assert result['last_run'] == {'role': 'frame-generation', 'ended_s_ago': pytest.approx(90, abs=3),
+                                  'active': True, 'error': False, 'writer_lock': 'released'}
+
+
+def test_lock_held_by_another_process_is_not_reported_as_ended(setup, monkeypatch):
+    manager, _, _, _ = setup
+    data = {'schema_version': 5, 'pid': 3714, 'process_start_ticks': 898084, 'role': 'frame-generation',
+            'updated_unix_ms': (time.time() - 30) * 1000, 'requested': {'name': 'pdc-870780'},
+            'frame_generation_active': True}
+    write(manager.config_root / '870780/runtime-state/state.json', json.dumps(data).encode())
+    monkeypatch.setattr(manager, '_runtime_locked', lambda path: True)
+    monkeypatch.setattr(manager, '_process_matches', lambda pid, ticks: False)
+    result = manager.runtime('870780')
+    assert result['rejections'] == {'process_identity': 1}
+    assert 'last_run' not in result
+    assert result['last_seen'] == {'role': 'frame-generation', 'active': True, 'error': False,
+                                   'writer_lock': 'held', 'process_identity': 'unmatched',
+                                   'state_age_s': pytest.approx(30, abs=3)}
+
+
+def test_runtime_without_state_file_has_no_last_run(setup):
+    manager, _, _, _ = setup
+    assert 'last_run' not in manager.runtime('870780')
 
 
 def test_namespace_scan_limit_fails_closed(setup, monkeypatch):

@@ -163,3 +163,20 @@ def test_runtime_projects_only_complete_valid_observed_dimensions(setup, monkeyp
     assert result['active'] is False and result['scaling_active'] is True
     assert result['spatial_resolution'] == ({'render': [1280, 720], 'output': [1920, 1080]}
                                             if width == 1280 else None)
+
+
+def test_disabling_only_frame_generation_keeps_scaling_profile(setup):
+    manager, cache, _, _ = setup
+    manager.install(cache)
+    both = manager.set_game('883710', 'game', {'enabled': True, 'mode': 'fixed', 'multiplier': 2, 'target_fps': 120,
+                                               'max_multiplier': 3, 'flow': 'balanced', 'performance': True,
+                                               'scaling_enabled': True, 'scaling_factor': 1.5, 'scaling_sharpness': 0.8})
+    path = Path(both['env']['MAKO_CONFIG'])
+    off = manager.set_game('883710', 'game', {'enabled': False})
+    assert off['profile']['enabled'] is False and off['profile']['scaling_enabled'] is True
+    assert off['env'] and off['wrappers']
+    stored = manager.status()['profiles']['883710']
+    assert stored['enabled'] is False and stored['scaling_enabled'] is True and stored['scaling_factor'] == 1.5
+    text = path.read_text()
+    assert 'scaling_enabled = true' in text and 'frame_generation_enabled = false' in text
+    assert 'scaling_method = "mako"' in text

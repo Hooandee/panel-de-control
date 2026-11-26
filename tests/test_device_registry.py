@@ -401,6 +401,29 @@ def test_an_unnamed_chip_falls_back_to_its_gpu_pci_id(tmp_path, vendor, device, 
     assert gpu_generation("amd", "AMD Custom APU 1234", str(tmp_path)) == expected
 
 
+@pytest.mark.parametrize("igpu", ["0x15bf", "0x150e", "0x1681"])
+@pytest.mark.parametrize("discrete", ["0x7590", "0x7550"])
+def test_a_radeon_rdna4_card_wins_over_an_igpu_listed_first(tmp_path, igpu, discrete):
+    from device_registry import gpu_generation
+    _card(tmp_path, 0, "0x1002", igpu)
+    _card(tmp_path, 1, "0x1002", discrete)
+    assert gpu_generation("amd", "AMD Custom APU 1234", str(tmp_path)) == "rdna4"
+
+
+def test_an_rdna4_card_beats_a_name_matched_apu_in_gpu_facts(tmp_path):
+    from device_registry import gpu_facts
+    _card(tmp_path, 0, "0x1002", "0x15bf")
+    _card(tmp_path, 1, "0x1002", "0x7590")
+    facts = gpu_facts("amd", "AMD Ryzen 7 7840HS", str(tmp_path))
+    assert (facts["generation"], facts["source"]) == ("rdna4", "pci")
+
+
+def test_a_steam_deck_stays_rdna2_without_a_discrete_card(tmp_path):
+    from device_registry import gpu_facts
+    _card(tmp_path, 0, "0x1002", "0x163f")
+    assert gpu_facts("amd", "AMD Custom APU 0932", str(tmp_path))["generation"] == "rdna2"
+
+
 def test_no_gpu_found_stays_unknown(tmp_path):
     from device_registry import gpu_generation
     assert gpu_generation("amd", "", str(tmp_path)) == "unknown"

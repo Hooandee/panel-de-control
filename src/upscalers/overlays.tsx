@@ -56,7 +56,9 @@ let ghost: { image: string; opacity: number } | null = null;
 const listeners = new Set<() => void>();
 
 function emit(): void {
-  for (const listener of listeners) listener();
+  for (const listener of [...listeners]) {
+    try { listener(); } catch { /* a theme's listener must not cut the broadcast */ }
+  }
 }
 
 /** Publishes what Escaladores knows so covers and the in-game pill follow it without polling. */
@@ -102,6 +104,34 @@ function useCoverLabels(): Record<string, Badge> {
     return () => { listeners.delete(update); };
   }, []);
   return useMemo(() => shown ? { ...engines, ...installed } : NO_COVERS, [engines, installed, shown]);
+}
+
+export type CoverBadge = Pick<Badge, "label" | "short" | "state">;
+
+/** What the cover pill of a game says; null when none or when the user hides pills. */
+export function coverBadgeFor(appid: string): CoverBadge | null {
+  if (!readCoverBadges()) return null;
+  const badge = installs[appid] ?? engineCovers[appid];
+  return badge ? { label: badge.label, short: badge.short, state: badge.state } : null;
+}
+
+function coverBadgeSignature(): string {
+  if (!readCoverBadges()) return "";
+  const pick = (map: Record<string, Badge>) => Object.entries(map).map(([appid, b]) => `${appid}:${b.label}|${b.short}|${b.state}`).join(",");
+  return `${pick(engineCovers)};${pick(installs)}`;
+}
+
+/** Calls back only when a cover pill appears, goes or changes. */
+export function subscribeCoverBadges(listener: () => void): () => void {
+  let last = coverBadgeSignature();
+  const check = () => {
+    const next = coverBadgeSignature();
+    if (next === last) return;
+    last = next;
+    listener();
+  };
+  listeners.add(check);
+  return () => { listeners.delete(check); };
 }
 
 /** Games with a Panel upscaler or engine profile, for a report to describe. */
@@ -150,6 +180,14 @@ export function readCoverBadges(): boolean {
 export function writeCoverBadges(shown: boolean): void {
   writeString(COVERS_KEY, shown ? "on" : "off");
   emit();
+}
+
+export interface CoverScan { labelled: number; images: number; placed: number; skipped: Record<string, number> }
+let lastScan: CoverScan | null = null;
+
+/** What the last pass found; canvas-painted shelves leave `images` at 0 while `labelled` games exist. */
+export function coverScan(): CoverScan | null {
+  return lastScan;
 }
 
 function mainWindow(): Window | null {
@@ -306,7 +344,7 @@ export const CoverBadges: FC = () => {
   const map = useCoverLabels();
   useEffect(() => {
     // Nothing to mark: the previous run's cleanup already removed the pills.
-    if (!Object.keys(map).length) return;
+    if (!Object.keys(map).length) { lastScan = null; return; }
     const view = mainWindow();
     const doc = view?.document;
     if (!view || !doc?.body) return;
@@ -323,21 +361,25 @@ export const CoverBadges: FC = () => {
       const limit = view.innerWidth * 0.6;
       // A tile can hold several copies of the art (Gallery's reflection, crossfade layers); the largest is the face.
       const faces = new Map<HTMLElement, { img: HTMLImageElement; badge: Badge; area: number }>();
+      const skipped: Record<string, number> = {};
+      const skip = (reason: string) => { skipped[reason] = (skipped[reason] ?? 0) + 1; };
+      let images = 0;
       for (const img of Array.from(doc.querySelectorAll<HTMLImageElement>("img[src*='/assets/'], img[src*='/customimages/'], img[src*='/apps/']"))) {
         const appid = appidOf(img.src);
         if (!appid || NOT_TILE.test(img.src)) continue;
         const badge = map[appid];
         if (!badge) continue;
+        images++;
         const box = img.getBoundingClientRect();
-        if (box.width < 56 || box.height < 40 || box.width > limit) continue;
+        if (box.width < 56 || box.height < 40 || box.width > limit) { skip("size"); continue; }
         const tile = tileOf(img);
-        if (!tile) continue;
+        if (!tile) { skip("no_tile"); continue; }
         // Art parked in a collapsed wrapper has no card to sit on; the pill would float on its own.
         const tileBox = tile.getBoundingClientRect();
-        if (tileBox.width < box.width * 0.5 || tileBox.height < box.height * 0.5) continue;
-        if (ICON.test(img.src) && !isRound(tile, view)) continue;
-        if (isCollection(tile)) continue;
-        if (isHidden(img, view)) continue;
+        if (tileBox.width < box.width * 0.5 || tileBox.height < box.height * 0.5) { skip("collapsed"); continue; }
+        if (ICON.test(img.src) && !isRound(tile, view)) { skip("icon"); continue; }
+        if (isCollection(tile)) { skip("collection"); continue; }
+        if (isHidden(img, view)) { skip("hidden"); continue; }
         const area = box.width * box.height;
         const seen = faces.get(tile);
         if (!seen || area > seen.area) faces.set(tile, { img, badge, area });
@@ -354,6 +396,7 @@ export const CoverBadges: FC = () => {
         }
       }
       const hosts = new Set<Element>();
+      lastScan = { labelled: Object.keys(map).length, images, placed: faces.size, skipped };
       for (const [tile, face] of faces) {
         const host = hostOf(face.img, tile);
         hosts.add(host);
@@ -384,6 +427,7 @@ export const CoverBadges: FC = () => {
       for (const node of Array.from(doc.querySelectorAll(`.${BADGE_CLASS}`))) {
         if (node.parentElement) clearBadge(node.parentElement);
       }
+      lastScan = null;
     };
   }, [map]);
   return null;

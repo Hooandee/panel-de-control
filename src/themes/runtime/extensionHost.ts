@@ -390,6 +390,8 @@ function freezePatch(patch: CssLoaderPatch): Readonly<CssLoaderPatch> {
 function scopedGames(games: Readonly<ThemeExtensionGamesAccess>, scope: MountScope): Readonly<ThemeExtensionGamesAccess> {
   let release: (() => void) | null = null;
   const forceClose = games.forceClose;
+  const upscalerBadge = games.upscalerBadge;
+  const onBadges = games.onUpscalerBadges;
   return Object.freeze({
     ...(forceClose ? { forceClose: (appid: number | string) => forceClose.call(games, appid) } : {}),
     pause: (ms: number) => {
@@ -399,6 +401,8 @@ function scopedGames(games: Readonly<ThemeExtensionGamesAccess>, scope: MountSco
     resume: () => games.resume(),
     howLongToBeat: (appid: number | string, name: string) => games.howLongToBeat(appid, name),
     protonDb: (appid: number | string) => games.protonDb(appid),
+    ...(upscalerBadge ? { upscalerBadge: (appid: number | string) => upscalerBadge.call(games, appid) } : {}),
+    ...(onBadges ? { onUpscalerBadges: (listener: () => void) => scope.track(onBadges.call(games, listener)) } : {}),
   });
 }
 

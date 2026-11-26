@@ -69,6 +69,9 @@ class Recipe:
     game_config: tuple[tuple[str, str, str], ...] = ()
     # False when the game fails to start with FSR 4's loader in place of its FSR 3.1 amd_fidelityfx_dx12.dll.
     legacy_ffx_swap: bool = True
+    anti_cheat: bool = False
+    # Anti-tamper that closes the game on unsigned code: only signed builds and files go in.
+    signed_only: bool = False
 
 
 RECIPES: dict[str, Recipe] = {
@@ -212,10 +215,18 @@ def recipe_for(appid: str, live: Recipe | None = None, *, engine: str = "optisca
                       catalog_version=catalog.catalog_version, source="game-recipes",
                       recommended_input=entry.recommended_input, effective_api=entry.effective_api, quality_owner=entry.quality_owner, recommended_build=entry.recommended_build, optiscaler_root_files=entry.optiscaler_root_files,
                       reframework_upscaler=entry.reframework_upscaler, optiscaler_fg=entry.optiscaler_fg,
-                      game_settings=entry.game_settings)
+                      game_settings=entry.game_settings,
+                      anti_cheat=entry.anti_cheat or bool(hand and hand.anti_cheat),
+                      signed_only=entry.signed_only or bool(hand and hand.signed_only))
         # The catalog installs Luma itself; games the wiki does not list still need it named.
         if any(dep.startswith("luma-") for dep in entry.dependencies):
             hand = replace(hand, needs=tuple(dict.fromkeys((*hand.needs, "luma"))))
+    else:
+        # Protection belongs to the game, not to the platform the rest of its entry is written for.
+        raw = catalog.games.get(str(appid))
+        if raw and (raw.anti_cheat or raw.signed_only):
+            hand = replace(hand or Recipe(str(appid)), anti_cheat=raw.anti_cheat or bool(hand and hand.anti_cheat),
+                           signed_only=raw.signed_only or bool(hand and hand.signed_only))
     return combine(hand, with_wiki(WIKI.get(str(appid)), live))
 
 

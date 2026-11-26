@@ -1,6 +1,7 @@
 """Where an installed game lives, which executable creates its device and what it ships."""
 
 import json
+import logging
 import os
 import re
 import stat
@@ -14,6 +15,8 @@ from pathlib import Path
 from steam_cleaner import vdf
 
 from . import launchers, pe
+
+_log = logging.getLogger(__name__)
 
 STATE_FULLY_INSTALLED = 4
 STATE_UPDATE_RUNNING = 256 | 1024
@@ -43,6 +46,9 @@ INPUTS = {
     "xefg": ("libxess_fg.dll",),
 }
 ANTI_CHEAT = ("easyanticheat", "battleye", "eac_launcher", "beservice")
+# Protections that close the game on unsigned code, matched by exact name inside the game folder.
+SIGNED_ONLY_DIRS = frozenset({"blizzarderror", "battle.net", "gameguard", "xigncode", "anticheatexpert"})
+SIGNED_ONLY_FILES = frozenset({"vgk.sys", "hoyokprotect.sys", "mhyprot2.sys", "mhyprot3.sys", "ace-base64.dll", "ace-base.dll"})
 FOREIGN_MARKERS = ("OptiScaler.ini", "OptiScaler.log", "FRAMEGEN_PATCH", "helixsr-install.json", "HelixSR-Scaler.files")
 # What other tools leave beside the exe: OptiScaler's own files, Decky-Framegen's marker, HelixSR's records.
 FOREIGN_ITEMS = (
@@ -287,14 +293,34 @@ def _script_shortcut(home: str, appid: str, name: str, exe: str, launch_options:
     key = launchers.unifideck_key(launch_options) if home and "unifideck" in exe.lower() else None
     if key:
         row = launchers.unifideck_row(home, key)
-        if row is None or not row[0]:
+        if row is None or row[0] == "xcloud" or not row[0]:
             return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True,
-                             unavailable="unifideck_not_installed" if row is None else "unifideck_no_exe")
+                             unavailable="unifideck_no_exe" if row and not row[0] else "unifideck_not_installed")
         if not Path(row[0]).is_file():
             return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True,
                              unavailable="unifideck_missing")
     # Otherwise an AppImage, script or Linux binary: its start folder is not a Windows game to patch.
     return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
+
+
+def shortcut_appid(home: str, key: str) -> str | None:
+    """The live appid of the non-Steam shortcut a stable `ns:<name>` key stands for."""
+    wanted = " ".join(key[3:].lower().split())
+    for root in steam_roots(home):
+        try:
+            profiles = [p for p in (root / "userdata").iterdir() if p.name.isdecimal()]
+        except OSError:
+            continue
+        for profile in profiles:
+            try:
+                shortcuts = vdf.read_shortcuts(profile / "config/shortcuts.vdf", lenient=True)
+            except (OSError, ValueError, UnicodeError):
+                continue
+            for entry in shortcuts.values() if isinstance(shortcuts, dict) else ():
+                if isinstance(entry, dict) and entry.get("appid") is not None \
+                        and " ".join(str(entry.get("appname") or "").lower().split()) == wanted:
+                    return str(entry["appid"])
+    return None
 
 
 def find_shortcut(home: str, appid: str) -> Installed | None:
@@ -306,8 +332,9 @@ def find_shortcut(home: str, appid: str) -> Installed | None:
             continue
         for profile in profiles:
             try:
-                shortcuts = vdf.read_shortcuts(profile / "config/shortcuts.vdf")
-            except (OSError, ValueError, UnicodeError):
+                shortcuts = vdf.read_shortcuts(profile / "config/shortcuts.vdf", lenient=True)
+            except (OSError, ValueError, UnicodeError) as error:
+                _log.info("shortcuts.vdf unreadable: %s", type(error).__name__ if not isinstance(error, ValueError) else error)
                 continue
             for entry in shortcuts.values() if isinstance(shortcuts, dict) else ():
                 if not isinstance(entry, dict) or str(entry.get("appid")) != appid:
@@ -650,14 +677,19 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
     inputs: dict[str, list[str]] = {key: [] for key in INPUTS}
     dll_targets: list[str] = []
     anti_cheat = False
+    protected = False
     for current, files in _walk(root):
         ours = _installed_by_panel(current)
         lower_dir = current.as_posix().lower()
         if any(marker in lower_dir for marker in ANTI_CHEAT):
             anti_cheat = True
+        if any(part.lower() in SIGNED_ONLY_DIRS for part in current.relative_to(root).parts):
+            protected = True
         for file in files:
             lower = file.lower()
             path = current / file
+            if lower in SIGNED_ONLY_FILES:
+                protected = True
             # Combined libraries need a loader plus effect providers, checked against the chosen build.
             if lower in {"amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_dx12.dll"} and lower not in ours and path.is_file() and not path.is_symlink():
                 dll_targets.append(path.relative_to(root).as_posix())
@@ -723,7 +755,8 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
         "inputs": {kind: sorted(paths)[:4] for kind, paths in inputs.items() if paths},
         "dll_targets": sorted(dll_targets),
         "streamline": streamline_major(root / sorted(inputs["streamline"])[0]) if inputs["streamline"] else None,
-        "anti_cheat": anti_cheat,
+        "anti_cheat": anti_cheat or protected,
+        "anti_cheat_kind": "signed_only" if protected else "warn" if anti_cheat else None,
         "foreign": foreign,
         "foreign_identity": foreign_identity(target) if foreign else None,
     }

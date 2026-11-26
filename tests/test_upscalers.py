@@ -4,6 +4,7 @@ import os
 import shlex
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -606,6 +607,24 @@ def test_non_steam_shortcut_installs_like_any_game(steam, fake_catalog, proc):
     assert detail["analysis"]["exe"] == "bin/game.exe"
     service.install(str(shortcut_id), {"build": "fsr-test"})
     assert (folder / "bin/dxgi.dll").read_bytes() == b"injector"
+
+
+def test_a_shortcuts_sessions_resolve_its_stable_key_to_the_live_appid(steam, fake_catalog, proc):
+    home, _ = steam
+    folder = home / "Games/Cracked Game"
+    exe = _write(folder / "bin/game.exe", b"MZ" + b"\0" * 64)
+    shortcut_id = 3123456789
+    _write(home / ".local/share/Steam/userdata/123/config/shortcuts.vdf", _shortcuts_vdf([
+        {"appid": shortcut_id, "name": "Cracked  Game", "exe": f'"{exe}"', "start": f'"{folder}"'},
+    ]))
+    service = _service(steam, fake_catalog, proc)
+    service.mark_delay = 0
+    service.install(str(shortcut_id), {"build": "fsr-test"})
+    assert service.session_injections("ns:cracked game")["optiscaler"]["build"] == "fsr-test"
+    service.session_outcome({"appid": "ns:cracked game", "start": "launch", "ended_by": "game_stopped", "outcome": "short",
+                             "seconds": 20, "injections": {"optiscaler": {"build": "fsr-test"}},
+                             "process": [{"names": ["game.exe"]}]})
+    assert [item["build"] for item in service.game(str(shortcut_id))["failed_builds"]] == ["fsr-test"]
 
 
 def test_clean_name_drops_release_tags():
@@ -2199,3 +2218,168 @@ def test_report_publishes_the_recorded_game_before_the_slow_disk_reads(steam, fa
         worker.join(5)
     assert partial["games"][0].get("scanned") is not False
     assert partial["games"][0]["elapsed_ms"] >= 0
+
+
+def test_helixsr_installs_when_chosen_even_if_the_recipe_keeps_the_fsr31_library(steam, helix_catalog, proc, monkeypatch):
+    _, game = steam
+    folder = game / "bin/x64_dx12"
+    (folder / "amd_fidelityfx_upscaler_dx12.dll").unlink()
+    _write(folder / "amd_fidelityfx_dx12.dll", b"ffx 1.0.1")
+    monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["2322010"], appid=APPID))
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+    assert service.helix.calls
+
+
+def test_helixsr_installs_when_the_legacy_library_is_beyond_the_first_four_fsr31_copies(steam, helix_catalog, proc, monkeypatch):
+    _, game = steam
+    for index in range(5):
+        _write(game / f"a{index}/amd_fidelityfx_upscaler_dx12.dll", b"ffx")
+    _write(game / "z/amd_fidelityfx_dx12.dll", b"ffx 1.0.1")
+    monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["2322010"], appid=APPID))
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+    assert service.helix.calls
+
+
+@pytest.fixture
+def silent_anti_cheat(monkeypatch):
+    base = recipes.RECIPES.get(APPID) or recipes.Recipe(APPID)
+    monkeypatch.setattr(recipes, "RECIPES", {**recipes.RECIPES, APPID: replace(base, anti_cheat=True)})
+
+
+def test_a_recipe_anti_cheat_asks_the_warning_for_engines_that_change_game_files(steam, proton_catalog, proc, silent_anti_cheat):
+    service = _service(steam, proton_catalog, proc)
+    assert service.game(APPID)["analysis"]["anti_cheat"] is True
+    with pytest.raises(UpscalerError, match="anti_cheat"):
+        service.install(APPID, {"build": "fsr-test"})
+    service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+
+
+def test_a_recipe_anti_cheat_does_not_block_proton_fsr4_which_writes_nothing(steam, proton_catalog, proc, silent_anti_cheat):
+    service = _service(steam, proton_catalog, proc)
+    assert "proton" in service.game(APPID)["analysis"]["anti_cheat_exempt"]
+    assert service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})["env"] == {"FSR4_UPGRADE": "1"}
+
+
+def test_the_accepted_warning_is_stored_by_every_engine_except_proton(steam, proton_catalog, proc, silent_anti_cheat):
+    service = _service(steam, proton_catalog, proc)
+    service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE", "confirm_anti_cheat": True})
+    assert service.game(APPID)["install"]["anti_cheat_accepted"] is False
+    service.uninstall(APPID)
+    service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    assert service.game(APPID)["install"]["anti_cheat_accepted"] is True
+
+
+def test_the_accepted_warning_is_stored_by_the_standalone_dll_engine(steam, dll_catalog, proc, silent_anti_cheat):
+    service = _service(steam, dll_catalog, proc)
+    service.install(APPID, {"build": "dll-test", "confirm_anti_cheat": True})
+    assert service.game(APPID)["install"]["anti_cheat_accepted"] is True
+
+
+def test_file_anti_cheat_does_not_block_proton_fsr4_but_still_asks_for_file_writers(steam, proton_catalog, proc):
+    _, game = steam
+    _write(game / "EasyAntiCheat/EasyAntiCheat_EOS_Setup.exe", b"MZ")
+    service = _service(steam, proton_catalog, proc)
+    assert service.game(APPID)["analysis"]["anti_cheat_exempt"] == ["proton"]
+    assert service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})["env"] == {"FSR4_UPGRADE": "1"}
+    with pytest.raises(UpscalerError, match="anti_cheat"):
+        service.install(APPID, {"build": "fsr-test"})
+
+
+def test_diablo_iv_recipe_prefers_proton_fsr4_on_rdna3_and_4_and_lite_on_rdna2():
+    recipe = recipes.recipe_for("2344520", platform="linux", arch="x86_64")
+    assert recipe.anti_cheat and recipe.recommended_input == "dlss" and recipe.args == ("-dx12",)
+    assert recipe.signed_only
+    assert [catalog.preferred_build(gpu, recipe) for gpu in ("rdna2", "rdna3", "rdna4")] == [
+        "fsr-4.1.1", "proton-fsr4", "proton-fsr4"]
+
+
+@pytest.mark.parametrize("platform,arch", [("windows", "x86_64"), ("linux", "aarch64")])
+def test_a_games_protection_applies_whatever_platform_its_entry_targets(platform, arch):
+    recipe = recipes.recipe_for("2344520", platform=platform, arch=arch)
+    assert recipe.anti_cheat and recipe.signed_only
+    assert recipe.recommended_build is None
+
+
+REAL_BUILDS = dict(catalog.BUILDS)
+
+
+def test_signed_only_recipe_lists_every_supported_build_and_recommends_the_signed_fsr_411_on_rdna2():
+    recipe = recipes.recipe_for("2344520", platform="linux", arch="x86_64")
+    offered = {row["id"] for row in catalog.describe("rdna2", "steam_deck_lcd", recipe) if row["supported"]}
+    plain = {row["id"] for row in catalog.describe("rdna2", "steam_deck_lcd") if row["supported"]}
+    assert "fsr-4.1.1" in offered and plain <= offered
+    assert catalog.preferred_build("rdna2", recipe) == "fsr-4.1.1"
+
+
+def test_signed_only_install_writes_only_signed_pieces(steam, fake_catalog, proc, monkeypatch):
+    _, game = steam
+    from test_upscalers_pe_sign import make_pe
+    unpacked = Path(fake_catalog) / "cache" / catalog.ASSETS[catalog.OPTISCALER_ARCHIVE].sha256 / "unpacked"
+    for name in ("dlssg_to_fsr3_amd_is_better.dll", "fakenvapi.dll"):
+        make_pe(unpacked / name, signed=False)
+    make_pe(unpacked / "amd_fidelityfx_dx12.dll", signed=True)
+    monkeypatch.setitem(catalog.ASSETS, catalog.OPTISCALER_ARCHIVE, replace(catalog.ASSETS[catalog.OPTISCALER_ARCHIVE], signed=True))
+    monkeypatch.setitem(catalog.ASSETS, "extra", replace(catalog.ASSETS["extra"], signed=True))
+    monkeypatch.setitem(catalog.ASSETS, "loose", replace(catalog.ASSETS["extra"], id="loose", signed=False))
+    monkeypatch.setitem(catalog.BUILDS, "unsigned", replace(catalog.BUILDS["fsr-test"], id="unsigned", assets=("loose",)))
+    real = REAL_BUILDS["fsr-4.1.1"]
+    monkeypatch.setitem(catalog.BUILDS, "fsr-4.1.1", replace(real, assets=("extra",)))
+    base = recipes.RECIPES.get(APPID) or recipes.Recipe(APPID)
+    monkeypatch.setattr(recipes, "RECIPES", {**recipes.RECIPES, APPID: replace(base, anti_cheat=True, signed_only=True)})
+    service = _service(steam, fake_catalog, proc)
+    assert service.game(APPID)["preferred"] == "fsr-4.1.1"
+    service.install(APPID, {"build": "unsigned", "confirm_anti_cheat": True})
+    service.install(APPID, {"build": "fsr-4.1.1", "confirm_anti_cheat": True})
+    target = game / "bin/x64_dx12"
+    names = {p.name for p in target.iterdir() if p.is_file()}
+    assert {"dxgi.dll", "amdxcffx64.dll", "OptiScaler.ini"} <= names
+    assert not names & {"dlssg_to_fsr3_amd_is_better.dll", "fakenvapi.dll"}
+    assert "amd_fidelityfx_dx12.dll" in names
+    assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"x"
+    assert (target / "D3D12_Optiscaler/D3D12Core.dll").is_file()
+    text = (target / "OptiScaler.ini").read_text()
+    assert "Fsr4Update=true" in text and "Fsr4ForceEnableInt8=true" in text and "Dx12Upscaler=fsr31" in text
+
+
+class _NewerOptiScaler:
+    def __init__(self, tag="v0.9.5-final", fail=False):
+        self.tag, self.fail, self.resolved = tag, fail, False
+
+    def tracked(self, asset):
+        return asset.id == catalog.OPTISCALER_ARCHIVE
+
+    def resolve(self, asset):
+        assert not self.fail, "signed_only must not resolve latest"
+        self.resolved = True
+        return asset
+
+    def version(self, asset):
+        return self.tag if self.resolved and self.tracked(asset) else None
+
+
+def _fsr411_install(steam, fake_catalog, proc, monkeypatch, latest, signed):
+    _, game = steam
+    monkeypatch.setitem(catalog.ASSETS, catalog.OPTISCALER_ARCHIVE, replace(catalog.ASSETS[catalog.OPTISCALER_ARCHIVE], signed=True))
+    monkeypatch.setitem(catalog.ASSETS, "extra", replace(catalog.ASSETS["extra"], signed=True))
+    monkeypatch.setitem(catalog.BUILDS, "fsr-4.1.1", replace(REAL_BUILDS["fsr-4.1.1"], assets=("extra",)))
+    base = recipes.RECIPES.get(APPID) or recipes.Recipe(APPID)
+    monkeypatch.setattr(recipes, "RECIPES", {**recipes.RECIPES, APPID: replace(base, anti_cheat=True, signed_only=signed)})
+    service = _service(steam, fake_catalog, proc)
+    service.latest = latest
+    service.install(APPID, {"build": "fsr-4.1.1", "confirm_anti_cheat": True})
+    return (game / "bin/x64_dx12" / "OptiScaler.ini").read_text()
+
+
+def test_signed_only_recipe_never_resolves_a_newer_optiscaler(steam, fake_catalog, proc, monkeypatch):
+    text = _fsr411_install(steam, fake_catalog, proc, monkeypatch, _NewerOptiScaler(fail=True), True)
+    assert "Fsr4ForceEnableInt8=true" in text
+
+
+@pytest.mark.parametrize("tag,expected", [("v0.9.5-final", "Fsr4ForceEnableInt8=1"), ("v0.9.4-final", "Fsr4ForceEnableInt8=true")])
+def test_int8_flag_becomes_a_mode_from_optiscaler_095(steam, fake_catalog, proc, monkeypatch, tag, expected):
+    text = _fsr411_install(steam, fake_catalog, proc, monkeypatch, _NewerOptiScaler(tag), False)
+    assert expected in text

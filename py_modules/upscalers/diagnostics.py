@@ -107,6 +107,14 @@ def frontend_context(value) -> dict:
         "covers": badges.get("covers") if isinstance(badges.get("covers"), bool) else None,
         "in_game": badges.get("in_game") if badges.get("in_game") in ("off", "start", "always") else None,
     }
+    scan = badges.get("cover_scan")
+    if isinstance(scan, dict):
+        counts = {key: scan[key] for key in ("labelled", "images", "placed") if type(scan.get(key)) is int and 0 <= scan[key] < 10**6}
+        skipped = scan.get("skipped") if isinstance(scan.get("skipped"), dict) else {}
+        counts["skipped"] = {key: value for key, value in skipped.items()
+                             if key in ("size", "no_tile", "collapsed", "icon", "collection", "hidden") and type(value) is int and 0 <= value < 10**6}
+        result["badges"]["cover_scan"] = counts
+    result["reported"] = bool(value)
     result["running"] = None
     if isinstance(running, dict):
         result["running"] = {key: running[key][:256] for key in ("stable_appid", "name") if isinstance(running.get(key), str)}
@@ -537,7 +545,27 @@ def recorded_state(appid: str, entry: dict) -> dict:
     """Panel's own record of a game, read from memory only: no folder, log or Steam file is touched."""
     return {"appid": appid, "scanned": False, "actions": report_actions(entry.get("actions")),
             "previous": copy.deepcopy(entry.get("previous")), "install": _report_install(entry.get("install")),
-            "history": _report_history(entry.get("history"))}
+            "history": _report_history(entry.get("history")), "failed_builds": failed_builds(entry.get("failed_builds"))}
+
+
+def failed_builds(value) -> list[dict]:
+    """Builds that closed the game within the short window; only identifiers, versions and numbers travel."""
+    if not isinstance(value, dict):
+        return []
+    result = []
+    for build_id, item in list(value.items())[:8]:
+        if not (isinstance(build_id, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}", build_id) and isinstance(item, dict)):
+            continue
+        row: dict = {"build": build_id}
+        for key in ("version", "archive"):
+            text = item.get(key)
+            if isinstance(text, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,63}", text):
+                row[key] = text
+        for key in ("seconds", "at"):
+            if isinstance(item.get(key), (int, float)) and not isinstance(item.get(key), bool):
+                row[key] = item[key]
+        result.append(row)
+    return result
 
 
 def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
@@ -560,6 +588,7 @@ def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
         "current": snapshot(install),
         "install": _report_install(install),
         "history": _report_history(entry.get("history")),
+        "failed_builds": failed_builds(entry.get("failed_builds")),
         "steam": _steam_config(home, appid),
     }
     if install and install.get("engine") == "helixsr":
@@ -699,7 +728,7 @@ def game_files(installed, analysis: dict, owned: list[str]) -> dict:
     target = Path(analysis["target"]) if analysis.get("target") else None
     folders = list(dict.fromkeys(f for f in (target, root) if f is not None))
     result: dict = {"exe": analysis.get("exe"), "apis": list(analysis.get("apis") or [])[:6],
-                    "anti_cheat": bool(analysis.get("anti_cheat")),
+                    "anti_cheat": bool(analysis.get("anti_cheat")), "anti_cheat_kind": analysis.get("anti_cheat_kind"),
                     "foreign_identity": fields(analysis.get("foreign_identity"), ("engine", "variant", "manifest_error")),
                     "inputs": {}, "loaders": [], "store_files": []}
     result["reframework_upscaler"] = dict.fromkeys(_REFRAMEWORK_FIELDS)

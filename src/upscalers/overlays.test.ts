@@ -171,6 +171,51 @@ describe("cover badges switch", () => {
   });
 });
 
+describe("cover badge for themes that paint covers", () => {
+  const overview = {
+    builds: [{ id: "fsr-4.1.2-beta", engine: "optiscaler", family: "fsr", version: "4.1.2", models: ["lite"] }],
+    installs: { "1245620": { build: "fsr-4.1.2-beta", status: "installed", options: { model: "lite" } } },
+  } as unknown as UpscalersOverview;
+
+  it("gives the same text as the DOM pill, follows installs and removals and honours the hide option", async () => {
+    const { coverBadgeFor, subscribeCoverBadges, writeCoverBadges } = await import("./overlays");
+    const changed = vi.fn();
+    const stop = subscribeCoverBadges(changed);
+    publishOverview(overview);
+    expect(coverBadgeFor("1245620")).toEqual({ label: "FSR 4.1.2 Lite", short: "FSR 4 Lite", state: "installed" });
+    expect(coverBadgeFor("7")).toBeNull();
+    expect(changed).toHaveBeenCalledTimes(1);
+    publishOverview(overview);
+    expect(changed).toHaveBeenCalledTimes(1);
+    writeCoverBadges(false);
+    expect(coverBadgeFor("1245620")).toBeNull();
+    expect(changed).toHaveBeenCalledTimes(2);
+    writeCoverBadges(true);
+    expect(changed).toHaveBeenCalledTimes(3);
+    publishOverview({ ...overview, installs: {} });
+    expect(coverBadgeFor("1245620")).toBeNull();
+    expect(changed).toHaveBeenCalledTimes(4);
+    stop();
+    publishOverview(overview);
+    expect(changed).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("cover badge listeners", () => {
+  it("keep being called when another one throws", async () => {
+    const { subscribeCoverBadges, writeCoverBadges } = await import("./overlays");
+    const good = vi.fn();
+    writeCoverBadges(true);
+    const stopBad = subscribeCoverBadges(() => { throw new Error("theme"); });
+    const stopGood = subscribeCoverBadges(good);
+    publishOverview({ builds: [{ id: "fsr-4.1.2-beta", engine: "optiscaler", family: "fsr", version: "4.1.2", models: ["lite"] }],
+      installs: { "99": { build: "fsr-4.1.2-beta", status: "installed", options: { model: "lite" } } } } as unknown as UpscalersOverview);
+    expect(good).toHaveBeenCalledTimes(1);
+    stopBad(); stopGood();
+    publishOverview({ builds: [], installs: {} } as unknown as UpscalersOverview);
+  });
+});
+
 describe("cover pill when FSR 4 fell back", () => {
   const overview = (fallback: unknown) => ({
     builds: [{ id: "fsr-4.1.2-beta", family: "fsr", version: "4.1.2", models: ["lite", "full"], engine: "optiscaler" }],

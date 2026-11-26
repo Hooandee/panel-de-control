@@ -20,6 +20,9 @@ import { showGame, takeHeldPage, type PageDraft } from "../upscalers/pageMemory"
 import type { UpscalerChoice, UpscalersOverview } from "../upscalers/types";
 import { useGameCompatibility } from "../upscalers/useGameCompatibility";
 
+// Unifideck lists every store game it knows, installed or not: those carry nothing to show.
+const LIBRARY_ONLY_REASONS = new Set(["unifideck_not_installed"]);
+
 const NavigationGroup = Focusable as FC<ComponentProps<typeof Focusable> & { childFocusDisabled?: boolean }>;
 
 export const EscaladoresSection: FC = () => {
@@ -83,8 +86,6 @@ export const EscaladoresSection: FC = () => {
     return [...selection.games]
       .sort((a, b) => Number(String(b.liveAppid) in installs) - Number(String(a.liveAppid) in installs) || b.lastPlayed - a.lastPlayed);
   }, [overview, selection]);
-  const selected = games.find((game) => game.liveAppid === selectedAppid);
-
   useEffect(() => {
     if (!overview) return;
     const open = () => {
@@ -97,19 +98,30 @@ export const EscaladoresSection: FC = () => {
   }, [overview, games, inventory]);
 
   const { compat, checked, status } = useGameCompatibility(games, !!overview);
-  const listed = useMemo(() => games.filter((game) => {
+  const selected = games.find((game) => game.liveAppid === selectedAppid
+    && (!compat[String(game.liveAppid)]?.unavailable || String(game.liveAppid) in (overview?.installs ?? {})));
+  const rows = useMemo(() => games.filter((game) => {
     const id = String(game.liveAppid);
-    return checked?.has(id) ? !compat[id]?.unavailable : !game.isNonSteam;
+    if (!checked?.has(id)) return !game.isNonSteam;
+    const reason = compat[id]?.unavailable;
+    return !reason || !LIBRARY_ONLY_REASONS.has(reason);
   }), [games, compat, checked]);
+  const listed = useMemo(() => rows.filter((game) => !compat[String(game.liveAppid)]?.unavailable), [rows, compat]);
 
   useEffect(() => {
     if (!overview) {
       if (failed) publishSelectorFailure();
     } else if (!selected) {
-      const filtered = games.filter((game) => compat[String(game.liveAppid)]?.unavailable).length;
-      publishSelectorContext(selection, listed, inventory?.complete ?? null, status, filtered, inventory?.rejected);
+      const reasons: Record<string, number> = {};
+      for (const game of games) {
+        const reason = compat[String(game.liveAppid)]?.unavailable;
+        if (reason) reasons[reason] = (reasons[reason] ?? 0) + 1;
+      }
+      const hidden = games.filter((game) => !rows.includes(game));
+      const filtered = hidden.filter((game) => checked?.has(String(game.liveAppid))).length;
+      publishSelectorContext(selection, rows, inventory?.complete ?? null, status, filtered, hidden.length - filtered, inventory?.rejected, reasons);
     }
-  }, [overview, failed, selected, games, listed, status, compat, selection, inventory]);
+  }, [overview, failed, selected, games, rows, status, compat, checked, selection, inventory]);
 
   return (
     <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
@@ -154,10 +166,10 @@ export const EscaladoresSection: FC = () => {
               </div>
             </>
           )}
-          {overview && listed.length === 0 && (
+          {overview && rows.length === 0 && (
             <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.empty")}</span>
           )}
-          {overview && listed.map((game) => {
+          {overview && rows.map((game) => {
             const install = overview.installs[String(game.liveAppid)];
             const build = install && overview.builds.find((b) => b.id === install.build);
             const busy = overview.job?.state === "running" && overview.job.appid === String(game.liveAppid);
@@ -170,7 +182,7 @@ export const EscaladoresSection: FC = () => {
             const scaler = install ? (fallback ? (fallback.observed ?? t("up.fallback.coverNone", { from: fallback.requested })) : badgeLabel(build, install.options?.model, install.build).full) : engines?.mako?.spatial ? makoName : null;
             const active = scaler === makoName && frameGen?.startsWith(makoName) ? frameGen : [scaler, frameGen].filter(Boolean).join(" - ");
             return (
-              <FocusableCard key={game.instanceKey} onActivate={() => setSelectedAppid(game.liveAppid)}>
+              <FocusableCard key={game.instanceKey} onActivate={() => { if (!info?.unavailable || install) setSelectedAppid(game.liveAppid); }}>
                 <GameCover urls={game.coverUrls} name={game.name} width={30} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -184,9 +196,12 @@ export const EscaladoresSection: FC = () => {
                           {fallback ? <LuTriangleAlert size={14} /> : install.status === "active" ? <LuCircleCheck size={14} /> : install.status === "broken" ? <LuTriangleAlert size={14} /> : <LuClock size={14} />}
                         </span>
                         <span style={{ color: theme.color.textPrimary }}>{active}</span>
+                        {info?.unavailable && <span style={{ color: theme.color.textMuted }}>{t(`up.list.unavailable.${info.unavailable}`)}</span>}
                       </>
                     ) : active ? (
                       <span style={{ color: theme.color.textPrimary }}>{active}</span>
+                    ) : info?.unavailable ? (
+                      <span style={{ color: theme.color.textMuted }}>{t(`up.list.unavailable.${info.unavailable}`)}</span>
                     ) : info ? (
                       <span style={{ color: info.inputs.length ? theme.color.ok : theme.color.textMuted }}>
                         {info.native ? t("up.list.linux") : info.inputs.length ? info.inputs.join(", ") : t("up.list.none")}
