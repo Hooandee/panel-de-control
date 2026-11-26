@@ -608,6 +608,12 @@
   <data name="UpscalersErrModConflict" xml:space="preserve"><value>Le mod apporte des fichiers en conflit avec ceux de Panel.</value></data>
   <data name="UpscalersErrModMoved" xml:space="preserve"><value>Le mod enregistré n'est plus là : ajoutez-le à nouveau.</value></data>
   <data name="UpscalersErrUserFileWrong" xml:space="preserve"><value>Ce n'est pas le fichier demandé par la recette.</value></data>
+  <data name="UpscalersNeedUserFile" xml:space="preserve"><value>{0} {1} manque : téléchargez-le vous-même (Panel ne peut pas) et ajoutez-le dans Avancé → Mods et vos fichiers.</value></data>
+  <data name="UpscalersNeedUserFileAvoid" xml:space="preserve"><value>Votre {0} est une version qui ne fonctionne pas : utilisez la {1}.</value></data>
+  <data name="UpscalersNeedUserFileOther" xml:space="preserve"><value>Votre {0} est une autre version ; celle testée est la {1}.</value></data>
+  <data name="UpscalersNeedRuntime" xml:space="preserve"><value>{0} manque : installez-le pour que le jeu démarre avec cette recette.</value></data>
+  <data name="UpscalersNeedRuntimeOutdated" xml:space="preserve"><value>{0} est obsolète : il faut la {1} ou plus récente.</value></data>
+  <data name="UpscalersNeedOpen" xml:space="preserve"><value>Ouvrir la page de téléchargement</value></data>
   <data name="UpscalersBeta" xml:space="preserve"><value>Beta</value></data>
   <data name="UpscalersDllMode" xml:space="preserve"><value>Mode DLL</value></data>
   <data name="UpscalersDllNoOptions" xml:space="preserve"><value>En mode DLL, réglez la qualité dans le jeu.</value></data>
