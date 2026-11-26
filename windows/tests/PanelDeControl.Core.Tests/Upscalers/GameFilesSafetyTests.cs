@@ -121,6 +121,61 @@ public sealed class GameFilesSafetyTests : IDisposable
     }
 
     [Fact]
+    public void RemovingAReframeworkInstallTakesOutWhatItGeneratedAndKeepsTheGamesOwnFiles()
+    {
+        File.WriteAllText(Path.Combine(_game, "config.ini"), "game config");
+        Directory.CreateDirectory(Path.Combine(_game, "reframework"));
+        File.WriteAllText(Path.Combine(_game, "reframework", "mine.lua"), "user");
+        GameFiles.Apply(_game, Sources(("dinput8.dll", "panel fw"), (ReframeworkConfig.FileName, "REFrameworkConfig_MenuOpen=false")), "[OptiScaler]");
+        File.WriteAllText(Path.Combine(_game, "re2_framework_log.txt"), "log");
+        File.WriteAllText(Path.Combine(_game, "reframework_crash.txt"), "crash");
+        File.WriteAllText(Path.Combine(_game, "ref_ui.ini"), "ui");
+        Directory.CreateDirectory(Path.Combine(_game, "_storage_", "inner"));
+        File.WriteAllText(Path.Combine(_game, "_storage_", "inner", "x.bin"), "x");
+        File.WriteAllText(Path.Combine(_game, "unrelated.txt"), "keep");
+
+        Assert.Empty(GameFiles.Remove(_game));
+
+        Assert.False(File.Exists(Path.Combine(_game, "re2_framework_log.txt")));
+        Assert.False(File.Exists(Path.Combine(_game, "reframework_crash.txt")));
+        Assert.False(File.Exists(Path.Combine(_game, "ref_ui.ini")));
+        Assert.False(Directory.Exists(Path.Combine(_game, "_storage_")));
+        Assert.False(File.Exists(Path.Combine(_game, "dinput8.dll")));
+        Assert.Equal("game config", File.ReadAllText(Path.Combine(_game, "config.ini")));
+        Assert.Equal("user", File.ReadAllText(Path.Combine(_game, "reframework", "mine.lua")));
+        Assert.Equal("keep", File.ReadAllText(Path.Combine(_game, "unrelated.txt")));
+    }
+
+    [Theory]
+    [InlineData("data/settings.json", false)]
+    [InlineData("autorun/mine.lua", true)]
+    [InlineData("plugins/extra.dll", true)]
+    public void AReframeworkFolderCreatedSinceTheInstallGoesOnlyWithoutUserScriptsOrPlugins(string file, bool kept)
+    {
+        GameFiles.Apply(_game, Sources(("dinput8.dll", "panel fw"), (ReframeworkConfig.FileName, "REFrameworkConfig_MenuOpen=false")), "[OptiScaler]");
+        var path = Path.Combine(_game, "reframework", file.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "x");
+
+        Assert.Empty(GameFiles.Remove(_game));
+
+        Assert.Equal(kept, File.Exists(path));
+    }
+
+    [Fact]
+    public void AnInstallWithoutASnapshotLeavesTheRuntimeFilesAlone()
+    {
+        GameFiles.Apply(_game, Sources(("dinput8.dll", "panel fw"), (ReframeworkConfig.FileName, "REFrameworkConfig_MenuOpen=false")), "[OptiScaler]");
+        var path = Path.Combine(_game, GameManifest.Folder, GameManifest.FileName);
+        File.WriteAllText(path, System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(path), @",\s*""preexisting"": \[\]", ""));
+        File.WriteAllText(Path.Combine(_game, "config.ini"), "game config");
+
+        GameFiles.Remove(_game);
+
+        Assert.Equal("game config", File.ReadAllText(Path.Combine(_game, "config.ini")));
+    }
+
+    [Fact]
     public void TwoSpellingsOfOneFileAreOneManifestEntryOnWindows()
     {
         var manifest = new GameManifest();

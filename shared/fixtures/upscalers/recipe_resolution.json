@@ -1673,15 +1673,15 @@
   },
   "windows|2050650|optiscaler|plain": {
    "appid": "2050650",
-   "exe": null,
+   "exe": "re4.exe",
    "args": [],
-   "files": {
-    "dinput8.dll": "reframework-nightly"
-   },
+   "files": {},
    "native_dlls": [
     "dinput8"
    ],
    "ini": {
+    "Spoofing.Dxgi": "false",
+    "Menu.OverlayMenu": "true",
     "Menu.ShortcutKey": "0x24"
    },
    "fg_note": null,
@@ -1701,17 +1701,27 @@
    "linux": false,
    "wiki_settings": {},
    "wiki_suggestions": {},
-   "source": "optiscaler-wiki@a920f9a",
-   "dependencies": [],
-   "catalog_revision": null,
+   "source": "game-recipes",
+   "dependencies": [
+    "refw-pdup-re4",
+    "puredark-upscaler-base"
+   ],
+   "catalog_revision": 1,
    "recommended_input": null,
-   "effective_api": null,
+   "effective_api": "d3d12",
    "quality_owner": "panel",
    "recommended_build": null,
-   "optiscaler_root_files": [],
-   "reframework_upscaler": false,
-   "optiscaler_fg": true,
-   "game_settings": [],
+   "optiscaler_root_files": [
+    "libxess.dll"
+   ],
+   "reframework_upscaler": true,
+   "optiscaler_fg": false,
+   "game_settings": [
+    [
+     "FidelityFX Super Resolution 2",
+     "No"
+    ]
+   ],
    "anr_settings": [],
    "mod_launch_exe": null,
    "mod_settings": {},
