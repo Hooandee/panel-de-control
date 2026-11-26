@@ -35,7 +35,8 @@ def inspect(path) -> tuple[bool, bool]:
             count = struct.unpack("<I", _read(handle, directories - 4, 4))[0]
             if count <= _SECURITY_DIR or count > _MAX_DIRS * 2:
                 return True, False
-            _address, size = struct.unpack("<II", _read(handle, directories + _SECURITY_DIR * 8, 8))
-            return True, size > 0
+            address, size = struct.unpack("<II", _read(handle, directories + _SECURITY_DIR * 8, 8))
+            handle.seek(0, 2)
+            return True, size > 0 and address >= 0x40 and address + size <= handle.tell()
     except (OSError, ValueError, struct.error):
         return False, False
