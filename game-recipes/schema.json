@@ -325,6 +325,9 @@
         },
         "anti_cheat": {
           "type": "boolean"
+        },
+        "signed_only": {
+          "type": "boolean"
         }
       },
       "required": [

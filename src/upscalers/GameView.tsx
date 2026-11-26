@@ -275,7 +275,7 @@ export const GameView: FC<{
 
   const install = detail?.install ?? null;
   const running = job?.state === "running";
-  const builds = overview.builds;
+  const builds = detail?.builds ?? overview.builds;
   const status = install?.status ?? null;
   const sameBuild = install?.build === choice.build;
   const solution = detail?.solutions?.[choice.build] ?? (detail?.install?.build === choice.build ? detail.solution : null);

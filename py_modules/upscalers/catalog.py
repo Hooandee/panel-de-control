@@ -28,6 +28,8 @@ class Asset:
     archive: bool = False
     member: str | None = None
     generation: int = 9
+    # The shipped binary carries a valid Authenticode signature.
+    signed: bool = False
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,7 @@ ASSETS: dict[str, Asset] = {
             ("https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/"
              "Optiscaler_0.9.4-final.20260718._MM.7z",),
             archive=True,
+            signed=True,
         ),
         # OptiScaler 10 nightly: bundled files move to an `OptiScaler/` subfolder; FFX upscaler 4.1.2.4555.
         Asset(
@@ -134,6 +137,7 @@ ASSETS: dict[str, Asset] = {
             "a2b136b6affd35a49b141a936be935f7d5ddc8d8f9b8c9afbe62ff9ddb2538a0",
             66830768,
             (f"{_BLEEDING}/fsr-4-1-1/amdxcffx64.dll",),
+            signed=True,
         ),
         Asset(
             "amdxcffx64-4.1.1-valve",
@@ -382,17 +386,47 @@ def for_game(build: Build, inputs: dict, gpu: str, recipe=None) -> Build:
     return replace(build, archive=OPTISCALER_BETA, extra_dir="OptiScaler", ini={**ini, "FSR.Fsr4GpuSupport": "4"})
 
 
-def preferred_build(gpu: str, recipe=None) -> str:
+def signed_only(recipe) -> bool:
+    return bool(getattr(recipe, "signed_only", False))
+
+
+def build_signed(build: Build) -> bool:
+    """Whether every binary the build writes into the game is signed: engines that write nothing qualify."""
+    if build.engine == "proton":
+        return True
+    if build.engine != "optiscaler":
+        return False
+    ids = [build.archive, *build.assets, *build.replace.values()]
+    if build.injector:
+        ids.append(build.injector)
+    return all(ASSETS[asset_id].signed for asset_id in ids)
+
+
+def preferred_build(gpu: str, recipe=None, device: str = "") -> str:
     recommended = BUILDS.get(getattr(recipe, "recommended_build", None))
-    if recommended and recommended.available and gpu in recommended.gpus:
+    if recommended and recommended.available and build_supported(recommended, gpu, device, recipe):
         return recommended.id
-    return PREFERRED.get(gpu, "fsr-3.1")
+    default = PREFERRED.get(gpu, "fsr-3.1")
+    fallback = BUILDS.get(default)
+    if signed_only(recipe) and not (fallback and fallback.available and build_supported(fallback, gpu, device, recipe)):
+        eligible = [b for b in BUILDS.values() if b.available and b.engine == "optiscaler" and build_supported(b, gpu, device, recipe)]
+        if eligible:
+            return max(eligible, key=lambda b: (b.image, -b.cost)).id
+    return default
 
 
 _DGPU_CYBOMAN = frozenset({"fsr-4.1.2-lite-dgpu-dll", "fsr-4.1.2-lite-dgpu-lossy-dll"})
 
 
-def build_supported(build: Build, gpu: str, device: str = "") -> bool:
+_SIGNED_ONLY_GPUS = {"fsr-4.1.1": ("rdna2",)}
+
+
+def build_supported(build: Build, gpu: str, device: str = "", recipe=None) -> bool:
+    if signed_only(recipe):
+        if not build_signed(build):
+            return False
+        if gpu in _SIGNED_ONLY_GPUS.get(build.id, ()):
+            return True
     if build.id in _DGPU_CYBOMAN:
         return gpu == "rdna3" and device == "steam_machine"
     if build.id == "fsr-4.1.2-lite-igpu-dll":
@@ -429,7 +463,7 @@ def may_fallback(build: Build, gpu: str) -> str | None:
     return "3.1.6" if build.id in _FP8_SDK and gpu != "rdna4" else None
 
 
-def describe(gpu: str, device: str = "") -> list[dict]:
+def describe(gpu: str, device: str = "", recipe=None) -> list[dict]:
     return [
         {
             "id": build.id,
@@ -439,7 +473,7 @@ def describe(gpu: str, device: str = "") -> list[dict]:
             "cost": build.cost,
             "available": build.available,
             "channel": build.channel,
-            "supported": build_supported(build, gpu, device),
+            "supported": build_supported(build, gpu, device, recipe),
             "download_bytes": sum({asset.sha256: asset.size for asset in build_assets(build)}.values()) if build.available else 0,
             "models": [model for model, _ in build.models],
             "dll_names": list(build.replace) if build.engine == "dll" else [],

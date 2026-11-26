@@ -341,6 +341,7 @@ export const ptBR: Record<string, string> = {
   "up.fg.hint.anrGame": "Ative-a nas configurações gráficas do jogo como DLSS Frame Generation.",
   "up.error.anr_layout": "A versão publicada do ANR mudou de formato e a anterior não pôde ser usada.",
   "up.error.anr_build": "O ANR precisa do OptiScaler 10, que não está disponível para esta GPU.",
+  "up.error.unsigned_build": "Este jogo fecha com arquivos não assinados: só são permitidas builds assinadas.",
   "up.fg.pick.optiscaler": "OptiScaler",
   "up.fg.pick.lsfg.caption": "Funciona em qualquer jogo, com um pouco mais de latência",
   "up.fg.experimental": "Experimental",

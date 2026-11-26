@@ -358,7 +358,7 @@ class UpscalerService:
                 automatic = auto_recipes.plan(recipe, installed)
             except auto_recipes.RecipeError:
                 automatic, refused = None, True
-            result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, _recommending(recipe, automatic, refused))}
+            result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, _recommending(recipe, automatic, refused), self.device)}
         if self.logger:
             reasons = Counter(row["unavailable"] for row in result.values() if row.get("unavailable"))
             if dict(reasons) != self._unactionable_logged:
@@ -465,7 +465,8 @@ class UpscalerService:
         selected = solutions.get((install or {}).get("build")) or solution_plan.resolve(self.gpu, analysis, recipe)
         return {
             "solution": selected, "solutions": solutions,
-            "preferred": catalog.preferred_build(self.gpu, _recommending(recipe, automatic, bool(recipe_info and recipe_info.get("blocked")))),
+            "preferred": catalog.preferred_build(self.gpu, _recommending(recipe, automatic, bool(recipe_info and recipe_info.get("blocked"))), self.device),
+            **({"builds": catalog.describe(self.gpu, self.device, recipe)} if catalog.signed_only(recipe) else {}),
             "appid": appid,
             "name": installed.name,
             "updating": games.update_state(installed.state_flags),
@@ -817,6 +818,8 @@ class UpscalerService:
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         entry = self._game_state(appid)
         recipe = self._recipe(appid, self._identity(installed, entry), installed)
+        if catalog.signed_only(recipe) and not catalog.build_supported(build, self.gpu, self.device, recipe):
+            raise UpscalerError("unsigned_build")
         try:
             automatic = auto_recipes.plan(recipe, installed)
         except auto_recipes.RecipeError as error:
@@ -896,6 +899,8 @@ class UpscalerService:
         sources = _archive_sources(archive, archive_asset.generation)
         base_ini = sources.pop("OptiScaler.ini").read_text(encoding="utf-8", errors="replace")
         injector = sources.pop("OptiScaler.dll")
+        if catalog.signed_only(recipe):
+            sources = {}
         if build.injector:
             injector = paths[build.injector]
         sources[proxy] = injector

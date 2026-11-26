@@ -118,6 +118,7 @@ export interface HistoryEntry {
 
 export interface GameDetail {
   preferred?: string;
+  builds?: BuildInfo[];
   solution?: ResolvedSolution | null;
   solutions?: Record<string, ResolvedSolution>;
   appid: string;

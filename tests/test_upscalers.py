@@ -2252,5 +2252,50 @@ def test_file_anti_cheat_still_asks_the_warning_for_proton_fsr4(steam, proton_ca
 def test_diablo_iv_recipe_prefers_proton_fsr4_on_rdna3_and_4_and_lite_on_rdna2():
     recipe = recipes.recipe_for("2344520", platform="linux", arch="x86_64")
     assert recipe.anti_cheat and recipe.recommended_input == "dlss" and recipe.args == ("-dx12",)
+    assert recipe.signed_only
     assert [catalog.preferred_build(gpu, recipe) for gpu in ("rdna2", "rdna3", "rdna4")] == [
-        "fsr-4.1.2-beta", "proton-fsr4", "proton-fsr4"]
+        "fsr-4.1.1", "proton-fsr4", "proton-fsr4"]
+
+
+REAL_BUILDS = dict(catalog.BUILDS)
+
+
+def test_signed_only_recipe_offers_the_signed_fsr_411_on_rdna2_and_hides_the_nightly():
+    recipe = recipes.recipe_for("2344520", platform="linux", arch="x86_64")
+    offered = {row["id"] for row in catalog.describe("rdna2", "steam_deck_lcd", recipe) if row["supported"]}
+    assert "fsr-4.1.1" in offered and "fsr-4.1.2-beta" not in offered and "fsr-4.1.1-rdna2" not in offered
+    assert not any(catalog.BUILDS[name].engine == "dll" for name in offered)
+    assert catalog.preferred_build("rdna2", recipe) == "fsr-4.1.1"
+
+
+def test_builds_stay_as_they_were_for_recipes_without_signed_only():
+    plain = {row["id"]: row["supported"] for row in catalog.describe("rdna2")}
+    assert plain["fsr-4.1.1"] is False and plain["fsr-4.1.2-beta"] is True
+    assert catalog.preferred_build("rdna2") == "fsr-4.1.2-beta"
+
+
+def test_signed_only_install_writes_only_signed_pieces(steam, fake_catalog, proc, monkeypatch):
+    _, game = steam
+    for name in ("dlssg_to_fsr3_amd_is_better.dll", "fakenvapi.dll", "amd_fidelityfx_dx12.dll"):
+        _write(Path(fake_catalog) / "cache" / catalog.ASSETS[catalog.OPTISCALER_ARCHIVE].sha256 / "unpacked" / name)
+    monkeypatch.setitem(catalog.ASSETS, catalog.OPTISCALER_ARCHIVE, replace(catalog.ASSETS[catalog.OPTISCALER_ARCHIVE], signed=True))
+    monkeypatch.setitem(catalog.ASSETS, "extra", replace(catalog.ASSETS["extra"], signed=True))
+    monkeypatch.setitem(catalog.ASSETS, "loose", replace(catalog.ASSETS["extra"], id="loose", signed=False))
+    monkeypatch.setitem(catalog.BUILDS, "unsigned", replace(catalog.BUILDS["fsr-test"], id="unsigned", assets=("loose",)))
+    real = REAL_BUILDS["fsr-4.1.1"]
+    monkeypatch.setitem(catalog.BUILDS, "fsr-4.1.1", replace(real, assets=("extra",)))
+    base = recipes.RECIPES.get(APPID) or recipes.Recipe(APPID)
+    monkeypatch.setattr(recipes, "RECIPES", {**recipes.RECIPES, APPID: replace(base, anti_cheat=True, signed_only=True)})
+    service = _service(steam, fake_catalog, proc)
+    assert service.game(APPID)["preferred"] == "fsr-4.1.1"
+    with pytest.raises(UpscalerError, match="unsigned_build"):
+        service.install(APPID, {"build": "unsigned", "confirm_anti_cheat": True})
+    service.install(APPID, {"build": "fsr-4.1.1", "confirm_anti_cheat": True})
+    target = game / "bin/x64_dx12"
+    names = {p.name for p in target.iterdir() if p.is_file()}
+    assert {"dxgi.dll", "amdxcffx64.dll", "OptiScaler.ini"} <= names
+    assert not names & {"dlssg_to_fsr3_amd_is_better.dll", "fakenvapi.dll", "amd_fidelityfx_dx12.dll"}
+    assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"x"
+    assert not (target / "D3D12_Optiscaler").exists()
+    text = (target / "OptiScaler.ini").read_text()
+    assert "Fsr4Update=true" in text and "Fsr4ForceEnableInt8=true" in text and "Dx12Upscaler=fsr31" in text

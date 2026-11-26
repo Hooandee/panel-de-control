@@ -22,5 +22,6 @@
   ],
   "recommended_input": "dlss",
   "recommended_build": "proton-fsr4",
-  "anti_cheat": true
+  "anti_cheat": true,
+  "signed_only": true
 }
