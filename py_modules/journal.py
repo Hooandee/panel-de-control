@@ -365,7 +365,9 @@ def merged_sections(directory: str) -> dict | None:
 
 
 _KEY_SOURCES = ("rpc", "session", "context", "sections", "state", "tdp", "loop", "themes")
-_KEY_MESSAGES = ("TDP transition", "Lifecycle transition", "Shutdown stage", " loaded (euid")
+_KEY_MESSAGES = (
+    "TDP transition", "Lifecycle transition", "Shutdown stage", " loaded (euid", "resume_probe",
+)
 
 
 def _is_key_record(record: dict) -> bool:

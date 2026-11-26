@@ -79,6 +79,26 @@ class IpDbus:
             ),
         }
 
+    def last_known(self) -> dict:
+        """What the last reads saw, without touching the bus."""
+        return {
+            "path": self._cached_path,
+            "capabilities": list(self._last_capabilities),
+        }
+
+    def composite_path(self) -> str | None:
+        return self._path()
+
+    def target_devices(self) -> list | None:
+        """Object paths of the composite's emulated devices; None when unreadable."""
+        path = self._path()
+        if not path:
+            return None
+        r = self._run(["busctl", "get-property", SVC, path, IFACE, "TargetDevices"])
+        if not r or r.returncode != 0:
+            return None
+        return list(dict.fromkeys(re.findall(r'"([^"]+)"', r.stdout)))
+
     def _path(self):
         # The composite object path is stable for the daemon's lifetime; discover it
         # once (a `busctl tree` spawn) and reuse — every method needs it, so this

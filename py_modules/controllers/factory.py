@@ -91,6 +91,13 @@ class ControllerBackend:
     def apply_effective(self, appid) -> bool:
         return False
 
+    # Resume evidence is InputPlumber-only; elsewhere there is nothing to observe.
+    def resume_baseline(self):
+        return None
+
+    def record_resume_probe(self, result) -> None:
+        pass
+
     def diagnostics(self) -> dict:
         diagnostics = {
             "manager": self.manager,
@@ -112,6 +119,16 @@ class IpBackend(ControllerBackend):
         self._store = store
         self._dbus = dbus
         self._device_key = device_key
+        self._resume_advisory = None
+
+    def resume_baseline(self):
+        reader = getattr(self._dbus, "last_known", None)
+        return reader() if callable(reader) else None
+
+    def record_resume_probe(self, result) -> None:
+        advisory = result.get("advisory") if isinstance(result, dict) else None
+        if advisory:
+            self._resume_advisory = advisory  # sticky: later resumes start from the lost state
 
     def get_config(self, appid=None) -> dict:
         return self._stamp(ip.get_config(self._store, self._dbus, self._device_key, appid=appid))
@@ -168,6 +185,7 @@ class IpBackend(ControllerBackend):
                 )
             ],
             "dbus": dbus_state,
+            "resume_advisory": self._resume_advisory,
         }
 
 

@@ -171,6 +171,7 @@ from controllers import conflict as controller_conflict
 from controllers import factory as controller_factory
 from controllers.store import RemapStore
 from controllers.dbus import IpDbus
+from controllers import resume_probe as controller_resume_probe
 from sysfs import read_int, read_str
 from mangohud.store import HudStore
 from mangohud import detect as mangohud_detect
@@ -346,6 +347,9 @@ _RESUME_WINDOW_S = 60.0
 # Switching cores off or pinning the GPU clock seconds after a resume can freeze the
 # machine; both wait this long after waking.
 _RESUME_HOLD_S = 30.0
+# One read-only look at the controller stack this long after a resume, once the
+# hardware has had time to re-enumerate.
+_CONTROLLER_RESUME_PROBE_S = 20.0
 
 _STEAM_DECK_PROFILES = frozenset({
     "steam_deck_lcd",
@@ -12569,6 +12573,51 @@ class Plugin(AmbientRpc):
                 pass
         self._pulse_mark("resume", sync=False, suspend_s=suspend_seconds, token=self._resume_token)
         self._start_resume_hold(self._resume_token)
+        self._start_controller_resume_probe(self._resume_token)
+
+    def _start_controller_resume_probe(self, token) -> None:
+        """Observe only: the controller is never touched on resume."""
+        backend = getattr(self, "_controller_backend", None)
+        if getattr(backend, "manager", None) != controller_detect.INPUTPLUMBER:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            baseline = backend.resume_baseline() or {}
+        except Exception:  # noqa: BLE001
+            return
+        loop.call_later(
+            _CONTROLLER_RESUME_PROBE_S, self._run_controller_resume_probe, token, backend, baseline
+        )
+
+    def _run_controller_resume_probe(self, token, backend, baseline) -> None:
+        if getattr(self, "_shutting_down", False) or token != getattr(self, "_resume_token", None):
+            return
+        version = (getattr(self, "_controller", None) or {}).get("version")
+        device_key = getattr(getattr(self, "_device", None), "key", None)
+
+        def work() -> None:
+            try:
+                result = controller_resume_probe.collect(
+                    IpDbus(),
+                    before=baseline.get("capabilities"),
+                    before_path=baseline.get("path"),
+                    version=version,
+                    device_key=device_key,
+                    elapsed_s=_CONTROLLER_RESUME_PROBE_S,
+                )
+                backend.record_resume_probe(result)
+                diary = journal.active
+                if diary is not None:
+                    lost = bool(result.get("caps_lost"))
+                    diary.write(
+                        "WARNING" if lost else "INFO", "controller", "resume_probe", **result
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+
+        # Default executor, not the serial apply one: several busctl calls must not queue
+        # TDP or CPU writes behind them.
+        asyncio.get_running_loop().run_in_executor(None, work)
 
     def _hold_cores_after_resume(
         self, intent: dict, *, allow_cores=False, allow_smt=False,
