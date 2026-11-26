@@ -25,6 +25,9 @@ public enum UpscalersOperation
     [EnumMember(Value = "cover")]
     Cover = 5,
 
+    /// <summary>Reads the in-game badge's mode, or sets it when the request carries one.</summary>
+    [EnumMember(Value = "ingame")]
+    InGame = 6,
     /// <summary>Quality, sharpness, model and frame generation of an OptiScaler install, without reinstalling.</summary>
     [EnumMember(Value = "configure")]
     Configure = 7,
@@ -173,6 +176,9 @@ public sealed class UpscalersRequest
     [DataMember(Name = "fg_route", Order = 9, EmitDefaultValue = false)]
     public string? FrameGenRoute { get; private set; }
 
+    /// <summary>The in-game badge mode to set: <c>off</c>, <c>start</c> or <c>always</c>.</summary>
+    [DataMember(Name = "mode", Order = 10, EmitDefaultValue = false)]
+    public string? Mode { get; private set; }
     /// <summary>The OptiScaler.ini key for <see cref="UpscalersOperation.SetIni"/>, as <c>Section.Key</c> or a bare <c>Key</c>.</summary>
     [DataMember(Name = "key", Order = 11, EmitDefaultValue = false)]
     public string? Key { get; private set; }
@@ -223,6 +229,9 @@ public sealed class UpscalersRequest
     public static UpscalersRequest Game(string appId) => new(UpscalersOperation.Game, appId: appId);
 
     public static UpscalersRequest Job() => new(UpscalersOperation.Job);
+
+    /// <summary>Asks for the in-game badge's mode; with <paramref name="mode"/> it sets it first.</summary>
+    public static UpscalersRequest InGame(string? mode = null) => new(UpscalersOperation.InGame) { Mode = mode };
 
     public static UpscalersRequest Cover(string appId) => new(UpscalersOperation.Cover, appId: appId);
 
@@ -308,8 +317,8 @@ public sealed class UpscalersRequest
         var settingsFree = Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8) && Absent(Exe);
         var noSource = Absent(Path) && Absent(Password) && Absent(Dependency) && Appids is null;
         var noSettings = settingsFree && noSource;
-        var bare = Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && settingsFree && Appids is null;
-        var noFrameGen = Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && noSettings;
+        var bare = Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && settingsFree && Absent(Mode) && Appids is null;
+        var noFrameGen = Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && noSettings && Absent(Mode);
         var noChoice = Absent(Build) && Absent(Quality) && Absent(Model) && noFrameGen;
         bool Printable(string? field, int limit) => field is { Length: > 0 } && field.Length <= limit && !field.Any(char.IsControl);
         var appId = AppId is { Length: > 0 and <= MaximumAppIdLength } && AppId.All(character => character is >= '0' and <= '9');
@@ -318,21 +327,21 @@ public sealed class UpscalersRequest
             UpscalersOperation.Overview or UpscalersOperation.Job =>
                 Absent(AppId) && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null && noFrameGen,
             UpscalersOperation.Game or UpscalersOperation.Cover => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null && noFrameGen,
-            UpscalersOperation.Configure => appId && Absent(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && noSettings
+            UpscalersOperation.Configure => appId && Absent(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && noSettings && Absent(Mode)
                 && (FrameGenRoute is null || Array.IndexOf(FrameGenRoutes, FrameGenRoute) >= 0),
             UpscalersOperation.Compat => Absent(AppId) && Experimental is null && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness)
                 && FrameGen is null && Absent(FrameGenRoute) && settingsFree && Absent(Path) && Absent(Password) && Absent(Dependency)
                 && Appids is { Length: > 0 and <= MaximumCompatAppids } && Appids.All(id => id is { Length: > 0 and <= MaximumCompatAppIdLength } && id.All(character => character is >= '0' and <= '9')),
             UpscalersOperation.Ini or UpscalersOperation.Image or UpscalersOperation.Verify or UpscalersOperation.Diagnose => appId && Experimental is null && noChoice,
             UpscalersOperation.RestoreImage or UpscalersOperation.AdoptForeign or UpscalersOperation.RestoreForeign => appId && noChoice,
-            UpscalersOperation.SetExe => appId && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
+            UpscalersOperation.SetExe => appId && Absent(Mode) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
                 && Absent(Key) && Absent(Value) && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8) && noSource
                 && (Exe is null || Printable(Exe, MaximumExeLength)),
             UpscalersOperation.Cancel => Absent(AppId) && noChoice,
-            UpscalersOperation.SetIni => appId && Absent(Exe) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
+            UpscalersOperation.SetIni => appId && Absent(Mode) && Absent(Exe) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
                 && Printable(Key, MaximumIniKeyLength) && Printable(Value, UpscalerSettings.MaximumIniValueLength)
                 && SharpnessEnabled is null && SharpnessValue is null && Absent(Int8) && noSource,
-            UpscalersOperation.SetImage => appId && Absent(Exe) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
+            UpscalersOperation.SetImage => appId && Absent(Mode) && Absent(Exe) && Absent(Build) && Absent(Quality) && Absent(Model) && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute)
                 && Absent(Key) && Absent(Value)
                 && (SharpnessEnabled is null) == (SharpnessValue is null)
                 && (SharpnessEnabled is not null || Int8 is not null)
@@ -344,9 +353,12 @@ public sealed class UpscalersRequest
             UpscalersOperation.UserFileCandidates => Absent(AppId) && Experimental is null && bare && Absent(Path) && Absent(Password) && Token(Dependency),
             UpscalersOperation.AddUserFile => appId && bare && Absent(Password) && Token(Dependency) && Printable(Path, MaximumPathLength),
             UpscalersOperation.RemoveUserFile => appId && bare && Absent(Path) && Absent(Password) && Token(Dependency),
-            UpscalersOperation.Install => appId && noSource && Token(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness)
+            UpscalersOperation.Install => appId && noSource && Token(Build) && Optional(Quality) && Optional(Model) && Optional(Sharpness) && Absent(Mode) && noSettings
                 && (FrameGenRoute is null || Array.IndexOf(FrameGenRoutes, FrameGenRoute) >= 0),
             UpscalersOperation.Uninstall => appId && Absent(Build) && Absent(Quality) && Absent(Model) && noFrameGen,
+            UpscalersOperation.InGame =>
+                Absent(AppId) && Absent(Build) && Absent(Quality) && Absent(Model) && Experimental is null
+                && Absent(Sharpness) && FrameGen is null && Absent(FrameGenRoute) && noSettings && (Mode is null || InGameModes.IsValid(Mode)),
             _ => false,
         };
         if (!valid)
@@ -414,6 +426,9 @@ public sealed class UpscalersOverview
     /// <summary>The adapter's own name (<c>NVIDIA GeForce RTX 5090 Laptop GPU</c>); <see cref="Gpu"/> stays the family the rules use.</summary>
     [DataMember(Name = "gpu_name", Order = 6, EmitDefaultValue = false)]
     public string? GpuName { get; set; }
+
+    [DataMember(Name = "ingame", Order = 7, EmitDefaultValue = false)]
+    public string? InGame { get; set; }
 }
 
 [DataContract]
@@ -977,6 +992,8 @@ public sealed class UpscalersResponse
     [DataMember(Name = "cover", Order = 6, EmitDefaultValue = false)]
     public UpscalerCover? Cover { get; set; }
 
+    [DataMember(Name = "ingame", Order = 7, EmitDefaultValue = false)]
+    public string? InGame { get; set; }
     [DataMember(Name = "options", Order = 8, EmitDefaultValue = false)]
     public UpscalerOptions? Options { get; set; }
 
@@ -1027,6 +1044,7 @@ public sealed class UpscalersResponse
             && (Kept is null || Kept.All(ForeignBackup.IsPlainName))
             && (Compat is null || Compat.Games is not null && Compat.Games.Select(game => game.AppId).Distinct().Count() == Compat.Games.Length)
             && (Overview is null || Overview.Games is not null && Overview.Games.Select(game => game.AppId).Distinct().Count() == Overview.Games.Length)
+            && (InGame is null || InGameModes.IsValid(InGame))
             && (Cover is null || Cover.Mime is UpscalerCover.Jpeg or UpscalerCover.Png && Cover.Data is { Length: > 0 and <= UpscalersWireCodec.MaximumCoverBytes / 3 * 4 + 4 });
         if (!valid)
         {

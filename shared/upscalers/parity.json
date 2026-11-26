@@ -195,6 +195,10 @@
     }
   },
   "windows_only_ops": [
-    "cover"
-  ]
+    "cover",
+    "ingame"
+  ],
+  "windows_differences": {
+    "ingame": "the in-game badge is a separate companion window above the game, default mode start (Linux keeps its mode in the front end and defaults to off); no FPS counter, Mako or Lossless lines"
+  }
 }

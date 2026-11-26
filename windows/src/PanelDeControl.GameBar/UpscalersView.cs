@@ -27,6 +27,7 @@ public sealed partial class UpscalersView : UserControl
     private static readonly ResourceLoader Strings = ResourceLoader.GetForViewIndependentUse();
     private static readonly string[] Qualities = { "native", "quality", "balanced", "performance" };
     private static readonly string[] OwnInputs = { "dlss", "fsr31", "fsr2", "xess" };
+    private static readonly string[] InGameChoices = { InGameModes.Off, InGameModes.Start, InGameModes.Always };
     private const string DefaultQuality = "quality";
     private const int MaximumPollFailures = 12;
     private const int MaximumCoverRequests = 2;
@@ -38,6 +39,8 @@ public sealed partial class UpscalersView : UserControl
     private readonly ToggleSwitch experimentalToggle = new();
     private readonly StackPanel content = new() { Spacing = 10, Visibility = Visibility.Collapsed };
     private readonly StackPanel listPanel = new() { Spacing = 10 };
+    private readonly StackPanel inGamePanel = new() { Spacing = 6 };
+    private readonly Grid inGameRow = new() { ColumnSpacing = 4 };
     private readonly TextBlock gpuText = new();
     private readonly TextBlock statusText = new();
     private readonly StackPanel gameList = new() { Spacing = 4 };
@@ -76,6 +79,9 @@ public sealed partial class UpscalersView : UserControl
     private string? selectedBuild;
     private string? selectedModel;
     private string selectedQuality = DefaultQuality;
+    private string inGameMode = InGameModes.Default;
+    private string? pendingInGameMode;
+    private int inGameRequest;
     private bool advancedOpen;
     private bool refreshing;
     private bool loadingGame;
@@ -230,7 +236,33 @@ public sealed partial class UpscalersView : UserControl
         gamePanel.Children.Add(advancedButton);
         gamePanel.Children.Add(advancedPanel);
 
+        var inGameLabel = new TextBlock { Style = Resource<Style>("PdcBodyStyle"), Text = Localized("UpscalersInGameLabel") };
+        for (var index = 0; index < InGameChoices.Length; index++)
+        {
+            inGameRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var chip = new Button
+            {
+                Tag = InGameChoices[index],
+                Content = Localized("UpscalersInGame_" + InGameChoices[index]),
+                Style = Resource<Style>("PdcSegmentButtonStyle"),
+            };
+            chip.Click += InGameChip_Click;
+            Grid.SetColumn(chip, index);
+            inGameRow.Children.Add(chip);
+        }
+
+        inGamePanel.Children.Add(inGameLabel);
+        inGamePanel.Children.Add(new Border
+        {
+            Padding = new Thickness(4),
+            CornerRadius = Resource<CornerRadius>("PdcRadiusInset"),
+            Background = Resource<Brush>("PdcLayerBrush"),
+            Child = inGameRow,
+        });
+        UpdateInGameChips();
+
         listPanel.Children.Add(gpuText);
+        listPanel.Children.Add(inGamePanel);
         listPanel.Children.Add(statusText);
         listPanel.Children.Add(gameList);
         content.Children.Add(listPanel);
@@ -331,6 +363,12 @@ public sealed partial class UpscalersView : UserControl
             ? overview.GpuName!
             : overview.Gpu == "unknown" ? Localized("UpscalersGpuUnknown") : overview.Gpu;
         gpuText.Text = string.Format(Localized("UpscalersGpu"), gpu);
+        if (pendingInGameMode is null)
+        {
+            inGameMode = InGameModes.Normalize(overview.InGame);
+        }
+
+        UpdateInGameChips();
         statusText.Text = !overview.SteamFound
             ? Localized("UpscalersNoSteam")
             : games.Length == 0 ? Localized("UpscalersNoGames") : string.Empty;
@@ -883,6 +921,45 @@ public sealed partial class UpscalersView : UserControl
         selectedModel = option.Model;
         ClearResult();
         UpdateActionState();
+    }
+
+    private async void InGameChip_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string mode })
+        {
+            return;
+        }
+
+        var request = ++inGameRequest;
+        pendingInGameMode = mode;
+        UpdateInGameChips();
+        var response = await client.InGameAsync(mode);
+        if (request != inGameRequest)
+        {
+            return;
+        }
+
+        pendingInGameMode = null;
+        if (response.Status == UpscalersResponseStatus.Ok)
+        {
+            inGameMode = InGameModes.Normalize(response.InGame);
+        }
+        else
+        {
+            statusText.Text = ErrorMessage(response.ErrorCode);
+        }
+
+        UpdateInGameChips();
+    }
+
+    private void UpdateInGameChips()
+    {
+        foreach (var chip in inGameRow.Children.OfType<Button>())
+        {
+            var active = Equals(chip.Tag, pendingInGameMode ?? inGameMode);
+            chip.Background = active ? AccentFill() : new SolidColorBrush(Colors.Transparent);
+            chip.FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal;
+        }
     }
 
     private void QualityChip_Click(object sender, RoutedEventArgs args)

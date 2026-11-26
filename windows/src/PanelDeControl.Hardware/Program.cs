@@ -110,11 +110,37 @@ public static class Program
                 vcRuntime: new VcRuntimeProbe().InstalledVersion,
                 helix: HelixSr.ForCatalog(upscalerData.Catalog, UpscalerPaths.Root),
                 latest: new LatestReleases(upscalerData.Catalog.Tracks, Path.Combine(UpscalerPaths.Root, "latest-releases.json")));
-            _ = Task.Run(() => upscalerService.Gpu);
+            // The first overview adopts what Panel left in games before a reinstall, so the in-game badge knows them
+            // without waiting for the widget, as Linux loads its overview when the plugin starts.
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    _ = upscalerService.Gpu;
+                    upscalerService.Overview();
+                }
+                catch (Exception exception)
+                {
+                    CompanionLog.Write("upscalers.startup", exception.GetType().Name);
+                }
+            });
             var upscalersServer = new UpscalersPipeServer(
                 UpscalersPipeServer.PackagedPipeName,
                 upscalerService,
                 PackageNamedPipeServerFactory.CreateConcurrentControl);
+
+            var upscalerGames = new SteamGames(PhysicalFileSystem.Instance, steamRootList);
+            using var inGameOverlay = new InGameOverlayWindow();
+            var inGameBadge = new InGameBadgeService(
+                upscalerStore,
+                upscalerData,
+                () => upscalerStore.InstalledAppIds
+                    .Select(appId => (AppId: appId, Root: upscalerGames.Find(appId)?.Root))
+                    .Where(game => game.Root is not null)
+                    .ToDictionary(game => game.AppId, game => game.Root!, StringComparer.Ordinal),
+                inGameOverlay,
+                ForegroundProcessReader.Read,
+                new InGameFactsReader(UpscalerService.IsInstalled, upscalerData.Catalog.AnrProvider));
 
             using var reportHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
             var reportServer = new ReportPipeServer(
@@ -142,6 +168,7 @@ public static class Program
                 SuperviseAsync("cpu", () => cpuServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("reports", () => reportServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("upscalers", () => upscalersServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("upscalers.ingame", () => inGameBadge.RunAsync(token), token),
                 SuperviseAsync("themes.engine", () => themeEngine.RunAsync(token), token),
                 SuperviseAsync("themes.pipe", () => themesServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("themes.focus", () => focusReturner.RunAsync(token), token),

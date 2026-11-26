@@ -105,6 +105,13 @@ public sealed partial class UpscalerService : IUpscalersController
                     return Ok(overview: await Task.Run(Overview, cancellationToken).ConfigureAwait(false));
                 case UpscalersOperation.Job:
                     return Ok();
+                case UpscalersOperation.InGame:
+                    if (request.Mode is not null)
+                    {
+                        await Task.Run(() => store.SetInGameMode(request.Mode), cancellationToken).ConfigureAwait(false);
+                    }
+
+                    return new UpscalersResponse { Status = UpscalersResponseStatus.Ok, Job = jobs.Snapshot(), InGame = store.InGameMode };
                 case UpscalersOperation.Cover:
                     return Ok(cover: await Task.Run(() => Cover(request.AppId!), cancellationToken).ConfigureAwait(false)
                         ?? throw new UpscalerException("no_cover"));
@@ -244,6 +251,7 @@ public sealed partial class UpscalerService : IUpscalersController
             GpuName = result.Name,
             SteamFound = libraries.Count > 0,
             Games = rows.ToArray(),
+            InGame = store.InGameMode,
         };
     }
 
@@ -898,7 +906,7 @@ public sealed partial class UpscalerService : IUpscalersController
             : 0;
 
     /// <summary>HelixSR's record and marker are what say it is in the game; every other engine has its manifest.</summary>
-    private static bool IsInstalled(InstalledUpscaler install) =>
+    internal static bool IsInstalled(InstalledUpscaler install) =>
         install.Engine == "helixsr"
             ? HelixSr.HasMarker(install.Target) && install.HelixFile.Length > 0 && File.Exists(install.HelixFile)
             : ManifestCheck.Presence(install.Target).Installed;
