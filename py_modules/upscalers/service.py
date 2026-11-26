@@ -1308,8 +1308,7 @@ class UpscalerService:
             raise UpscalerError("helixsr_no_fsr")
         entry = self._game_state(appid)
         recipe = self._recipe(appid, self._identity(installed, entry), installed)
-        if recipe and not recipe.legacy_ffx_swap and any(
-                Path(str(path)).name.lower() == "amd_fidelityfx_dx12.dll" for path in analysis["inputs"].get("fsr31", ())):
+        if recipe and not recipe.legacy_ffx_swap and analysis.get("dll_blocked") == "recipe_legacy_ffx":
             raise UpscalerError("helixsr_recipe_blocked")
         pinned = catalog.ASSETS[build.archive]
         newest = self.latest.resolve(pinned) if self.helix.ready() else None

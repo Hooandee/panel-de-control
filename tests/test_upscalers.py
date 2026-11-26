@@ -2215,6 +2215,19 @@ def test_helixsr_leaves_the_fsr31_library_a_recipe_keeps_untouched(steam, helix_
     assert service.helix.calls == [] and legacy.read_bytes() == b"ffx 1.0.1"
 
 
+def test_helixsr_sees_the_legacy_library_beyond_the_first_four_fsr31_copies(steam, helix_catalog, proc, monkeypatch):
+    _, game = steam
+    folder = game / "bin/x64_dx12"
+    for index in range(5):
+        _write(game / f"a{index}/amd_fidelityfx_upscaler_dx12.dll", b"ffx")
+    _write(game / "z/amd_fidelityfx_dx12.dll", b"ffx 1.0.1")
+    monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["2322010"], appid=APPID))
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    with pytest.raises(UpscalerError, match="helixsr_recipe_blocked"):
+        service.install(APPID, {"build": "hlx-fsr4"})
+
+
 @pytest.fixture
 def silent_anti_cheat(monkeypatch):
     base = recipes.RECIPES.get(APPID) or recipes.Recipe(APPID)
