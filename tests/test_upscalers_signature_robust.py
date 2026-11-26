@@ -210,3 +210,9 @@ def test_a_measurement_of_another_sha_never_stands_in_for_the_asset():
     asset = catalog.ASSETS[build.archive]
     catalog.record_signature(asset.id, "f" * 64, False)
     assert catalog.asset_signed(asset) == asset.signed
+
+
+def test_required_signed_with_no_signed_build_recommends_nothing(monkeypatch):
+    monkeypatch.setattr(catalog, "build_signed", lambda build: False)
+    assert catalog.preferred_build("rdna2", require_signed=True) == ""
+    assert catalog.preferred_build("rdna2") != ""

@@ -299,3 +299,10 @@ it("says there is nothing else to recommend when the failed build is still the p
   await act(async () => { render(<GameView {...props} />); });
   expect(screen.getByText("up.failedBuild.alone")).toBeTruthy();
 });
+
+it("does not recommend a build the game's signing requirement rules out", async () => {
+  state.detail = { ...installed("not_run"), preferred: "fsr-4.1.1", failed_builds: [{ build: "fsr-4.1.2-beta", seconds: 88.7 }] } as unknown as GameDetail;
+  const unsupported = { ...overview, builds: [{ ...overview.builds[0], supported: false }] } as UpscalersOverview;
+  await act(async () => { render(<GameView {...props} overview={unsupported} />); });
+  expect(screen.queryByText("up.failedBuild")).toBeNull();
+});

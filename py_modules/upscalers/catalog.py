@@ -445,7 +445,7 @@ def preferred_build(gpu: str, recipe=None, device: str = "", *, require_signed: 
         return chosen[0].id
     if (required or failed) and pool:
         return best(pool)
-    return default
+    return "" if required else default
 
 
 _DGPU_CYBOMAN = frozenset({"fsr-4.1.2-lite-dgpu-dll", "fsr-4.1.2-lite-dgpu-lossy-dll"})
