@@ -317,3 +317,41 @@ it("asks again for a signed-only game whose old install has no recorded acceptan
   await act(async () => { await Promise.resolve(); });
   expect(installUpscaler).not.toHaveBeenCalledWith("777", expect.objectContaining({ confirm_anti_cheat: true }));
 });
+
+const protonOverview = { ...overview, builds: [
+  { ...build, id: "fsr-4.1.1", version: "4.1.1", engine: "optiscaler" },
+  { ...build, id: "proton-fsr4", version: "4", engine: "proton" },
+] } as unknown as UpscalersOverview;
+const forgetRequests = async () => {
+  const { readInstallJobId, clearInstallRequest } = await import("./jobRunner");
+  const id = readInstallJobId("777");
+  if (id) clearInstallRequest("777", id);
+};
+const protonInstalled = (analysis: Record<string, unknown>) => {
+  const detail = installed("installed") as any;
+  return { ...detail, analysis: { ...detail.analysis, anti_cheat_exempt: ["proton"], ...analysis }, install: { ...detail.install, build: "proton-fsr4", anti_cheat_accepted: false } } as unknown as GameDetail;
+};
+
+it("asks for the signed-only confirmation when a Proton install is switched to OptiScaler", async () => {
+  await forgetRequests();
+  state.detail = protonInstalled({ anti_cheat: true, anti_cheat_kind: "signed_only" });
+  await act(async () => { render(<GameView {...props} overview={protonOverview} />); });
+  expect(screen.queryByText("up.error.anti_cheat")).toBeNull();
+  await act(async () => { fireEvent.click(screen.getByText("choose 411")); });
+  expect(screen.getByText("up.error.anti_cheat")).toBeTruthy();
+  expect((screen.getByText("up.save") as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => { fireEvent.click(screen.getByText("up.error.anti_cheat.confirm")); });
+  expect((screen.getByText("up.save") as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("never sends the EasyAntiCheat confirmation for a Proton install without showing the warning", async () => {
+  const { installUpscaler } = await import("../api");
+  const { markPendingReinstall } = await import("./userFileWatch");
+  await forgetRequests();
+  state.detail = protonInstalled({ anti_cheat: true, anti_cheat_kind: "warn" });
+  markPendingReinstall("777");
+  await act(async () => { render(<GameView {...props} overview={protonOverview} />); });
+  await act(async () => { fireEvent.click(screen.getByText("choose 411")); });
+  expect(screen.getByText("up.error.anti_cheat")).toBeTruthy();
+  expect(installUpscaler).not.toHaveBeenCalledWith("777", expect.objectContaining({ confirm_anti_cheat: true }));
+});
