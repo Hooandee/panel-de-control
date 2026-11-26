@@ -2265,6 +2265,13 @@ def test_diablo_iv_recipe_prefers_proton_fsr4_on_rdna3_and_4_and_lite_on_rdna2()
         "fsr-4.1.1", "proton-fsr4", "proton-fsr4"]
 
 
+@pytest.mark.parametrize("platform,arch", [("windows", "x86_64"), ("linux", "aarch64")])
+def test_a_games_protection_applies_whatever_platform_its_entry_targets(platform, arch):
+    recipe = recipes.recipe_for("2344520", platform=platform, arch=arch)
+    assert recipe.anti_cheat and recipe.signed_only
+    assert recipe.recommended_build is None
+
+
 REAL_BUILDS = dict(catalog.BUILDS)
 
 

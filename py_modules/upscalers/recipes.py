@@ -221,6 +221,12 @@ def recipe_for(appid: str, live: Recipe | None = None, *, engine: str = "optisca
         # The catalog installs Luma itself; games the wiki does not list still need it named.
         if any(dep.startswith("luma-") for dep in entry.dependencies):
             hand = replace(hand, needs=tuple(dict.fromkeys((*hand.needs, "luma"))))
+    else:
+        # Protection belongs to the game, not to the platform the rest of its entry is written for.
+        raw = catalog.games.get(str(appid))
+        if raw and (raw.anti_cheat or raw.signed_only):
+            hand = replace(hand or Recipe(str(appid)), anti_cheat=raw.anti_cheat or bool(hand and hand.anti_cheat),
+                           signed_only=raw.signed_only or bool(hand and hand.signed_only))
     return combine(hand, with_wiki(WIKI.get(str(appid)), live))
 
 
