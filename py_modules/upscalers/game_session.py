@@ -33,13 +33,14 @@ def process_summary(table, appid, game_tree):
 
 class GameSessions:
     def __init__(self, *, injections, runtime, probe, emit, submit, submit_later,
-                 clock=time.monotonic, wall=time.time):
+                 on_start=None, clock=time.monotonic, wall=time.time):
         self._injections = injections
         self._runtime = runtime
         self._probe = probe
         self._emit = emit
         self._submit = submit
         self._submit_later = submit_later
+        self._on_start = on_start
         self._clock = clock
         self._wall = wall
         self._lock = threading.Lock()
@@ -61,6 +62,11 @@ class GameSessions:
             ended["ended"], ended["ended_by"] = now, "game_stopped" if current is None else "context_change"
             self._submit(lambda: self._finish(ended))
         if started is not None:
+            if self._on_start is not None:
+                try:
+                    self._on_start(started["appid"])
+                except Exception:  # noqa: BLE001 — a restart hint never breaks tracking
+                    pass
             self._submit(lambda: self._capture(started))
             for delay in PROBE_DELAYS_S:
                 timer = self._submit_later(delay, lambda delay=delay: self._sample(started, delay))

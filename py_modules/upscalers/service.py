@@ -157,6 +157,9 @@ class UpscalerService:
         self.mako = mako.Mako(home, Path(state_dir))
         self._engine_lock = threading.RLock()
         self._image_lock = threading.RLock()
+        self._state_lock = threading.RLock()
+        self.mark_delay = MARK_DELAY_S
+        self._pending_marks: dict[str, threading.Timer] = {}
         self._engine_checks = {}
         self.engine_game_running = lambda: False
         self.launch_receipts = launch_state.LaunchReceipts(Path(state_dir))
@@ -196,8 +199,9 @@ class UpscalerService:
                 "global_actions": data.get("global_actions", [])[-20:] if isinstance(data, dict) and isinstance(data.get("global_actions"), list) else []}
 
     def _save(self) -> None:
-        self.state_path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_json_save(str(self.state_path), self.state)
+        with self._state_lock:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_json_save(str(self.state_path), self.state)
 
     def _game_state(self, appid: str) -> dict:
         entry = self.state["games"].setdefault(appid, {})
@@ -1037,7 +1041,8 @@ class UpscalerService:
                                    protect=bool(recipe and recipe.protect_dlls))
 
         now = time.time()
-        entry.get("failed_builds", {}).pop(build.id, None)
+        with self._state_lock:
+            entry.get("failed_builds", {}).pop(build.id, None)
         entry["install"] = {
             "build": build.id, "archive": build.archive, "proxy": proxy, "target": str(target), "exe": analysis["exe"],
             "installed_at": now, "options": _clean_options(choice), "solution": solution,
@@ -1113,12 +1118,13 @@ class UpscalerService:
             if not is_pe:
                 continue
             sha = chosen[asset.id].sha256
-            if self.state.setdefault("signatures", {}).get(sha) != {"id": asset.id, "signed": signed}:
-                self.state["signatures"].pop(sha, None)
-                self.state["signatures"][sha] = {"id": asset.id, "signed": signed}
-                for stale in list(self.state["signatures"])[:-64]:
-                    del self.state["signatures"][stale]
-                changed = True
+            with self._state_lock:
+                if self.state.setdefault("signatures", {}).get(sha) != {"id": asset.id, "signed": signed}:
+                    self.state["signatures"].pop(sha, None)
+                    self.state["signatures"][sha] = {"id": asset.id, "signed": signed}
+                    for stale in list(self.state["signatures"])[:-64]:
+                        del self.state["signatures"][stale]
+                    changed = True
             catalog.record_signature(asset.id, sha, signed)
             if required and copied and not signed and unsigned is None:
                 unsigned = name
@@ -1147,13 +1153,44 @@ class UpscalerService:
         return kept
 
     def session_outcome(self, record: dict) -> None:
-        """A launch that ended within the short window with Panel's injection active marks that build for the game;
-        a normal launch with the same build clears it."""
+        """A launch that ended within the short window, with the game itself seen running and no relaunch right after,
+        marks that build for the game; a normal launch with the same build clears it."""
         if (not isinstance(record, dict) or record.get("start") != "launch" or record.get("ended_by") != "game_stopped"
                 or record.get("outcome") not in ("short", "normal")):
             return
+        appid = str(record.get("appid"))
+        self.session_started(appid)
+        if record["outcome"] == "short":
+            if not _game_ran(record):
+                return
+            if self.mark_delay > 0:
+                timer = threading.Timer(self.mark_delay, self._fire_mark, (appid, record))
+                timer.daemon = True
+                with self._state_lock:
+                    self._pending_marks[appid] = timer
+                timer.start()
+                return
         with self._image_lock:
             self._mark_outcome(record)
+
+    def session_started(self, appid) -> None:
+        """A relaunch right after a short session is a restart (RestartAppIfNecessary, a bootstrapper), not a failure."""
+        with self._state_lock:
+            timer = self._pending_marks.pop(str(appid), None)
+        if timer is not None:
+            timer.cancel()
+
+    def _fire_mark(self, appid: str, record: dict) -> None:
+        with self._state_lock:
+            if self._pending_marks.get(appid) is not threading.current_thread():
+                return
+            del self._pending_marks[appid]
+        try:
+            with self._image_lock:
+                self._mark_outcome(record)
+        except Exception as error:  # noqa: BLE001
+            if self.logger:
+                self.logger.warning("Deferred build mark failed: %s", type(error).__name__)
 
     def _mark_outcome(self, record: dict) -> None:
         appid = str(record.get("appid"))
@@ -1163,10 +1200,16 @@ class UpscalerService:
         entry = self.state["games"].get(appid)
         if not builds or not isinstance(entry, dict):
             return
+        with self._state_lock:
+            self._apply_outcome(entry, record, builds)
+
+    def _apply_outcome(self, entry: dict, record: dict, builds: set[str]) -> None:
         marks = entry.setdefault("failed_builds", {})
         install = entry.get("install") if isinstance(entry.get("install"), dict) else {}
         if record["outcome"] == "normal":
             if not builds & set(marks):
+                if not marks:
+                    entry.pop("failed_builds", None)
                 return
             for build_id in builds:
                 marks.pop(build_id, None)
@@ -1424,6 +1467,7 @@ class UpscalerService:
         if not isinstance(old, dict):
             return None
         entry["previous"] = diagnostics.snapshot(old, excerpt=True)
+        self._forget_mark(entry, old)
         self._drop(old, installed.root)
         if old.get("launcher"):
             try:
@@ -1944,6 +1988,7 @@ class UpscalerService:
         if _is_helix(install) and installed is None:
             raise UpscalerError("not_installed")
         entry["previous"] = diagnostics.snapshot(install, excerpt=True)
+        self._forget_mark(entry, install)
         kept = self._drop(install, installed.root if installed else Path(install["target"]))
         if install.get("launcher") and installed:
             try:
@@ -1959,6 +2004,14 @@ class UpscalerService:
         entry["install"] = None
         self._save()
         return result
+
+    def _forget_mark(self, entry: dict, install: dict) -> None:
+        with self._state_lock:
+            marks = entry.get("failed_builds")
+            if isinstance(marks, dict):
+                marks.pop(install.get("build"), None)
+                if not marks:
+                    entry.pop("failed_builds", None)
 
     def _launcher_overrides(self, installed: games.Installed, install: dict, remove: bool) -> None:
         """Heroic/Lutris keep their own per-game environment; Steam's launch options never reach Wine."""
@@ -2661,6 +2714,12 @@ def _recipe_anti_cheat(analysis: dict, recipe) -> dict:
 
 
 _INJECTED_ENGINES = frozenset({"optiscaler", "dll", "helixsr"})
+MARK_DELAY_S = 30
+
+
+def _game_ran(record: dict) -> bool:
+    probes = record.get("process")
+    return isinstance(probes, list) and any(isinstance(item, dict) and item.get("names") for item in probes)
 
 
 def _signing(recipe, analysis: dict) -> tuple[bool, bool]:

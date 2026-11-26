@@ -12200,7 +12200,8 @@ class Plugin(AmbientRpc):
 
         tracker = upscaler_game_session.GameSessions(
             injections=service_call("session_injections", None), runtime=service_call("session_mako_runtime", {}),
-            probe=probe, emit=emit, submit=submit, submit_later=submit_later)
+            probe=probe, emit=emit, submit=submit, submit_later=submit_later,
+            on_start=service_call("session_started", None))
         self._game_sessions = tracker
         return tracker
 

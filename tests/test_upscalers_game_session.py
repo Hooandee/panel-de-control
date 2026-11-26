@@ -308,3 +308,11 @@ def test_unload_still_emits_the_session_that_was_queued_behind_a_running_job(plu
         release.set()
     records = _plugin_records(plugin, monkeypatch, act)
     assert sorted(record['appid'] for record in records) == ['1', '2']
+
+
+def test_a_new_session_tells_the_service_before_anything_else():
+    seen = []
+    sessions = GameSessions(injections=lambda a: {}, runtime=lambda a: {}, probe=lambda a: {}, emit=lambda r: None,
+                            submit=lambda job: None, submit_later=lambda d, job: None, on_start=seen.append)
+    sessions.transition(None, "7", True)
+    assert seen == ["7"]

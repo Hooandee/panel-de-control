@@ -1,4 +1,5 @@
 import json
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -149,11 +150,12 @@ def test_measurements_survive_a_restart(steam, fake_catalog, proc, monkeypatch):
 
 def launch(appid, build, seconds, engine="optiscaler"):
     return {"appid": appid, "start": "launch", "seconds": seconds, "ended_by": "game_stopped", "outcome": "short" if seconds < 90 else "normal",
-            "injections": {engine: {"build": build}}}
+            "injections": {engine: {"build": build}}, "process": [{"at": 5, "reaper": True, "processes": 3, "names": ["Game.exe"]}]}
 
 
 def installed_service(steam, fake_catalog, proc):
     service = _service(steam, fake_catalog, proc)
+    service.mark_delay = 0
     service.install(APPID, {"build": "fsr-test"})
     return service
 
@@ -307,3 +309,53 @@ def test_standalone_dll_builds_are_refused_for_a_signed_only_game(steam, dll_cat
     with pytest.raises(UpscalerError) as refused:
         _service(steam, dll_catalog, proc).install(APPID, {"build": "dll-test", "confirm_anti_cheat": True})
     assert refused.value.code == "unsigned_build" and original.read_bytes() == before
+
+
+@pytest.mark.parametrize("probes", ["not_sampled", [], [{"at": 5, "reaper": True, "processes": 2, "names": []}]])
+def test_a_short_session_without_the_game_process_never_marks(steam, fake_catalog, proc, probes):
+    service = installed_service(steam, fake_catalog, proc)
+    service.session_outcome({**launch(APPID, "fsr-test", 20), "process": probes})
+    assert service.game(APPID)["failed_builds"] == []
+
+
+def test_the_mark_waits_and_a_relaunch_inside_the_window_discards_it(steam, fake_catalog, proc):
+    service = installed_service(steam, fake_catalog, proc)
+    service.mark_delay = 0.2
+    service.session_outcome(launch(APPID, "fsr-test", 20))
+    assert service.game(APPID)["failed_builds"] == []
+    service.session_started(APPID)
+    time.sleep(0.5)
+    assert service.game(APPID)["failed_builds"] == []
+
+
+def test_the_mark_lands_when_nothing_relaunches(steam, fake_catalog, proc):
+    service = installed_service(steam, fake_catalog, proc)
+    service.mark_delay = 0.1
+    service.session_outcome(launch(APPID, "fsr-test", 20))
+    time.sleep(0.5)
+    assert [item["build"] for item in service.game(APPID)["failed_builds"]] == ["fsr-test"]
+
+
+def test_uninstalling_or_replacing_the_build_forgets_its_mark(steam, fake_catalog, proc):
+    service = installed_service(steam, fake_catalog, proc)
+    service.session_outcome(launch(APPID, "fsr-test", 20))
+    service.uninstall(APPID)
+    assert service.game(APPID)["failed_builds"] == []
+    service.install(APPID, {"build": "fsr-test"})
+    service.session_outcome(launch(APPID, "fsr-test", 20))
+    service.state["games"][APPID]["failed_builds"]["other"] = {}
+    service._forget_mark(service.state["games"][APPID], {"build": "other"})
+    assert "other" not in service.state["games"][APPID]["failed_builds"]
+    service.install(APPID, {"build": "fsr-test", "quality": "balanced"})
+    assert service.game(APPID)["failed_builds"] == []
+
+
+def test_state_writes_wait_for_the_state_lock(steam, fake_catalog, proc):
+    import threading
+    service = installed_service(steam, fake_catalog, proc)
+    done = threading.Event()
+    with service._state_lock:
+        thread = threading.Thread(target=lambda: (service.session_outcome(launch(APPID, "fsr-test", 20)), done.set()))
+        thread.start()
+        assert not done.wait(0.3)
+    assert done.wait(2)
