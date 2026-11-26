@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-loop",
+  "cssLoaderName": "Hooandee Loop",
+  "version": "0.1.6",
+  "displayName": {
+    "es": "Loop",
+    "en": "Loop",
+    "it": "Loop"
+  },
+  "description": {
+    "es": "Tus portadas, enormes y en 3D. Giran con suavidad sobre un suelo de cristal oscuro que las refleja, con el logo delante, el fondo del juego detrás y su ficha en cuanto te paras. A para jugar.",
+    "en": "Your covers, huge and in 3D. They glide over a dark glass floor that reflects them, with the logo in front, the game's art behind and its details as soon as you stop. Press A to play.",
+    "it": "Le tue copertine, enormi e in 3D. Scorrono morbide su un pavimento di vetro scuro che le riflette, con il logo davanti, l'arte del gioco dietro e la sua scheda appena ti fermi. Premi A per giocare."
+  },
+  "author": "Hooandee",
+  "tags": [],
+  "artifact": {
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-loop/0.1.6/theme.zip",
+    "size": 58202,
+    "sha256": "8ba3addfb7176f0f9bfd65528d0015f6e5c51c301d0b15f6d35ba3be58f62c08"
+  },
+  "minimumVersions": {
+    "panel": "0.97.0",
+    "cssLoader": "2.1.2",
+    "cssLoaderBackend": 9
+  },
+  "notes": {
+    "es": "Las portadas muestran qué escalador tiene cada juego, igual que en los demás temas.",
+    "en": "Covers show which upscaler each game has, just like in the other themes.",
+    "it": "Le copertine mostrano quale upscaler ha ogni gioco, come negli altri temi."
+  }
+}
