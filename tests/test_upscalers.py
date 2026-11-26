@@ -2247,6 +2247,21 @@ def test_a_recipe_anti_cheat_does_not_block_proton_fsr4_which_writes_nothing(ste
     assert service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})["env"] == {"FSR4_UPGRADE": "1"}
 
 
+def test_the_accepted_warning_is_stored_by_every_engine_except_proton(steam, proton_catalog, proc, silent_anti_cheat):
+    service = _service(steam, proton_catalog, proc)
+    service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE", "confirm_anti_cheat": True})
+    assert service.game(APPID)["install"]["anti_cheat_accepted"] is False
+    service.uninstall(APPID)
+    service.install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
+    assert service.game(APPID)["install"]["anti_cheat_accepted"] is True
+
+
+def test_the_accepted_warning_is_stored_by_the_standalone_dll_engine(steam, dll_catalog, proc, silent_anti_cheat):
+    service = _service(steam, dll_catalog, proc)
+    service.install(APPID, {"build": "dll-test", "confirm_anti_cheat": True})
+    assert service.game(APPID)["install"]["anti_cheat_accepted"] is True
+
+
 def test_file_anti_cheat_does_not_block_proton_fsr4_but_still_asks_for_file_writers(steam, proton_catalog, proc):
     _, game = steam
     _write(game / "EasyAntiCheat/EasyAntiCheat_EOS_Setup.exe", b"MZ")

@@ -1055,7 +1055,7 @@ class UpscalerService:
             "native_dlls": sorted({*(recipe.native_dlls if recipe else ()), *user_mods.native_dlls(mod_sources)}),
             "mod": {"filename": mod.get("filename"), "id": mod.get("id")} if mod and mod_sources else None,
             "launch": self._launch_swap(recipe.mod_launch_exe) if mod_sources and recipe and recipe.mod_launch_exe else None,
-            "anti_cheat_accepted": bool(analysis.get("anti_cheat") and choice.get("confirm_anti_cheat")),
+            "anti_cheat_accepted": _anti_cheat_accepted(analysis, choice, build.engine),
             "game_build": installed.build_id,
             "recipe_revision": automatic.revision if automatic else None,
             "recipe_configuration": dict(getattr(automatic, "configuration", {})) if automatic else {},
@@ -1388,6 +1388,7 @@ class UpscalerService:
             "target": str(root), "exe": analysis["exe"], "dll_targets": targets,
             "installed_at": now, "options": _clean_options({"fg": "off"}),
             "native_dlls": [], "fg_plan": None, "args": [], "added_args": [],
+            "anti_cheat_accepted": _anti_cheat_accepted(analysis, choice, build.engine),
         }
         entry["history"].append({"build": build.id, "proxy": None, "at": now, "result": "not_run", "exe": analysis["exe"]})
         entry["history"] = entry["history"][-HISTORY_LIMIT:]
@@ -1440,6 +1441,7 @@ class UpscalerService:
             "helix_file": str(log.parent / HELIX_INSTALL_FILE),
             "installed_at": now, "options": options, "native_dlls": [], "fg_plan": None,
             "args": [], "added_args": [],
+            "anti_cheat_accepted": _anti_cheat_accepted(analysis, choice, build.engine),
         }
         entry["history"].append({"build": build.id, "proxy": entry["install"]["proxy"], "at": now,
                                  "result": "pending", "exe": analysis["exe"]})
@@ -1472,6 +1474,7 @@ class UpscalerService:
             "build": build.id, "engine": "proton", "env": env, "proxy": None, "target": str(target),
             "exe": analysis["exe"], "installed_at": now, "options": _clean_options({**choice, "fg": "off"}),
             "native_dlls": [], "fg_plan": None, "args": [], "added_args": [],
+            "anti_cheat_accepted": _anti_cheat_accepted(analysis, choice, build.engine),
         }
         entry["history"].append({"build": build.id, "proxy": None, "at": now, "result": "pending", "exe": analysis["exe"]})
         entry["history"] = entry["history"][-HISTORY_LIMIT:]
@@ -2744,6 +2747,10 @@ def _signing(recipe, analysis: dict) -> tuple[bool, bool]:
     a plain anti-cheat only makes them the recommended ones."""
     kind = analysis.get("anti_cheat_kind")
     return bool(catalog.signed_only(recipe) or kind == "signed_only"), kind in ("warn", "signed_only")
+
+
+def _anti_cheat_accepted(analysis: dict, choice: dict, engine: str) -> bool:
+    return bool(analysis.get("anti_cheat") and choice.get("confirm_anti_cheat") and engine not in analysis.get("anti_cheat_exempt", ()))
 
 
 def _failed_builds(entry: dict) -> dict[str, dict]:
