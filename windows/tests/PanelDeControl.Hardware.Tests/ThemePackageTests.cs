@@ -310,6 +310,8 @@ public sealed class ThemePackageTests : IDisposable
         var error = await Assert.ThrowsAsync<ThemeInstallException>(() => service.InstallEarlyFileAsync("hooandee-eclipse", picked, default));
 
         Assert.Equal("early_archive_unpublished", error.Code);
+        Assert.Contains($"hooandee-eclipse archive {archive.Length} bytes", error.Message, StringComparison.Ordinal);
+        Assert.Contains($"published: 0.2.5 {archive.Length} bytes sha256 {new string('a', 12)}", error.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.Combine(root, "library", Name)));
     }
 

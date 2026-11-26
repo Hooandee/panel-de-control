@@ -424,10 +424,12 @@
   <data name="ThemesEarlyTag" xml:space="preserve"><value>Early</value></data>
   <data name="ThemesInstallFromFile" xml:space="preserve"><value>Installa da file</value></data>
   <data name="ThemesEarlyAvailable" xml:space="preserve"><value>Early {0}</value></data>
+  <data name="ThemesEarlyUpdateAvailable" xml:space="preserve"><value>Early {0} disponibile</value></data>
   <data name="ThemesPickerUnavailable" xml:space="preserve"><value>non è stato possibile aprire la selezione dei file; si apre anche da Panel de Control in Start</value></data>
   <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>con un altro tema attivo non ci sono animazioni; va spento uno dei due</value></data>
   <data name="ThemesKeyboardsHeading" xml:space="preserve"><value>Tastiere</value></data>
   <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>quello zip non è una early pubblicata di questo tema</value></data>
+  <data name="ThemesErrorEarlyOther" xml:space="preserve"><value>quello zip non è la early pubblicata ({0}); può essere più vecchio, più nuovo o di un'altra build</value></data>
   <data name="ThemesGroup_appearance" xml:space="preserve"><value>Aspetto</value></data>
   <data name="ThemesGroup_grid" xml:space="preserve"><value>Griglia</value></data>
   <data name="ThemesGroup_animations" xml:space="preserve"><value>Animazioni</value></data>

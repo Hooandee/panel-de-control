@@ -89,6 +89,21 @@ public sealed class ThemesContractTests
         Assert.Null(LocalizedText.Pick(theme.Options[0].Values[1].Label, "es"));
     }
 
+    [Theory]
+    [InlineData("0.2.4", null, "0.2.5", true)]
+    [InlineData("0.2.4", "0.2.4", "0.2.5", true)]
+    [InlineData("0.2.5", null, "0.2.5", false)]
+    [InlineData("0.3.0", null, "0.2.5", false)]
+    [InlineData("0.2.4", "0.2.6", "0.2.5", false)]
+    [InlineData("0.2.4", null, null, false)]
+    public void InstalledThemeLearnsOfANewerPublishedEarly(string installed, string? published, string? early, bool expected)
+    {
+        var theme = new ThemeEntry { Name = "X", InstalledVersion = installed, PublishedVersion = published, EarlyVersion = early };
+
+        Assert.Equal(expected, theme.EarlyUpdateAvailable);
+        Assert.False(new ThemeEntry { Name = "X", PublishedVersion = published, EarlyVersion = early }.EarlyUpdateAvailable);
+    }
+
     [Fact]
     public void AppliedNeedsEveryPageAndTheRuntime()
     {

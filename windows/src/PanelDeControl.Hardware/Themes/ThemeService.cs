@@ -183,10 +183,23 @@ public sealed class ThemeService
             var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
             var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
             catalog = catalog with { Early = await FetchEarlyAsync(cancellationToken, strict: true).ConfigureAwait(false) };
-            var release = catalog.Early.FirstOrDefault(candidate => candidate.CatalogId == catalogId)
-                ?? throw new ThemeInstallException("unknown_theme", "Theme has no published early");
-            var artifact = release.Artifacts.FirstOrDefault(candidate => candidate.Size == bytes.LongLength && candidate.Sha256 == sha)
-                ?? throw new ThemeInstallException("early_archive_unpublished", "The chosen archive is not a published early");
+            var release = catalog.Early.FirstOrDefault(candidate => candidate.CatalogId == catalogId);
+            if (release is null)
+            {
+                var message = $"{catalogId} has no published early; archive {bytes.LongLength} bytes sha256 {sha[..12]}";
+                CompanionLog.Write("themes.install_early_rejected", message);
+                throw new ThemeInstallException("unknown_theme", message);
+            }
+
+            var artifact = release.Artifacts.FirstOrDefault(candidate => candidate.Size == bytes.LongLength && candidate.Sha256 == sha);
+            if (artifact is null)
+            {
+                var published = string.Join(", ", release.Artifacts.Select(candidate => $"{candidate.Version} {candidate.Size} bytes sha256 {candidate.Sha256[..Math.Min(12, candidate.Sha256.Length)]}"));
+                var message = $"{catalogId} archive {bytes.LongLength} bytes sha256 {sha[..12]} is not a published early; published: {published}";
+                CompanionLog.Write("themes.install_early_rejected", message);
+                throw new ThemeInstallException("early_archive_unpublished", message);
+            }
+
             var installed = installer.Install(release.AsRelease(artifact), bytes);
             MirrorAssets(installed);
             settings.Update(themes => themes.Any(theme => theme.Name == installed.Name)
