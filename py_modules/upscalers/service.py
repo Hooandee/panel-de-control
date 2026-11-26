@@ -1373,7 +1373,6 @@ class UpscalerService:
     def _install_helix(self, appid: str, build: catalog.Build, choice: dict) -> dict:
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         entry = self._game_state(appid)
-        recipe = self._recipe(appid, self._identity(installed, entry), installed)
         if build.way == "fsr" and "fsr31" not in analysis["inputs"]:
             raise UpscalerError("helixsr_no_fsr")
         pinned = catalog.ASSETS[build.archive]

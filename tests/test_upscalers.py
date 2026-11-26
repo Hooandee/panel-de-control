@@ -2224,7 +2224,7 @@ def test_helixsr_installs_when_chosen_even_if_the_recipe_keeps_the_fsr31_library
     _, game = steam
     folder = game / "bin/x64_dx12"
     (folder / "amd_fidelityfx_upscaler_dx12.dll").unlink()
-    legacy = _write(folder / "amd_fidelityfx_dx12.dll", b"ffx 1.0.1")
+    _write(folder / "amd_fidelityfx_dx12.dll", b"ffx 1.0.1")
     monkeypatch.setitem(recipes.RECIPES, APPID, replace(recipes.RECIPES["2322010"], appid=APPID))
     service = _service(steam, helix_catalog, proc)
     service.helix = FakeHelix()

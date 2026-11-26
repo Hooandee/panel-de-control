@@ -430,7 +430,7 @@ def preferred_build(gpu: str, recipe=None, device: str = "", *, require_signed: 
 
     def usable(build) -> bool:
         return bool(build and build.available and build.id not in failed
-                    and build_supported(build, gpu, device, recipe) and (not required or build_signed(build)))
+                    and build_supported(build, gpu, device, recipe, require_signed=required) and (not required or build_signed(build)))
 
     default = PREFERRED.get(gpu, "fsr-3.1")
     ordered = [BUILDS.get(getattr(recipe, "recommended_build", None)), BUILDS.get(default)]
