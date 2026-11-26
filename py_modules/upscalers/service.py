@@ -828,9 +828,7 @@ class UpscalerService:
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
         entry = self._game_state(appid)
         recipe = self._recipe(appid, self._identity(installed, entry), installed)
-        required, _prefer = _signing(recipe, analysis)
-        if required and not catalog.build_supported(build, self.gpu, self.device, recipe, require_signed=True):
-            raise UpscalerError("unsigned_build")
+        required = self._require_signed(build, analysis, recipe)
         try:
             automatic = auto_recipes.plan(recipe, installed)
         except auto_recipes.RecipeError as error:
@@ -1230,8 +1228,15 @@ class UpscalerService:
                         {"source": "pinned", "fallback": self._fallbacks.get(asset.id, "unresolved")})
         return item
 
+    def _require_signed(self, build: catalog.Build, analysis: dict, recipe) -> bool:
+        required, _prefer = _signing(recipe, analysis)
+        if required and not catalog.build_supported(build, self.gpu, self.device, recipe, require_signed=True):
+            raise UpscalerError("unsigned_build")
+        return required
+
     def _install_dll(self, appid: str, build: catalog.Build, choice: dict) -> dict:
         installed, analysis, _target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
+        self._require_signed(build, analysis, self._recipe(appid, self._identity(installed, self._game_state(appid)), installed))
         name = "amd_fidelityfx_upscaler_dx12.dll"
         loader = "amd_fidelityfx_loader_dx12.dll"
         framegen = "amd_fidelityfx_framegeneration_dx12.dll"
@@ -1326,10 +1331,11 @@ class UpscalerService:
 
     def _install_helix(self, appid: str, build: catalog.Build, choice: dict) -> dict:
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")), build.engine)
-        if build.way == "fsr" and "fsr31" not in analysis["inputs"]:
-            raise UpscalerError("helixsr_no_fsr")
         entry = self._game_state(appid)
         recipe = self._recipe(appid, self._identity(installed, entry), installed)
+        self._require_signed(build, analysis, recipe)
+        if build.way == "fsr" and "fsr31" not in analysis["inputs"]:
+            raise UpscalerError("helixsr_no_fsr")
         if recipe and not recipe.legacy_ffx_swap and analysis.get("dll_blocked") == "recipe_legacy_ffx":
             raise UpscalerError("helixsr_recipe_blocked")
         pinned = catalog.ASSETS[build.archive]

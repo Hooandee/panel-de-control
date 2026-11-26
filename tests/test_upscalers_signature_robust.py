@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from test_upscalers import APPID, _service, _write, fake_catalog, proc, steam  # noqa: F401
+from test_upscalers import APPID, _service, _write, dll_catalog, fake_catalog, proc, steam  # noqa: F401
 from test_upscalers_pe_sign import make_pe
 from upscalers import catalog, games
 from upscalers.catalog import Asset, Build
@@ -288,3 +288,12 @@ def test_a_build_swapped_after_the_old_install_is_measured_too(steam, fake_catal
         _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test", "confirm_anti_cheat": True})
     assert refused.value.code == "unsigned_build" and len(calls) >= 2
     assert not (game / "bin/x64_dx12/dxgi.dll").exists()
+
+
+def test_standalone_dll_builds_are_refused_for_a_signed_only_game(steam, dll_catalog, proc):
+    game = blizzard_game(steam)
+    original = game / "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+    before = original.read_bytes()
+    with pytest.raises(UpscalerError) as refused:
+        _service(steam, dll_catalog, proc).install(APPID, {"build": "dll-test", "confirm_anti_cheat": True})
+    assert refused.value.code == "unsigned_build" and original.read_bytes() == before

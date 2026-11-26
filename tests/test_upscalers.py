@@ -2279,8 +2279,11 @@ def test_signed_only_recipe_offers_the_signed_fsr_411_on_rdna2_and_hides_the_nig
 
 def test_signed_only_install_writes_only_signed_pieces(steam, fake_catalog, proc, monkeypatch):
     _, game = steam
-    for name in ("dlssg_to_fsr3_amd_is_better.dll", "fakenvapi.dll", "amd_fidelityfx_dx12.dll"):
-        _write(Path(fake_catalog) / "cache" / catalog.ASSETS[catalog.OPTISCALER_ARCHIVE].sha256 / "unpacked" / name)
+    from test_upscalers_pe_sign import make_pe
+    unpacked = Path(fake_catalog) / "cache" / catalog.ASSETS[catalog.OPTISCALER_ARCHIVE].sha256 / "unpacked"
+    for name in ("dlssg_to_fsr3_amd_is_better.dll", "fakenvapi.dll"):
+        make_pe(unpacked / name, signed=False)
+    make_pe(unpacked / "amd_fidelityfx_dx12.dll", signed=True)
     monkeypatch.setitem(catalog.ASSETS, catalog.OPTISCALER_ARCHIVE, replace(catalog.ASSETS[catalog.OPTISCALER_ARCHIVE], signed=True))
     monkeypatch.setitem(catalog.ASSETS, "extra", replace(catalog.ASSETS["extra"], signed=True))
     monkeypatch.setitem(catalog.ASSETS, "loose", replace(catalog.ASSETS["extra"], id="loose", signed=False))
@@ -2297,9 +2300,10 @@ def test_signed_only_install_writes_only_signed_pieces(steam, fake_catalog, proc
     target = game / "bin/x64_dx12"
     names = {p.name for p in target.iterdir() if p.is_file()}
     assert {"dxgi.dll", "amdxcffx64.dll", "OptiScaler.ini"} <= names
-    assert not names & {"dlssg_to_fsr3_amd_is_better.dll", "fakenvapi.dll", "amd_fidelityfx_dx12.dll"}
+    assert not names & {"dlssg_to_fsr3_amd_is_better.dll", "fakenvapi.dll"}
+    assert "amd_fidelityfx_dx12.dll" in names
     assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"x"
-    assert not (target / "D3D12_Optiscaler").exists()
+    assert (target / "D3D12_Optiscaler/D3D12Core.dll").is_file()
     text = (target / "OptiScaler.ini").read_text()
     assert "Fsr4Update=true" in text and "Fsr4ForceEnableInt8=true" in text and "Dx12Upscaler=fsr31" in text
 
