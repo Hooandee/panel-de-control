@@ -3518,3 +3518,114 @@ def test_journal_only_ambiguous_release_preserves_external_values_and_reports_fa
     assert marker.exists()
     assert not any(call[:2] in (["pactl", "set-sink-volume"], ["pactl", "set-sink-mute"])
                    and call[2] == "alsa_speaker" for call in fake.calls[checkpoint:])
+
+
+class _ChannelRunner(_FakeRunner):
+    """pactl rejects a volume list that is neither one value nor one per channel."""
+
+    def __init__(self, channels, volumes):
+        super().__init__(downstream_vol=dict(volumes))
+        self._channels = dict(channels)
+        for sink, count in self._channels.items():
+            self._volume_channels[sink] = (volumes[sink],) * count
+
+    def __call__(self, argv, timeout=8):
+        if argv[:2] == ["pactl", "set-sink-volume"] and argv[2] in self._channels:
+            self.calls.append(argv)
+            values = argv[3:]
+            count = self._channels[argv[2]]
+            if len(values) == 1:
+                values = values * count
+            if len(values) != count:
+                return ""
+            self._volumes[argv[2]] = values[0]
+            self._volume_channels[argv[2]] = tuple(values)
+            return ""
+        return super().__call__(argv, timeout)
+
+
+_QJ9J_HDMI = "alsa_output.pci-0000_09_00.1.pro-output-3"
+_QJ9J_SPEAKER = "alsa_output.pci-0000_09_00.6.pro-output-0"
+_QJ9J_BLUEZ = "bluez_output.00_00_00_00_00_00.1"
+
+
+def _qj9j_eq(tmp_path, hdmi_volume="100%"):
+    fake = _ChannelRunner(
+        {_QJ9J_HDMI: 8, _QJ9J_SPEAKER: 2, _QJ9J_BLUEZ: 1},
+        {_QJ9J_HDMI: hdmi_volume, _QJ9J_SPEAKER: "61%", _QJ9J_BLUEZ: "100%"},
+    )
+    fake._default = _QJ9J_BLUEZ
+    fake._link_target = _QJ9J_BLUEZ
+    fake._sinks = (
+        "38\tROG Ally\tPipeWire\ts32le 2ch 48000Hz\tIDLE\n"
+        f"8298\t{_QJ9J_HDMI}\tPipeWire\ts32le 8ch 48000Hz\tIDLE\n"
+        f"8299\t{_QJ9J_SPEAKER}\tPipeWire\ts32le 2ch 48000Hz\tIDLE\n"
+        f"10899\t{_QJ9J_BLUEZ}\tPipeWire\ts16le 1ch 8000Hz\tRUNNING\n"
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    Path(eq._pending_path()).write_text(json.dumps({
+        "sink": _QJ9J_SPEAKER,
+        "volume": "100%",
+        "phase": "prepared",
+        "muted": False,
+        "physical_volumes": ["61%", "61%"],
+        "physical_muted": False,
+        "pending_restores": [{
+            "sink": _QJ9J_HDMI,
+            "volumes": ["100%", "100%"],
+            "muted": False,
+        }],
+    }))
+    return fake, eq
+
+
+def test_pending_hdmi_restore_recorded_with_fewer_channels_does_not_block_the_eq(tmp_path):
+    fake, eq = _qj9j_eq(tmp_path)
+
+    eq.ensure_sink([0] * 10)
+
+    assert (eq.apply_diagnostics() or {}).get("reason") != "pending_route_restore_not_confirmed"
+    assert eq._route_state() is None or eq._route_state()["pending_restores"] == []
+    assert fake._volume_channels[_QJ9J_HDMI] == ("100%",) * 8
+
+
+def test_unconfirmable_pending_restore_is_dropped_after_bounded_attempts(tmp_path):
+    import journal
+
+    written = []
+
+    class Diary:
+        def write(self, *args, **fields):
+            written.append((args, fields))
+
+    fake, eq = _qj9j_eq(tmp_path, hdmi_volume="70%")
+    state = json.loads(Path(eq._pending_path()).read_text())
+    state["pending_restores"][0]["volumes"] = ["100%", "80%"]
+    Path(eq._pending_path()).write_text(json.dumps(state))
+
+    journal.active = Diary()
+    try:
+        assert eq.ensure_sink([0] * 10) is False
+        blocked = eq.apply_diagnostics()
+        applies = 1
+        while not eq.ensure_sink([0] * 10):
+            applies += 1
+            assert applies < pipewire._PENDING_RESTORE_MAX_ATTEMPTS
+    finally:
+        journal.active = None
+
+    assert blocked["reason"] == "pending_route_restore_not_confirmed"
+    assert blocked["pending_restore"]["sink"] == _QJ9J_HDMI
+    assert eq.apply_diagnostics()["ok"] is True
+    assert eq._route_state() is None or eq._route_state()["pending_restores"] == []
+    assert fake._volume_channels[_QJ9J_HDMI] == ("70%",) * 8
+    decisions = [
+        fields for args, fields in written
+        if args[1:3] == ("audio", "pending_restore")
+    ]
+    assert [fields["decision"] for fields in decisions] == ["retry"] * (
+        len(decisions) - 1
+    ) + ["dropped"]
+    assert decisions[-1]["sink"] == _QJ9J_HDMI
+    assert decisions[-1]["after"] == ["70%"] * 8
+    assert decisions[-1]["attempt"] == pipewire._PENDING_RESTORE_MAX_ATTEMPTS
