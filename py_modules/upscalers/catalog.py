@@ -401,8 +401,6 @@ def record_signature(asset_id: str, sha256: str, signed: bool) -> None:
 
 def asset_signed(asset: Asset) -> bool:
     measured = MEASURED.get(asset.sha256)
-    if measured is None:
-        measured = next((item for item in reversed(MEASURED.values()) if item["id"] == asset.id), None)
     return asset.signed if measured is None else measured["signed"]
 
 

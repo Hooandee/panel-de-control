@@ -203,3 +203,10 @@ def test_the_report_carries_failed_builds_without_free_text(steam, fake_catalog,
     report = service.report()
     rows = report["games"][0]["failed_builds"]
     assert rows[0]["build"] == "fsr-test" and "note" not in rows[0] and "someone" not in json.dumps(rows)
+
+
+def test_a_measurement_of_another_sha_never_stands_in_for_the_asset():
+    build = catalog.BUILDS["fsr-3.1"]
+    asset = catalog.ASSETS[build.archive]
+    catalog.record_signature(asset.id, "f" * 64, False)
+    assert catalog.asset_signed(asset) == asset.signed
