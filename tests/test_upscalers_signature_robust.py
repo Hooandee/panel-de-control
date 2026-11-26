@@ -31,10 +31,15 @@ def test_diablo_iv_tree_with_blizzard_error_is_signed_only_without_a_recipe(tmp_
     assert analysis["anti_cheat"] and analysis["anti_cheat_kind"] == "signed_only"
 
 
-@pytest.mark.parametrize("mark", ["Battle.net.dll", "vgk.sys", "xigncode/x3.xem", "GameGuard/GameMon.des",
-                                  "nProtect/npggNT.des", "ACE-Base64.dll", "AntiCheatExpert/x.dat", "HoYoKProtect.sys", "mhyprot2.sys"])
+@pytest.mark.parametrize("mark", ["Battle.net/x.dat", "vgk.sys", "VGK.SYS", "xigncode/x3.xem", "GameGuard/GameMon.des",
+                                  "ACE-Base64.dll", "AntiCheatExpert/x.dat", "HoYoKProtect.sys", "mhyprot2.sys", "mhyprot3.sys"])
 def test_known_protections_that_kill_unsigned_code(tmp_path, mark):
     assert games.analyze(game_tree(tmp_path, mark))["anti_cheat_kind"] == "signed_only"
+
+
+@pytest.mark.parametrize("mark", ["Content/Vanguard_Armor.pak", "vgk_shaders.bin", "Battle.net.dll", "Vanguard/x.dat"])
+def test_a_name_that_merely_contains_a_protection_is_not_one(tmp_path, mark):
+    assert games.analyze(game_tree(tmp_path, mark))["anti_cheat_kind"] is None
 
 
 def test_easy_anti_cheat_only_warns(tmp_path):
