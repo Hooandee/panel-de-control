@@ -28,5 +28,9 @@
     "https://github.com/optiscaler/OptiScaler/wiki/Horizon-Zero-Dawn"
   ],
   "effective_api": "d3d12",
-  "recommended_input": "dlss"
+  "recommended_input": "dlss",
+  "tested_game_builds": [
+    "8040161"
+  ],
+  "tested_at": "2026-11-27"
 }
