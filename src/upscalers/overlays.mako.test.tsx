@@ -42,25 +42,33 @@ it("shows confirmed Mako generation without an OptiScaler install", () => {
   rerender(<InGameBadge />);
   expect(screen.queryByText("Mako 5 ×2")).toBeNull();
 });
-it("keeps the version and live dimensions concise when the log only proves a family", () => {
-  publishOverview({ builds: [], installs: { "1462040": { build: "fsr-test", status: "installed", options: {} } } } as never);
+it.each([true, false])("shows the observed family when the log only proves a family (build listed: %s)", (listed) => {
+  publishOverview({ builds: listed ? [{ id: "fsr-4.1.1", family: "fsr", version: "4.1.1", engine: "optiscaler" }] : [],
+    installs: { "1462040": { build: "fsr-4.1.1", status: "active", options: {} } } } as never);
   vi.mocked(useOverlayLive).mockReturnValue({ live: { result: "active", resolution: { render: [960, 540], output: [1920, 1080] }, provider_name: "FSR", provider_version: null, provider_source: "optiscaler_log", provider_confidence: "family_only" }, lossless: null, makoName: "Mako 5", makoSpatial: null, makoResolutionWarning: false, makoMultiplier: null });
   render(<InGameBadge />);
-  expect(screen.getByText("fsr-test").parentElement?.textContent).toContain("540p → 1080p");
+  expect(screen.getByText("FSR").parentElement?.textContent).toContain("540p → 1080p");
+  expect(screen.queryByText("FSR 4.1.1")).toBeNull();
   expect(screen.queryByText("up.overlay.configured")).toBeNull();
 });
 
-it("uses an observed exact version only with its log source", () => {
-  publishOverview({ builds: [], installs: { "1462040": { build: "configured-build", status: "installed", options: {} } } } as never);
-  const state = { makoName: "Mako 5", live: { result: "active", provider_name: "FSR" as const, provider_version: "4.1.1", provider_source: "optiscaler_log" as const }, lossless: null, makoSpatial: null, makoResolutionWarning: false, makoMultiplier: null };
+it("shows the confirmed provider version and model when they differ from the package", () => {
+  publishOverview({ builds: [{ id: "fsr-4.1.1", family: "fsr", version: "4.1.1", engine: "optiscaler" }],
+    installs: { "1462040": { build: "fsr-4.1.1", status: "active", options: {} } } } as never);
+  const state = { makoName: "Mako 5", live: { result: "active", provider_name: "FSR" as const, provider_version: "4.1.2", provider_model: "INT8", provider_source: "optiscaler_log" as const, provider_confidence: "log_provider" as const }, lossless: null, makoSpatial: null, makoResolutionWarning: false, makoMultiplier: null };
   vi.mocked(useOverlayLive).mockReturnValue(state);
   const { rerender } = render(<InGameBadge />);
-  expect(screen.getByText("FSR 4.1.1")).toBeTruthy();
+  expect(screen.getByText("FSR 4.1.2 INT8")).toBeTruthy();
   expect(screen.queryByText("up.overlay.configured")).toBeNull();
   vi.mocked(useOverlayLive).mockReturnValue({ ...state, live: { ...state.live, provider_source: "unavailable" } });
   rerender(<InGameBadge />);
-  expect(screen.getByText("configured-build")).toBeTruthy();
+  expect(screen.getByText("FSR 4.1.1")).toBeTruthy();
   expect(screen.queryByText("up.overlay.configured")).toBeNull();
+  vi.mocked(useOverlayLive).mockReturnValue({ ...state, live: { ...state.live,
+    fallback: { requested: "FSR 4", observed: "FSR 3.1", reason: "backend_changed" } } });
+  rerender(<InGameBadge />);
+  expect(screen.getByText("up.fallback.line")).toBeTruthy();
+  expect(screen.queryByText("FSR 4.1.2 INT8")).toBeNull();
 });
 it("keeps Lossless configuration separate from confirmed Mako generation", () => {
   vi.mocked(useOverlayLive).mockReturnValue({ makoName: "Mako 5", live: null, makoSpatial: null, lossless: { name: "Game", multiplier: 2, flow_scale: 0.75, performance: true }, makoResolutionWarning: false, makoMultiplier: 2 });
@@ -90,13 +98,6 @@ it.each([
   render(<InGameBadge />);
   expect(screen.getByText(shown)).toBeTruthy();
   expect(screen.queryByText("FSR 4.1.2")).toBeNull();
-});
-it("keeps the installed label when the log observes the same provider", () => {
-  publishOverview({ builds: [{ id: "fsr-build", family: "fsr", version: "4.1.2", engine: "optiscaler" }],
-    installs: { "1462040": { build: "fsr-build", status: "active", options: {} } } } as never);
-  vi.mocked(useOverlayLive).mockReturnValue({ live: { result: "active", provider_family: "fsr", provider_name: "FSR", provider_version: null, provider_source: "optiscaler_log" }, lossless: null, makoName: "Mako 5", makoSpatial: null, makoResolutionWarning: false, makoMultiplier: null });
-  render(<InGameBadge />);
-  expect(screen.getByText("FSR 4.1.2")).toBeTruthy();
 });
 it("does not present an unloaded scaler as working beside an active Lossless", () => {
   publishOverview({ builds: [{ id: "fsr-build", family: "fsr", version: "4.1.2", engine: "optiscaler" }],
