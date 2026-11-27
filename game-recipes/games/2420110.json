@@ -20,5 +20,9 @@
     "https://github.com/optiscaler/OptiScaler/wiki/Horizon-Forbidden-West-Complete-Edition"
   ],
   "effective_api": "d3d12",
-  "recommended_input": "fsr31"
+  "recommended_input": "fsr31",
+  "tested_game_builds": [
+    "14835813"
+  ],
+  "tested_at": "2026-11-27"
 }
