@@ -117,6 +117,8 @@ def _seven_zip() -> bool:
 def _entries(path: Path, password: str | None = None) -> tuple[list[tuple[str, int]], bool]:
     """List sizes and encryption before copying files. Archive links are refused."""
     if path.suffix.lower() == ".dll":
+        if "\\" in path.name:
+            raise ModError("unsafe_archive")
         return [(path.name, path.stat().st_size)], False
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:
@@ -188,15 +190,31 @@ def _readable(path: Path, password: str | None = None) -> list[str]:
     return members
 
 
+def _copy_loose_dll(path: Path, destination: Path) -> None:
+    remaining = min(user_deps.MAX_ARCHIVE, user_deps.MAX_MEMBER, MAX_TOTAL)
+    try:
+        # O_NONBLOCK keeps a substituted FIFO from blocking before fstat can reject it.
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as source:
+            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                raise ModError("unreadable")
+            with destination.open("wb") as sink:
+                while chunk := source.read(min(64 * 1024, remaining + 1)):
+                    if len(chunk) > remaining:
+                        raise ModError("too_large")
+                    sink.write(chunk)
+                    remaining -= len(chunk)
+    except OSError:
+        raise ModError("unreadable") from None
+
+
 def _extract_all(path: Path, wanted: dict[str, str], destination: Path, password: str | None = None) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     if path.suffix.lower() == ".dll":
         for target in wanted:
             out = destination / target
             out.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(path, out)
-            if out.stat().st_size > min(user_deps.MAX_MEMBER, MAX_TOTAL):
-                raise ModError("too_large")
+            _copy_loose_dll(path, out)
         return
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:

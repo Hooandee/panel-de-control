@@ -2109,6 +2109,45 @@ def test_a_loose_mod_dll_is_installed_and_the_original_is_restored(steam, fake_c
     assert dll.read_bytes() == b"replacement"
 
 
+@pytest.mark.parametrize(("change", "code"), [
+    ("grow", "too_large"),
+    ("symlink", "unreadable"),
+    ("fifo", "unreadable"),
+    ("backslash", "unsafe_archive"),
+])
+def test_loose_mod_dll_checks_the_source_before_copying(tmp_path, monkeypatch, change, code):
+    from upscalers import user_mods
+
+    dll = tmp_path / (r"folder\custom.dll" if change == "backslash" else "custom.dll")
+    dll.write_bytes(b"initial")
+    replacement = tmp_path / "replacement.dll"
+    replacement.write_bytes(b"outside selection")
+    monkeypatch.setattr(user_mods.user_deps, "MAX_MEMBER", len(b"initial"))
+    extract = user_mods._extract_all
+
+    def change_source(path, wanted, destination, password):
+        if change == "grow":
+            with path.open("ab") as source:
+                source.write(b"extra")
+        elif change == "symlink":
+            path.unlink()
+            path.symlink_to(replacement)
+        elif change == "fifo":
+            path.unlink()
+            os.mkfifo(path)
+        try:
+            extract(path, wanted, destination, password)
+        finally:
+            if change == "grow":
+                assert all(file.stat().st_size <= len(b"initial") for file in destination.iterdir())
+
+    monkeypatch.setattr(user_mods, "_extract_all", change_source)
+    store = user_mods.Store(tmp_path / "store")
+    with pytest.raises(user_mods.ModError, match=f"^{code}$"):
+        store.adopt(APPID, dll, ".", set(), set())
+    assert store.status(APPID) is None
+
+
 def test_a_mod_that_overwrites_optiscalers_files_is_refused(steam, fake_catalog, proc):
     home, _ = steam
     archive = _mod_zip(home / "Downloads/bad.zip", {"OptiScaler.ini": b"[x]", "nvngx.dll": b"x"})
