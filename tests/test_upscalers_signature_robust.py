@@ -7,7 +7,7 @@ import pytest
 
 from test_upscalers import APPID, _service, _write, dll_catalog, fake_catalog, proc, steam  # noqa: F401
 from test_upscalers_pe_sign import make_pe
-from upscalers import catalog, games
+from upscalers import catalog, games, recipes
 from upscalers.catalog import Asset, Build
 from upscalers.service import UpscalerError
 
@@ -391,3 +391,44 @@ def test_policy_a_signed_only_game_installs_the_unsigned_nightly_in_full_once_th
 def test_policy_no_build_is_hidden_by_signature():
     for build in catalog.BUILDS.values():
         assert catalog.build_supported(build, "rdna3", "", None, require_signed=True) == catalog.build_supported(build, "rdna3", "")
+
+
+@pytest.mark.parametrize("gpu,fallback", [
+    ("rdna2", "fsr-4.1.1-rdna2"), ("rdna3", "fsr-4.1.1"), ("rdna35", "fsr-4.1.1"),
+])
+def test_amd_lite_preference_and_gpu_specific_fallback(gpu, fallback, monkeypatch):
+    lite = catalog.BUILDS["fsr-4.1.2-beta"]
+    assert catalog.preferred_build(gpu) == lite.id
+    assert catalog.preferred_build(gpu, prefer_signed=True) == lite.id
+    assert catalog.preferred_build(gpu, failed={lite.id}) == fallback
+    assert catalog.preferred_build(gpu, blocked={lite.id}) == fallback
+    monkeypatch.setitem(catalog.BUILDS, lite.id, replace(lite, available=False))
+    assert catalog.preferred_build(gpu) == fallback
+
+
+def test_preference_preserves_other_engines_and_gpus():
+    proton = recipes.Recipe("2344520", recommended_build="proton-fsr4", signed_only=True)
+    assert catalog.preferred_build("rdna3", proton) == "proton-fsr4"
+    assert catalog.preferred_build("rdna3", require_signed=True) == "fsr-4.1.1"
+    assert catalog.preferred_build("rdna4") == "fsr-4.1.1"
+    assert not catalog.build_supported(catalog.BUILDS["fsr-4.1.2-beta"], "rdna4")
+    assert catalog.preferred_build("intel") == "xess"
+    assert catalog.preferred_build("unknown") == "fsr-3.1"
+
+
+def test_lite_requests_the_actual_model_without_changing_an_explicit_full_choice():
+    build = catalog.BUILDS["fsr-4.1.2-beta"]
+    assert catalog.model_overrides(build, None) == {"FSR.Fsr4GpuSupport": "4"}
+    assert catalog.model_overrides(build, "full") == {"FSR.Fsr4GpuSupport": "2"}
+
+
+def test_411_uses_the_pinned_sdk_when_optiscaler_latest_has_a_different_fsr(steam, fake_catalog, proc, monkeypatch):
+    service = _service(steam, fake_catalog, proc)
+    stable = catalog.ASSETS[catalog.OPTISCALER_ARCHIVE]
+    newer = replace(stable, sha256="e" * 64)
+    base = catalog.BUILDS["fsr-test"]
+    monkeypatch.setitem(catalog.BUILDS, "fsr-4.1.1", replace(base, id="fsr-4.1.1", version="4.1.1"))
+    monkeypatch.setattr(service.latest, "resolve", lambda asset: newer if asset == stable else asset)
+    service.install(APPID, {"build": "fsr-4.1.1"})
+    components = service._game_state(APPID)["install"]["components"]
+    assert next(component for component in components if component["id"] == stable.id)["sha256"] == stable.sha256

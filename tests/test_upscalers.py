@@ -476,7 +476,7 @@ def test_panel_resolution_prefers_the_internal_panel(tmp_path):
 
 def test_compatibility_flags_games_that_ship_an_upscaler(steam, fake_catalog, proc):
     service = _service(steam, fake_catalog, proc)
-    assert service.compatibility([APPID, "999"]) == {APPID: {"native": False, "inputs": ["DLSS", "FSR 3.1"], "preferred": "fsr-4.1.2-beta"}}
+    assert service.compatibility([APPID, "999"]) == {APPID: {"native": False, "inputs": ["DLSS", "FSR 3.1"], "preferred": "fsr-test"}}
 
 
 def test_log_reader_takes_real_optiscaler_lines(tmp_path):
@@ -1843,7 +1843,7 @@ def test_appimage_shortcut_on_the_desktop_is_a_linux_game_not_the_desktop_folder
         {"appid": shortcut_id, "name": "Uncharted", "exe": f'"{app}"', "start": f'"{desktop}"'},
     ]))
     service = _service(steam, fake_catalog, proc)
-    assert service.compatibility([str(shortcut_id)])[str(shortcut_id)] == {"native": True, "inputs": [], "preferred": "fsr-4.1.2-beta"}
+    assert service.compatibility([str(shortcut_id)])[str(shortcut_id)] == {"native": True, "inputs": [], "preferred": "fsr-test"}
     with pytest.raises(UpscalerError):
         service.install(str(shortcut_id), {"build": "fsr-test"})
     assert not (desktop / "HelixSR/setup/dxgi.dll").exists()

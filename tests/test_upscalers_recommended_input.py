@@ -26,7 +26,7 @@ def test_game_input_recommendation_requires_detected_input(steam, fake_catalog, 
 
 @pytest.mark.parametrize('eligible', [True, False])
 def test_game_and_bulk_share_recipe_build_recommendation(steam, fake_catalog, proc, monkeypatch, eligible):
-    from upscalers import auto_recipes, recipes, catalog
+    from upscalers import auto_recipes, recipes
     from types import SimpleNamespace
     service = _service(steam, fake_catalog, proc)
     recipe = recipes.Recipe('292030', recommended_build='fsr-test')
@@ -36,6 +36,6 @@ def test_game_and_bulk_share_recipe_build_recommendation(steam, fake_catalog, pr
             raise auto_recipes.RecipeError('recipe_unsupported')
         return SimpleNamespace(recommended_build='fsr-test', dependencies=())
     monkeypatch.setattr(auto_recipes, 'plan', plan)
-    expected = 'fsr-test' if eligible else catalog.preferred_build('rdna2')
+    expected = 'fsr-test' if eligible else ''
     assert service.game('292030')['preferred'] == expected
     assert service.compatibility(['292030'])['292030']['preferred'] == expected

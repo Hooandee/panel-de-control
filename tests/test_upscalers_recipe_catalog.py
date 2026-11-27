@@ -257,9 +257,9 @@ def test_remake_recommends_supported_build_without_changing_global_default():
     assert catalog.BUILDS[recipe.recommended_build].models[0][0] == 'lite'
     assert catalog.preferred_build('intel', recipe) == 'xess'
     assert catalog.preferred_build('rdna4', recipe) == 'fsr-4.1.1'
-    assert catalog.preferred_build('rdna3') == 'fsr-4.1.1'
+    assert catalog.preferred_build('rdna3') == 'fsr-4.1.2-beta'
     windows = recipes.recipe_for('1462040', platform='windows', arch='x86_64')
-    assert catalog.preferred_build('rdna3', windows) == 'fsr-4.1.1'
+    assert catalog.preferred_build('rdna3', windows) == 'fsr-4.1.2-beta'
 
 
 def test_luma_411_uses_new_engine_and_preserves_driver_provider():

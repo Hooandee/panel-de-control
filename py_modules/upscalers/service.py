@@ -368,7 +368,11 @@ class UpscalerService:
                 automatic = auto_recipes.plan(recipe, installed)
             except auto_recipes.RecipeError:
                 automatic, refused = None, True
-            result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, _recommending(recipe, automatic, refused), self.device)}
+            entry = self.state["games"].get(installed.appid) or {}
+            blocked = {build.id for build in catalog.BUILDS.values() if build.engine == "optiscaler"} if refused else ()
+            preferred = catalog.preferred_build(self.gpu, _recommending(recipe, automatic, refused), self.device,
+                                                failed=_recommendation_failures(entry, installed.build_id), blocked=blocked)
+            result[installed.appid] = {**cached[1], "preferred": preferred}
         if self.logger:
             reasons = Counter(row["unavailable"] for row in result.values() if row.get("unavailable"))
             if dict(reasons) != self._unactionable_logged:
@@ -482,7 +486,9 @@ class UpscalerService:
         return {
             "solution": selected, "solutions": solutions,
             "preferred": catalog.preferred_build(self.gpu, _recommending(recipe, automatic, bool(recipe_info and recipe_info.get("blocked"))),
-                                                 self.device, require_signed=required, prefer_signed=prefer, failed=frozenset(failed)),
+                                                 self.device, require_signed=required, prefer_signed=prefer,
+                                                 failed=_recommendation_failures(entry, installed.build_id),
+                                                 blocked={build for build, route in solutions.items() if route["blocked_reason"]}),
             "failed_builds": [{**item, "build": build_id} for build_id, item in failed.items()],
             **({"builds": catalog.describe(self.gpu, self.device, recipe, require_signed=required)} if required else {}),
             "appid": appid,
@@ -871,6 +877,10 @@ class UpscalerService:
         # the game exactly as it was.
         # A signed-only recipe is validated against the catalog's own files: a newer OptiScaler fails to hook the signed FSR 4.
         pinned_only: set[str] = {asset.id for asset in needed(effective_build, recipe)} if required else set()
+        # FFX in OptiScaler 0.9.5 is already 4.1.2. Keep the 4.1.1 SDK from the pinned 0.9.4 archive.
+        if effective_build.id == "fsr-4.1.1" and effective_build.archive == catalog.OPTISCALER_ARCHIVE:
+            pinned_only.add(effective_build.archive)
+            self._fallbacks[effective_build.archive] = "fsr_version"
         paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
         self._check_signatures(effective_build, needed(effective_build, recipe), paths, chosen)
         # Unsigned helpers nothing needs stay out only when the chosen build itself is signed; an unsigned build goes in whole.
@@ -1260,8 +1270,9 @@ class UpscalerService:
     def _fetch_assets(self, assets: list[catalog.Asset], pinned_only=frozenset()) -> tuple[dict[str, Path], dict[str, catalog.Asset]]:
         """Each asset at its newest verified release, falling back to the catalog's own when that one fails."""
         unique = list({asset.id: asset for asset in assets}.values())
-        self._fallbacks.update({asset.id: "layout" for asset in unique
-                                if asset.id in pinned_only and self.latest.tracked(asset)})
+        for asset in unique:
+            if asset.id in pinned_only and self.latest.tracked(asset):
+                self._fallbacks.setdefault(asset.id, "layout")
         if any(self.latest.tracked(asset) and asset.id not in pinned_only for asset in unique):
             self._update_job(phase="resolve", total=0, done=0)
         chosen = {asset.id: asset if asset.id in pinned_only else self.latest.resolve(asset) for asset in unique}
@@ -2459,6 +2470,8 @@ class UpscalerService:
         history = entry.get("history") or []
         if history and history[-1].get("build") == install.get("build") and result != "not_run":
             history[-1]["result"] = result
+            history[-1]["game_build"] = install.get("game_build")
+            history[-1]["model"] = (install.get("options") or {}).get("model")
             history[-1]["facts"] = {k: facts[k] for k in ("upscaler", "input", "fg", "resolution", "initial_resolution", "resolution_source", "version", "fallback") if k in facts}
             self._save()
         return {"result": result, "facts": facts}
@@ -2753,6 +2766,31 @@ def _anti_cheat_accepted(analysis: dict, choice: dict, engine: str) -> bool:
 def _failed_builds(entry: dict) -> dict[str, dict]:
     marks = entry.get("failed_builds")
     return {build_id: item for build_id, item in marks.items() if isinstance(item, dict)} if isinstance(marks, dict) else {}
+
+
+def _recommendation_failures(entry: dict, game_build: str | None) -> set[str]:
+    failed = set(_failed_builds(entry))
+    install = entry.get("install") or {}
+    verified = set()
+    for attempt in reversed(entry.get("history") or []):
+        build_id = attempt.get("build")
+        build = catalog.BUILDS.get(build_id)
+        if not build or build.engine != "optiscaler" or build.version not in ("4.1.1", "4.1.2"):
+            continue
+        if build_id in verified or attempt.get("game_build") != game_build:
+            continue
+        if build_id == catalog.FSR_LITE_BUILD:
+            if "model" not in attempt and build_id != install.get("build"):
+                continue
+            if attempt.get("model", (install.get("options") or {}).get("model")) not in (None, "lite"):
+                continue
+        facts = attempt.get("facts") or {}
+        if facts.get("fallback"):
+            failed.add(build_id)
+        elif not facts.get("upscaler"):
+            continue
+        verified.add(build_id)
+    return failed
 
 
 def _unmanaged_dlls(target: Path, install: dict, candidates: set[str]) -> dict[str, list[str]]:
