@@ -14,6 +14,12 @@ class RecipeError(Exception):
         self.code = code
 
 
+class MissingRecipeFiles(RecipeError):
+    def __init__(self, members: dict[str, set[str]]):
+        super().__init__("recipe_files_invalid")
+        self.members = members
+
+
 def plan(recipe, installed):
     if recipe is None or not recipe.dependencies:
         return None
@@ -62,6 +68,7 @@ def user_files(selected, store) -> list[dict]:
 
 def sources(selected, paths: dict[str, Path], store=None) -> dict[str, Path]:
     result = {}
+    missing: dict[str, set[str]] = {}
     for dependency in dependencies(selected):
         if dependency.kind == "user_files":
             # Missing until the user picks the file: the rest installs and the row says what is left.
@@ -72,19 +79,26 @@ def sources(selected, paths: dict[str, Path], store=None) -> dict[str, Path]:
             continue
         if dependency.kind != "game_files":
             continue
-        root = paths[dependency.asset].resolve(strict=True)
+        try:
+            root = paths[dependency.asset].resolve(strict=True)
+        except OSError:
+            raise RecipeError("recipe_files_invalid") from None
         for destination, member in dependency.files.items():
-            source = root / member
-            try:
-                if (not source.is_file() or source.is_symlink() or
-                        not source.resolve(strict=True).is_relative_to(root) or
-                        any(parent.is_symlink() for parent in source.parents if parent != root and parent.is_relative_to(root))):
-                    raise RecipeError("recipe_files_invalid")
-            except OSError:
-                raise RecipeError("recipe_files_invalid") from None
             if destination in result:
                 raise RecipeError("recipe_files_invalid")
+            source = root / member
+            if source.is_symlink() or any(parent.is_symlink() for parent in source.parents if parent != root and parent.is_relative_to(root)):
+                raise RecipeError("recipe_files_invalid")
+            try:
+                if not source.resolve(strict=True).is_relative_to(root) or not source.is_file():
+                    raise RecipeError("recipe_files_invalid")
+            except FileNotFoundError:
+                missing.setdefault(dependency.asset, set()).add(member)
+            except OSError:
+                raise RecipeError("recipe_files_invalid") from None
             result[destination] = source
+    if missing:
+        raise MissingRecipeFiles(missing)
     return result
 
 

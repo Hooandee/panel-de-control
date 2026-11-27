@@ -447,3 +447,31 @@ def test_horizon_rejects_two_spellings_before_touching_game(horizon_unlocker):
         service.install(appid, {'build': 'fsr-test'})
     assert files(game) == before
     assert not calls
+
+
+def test_horizon_repairs_only_the_asset_with_a_missing_recipe_member(horizon_unlocker, monkeypatch):
+    service, appid, game, calls = horizon_unlocker
+    selected = auto_recipes.plan(service._recipe(appid, None, service._find(appid)), service._find(appid))
+    asset, = auto_recipes.assets(selected)
+    payload = service.cache.unpacked(asset)
+    (payload / 'winmm.dll').unlink()
+    repairs = []
+    fetches = []
+    original_fetch = service._fetch_assets
+
+    def fetch(*args):
+        fetches.append(args)
+        return original_fetch(*args)
+
+    def repair(affected_asset, members, cancelled):
+        assert not (game / 'dxgi.dll').exists()
+        assert not calls
+        repairs.append((affected_asset.id, members))
+        (payload / 'winmm.dll').write_bytes(b'upstream DLL')
+
+    monkeypatch.setattr(service, '_fetch_assets', fetch)
+    monkeypatch.setattr(service.cache, 'repair_missing_members', repair, raising=False)
+    service.begin_scaler_transition(appid)
+    assert service.install(appid, {'build': 'fsr-test'})['overrides'] == ['dxgi=n,b', 'winmm=n,b']
+    assert repairs == [(asset.id, {'winmm.dll'})]
+    assert len(fetches) == 1

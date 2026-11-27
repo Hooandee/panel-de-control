@@ -191,3 +191,34 @@ def test_lossless_installs_over_an_unpack_that_only_peeled_the_compression(tmp_p
     (stale / "layer.tar").write_bytes(b"what 7z leaves behind")
     (stale / ".complete").write_text(asset.sha256)
     assert service.lsfg_install()["installed"]
+
+
+def test_repair_missing_archive_members_keeps_existing_readers_and_extracts_once(tmp_path, monkeypatch):
+    asset, payload = _tarball(tmp_path, {"winmm.dll": b"loader", "sub/second.dll": b"second", "other.dll": b"upstream"})
+    cache = AssetCache(tmp_path / "cache")
+    archive = cache.file(asset)
+    archive.parent.mkdir(parents=True)
+    archive.write_bytes(payload)
+    unpacked = cache.unpacked(asset)
+    unpacked.mkdir()
+    (unpacked / ".complete").write_text(asset.sha256)
+    other = unpacked / "other.dll"
+    other.write_bytes(b"reader content")
+    member_names = {"winmm.dll", "sub/second.dll"}
+    original_unpack = cache._unpack
+    extractions = []
+
+    def unpack(asset, destination=None):
+        assert other.read_bytes() == b"reader content"
+        extractions.append(destination)
+        original_unpack(asset, destination)
+
+    monkeypatch.setattr(cache, "_unpack", unpack)
+    with other.open("rb") as reader:
+        cache.repair_missing_members(asset, member_names, lambda: False)
+        assert reader.read() == b"reader content"
+    cache.repair_missing_members(asset, member_names, lambda: False)
+    assert len(extractions) == 1 and extractions[0] != unpacked
+    assert other.read_bytes() == b"reader content"
+    assert (unpacked / "winmm.dll").read_bytes() == b"loader"
+    assert (unpacked / "sub/second.dll").read_bytes() == b"second"

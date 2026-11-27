@@ -885,13 +885,15 @@ class UpscalerService:
                 _anr_sources(paths[catalog.ANR_FG], "")
         try:
             recipe_files = auto_recipes.sources(automatic, paths, self.user_files)
-        except auto_recipes.RecipeError:
-            pinned_only |= {asset.id for asset in auto_recipes.assets(automatic)}
-            paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
+        except auto_recipes.MissingRecipeFiles as missing:
             try:
+                for asset_id, members in missing.members.items():
+                    self.cache.repair_missing_members(chosen[asset_id], members, self._cancel.is_set)
                 recipe_files = auto_recipes.sources(automatic, paths, self.user_files)
             except auto_recipes.RecipeError as error:
                 raise UpscalerError(error.code) from None
+        except auto_recipes.RecipeError as error:
+            raise UpscalerError(error.code) from None
         mod = self.user_mods.status(appid)
         if mod and mod.get("target") != Path(analysis["target"]).relative_to(installed.root).as_posix():
             raise UpscalerError("mod_moved")
@@ -912,7 +914,10 @@ class UpscalerService:
             if len(paths_at_name) > 1:
                 raise UpscalerError("recipe_files_invalid")
             if paths_at_name:
-                aliases[name] = paths_at_name[0]
+                existing = target / paths_at_name[0]
+                if existing.is_symlink() or not existing.is_file():
+                    raise UpscalerError("recipe_files_invalid")
+                aliases[name] = existing.name
         if analysis["foreign"] and not previous:
             raise UpscalerError("foreign")
         # Only recipes with Proton prerequisites (Luma's runtimes) and mods built against a recent Visual C++ runtime
