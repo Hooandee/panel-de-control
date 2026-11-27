@@ -361,12 +361,18 @@ class Store:
             if old.exists():
                 trash = self.root / f".{appid}-old-{time.time_ns()}"
                 os.replace(old, trash)
-            os.replace(staging, old)
+            try:
+                os.replace(staging, old)
+            except OSError:
+                if trash is not None:
+                    os.replace(trash, old)
+                raise
             if trash:
                 shutil.rmtree(trash, ignore_errors=True)
-        except BaseException:
+        except OSError:
+            raise ModError("unreadable") from None
+        finally:
             shutil.rmtree(staging, ignore_errors=True)
-            raise
         return self.status(appid) or {}
 
     def remove(self, appid: str) -> None:

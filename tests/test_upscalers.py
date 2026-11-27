@@ -2120,6 +2120,30 @@ def test_loose_mod_dll_refuses_multiple_casefold_aliases(tmp_path):
     assert store.status(APPID) is None
 
 
+def test_failed_mod_publication_preserves_the_previous_mod(tmp_path, monkeypatch):
+    from upscalers import user_mods
+
+    first = _write(tmp_path / "first.dll", b"first")
+    second = _write(tmp_path / "second.dll", b"second")
+    store = user_mods.Store(tmp_path / "store")
+    previous = store.adopt(APPID, first, ".", set(), set())
+    replace = os.replace
+
+    def fail_publication(source, destination):
+        if destination == store.root / APPID:
+            monkeypatch.setattr(os, "replace", replace)
+            raise OSError("publication failed")
+        replace(source, destination)
+
+    monkeypatch.setattr(os, "replace", fail_publication)
+    with pytest.raises(user_mods.ModError, match="^unreadable$"):
+        store.adopt(APPID, second, ".", set(), set())
+
+    assert store.status(APPID) == previous
+    assert store.sources(APPID)["first.dll"].read_bytes() == b"first"
+    assert store.adopt(APPID, second, ".", set(), set())["filename"] == "second.dll"
+
+
 def test_loose_mod_dll_refuses_a_destination_symlink(steam, fake_catalog, proc):
     home, game = steam
     dll = _write(home / "Downloads/custom.dll")
