@@ -294,3 +294,51 @@ def test_an_abandoned_staging_is_removed_and_one_in_use_is_left(tmp_path, monkey
         assert transaction.exists()
     prefix_dependencies.abandon(str(tmp_path), game, str(proc))
     assert not transaction.exists() and (compat / 'pfx').is_dir()
+
+
+def test_horizon_unlocker_installs_and_rolls_back_as_a_managed_recipe(steam, fake_catalog, proc, monkeypatch):
+    from dataclasses import replace
+    from upscalers import games, recipe_catalog
+
+    appid = '1151640'
+    service = _service(steam, fake_catalog, proc)
+    installed = replace(service._find(APPID), appid=appid, name='Horizon Zero Dawn Complete Edition')
+    monkeypatch.setattr(service, '_find', lambda *args: installed)
+    monkeypatch.setattr(recipe_catalog.host_platform, 'system', lambda: 'Linux')
+    monkeypatch.setattr(recipe_catalog.host_platform, 'machine', lambda: 'x86_64')
+    game = installed.root
+    (game / 'HorizonZeroDawn.exe').write_bytes(b'MZ' + b'\0' * 4096)
+    (game / 'nvngx_dlss.dll').write_bytes(b'shipped DLSS')
+
+    matched = recipe_catalog.bundled().match(appid, 'optiscaler')
+    asset, = auto_recipes.assets(matched)
+    payload = service.cache.unpacked(asset)
+    payload.mkdir(parents=True)
+    (payload / '.complete').write_text(asset.sha256)
+    (payload / 'winmm.dll').write_bytes(b'upstream DLL')
+    (payload / 'unused.dll').write_bytes(b'unused')
+    calls = []
+    def prepare(home, installed, verbs, *args, **kwargs):
+        calls.append(verbs)
+        return {'state': 'prepared'}
+
+    monkeypatch.setattr(prefix_dependencies, 'prepare', prepare)
+    monkeypatch.setattr(prefix_dependencies, 'publish', lambda *args: calls.append('publish'))
+    monkeypatch.setattr(prefix_dependencies, 'rollback', lambda *args: calls.append('rollback'))
+    monkeypatch.setattr(prefix_dependencies, 'finish', lambda *args: calls.append('finish'))
+
+    checkpoint = service.begin_scaler_transition(appid)
+    result = service.install(appid, {'build': 'fsr-test', 'proxy': 'winmm.dll'})
+    assert result['overrides'] == ['dxgi=n,b', 'winmm=n,b']
+    assert (game / 'winmm.dll').read_bytes() == b'upstream DLL'
+    assert (game / 'dxgi.dll').read_bytes() == b'injector'
+    assert 'Dxgi=false' in (game / 'OptiScaler.ini').read_text()
+    assert not (game / 'unused.dll').exists()
+    assert (game / 'nvngx_dlss.dll').read_bytes() == b'shipped DLSS'
+    service.record_added_args(appid, [], ['winmm=n,b'])
+    result = service.finish_scaler_transition(appid, checkpoint['token'], True)
+    assert result['removed_overrides'] == ['winmm=n,b']
+    assert not (game / 'winmm.dll').exists()
+    assert not (game / 'dxgi.dll').exists()
+    assert not (game / games.MANIFEST_DIR).exists()
+    assert calls == [('vcrun2022',), 'publish', 'rollback']

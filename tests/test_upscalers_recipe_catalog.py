@@ -97,7 +97,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 20
+    assert recipe.catalog_version == rc.bundled().catalog_version
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
@@ -121,6 +121,8 @@ def test_recipe_preserves_wiki_and_existing_rules():
     ('assets.json', lambda d: d['luma-ff7-800'].update(url='http://localhost/a')),
     ('assets.json', lambda d: d['luma-ff7-800'].update(sha256='no')),
     ('assets.json', lambda d: d['luma-ff7-800'].update(size=True)),
+    ('assets.json', lambda d: d['cyberfsr-dlss-unlocker-2-0-0-15'].update(format='zip')),
+    ('games/1151640.json', lambda d: d['conditions'].update(dependency_gpus=['unknown'])),
     ('games/1462040.json', lambda d: d.update(args=['-dx11;echo'])),
     ('games/1462040.json', lambda d: d.update(dependencies=['luma-ff7','luma-ff7'])),
 ])
@@ -405,3 +407,25 @@ def test_village_gets_the_puredark_route_instead_of_a_mod_to_find():
     assert [(d.id, d.kind) for d in order] == [('refw-pdup-re8', 'game_files'), ('puredark-upscaler-base', 'user_files')]
     recipe = recipes.recipe_for('1196590', platform='linux', arch='x86_64')
     assert recipe.reframework_upscaler and not recipe.optiscaler_fg
+
+
+@pytest.mark.parametrize('gpu', ['rdna2', 'rdna3', 'rdna35', 'rdna4', 'nvidia', 'intel', 'unknown', None])
+def test_horizon_unlocker_is_limited_to_supported_amd_on_linux(gpu):
+    appid = '1151640'
+    recipe = recipes.recipe_for(appid, platform='linux', arch='x86_64', gpu=gpu)
+    assert recipe.recommended_input == 'dlss'
+    expected = ('hzd-dlss-unlocker',) if gpu in ('rdna2', 'rdna3', 'rdna35', 'rdna4') else ()
+    assert recipe.dependencies == expected
+    for platform, arch, engine in [('windows', 'x86_64', 'optiscaler'), ('linux', 'aarch64', 'optiscaler'),
+                                   ('linux', 'x86_64', 'dll')]:
+        assert not recipes.recipe_for(appid, platform=platform, arch=arch, engine=engine, gpu=gpu).dependencies
+
+
+def test_horizon_unlocker_has_a_pinned_7z_with_one_file_and_its_proton_runtime():
+    catalog = rc.load()
+    dependency = catalog.dependencies['hzd-dlss-unlocker']
+    assert dependency.files == {'winmm.dll': 'winmm.dll'}
+    assert [entry.id for entry in catalog.dependency_order([dependency.id])] == ['vcrun2022', dependency.id]
+    asset = catalog.assets[dependency.asset]
+    assert (asset.filename, asset.format, asset.size) == ('CyberFSR_DLSS-Unlocker_v2.0.0.15.7z', '7z', 700050)
+    assert asset.sha256 == '03489dc79f0c9e0612de0e28cc6ec0e98896a5e6fc657cc9e663d16c531f11c9'

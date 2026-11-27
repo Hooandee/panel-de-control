@@ -362,7 +362,7 @@ class UpscalerService:
                 cached = (stamp, {"native": installed.native,
                                   "inputs": [] if installed.native else games.shipped_upscalers(installed.root)})
                 self._compat[installed.appid] = cached
-            recipe = recipes.recipe_for(installed.appid, game_build=installed.build_id)
+            recipe = recipes.recipe_for(installed.appid, game_build=installed.build_id, gpu=self._recipe_gpu(installed))
             refused = False
             try:
                 automatic = auto_recipes.plan(recipe, installed)
@@ -397,6 +397,9 @@ class UpscalerService:
         self._save()
         return entry["identity"]
 
+    def _recipe_gpu(self, installed: games.Installed | None) -> str | None:
+        return self.gpu if installed and not (installed.native or installed.launcher or installed.shortcut) else None
+
     def _recipe(self, appid: str, identity: dict | None, installed: games.Installed | None = None):
         steam_appid = str(identity.get("steam_appid") or appid) if identity else str(appid)
         live = None
@@ -404,7 +407,8 @@ class UpscalerService:
             found = self.wiki.lookup(identity.get("name") if identity else None, installed.name)
             if found:
                 live = recipes.from_facts(steam_appid, found, "optiscaler-wiki@live", self.wiki.page_facts(found.get("page")))
-        recipe = recipes.recipe_for(steam_appid, live, game_build=installed.build_id if installed else None)
+        recipe = recipes.recipe_for(steam_appid, live, game_build=installed.build_id if installed else None,
+                                    gpu=self._recipe_gpu(installed))
         return recipes.with_engine(recipe, appid, installed.root) if installed else recipe
 
     def refresh_wiki(self, appid: str | None = None) -> dict:
@@ -881,10 +885,14 @@ class UpscalerService:
                 paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
                 _anr_sources(paths[catalog.ANR_FG], "")
         try:
-            auto_recipes.sources(automatic, paths, self.user_files)
+            recipe_files = auto_recipes.sources(automatic, paths, self.user_files)
         except auto_recipes.RecipeError:
             pinned_only |= {asset.id for asset in auto_recipes.assets(automatic)}
             paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
+            try:
+                recipe_files = auto_recipes.sources(automatic, paths, self.user_files)
+            except auto_recipes.RecipeError as error:
+                raise UpscalerError(error.code) from None
         mod = self.user_mods.status(appid)
         if mod and mod.get("target") != Path(analysis["target"]).relative_to(installed.root).as_posix():
             raise UpscalerError("mod_moved")
@@ -901,10 +909,9 @@ class UpscalerService:
         recipe = self._recipe(appid, entry.get("identity"), installed)
         proxy = str(choice.get("proxy") or _recipe_proxy(recipe) or "dxgi.dll")
         mod_sources = self.user_mods.sources(appid)
-        mod_names = {name.casefold() for name in mod_sources}
-        if proxy.casefold() in mod_names:
-            # The mod brings its own loader under OptiScaler's usual name (ERSS-FG's dxgi.dll): OptiScaler takes another.
-            proxy = next((name for name in games.PROXY_NAMES if name.casefold() not in mod_names and name != "d3d12.dll"), None)
+        loader_names = {name.casefold() for name in (*mod_sources, *recipe_files)}
+        if proxy.casefold() in loader_names:
+            proxy = next((name for name in games.PROXY_NAMES if name.casefold() not in loader_names and name != "d3d12.dll"), None)
             if proxy is None:
                 raise UpscalerError("mod_conflict")
         build = catalog.for_game(build, analysis["inputs"], self.gpu, recipe)
@@ -938,16 +945,9 @@ class UpscalerService:
             if recipe.optipatcher:
                 sources[f"{prefix}plugins/OptiPatcher.asi"] = paths[catalog.OPTIPATCHER]
             sources = _with_root_files(sources, prefix, recipe.optiscaler_root_files)
-        extra: dict[str, Path] = {}
         if wants_anr:
-            extra.update(_anr_sources(paths[catalog.ANR_FG], prefix))
-            sources.update(extra)
+            sources.update(_anr_sources(paths[catalog.ANR_FG], prefix))
 
-        try:
-            recipe_files = auto_recipes.sources(automatic, paths, self.user_files)
-        except auto_recipes.RecipeError as error:
-            raise UpscalerError(error.code) from None
-        extra.update(recipe_files)
         sources = {**recipe_files, **sources}
         panel_names = {name.casefold() for name in (*sources, "OptiScaler.ini")}
         if any(name.casefold() in panel_names for name in mod_sources):
@@ -1054,7 +1054,8 @@ class UpscalerService:
         entry["install"] = {
             "build": build.id, "archive": build.archive, "proxy": proxy, "target": str(target), "exe": analysis["exe"],
             "installed_at": now, "options": _clean_options(choice), "solution": solution,
-            "native_dlls": sorted({*(recipe.native_dlls if recipe else ()), *user_mods.native_dlls(mod_sources)}),
+            "native_dlls": sorted({*(recipe.native_dlls if recipe else ()),
+                                   *user_mods.native_dlls((*mod_sources, *recipe_files))}),
             "mod": {"filename": mod.get("filename"), "id": mod.get("id")} if mod and mod_sources else None,
             "launch": self._launch_swap(recipe.mod_launch_exe) if mod_sources and recipe and recipe.mod_launch_exe else None,
             "anti_cheat_accepted": _anti_cheat_accepted(analysis, choice, build.engine),

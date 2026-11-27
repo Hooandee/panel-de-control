@@ -16,6 +16,8 @@ _HASH = re.compile(r'[a-f0-9]{64}\Z')
 _ENGINES = {'optiscaler', 'dll', 'helixsr', 'proton', 'mako'}
 _PLATFORMS = {'linux', 'windows', 'darwin', 'android'}
 _ARCHES = {'x86_64', 'aarch64'}
+_AMD_GPUS = {'rdna2', 'rdna3', 'rdna35', 'rdna4'}
+_ARCHIVE_FORMATS = ('zip', '7z')
 _VERBS = {'vcrun2022', 'msvcrt40'}
 # Pages a user_files dependency may point the user to; Panel never downloads from them.
 _PAGE_HOSTS = {'www.nexusmods.com', 'nexusmods.com', 'github.com', 'www.patreon.com'}
@@ -251,10 +253,10 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
     for identifier, item in raw['assets'].items():
         _identifier(identifier)
         item = _object(item, ('url', 'source_url', 'sha256', 'size', 'filename', 'format'))
-        if not isinstance(item['sha256'], str) or not _HASH.fullmatch(item['sha256']) or item['format'] != 'zip':
+        if not isinstance(item['sha256'], str) or not _HASH.fullmatch(item['sha256']) or item['format'] not in _ARCHIVE_FORMATS:
             raise CatalogError('invalid_asset')
         filename = _path(item['filename'])
-        if '/' in filename or not filename.endswith('.zip'):
+        if '/' in filename or not filename.endswith('.' + item['format']):
             raise CatalogError('invalid_filename')
         assets[identifier] = AssetSpec(identifier, _url(item['url'], asset=True), _url(item['source_url']),
                                        item['sha256'], _integer(item['size'], 2 * 1024**3), filename, item['format'])
@@ -298,8 +300,8 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
         if not isinstance(appid, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', appid):
             raise CatalogError('invalid_appid')
         item = _object(item, ('name', 'revision', 'conditions', 'args', 'ini', 'dependencies', 'source_urls'), ('exe', 'tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings', 'anti_cheat', 'signed_only'))
-        conditions = _object(item['conditions'], ('engine', 'platform', 'arch'), ('game_builds',))
-        allowed = {'engine': _ENGINES, 'platform': _PLATFORMS, 'arch': _ARCHES}
+        conditions = _object(item['conditions'], ('engine', 'platform', 'arch'), ('game_builds', 'dependency_gpus'))
+        allowed = {'engine': _ENGINES, 'platform': _PLATFORMS, 'arch': _ARCHES, 'dependency_gpus': _AMD_GPUS}
         parsed_conditions = {}
         for key, values in conditions.items():
             if key == 'game_builds':

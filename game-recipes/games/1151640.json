@@ -1,6 +1,6 @@
 {
   "name": "Horizon Zero Dawn Complete Edition",
-  "revision": 1,
+  "revision": 2,
   "conditions": {
     "engine": [
       "optiscaler"
@@ -10,12 +10,20 @@
     ],
     "arch": [
       "x86_64"
+    ],
+    "dependency_gpus": [
+      "rdna2",
+      "rdna3",
+      "rdna35",
+      "rdna4"
     ]
   },
   "exe": "HorizonZeroDawn.exe",
   "args": [],
   "ini": {},
-  "dependencies": [],
+  "dependencies": [
+    "hzd-dlss-unlocker"
+  ],
   "source_urls": [
     "https://github.com/optiscaler/OptiScaler/wiki/Horizon-Zero-Dawn"
   ],
