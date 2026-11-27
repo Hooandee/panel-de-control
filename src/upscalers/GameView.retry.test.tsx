@@ -463,3 +463,23 @@ it("keeps RDR2's preferred Lite selected without borrowing the fallback package'
   expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
   expect(screen.getAllByText("up.input.activate")).toHaveLength(1);
 });
+
+it.each([
+  { device: "steam_deck_lcd", tested: true },
+  { device: "steam_deck_oled", tested: false },
+])("marks Zero Dawn Lite only on the tested Deck profile ($device)", async ({ device, tested }) => {
+  const lite = { ...build, id: "fsr-4.1.2-beta", version: "4.1.2", models: ["lite", "full"] };
+  state.detail = {
+    analysis: { target: "/game", inputs: { dlss: ["nvngx_dlss.dll"] }, candidates: [] },
+    history: [], install: null, preferred: lite.id, recipe_info: { needs: [] },
+    solutions: { [lite.id]: {
+      recommended_input: "dlss", input_reconciled: true, dependencies: ["hzd-dlss-unlocker"], quality: { owner: "panel" },
+    } },
+  };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1151640 }}
+    overview={{ ...overview, builds: [...overview.builds, lite], device }} />); });
+  const selected = screen.getByTestId("selected-build");
+  expect(selected.textContent).toBe(lite.id);
+  expect(selected.dataset.testedBuild).toBe(tested ? lite.id : undefined);
+  expect(selected.dataset.testedModel).toBe(tested ? "lite" : undefined);
+});

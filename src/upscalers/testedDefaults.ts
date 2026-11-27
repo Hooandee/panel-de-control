@@ -17,9 +17,10 @@ interface GameGuidance {
 }
 
 const steamMachine = { device: "steam_machine", gpu: "rdna3", build: "fsr-4.1.1", model: null } as const;
+const steamDeckLcdLite = { device: "steam_deck_lcd", gpu: "rdna2", build: "fsr-4.1.2-beta", model: "lite" } as const;
 
 const GUIDANCE: Readonly<Partial<Record<string, GameGuidance>>> = {
-  "1151640": { input: "dlss", menuName: "NVIDIA DLSS", requiredDependency: "hzd-dlss-unlocker", tested: [steamMachine] },
+  "1151640": { input: "dlss", menuName: "NVIDIA DLSS", requiredDependency: "hzd-dlss-unlocker", tested: [steamMachine, steamDeckLcdLite] },
   "2420110": { input: "fsr31", menuName: "AMD FSR 3", tested: [steamMachine] },
   "1174180": { input: "fsr2", menuName: "AMD FSR 2", tested: [{ ...steamMachine, requiresDx12Config: true }] },
 };
