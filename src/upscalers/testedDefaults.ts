@@ -42,8 +42,7 @@ export function detectedGameInput(guide: GameGuidance, detail: GameDetail, build
 }
 
 export function needsManualGameConfig(detail: GameDetail): boolean {
-  return detail.shortcut || !detail.recipe_info?.game_config
-    || !!detail.install?.game_config?.some(({ state }) => state === "missing" || state === "failed");
+  return detail.shortcut || detail.recipe_info?.game_config_matches !== true;
 }
 
 export function testedDefault(detail: GameDetail | null, appid: string, overview: UpscalersOverview): TestedDefault | undefined {
@@ -57,10 +56,7 @@ export function testedDefault(detail: GameDetail | null, appid: string, overview
   const plan = detail.solutions?.[build.id];
   const inputs = plan?.inputs ?? detail.analysis.inputs;
   if (plan?.blocked_reason || buildBlocker(build, inputs) || !detectedGameInput(guide, detail, build)) return;
-  if (tested.requiresDx12Config) {
-    const forcesDx12 = plan?.api_source === "recipe" && plan.effective_api === "d3d12";
-    if (detail.shortcut || (needsManualGameConfig(detail) && !forcesDx12)) return;
-  }
+  if (tested.requiresDx12Config && needsManualGameConfig(detail)) return;
   if ((build.models?.[0] ?? null) !== tested.model) return;
   return { mode: "optiscaler", build: tested.build, model: tested.model };
 }

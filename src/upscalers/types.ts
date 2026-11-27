@@ -229,6 +229,7 @@ export interface RecipeInfo {
   game_settings?: { setting: string; value: string }[];
   /** Panel sets a game setting itself on install (RDR2's API): the page only asks while it could not. */
   game_config?: boolean;
+  game_config_matches?: boolean;
   anr_settings?: { setting: string; value: string }[];
   fps_counter?: boolean;
   quality_on_exit?: boolean;

@@ -490,7 +490,7 @@ export const GameView: FC<{
     setVerifying(true);
     try {
       setVerify(await verifyUpscaler(appid));
-      await load();
+      await load(true);
       onChanged();
     } catch {
       setMessage(t("up.error.generic"));
@@ -553,7 +553,6 @@ export const GameView: FC<{
     ? detectedGameInput(guidance, detail, selected) : null;
   const recommendedInput = !guidance && optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown && !lumaInput
     ? INPUT_NAMES[recommendedInputKey] : null;
-  // A setting Panel writes into the game's config on install is only asked of the user when Panel could not write it.
   const notice = detail && !detail.native && needsManualGameConfig(detail) ? gameNotice(detail.identity?.steam_appid ?? appid) : null;
   const strain = detail && !detail.native && !spatial ? steamMachineStrain(overview.device, gameOutputHeight(detail?.history ?? [], overview.display), selected, choice.quality) : null;
   const recipeBlocked = !!solution?.blocked_reason || (optiscalerRecipe && !solution && !!detail?.recipe_info?.blocked);

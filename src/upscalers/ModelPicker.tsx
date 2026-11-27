@@ -92,7 +92,7 @@ export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onCha
   const modeOption = (value: typeof mode, name: string, icon: ReactNode) => {
     const description = testedDefault?.mode === value ? t("up.mode.tested") : undefined;
     return {
-      value, description,
+      value, valueLabel: name, description,
       label: <span ref={showScalerIcon} style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs }}>
         {icon}<span>{name}</span>{description && <TestedMark description={description} announce={duo} />}
       </span>,
@@ -118,6 +118,8 @@ export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onCha
     .flatMap((build) => (build.models?.length ? build.models : [null]).map((model) => ({ build, model })));
   const currentModel = choice.model ?? current?.models?.[0] ?? null;
   const selectedIndex = Math.max(0, options.findIndex(({ build, model }) => choice.build === build.id && currentModel === model));
+  const currentDescription = mode === choiceMode && current
+    ? [optionLabel(current, currentModel), testedLabel(current, currentModel)].filter(Boolean).join(". ") : undefined;
   return <Focusable flow-children="column" style={{ ...theme.card, padding: theme.space.sm, fontSize: theme.font.caption, lineHeight: 1.35, minWidth: 0, overflowWrap: "normal", wordBreak: "normal" }}>
     <PickerButton duo={duo} controlId={`${appid}:scaler-engine`} label={t("up.models.title")} value={mode} disabled={disabled}
       options={[
@@ -127,7 +129,7 @@ export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onCha
       ]}
       onChange={next => { if (disabled) return; setMode(next); onSpatial?.(next === "mako"); setOpen(next !== "mako"); }} />
     {mode !== "mako" && <Focusable data-pdc-part="disclosure" ref={trigger} role="button" aria-label={t("up.section.model")} aria-expanded={open} aria-disabled={disabled}
-      aria-description={mode === choiceMode && current ? testedLabel(current, currentModel) : undefined}
+      aria-description={currentDescription}
       onClick={toggle} onActivate={toggle} onCancel={open ? (event) => { event.stopPropagation(); close(); } : undefined}
       style={{ padding: theme.space.sm, cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: theme.space.sm }}>
       <span style={{ flex: 1, minWidth: 0 }}>{mode === choiceMode && current ? named(current, currentModel) : t("up.section.model")}</span>

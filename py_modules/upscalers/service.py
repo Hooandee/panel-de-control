@@ -451,6 +451,8 @@ class UpscalerService:
         install = entry.get("install")
         automatic = None
         recipe_info = _recipe_info(recipe)
+        if recipe_info and recipe.game_config:
+            recipe_info["game_config_matches"] = game_config.matches(game_config.prefix_user(self.home, installed), recipe.game_config)
         if recipe_info and (installed.native or not analysis.get("inputs", {}).get(recipe_info["recommended_input"])):
             recipe_info["recommended_input"] = None
         if recipe_info and "luma" in recipe_info["needs"]:

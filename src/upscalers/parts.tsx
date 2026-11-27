@@ -174,7 +174,7 @@ export const ActionButton: FC<{
 export function PickerButton<T extends string>({ label, value, options, onChange, disabled, badge, showLabel = false, duo = false, controlId, ready = true }: {
   label: string;
   value: T;
-  options: { value: T; label: ReactNode; caption?: string; description?: string }[];
+  options: { value: T; label: ReactNode; caption?: string; valueLabel?: string; description?: string }[];
   onChange: (value: T) => void;
   disabled?: boolean;
   badge?: ReactNode;
@@ -202,7 +202,8 @@ export function PickerButton<T extends string>({ label, value, options, onChange
     setOpen(false);
   };
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
-  const current = options.find((option) => option.value === value);
+  const current = options[selectedIndex]?.value === value ? options[selectedIndex] : undefined;
+  const description = [current?.valueLabel, current?.description].filter(Boolean).join(". ");
   const toggle = () => { if (!disabled) { if (open) close(); else setOpen(true); } };
   if (duo) return <div style={{ ...theme.card, minWidth: 0, maxWidth: "100%", display: "flex", alignItems: "center", gap: theme.space.xs, padding: theme.space.sm }}>
     {showLabel && <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body }}>{label}</span>}
@@ -215,7 +216,7 @@ export function PickerButton<T extends string>({ label, value, options, onChange
   </div>;
   return (
     <Focusable flow-children="column" style={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", opacity: disabled ? 0.45 : 1 }}>
-      <Focusable data-pdc-part="surface-action" ref={trigger} role="button" aria-label={label} aria-description={current?.description} aria-expanded={open} aria-disabled={disabled}
+      <Focusable data-pdc-part="surface-action" ref={trigger} role="button" aria-label={label} aria-description={description || undefined} aria-expanded={open} aria-disabled={disabled}
         onActivate={toggle} onClick={toggle} onCancel={open ? (event) => { event.stopPropagation(); close(); } : undefined}
         style={{ width: "100%", minWidth: 0, cursor: "pointer" }}>
         <div style={{ ...theme.card, boxSizing: "border-box", width: "100%", padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", alignItems: "center", gap: theme.space.xs }}>
