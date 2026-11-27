@@ -21,7 +21,7 @@ const steamDeckLcdLite = { device: "steam_deck_lcd", gpu: "rdna2", build: "fsr-4
 
 const GUIDANCE: Readonly<Partial<Record<string, GameGuidance>>> = {
   "1151640": { input: "dlss", menuName: "NVIDIA DLSS", requiredDependency: "hzd-dlss-unlocker", tested: [steamMachine, steamDeckLcdLite] },
-  "2420110": { input: "fsr31", menuName: "AMD FSR 3", tested: [steamMachine] },
+  "2420110": { input: "fsr31", menuName: "AMD FSR 3", tested: [steamMachine, steamDeckLcdLite] },
   "1174180": { input: "fsr2", menuName: "AMD FSR 2.0", tested: [{ ...steamMachine, requiresDx12Config: true }] },
 };
 
