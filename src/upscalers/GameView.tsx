@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ReactN
 import { LuArrowLeftRight, LuInfo, LuCircleCheck, LuCircleDashed, LuTriangleAlert } from "react-icons/lu";
 
 import {
-  cancelUpscalersJob, configureUpscaler, getUpscalersGame,
+  cancelUpscalersJob, configureUpscaler, getUpscalersGame, getUpscalerLaunchReceipt,
   refreshUpscalerWiki, setUpscalersExe, uninstallUpscaler, verifyUpscaler, adoptForeignUpscaler, restoreForeignUpscaler,
 } from "../api";
 import { CompactBackAction } from "../components/CompactBackAction";
@@ -17,6 +17,8 @@ import { openIdentityModal } from "./IdentityModal";
 import { readShortcutHint } from "./shortcutHint";
 import { useI18n } from "../i18n";
 import type { GameEntry } from "../launch/steamApi";
+import { activeDisplayResolution } from "../steam/performanceSettingsRuntime";
+import { hasMakoLeftover } from "./makoLeftover";
 import { readAppDetails } from "../launch/steamApi";
 import { getEnv, parse } from "../launch/compose";
 import { CATALOG, pillVisible } from "../launch/catalog";
@@ -111,7 +113,7 @@ export const GameView: FC<{
   const [spatial, setSpatial] = useState(draft?.spatial ?? false);
   const [makoAvailable, setMakoAvailable] = useState(false);
   const [spatialInstalled, setSpatialInstalled] = useState(false);
-  const spatialSelected = useRef(draft?.spatial !== undefined);
+  const spatialSelected = useRef(draft?.spatial);
   const panelQuality = useRef<Quality>("native");
   useEffect(() => {
     let alive = true;
@@ -124,7 +126,7 @@ export const GameView: FC<{
       const installed = !!status.profiles[appid]?.scaling_enabled;
       setSpatialInstalled(installed);
       setMakoAvailable(status.supported && !status.foreign && status.reason !== "mako_identity_ambiguous");
-      if (initial && !spatialSelected.current) setSpatial(installed);
+      if (initial && spatialSelected.current === undefined) setSpatial(installed);
     }).catch(() => {}); };
     const changed = () => refresh();
     refresh(true);
@@ -132,18 +134,37 @@ export const GameView: FC<{
     return () => { alive = false; window.removeEventListener("pdc-mako-changed", changed); };
   }, [appid]);
   const selectSpatial = (value: boolean) => {
-    spatialSelected.current = true;
+    spatialSelected.current = value;
     setSpatial(value);
     writeDraft(game.liveAppid, { choice, advanced, edited: hasLocalChoice.current, spatial: value });
   };
   const keepDraft = useRef(false);
   const hasLocalChoice = useRef(draft ? draft.edited !== false : false);
   const [reshadeRedirected, setReshadeRedirected] = useState(false);
-  const tested = testedDefault(detail, appid, overview, makoAvailable, reshadeRedirected);
-  const preferred = initialBuild(detail?.preferred ?? overview.preferred, tested);
+  const guidance = gameUpscalerGuidance(detail, appid, overview.device);
+  const checkSpatial = guidance?.profiles[overview.device ?? ""]?.mode === "mako" && makoAvailable;
+  const [spatialOutput, setSpatialOutput] = useState<[number, number] | null>(null);
+  useEffect(() => {
+    setSpatialOutput(null);
+    if (!checkSpatial) return;
+    let generation = 0;
+    const refresh = () => {
+      const current = ++generation;
+      void Promise.all([activeDisplayResolution(), readAppDetails(game.liveAppid), getUpscalerLaunchReceipt(appid, "mako")])
+        .then(([output, app, receipt]) => {
+          if (current === generation) setSpatialOutput(app && !hasMakoLeftover(app.launch, receipt) ? output : null);
+        }).catch(() => { if (current === generation) setSpatialOutput(null); });
+    };
+    refresh();
+    window.addEventListener("resize", refresh);
+    window.addEventListener("pdc-mako-changed", refresh);
+    return () => { generation++; window.removeEventListener("resize", refresh); window.removeEventListener("pdc-mako-changed", refresh); };
+  }, [checkSpatial, appid, game.liveAppid]);
+  const tested = testedDefault(detail, appid, overview, checkSpatial ? spatialOutput : null, reshadeRedirected);
+  const preferred = initialBuild(detail?.preferred ?? overview.preferred, tested, detail?.analysis.anti_cheat_kind === "signed_only");
   const testedSpatial = tested?.mode === "mako";
   useEffect(() => {
-    if (!detail || detail.install || spatialSelected.current || hasLocalChoice.current || pendingInstall(appid) || readInstallRequest(appid)) return;
+    if (!detail || detail.install || spatialSelected.current !== undefined || hasLocalChoice.current || pendingInstall(appid) || readInstallRequest(appid)) return;
     setSpatial(spatialInstalled || testedSpatial);
   }, [appid, detail, spatialInstalled, testedSpatial]);
   const testedModel = tested && tested.mode !== "mako" && tested.build === preferred && tested.model === "lite" ? "lite" : null;
@@ -162,23 +183,23 @@ export const GameView: FC<{
     hasLocalChoice.current = true;
     trace("select", next);
     setChoice(next);
-    writeDraft(game.liveAppid, { choice: next, advanced, edited: true, spatial: spatialSelected.current ? false : undefined });
+    writeDraft(game.liveAppid, { choice: next, advanced, edited: true, spatial: spatialSelected.current });
   };
   const toggleAdvanced = () => {
     recordUiEvent("upscalers", "advanced", { appid, open: !advanced });
     setAdvanced(!advanced);
-    writeDraft(game.liveAppid, { choice, advanced: !advanced, edited: hasLocalChoice.current, spatial: spatialSelected.current ? spatial : undefined });
+    writeDraft(game.liveAppid, { choice, advanced: !advanced, edited: hasLocalChoice.current, spatial: spatialSelected.current });
   };
   useEffect(() => {
     showGame(game.liveAppid);
     return onDraft(game.liveAppid, (next) => {
       hasLocalChoice.current = next.edited !== false;
-      if (next.spatial !== undefined) { spatialSelected.current = true; setSpatial(next.spatial); }
+      if (next.spatial !== undefined) { spatialSelected.current = next.spatial; setSpatial(next.spatial); }
       setChoice(next.choice as UpscalerChoice);
       setAdvanced(next.advanced);
     });
   }, [game.liveAppid]);
-  useEffect(() => { writeDraft(game.liveAppid, { choice, advanced, edited: hasLocalChoice.current, spatial: spatialSelected.current ? spatial : undefined }); }, [game.liveAppid, choice, advanced, spatial]);
+  useEffect(() => { writeDraft(game.liveAppid, { choice, advanced, edited: hasLocalChoice.current, spatial: spatialSelected.current }); }, [game.liveAppid, choice, advanced, spatial]);
   const [trackedJob, setJob] = useState<UpscalerJob | null>(overview.job?.appid === appid ? overview.job : null);
   const job = trackedJob?.appid === appid ? trackedJob : null;
   const [message, setMessage] = useState<string | null>(() => {
@@ -565,7 +586,6 @@ export const GameView: FC<{
   const inputHintShown = !scalerSeenWorking && qualityMode.mode !== "locked";
   // Luma hands OptiScaler its DLSS input itself; these games have no such option in their menus.
   const lumaInput = !!detail?.recipe_info?.luma_detected || !!detail?.recipe_info?.automatic?.includes("Luma");
-  const guidance = gameUpscalerGuidance(detail, appid, overview.device);
   const activationInput = guidance && detail && selected && !install && !running && !spatial && !pendingModel && !externalHelix && inputHintShown
     ? detectedGameInput(guidance, detail, selected) : null;
   const recommendedInput = !guidance?.menuName && optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown && !lumaInput

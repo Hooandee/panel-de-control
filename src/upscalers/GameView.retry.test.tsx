@@ -57,10 +57,10 @@ vi.mock("./parts", () => {
     ListRow: ({ label, onPress }: any) => state.advancedRows ? <button onClick={onPress}>{label}</button> : null, SegmentRow: ({ options }: any) => <div>{options.map((o: any) => <span key={o.value}>{o.label}{o.caption && <small>{o.caption}</small>}</span>)}</div>, statusColor: () => "",
     ActionButton: ({ label, onPress, disabled }: any) => <button disabled={disabled} onClick={onPress}>{label}</button> };
 });
-vi.mock("./ModelPicker", () => ({ ModelPicker: ({ choice, onChange, onPendingChoice, onSpatial, testedDefault }: any) => <>
+vi.mock("./ModelPicker", () => ({ ModelPicker: ({ choice, onChange, onPendingChoice, onSpatial, spatial, testedDefault }: any) => <>
   <button onClick={() => onSpatial(true)}>choose Mako</button>
   <button onClick={() => onPendingChoice(true)}>choose DLL engine</button>
-  <output data-testid="selected-build" data-tested-mode={testedDefault?.mode} data-tested-build={testedDefault?.build} data-tested-model={testedDefault?.model}>{choice.build}</output>
+  <output data-testid="selected-build" data-spatial={spatial} data-tested-mode={testedDefault?.mode} data-tested-build={testedDefault?.build} data-tested-model={testedDefault?.model}>{choice.build}</output>
   <button onClick={() => onChange({ ...choice, build: "fsr-4.0.2c", quality: "balanced", sharpness: "soft", model: null })}>choose 402</button>
   <button onClick={() => onChange({ ...choice, build: "fsr-4.1.1" })}>choose 411</button>
   <button onClick={() => onChange({ ...choice, build: "fsr-lite", model: null })}>choose Lite</button>
@@ -566,4 +566,14 @@ it("guides RDR2 shortcuts to DirectX 12 without marking the launcher route as te
   expect(screen.getByText("up.notice.rdr2Dx12")).toBeTruthy();
   expect(screen.getAllByText("up.input.activate")).toHaveLength(1);
   expect((screen.getByRole("button", { name: "up.activate" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("keeps the selected spatial scaler when frame generation changes", async () => {
+  state.job = null;
+  state.detail = { analysis: { target: "/game", inputs: {}, candidates: [] }, history: [], install: null };
+  await act(async () => { render(<GameView {...props} />); });
+  await act(async () => { fireEvent.click(screen.getByText("choose Mako")); });
+  expect(screen.getByTestId("selected-build").dataset.spatial).toBe("true");
+  await act(async () => { state.frameProps.onOptiscaler("off", null); });
+  expect(screen.getByTestId("selected-build").dataset.spatial).toBe("true");
 });

@@ -62,24 +62,23 @@ export function needsManualGameConfig(detail: GameDetail): boolean {
   return detail.shortcut || detail.recipe_info?.game_config_matches !== true;
 }
 
-type Hardware = Pick<UpscalersOverview, "preferred" | "builds" | "device" | "gpu" | "display">;
+type Hardware = Pick<UpscalersOverview, "builds" | "device" | "gpu">;
 
-export function initialBuild(preferred: string, tested?: TestedDefault): string {
-  if (!tested || tested.mode === "mako" || tested.model !== "lite") return preferred;
+export function initialBuild(preferred: string, tested?: TestedDefault, keepPreferred = false): string {
+  if (keepPreferred || !tested || tested.mode === "mako" || tested.model !== "lite") return preferred;
   const preferLite = preferred === "fsr-4.1.1" || preferred === "fsr-4.1.2-beta";
   return preferLite && tested.build.startsWith("fsr-4.1.2") ? tested.build : preferred;
 }
 
-export function testedDefault(detail: GameDetail | null, appid: string, overview: Hardware, makoAvailable = false, reshadeRedirected = false): TestedDefault | undefined {
+export function testedDefault(detail: GameDetail | null, appid: string, overview: Hardware, spatialOutput: [number, number] | null = null, reshadeRedirected = false): TestedDefault | undefined {
   const guide = gameUpscalerGuidance(detail, appid, overview.device);
   const tested = guide?.profiles[overview.device ?? ""];
   if (!detail?.analysis.target || !guide || !tested || tested.gpu !== overview.gpu || detail.recipe_info?.broken) return;
   if (tested.mode === "mako") {
-    if (makoAvailable && !detail.analysis.foreign && tested.output?.every((pixels, i) => pixels === overview.display?.[i])) return { mode: "mako", render: tested.render };
+    if (spatialOutput && !detail.analysis.foreign && tested.output?.every((pixels, i) => pixels === spatialOutput[i])) return { mode: "mako", render: tested.render };
     return;
   }
   if (!tested.build || tested.model === undefined) return;
-  if (detail.analysis.anti_cheat_kind === "signed_only" && tested.build !== detail.preferred) return;
   const build = (detail.builds ?? overview.builds).find(({ id }) => id === tested.build);
   if (!build?.available || !build.supported || detail.failed_builds?.some(({ build }) => build === tested.build)) return;
   if (detail.install?.build === tested.build && detail.install.status === "broken") return;

@@ -15,7 +15,7 @@ describe("historical profiles", () => {
     expect(profile).toEqual({ mode: "dll", build: dll.id, model: "lite" });
     expect(initialBuild(lite.id, profile)).toBe(dll.id);
     expect(testedDefault({ ...detail, analysis: { ...detail.analysis, dll_targets: [] } }, "3764200", hardware)).toBeUndefined();
-    expect(testedDefault({ ...detail, analysis: { ...detail.analysis, anti_cheat_kind: "signed_only" }, preferred: "fsr-4.1.1" }, "3764200", hardware)).toBeUndefined();
+    expect(initialBuild("fsr-4.1.1", profile, true)).toBe("fsr-4.1.1");
   });
 
   it("marks a resolved Luma route without instructing the player to turn on DLSS", () => {
@@ -26,7 +26,7 @@ describe("historical profiles", () => {
     expect(testedDefault(luma, "2679460", device)).toEqual({ mode: "optiscaler", build: lite.id, model: "lite" });
     expect(detectedGameInput(guide, luma, lite)).toBeNull();
     expect(testedDefault(detail, "2679460", device)).toBeUndefined();
-    expect(testedDefault(luma, "2679460", device, false, true)).toBeUndefined();
+    expect(testedDefault(luma, "2679460", device, null, true)).toBeUndefined();
   });
 
   it("keeps the Lite default when a different model was verified with the user's mod", () => {
@@ -40,10 +40,10 @@ describe("historical profiles", () => {
 
   it("marks spatial Mako only at the tested output on the matching device", () => {
     const device = { ...hardware, device: "rog_ally", gpu: "rdna3" };
-    expect(testedDefault(detail, "292030", device, true)).toEqual({ mode: "mako", render: [1280, 720] });
-    expect(testedDefault(detail, "292030", device, false)).toBeUndefined();
-    expect(testedDefault(detail, "292030", { ...device, display: [1280, 720] }, true)).toBeUndefined();
-    expect(testedDefault(detail, "292030", hardware, true)).toBeUndefined();
+    expect(testedDefault(detail, "292030", device, [1920, 1080])).toEqual({ mode: "mako", render: [1280, 720] });
+    expect(testedDefault(detail, "292030", device, null)).toBeUndefined();
+    expect(testedDefault(detail, "292030", device, [1280, 720])).toBeUndefined();
+    expect(testedDefault(detail, "292030", hardware, [1920, 1080])).toBeUndefined();
   });
 });
 
