@@ -2083,6 +2083,32 @@ def test_a_users_mod_goes_in_with_optiscaler_and_leaves_with_it(steam, fake_cata
     assert not (target / "dxgi.dll").exists() and not (target / "ERSS2").exists()
 
 
+def test_a_loose_mod_dll_is_installed_and_the_original_is_restored(steam, fake_catalog, proc):
+    home, game = steam
+    target = game / "bin/x64_dx12"
+    original = target / "D3D12.dll"
+    _write(original, b"original")
+    dll = home / "Downloads/D3D12.dll"
+    _write(dll, b"replacement")
+    service = _service(steam, fake_catalog, proc)
+
+    assert service.mod_candidates(APPID)["candidates"] == []
+    assert service.add_mod(APPID, str(dll))["mod"]["files"] == ["D3D12.dll"]
+    service.install(APPID, {"build": "fsr-test"})
+    assert original.read_bytes() == b"replacement"
+    assert service.game(APPID)["mod"]["applied"] is True
+
+    reserved = home / "Downloads/nvngx_dlss.dll"
+    _write(reserved, b"reserved")
+    with pytest.raises(UpscalerError, match="mod_conflict"):
+        service.add_mod(APPID, str(reserved))
+    assert service.game(APPID)["mod"]["applied"] is True
+
+    service.uninstall(APPID)
+    assert original.read_bytes() == b"original"
+    assert dll.read_bytes() == b"replacement"
+
+
 def test_a_mod_that_overwrites_optiscalers_files_is_refused(steam, fake_catalog, proc):
     home, _ = steam
     archive = _mod_zip(home / "Downloads/bad.zip", {"OptiScaler.ini": b"[x]", "nvngx.dll": b"x"})

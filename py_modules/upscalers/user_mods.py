@@ -115,8 +115,9 @@ def _seven_zip() -> bool:
 
 
 def _entries(path: Path, password: str | None = None) -> tuple[list[tuple[str, int]], bool]:
-    """Files in the archive with their sizes, and whether they are encrypted, read before anything is extracted;
-    links are refused."""
+    """List sizes and encryption before copying files. Archive links are refused."""
+    if path.suffix.lower() == ".dll":
+        return [(path.name, path.stat().st_size)], False
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:
             entries = []
@@ -165,7 +166,7 @@ def _entries(path: Path, password: str | None = None) -> tuple[list[tuple[str, i
 
 
 def _readable(path: Path, password: str | None = None) -> list[str]:
-    if path.is_symlink() or not path.is_file() or path.suffix.lower() not in user_deps.ARCHIVES:
+    if path.is_symlink() or not path.is_file() or path.suffix.lower() not in (*user_deps.ARCHIVES, ".dll"):
         raise ModError("unreadable")
     if path.stat().st_size > user_deps.MAX_ARCHIVE:
         raise ModError("too_large")
@@ -189,6 +190,14 @@ def _readable(path: Path, password: str | None = None) -> list[str]:
 
 def _extract_all(path: Path, wanted: dict[str, str], destination: Path, password: str | None = None) -> None:
     destination.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() == ".dll":
+        for target in wanted:
+            out = destination / target
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, out)
+            if out.stat().st_size > min(user_deps.MAX_MEMBER, MAX_TOTAL):
+                raise ModError("too_large")
+        return
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:
             for target, member in wanted.items():

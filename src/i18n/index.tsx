@@ -2703,7 +2703,7 @@ const en: Record<string, string> = {
   "up.error.mod_conflict": "That mod ships OptiScaler's files: use the version without OptiScaler",
   "up.error.mod_layout": "That mod spreads across the game folder; install it by hand",
   "up.mod.apply": "Reinstall to apply it",
-  "up.error.mod_unsafe": "That archive has invalid paths or is too large",
+  "up.error.mod_unsafe": "That file has invalid paths or is too large",
   "up.error.watch_expired": "No file reached Downloads in 15 minutes. Download it again or choose the file",
   "up.error.mod_unreadable": "That file can't be read",
   "up.error.user_file_wrong": "That file isn't the one this game needs",
