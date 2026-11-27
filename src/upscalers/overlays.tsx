@@ -9,6 +9,7 @@ import { OverGameComposition } from "../platform/overGameComposition";
 import { subscribeQamSurface, type QamSurface } from "../platform/qamSurface";
 import { readString, writeString } from "../system/pdcStorage";
 import { useRunningGame } from "../tdp/useRunningGame";
+import { theme } from "../theme";
 import { useGameInFront } from "./gameInFront";
 import { useOverlayLive } from "./useOverlayLive";
 import { startFpsCounterSession } from "./fpsCounter";
@@ -36,6 +37,7 @@ interface Badge {
   state: string;
   build: string;
   engine: string | null;
+  fsrProfile?: string;
   fg: boolean;
   fgRoute: string | null;
   modFg: string | null;
@@ -68,7 +70,9 @@ export function publishOverview(overview: UpscalersOverview): void {
     const cover = fallback
       ? { label: translate(fallback.observed ? "up.fallback.cover" : "up.fallback.coverNone", { from: fallback.requested, to: fallback.observed ?? "" }), short: fallback.observed ?? translate("up.fallback.coverNone", { from: fallback.requested, to: "" }), state: "fallback" }
       : { label: label.full, short: label.short, state: install.status };
-    next[appid] = { ...cover, build: install.build, engine: build?.engine ?? null, fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null, modFg: install.mod_fg ?? null, fallback };
+    const fsrProfile = build?.engine === "optiscaler" && build.family === "fsr"
+      ? label.full.slice(PROVIDER_NAMES.fsr.length).trimStart() : undefined;
+    next[appid] = { ...cover, build: install.build, engine: build?.engine ?? null, fsrProfile, fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null, modFg: install.mod_fg ?? null, fallback };
   }
   installs = next;
   makoEngines = Object.fromEntries(Object.entries(overview.engines ?? {}).flatMap(([appid, engines]) => engines.mako?.engine ? [[appid, engines.mako.engine]] : []));
@@ -455,6 +459,10 @@ export const InGameBadge: FC = () => {
     ? [observedName, observedVersion, observedVersion && live.provider_model].filter(Boolean).join(" ")
     : null;
   const fallback = live ? live.fallback ?? null : badge?.fallback ?? null;
+  const fsrProfile = !fallback && live?.provider_confidence === "family_only" && observedProvider === PROVIDER_NAMES.fsr
+    ? badge?.fsrProfile : undefined;
+  const scalerLabel = fallback ? fallbackLine(fallback, t)
+    : fsrProfile ? t("up.overlay.active", { provider: PROVIDER_NAMES.fsr }) : observedProvider ?? badge?.label;
   const fgLabel = lossless
     ? `Lossless Scaling ×${lossless.multiplier} · ${t("up.lsfg.flowScale")} ${Math.round(lossless.flow_scale * 100)} %`
     : badge?.fg ? t(`up.fg.pick.${badge.fgRoute ?? "optiscaler"}`) : badge?.modFg ?? null;
@@ -540,7 +548,8 @@ export const InGameBadge: FC = () => {
           }}
         >
           {scalerShown && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
-            <span style={fallback ? { color: "#ffbe63" } : undefined}>{fallback ? fallbackLine(fallback, t) : observedProvider ?? badge!.label}</span>
+            <span style={fallback ? { color: "#ffbe63" } : undefined}>{scalerLabel}</span>
+            {fsrProfile && <span style={{ color: theme.color.textMuted }}>{t("up.overlay.profile", { profile: fsrProfile })}</span>}
             {resolution && <span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{resolution[0]}p → {resolution[1]}p</span>}
           </div>}
           {makoSpatial && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>

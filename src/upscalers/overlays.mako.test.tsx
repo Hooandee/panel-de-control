@@ -4,7 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 vi.mock("@decky/ui", () => ({ findSP: () => window }));
 vi.mock("@decky/api", () => ({ routerHook: {}, callable: () => vi.fn().mockResolvedValue(null) }));
-vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string, args?: { provider?: string; profile?: string }) =>
+  key === "up.overlay.active" ? `${args?.provider} active` : key === "up.overlay.profile" ? `Profile ${args?.profile}` : key }) }));
 vi.mock("../platform/overGameComposition", () => ({ OverGameComposition: () => null }));
 vi.mock("../platform/qamSurface", () => ({ subscribeQamSurface: () => () => {} }));
 vi.mock("../tdp/useRunningGame", () => ({ useRunningGame: () => ({ liveAppid: 1462040 }) }));
@@ -43,11 +44,13 @@ it("shows confirmed Mako generation without an OptiScaler install", () => {
   expect(screen.queryByText("Mako 5 ×2")).toBeNull();
 });
 it.each([true, false])("shows the observed family when the log only proves a family (build listed: %s)", (listed) => {
-  publishOverview({ builds: listed ? [{ id: "fsr-4.1.1", family: "fsr", version: "4.1.1", engine: "optiscaler" }] : [],
-    installs: { "1462040": { build: "fsr-4.1.1", status: "active", options: {} } } } as never);
+  publishOverview({ builds: listed ? [{ id: "fsr-4.1.2-beta", family: "fsr", version: "4.1.2", models: ["lite", "full"], engine: "optiscaler" }] : [],
+    installs: { "1462040": { build: "fsr-4.1.2-beta", status: "active", options: { model: "lite" } } } } as never);
   vi.mocked(useOverlayLive).mockReturnValue({ live: { result: "active", resolution: { render: [960, 540], output: [1920, 1080] }, provider_name: "FSR", provider_version: null, provider_source: "optiscaler_log", provider_confidence: "family_only" }, lossless: null, makoName: "Mako 5", makoSpatial: null, makoResolutionWarning: false, makoMultiplier: null });
   render(<InGameBadge />);
-  expect(screen.getByText("FSR").parentElement?.textContent).toContain("540p → 1080p");
+  expect(screen.getByText(listed ? "FSR active" : "FSR").parentElement?.textContent).toContain("540p → 1080p");
+  expect(!!screen.queryByText("Profile 4.1.2 Lite")).toBe(listed);
+  expect(screen.queryByText("FSR 4.1.2 Lite")).toBeNull();
   expect(screen.queryByText("FSR 4.1.1")).toBeNull();
   expect(screen.queryByText("up.overlay.configured")).toBeNull();
 });
@@ -59,6 +62,7 @@ it("shows the confirmed provider version and model when they differ from the pac
   vi.mocked(useOverlayLive).mockReturnValue(state);
   const { rerender } = render(<InGameBadge />);
   expect(screen.getByText("FSR 4.1.2 INT8")).toBeTruthy();
+  expect(screen.queryByText("Profile 4.1.1")).toBeNull();
   expect(screen.queryByText("up.overlay.configured")).toBeNull();
   vi.mocked(useOverlayLive).mockReturnValue({ ...state, live: { ...state.live, provider_source: "unavailable" } });
   rerender(<InGameBadge />);
@@ -98,6 +102,7 @@ it.each([
   render(<InGameBadge />);
   expect(screen.getByText(shown)).toBeTruthy();
   expect(screen.queryByText("FSR 4.1.2")).toBeNull();
+  expect(screen.queryByText("Profile 4.1.2")).toBeNull();
 });
 it("does not present an unloaded scaler as working beside an active Lossless", () => {
   publishOverview({ builds: [{ id: "fsr-build", family: "fsr", version: "4.1.2", engine: "optiscaler" }],

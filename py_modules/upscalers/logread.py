@@ -28,17 +28,18 @@ _FACTS = (
     # The game's XeFG stays its own when OptiScaler cannot take over its library: no log line, no End key.
     ("fg_blind", re.compile(r"XeFG passthrough: (false)\s*$")),
     ("fg_context", re.compile(r"(FSRFG_Dx12::CreateContext D3D12_CreateContext result: 0|XeFG context created)")),
-    ("upscaler", re.compile(r"init successful for (.+?), upscaler changed")),
+    ("upscaler_ready", re.compile(r"init successful for (.+?), upscaler changed")),
     ("fg", re.compile(r"(D3D12_Configure Enabled: true, result: (?:0\b|FFX_API_RETURN_OK)|SetEnabled: true, result: \w*SUCCESS|Nukem.{0,40}(?:initialized|loaded))", re.I)),
-    # Queried while loading, whether or not FSR runs later: only names what an FSR feature runs.
-    ("fsr4_model", re.compile(r"Upscaler support - fsr4: ([a-z0-9 ]+?)(?: \(forced\))?,")),
-    ("fsr4_provider", re.compile(r"QueryProvider \S+ provider for 10000: (4\.\d+\.\d+) \*")),
     ("initial_resolution", re.compile(r"Render Resolution:\s*(\d{2,5})x(\d{2,5}),\s*Display Resolution\s*(\d{2,5})x(\d{2,5})")),
 )
+# The driver query lists a candidate. Only the successful result inside OptiScaler's own FFX creation selects it.
+_DRIVER_DX12_VERSION = re.compile(r"FSR4DriverDll::QueryProvider amdxcffx64\.dll provider for 10000: (4\.\d+\.\d+) \*")
+_DRIVER_DX12_RESULT = "FSR4DriverProviderDx12::CreateContext Created driver upscaler context, result: "
+_FFX_DX12_CONTEXT = "FFXFeatureDx12::InitFFX _createContext!"
+_FFX_OTHER_CONTEXT = re.compile(r"\bffxCreateContext_Dx12\b|\bCreating with (?:upscaling|main)_dx12\b")
 # OptiScaler cannot hand a Vulkan game's textures to FSR 4 (D3D12 only) and drops to an older FSR.
 _TEXTURE_FAILURE = re.compile(r"CreateSharedTexture Failed to get memory Win32 handle|Can't process Vulkan textures")
 _CLOCK = re.compile(r"\[(\d{2}):(\d{2}):(\d{2})\.\d+\]")
-_FSR4_MODELS = {"int8 lite": "Lite", "int8": "INT8", "fp8": "FP8"}
 # An error line and, when it names one, the function that logged it (without OptiScaler's anonymous-namespace prefix).
 _ERROR = re.compile(r"\[(?:E|C)\]\s\s*(?:(?:`anonymous-namespace'::)?([A-Za-z_][\w:]{0,60}))?")
 ERROR_SOURCES = 6
@@ -70,7 +71,20 @@ def read(target: Path, since: float | None = None) -> dict:
         return facts
     errors = 0
     sources: dict[str, int] = {}
+    driver_version = None
+    ffx_dx12_context = False
     for line in text.splitlines():
+        if match := _DRIVER_DX12_VERSION.search(line):
+            driver_version = match[1]
+        elif _FFX_DX12_CONTEXT in line:
+            ffx_dx12_context = True
+            facts.pop("fsr4_provider", None)
+        elif _DRIVER_DX12_RESULT in line:
+            if ffx_dx12_context and driver_version and line.endswith(_DRIVER_DX12_RESULT + "The operation was successful."):
+                facts["fsr4_provider"] = driver_version
+            ffx_dx12_context = False
+        elif _FFX_OTHER_CONTEXT.search(line):
+            ffx_dx12_context = False
         for key, pattern in _FACTS:
             match = pattern.search(line)
             if not match:
@@ -81,7 +95,10 @@ def read(target: Path, since: float | None = None) -> dict:
                 facts["input"] = "XeSS"
             elif key == "fsr_input":
                 facts["input"] = "FSR" + match.group(1)
-            elif key == "d3d11_upscaler":
+            elif key in ("upscaler", "d3d11_upscaler", "upscaler_ready"):
+                if key != "upscaler_ready" or match[1].strip() != facts.get("upscaler"):
+                    facts.pop("fsr4_provider", None)
+                    ffx_dx12_context = False
                 facts["upscaler"] = match.group(1).strip()[:120]
             elif key == "initial_resolution":
                 facts[key] = {
@@ -129,14 +146,12 @@ def provider_observation(facts: dict) -> dict:
             if re.fullmatch(candidate + r"(?:[234]1?| [234](?:\.[0-9x]+)*(?:/4)?(?: lite)?)?", token):
                 family = candidate
                 break
-    # OptiScaler's FSR entry points (`fsr31`, `FSR 3.X`, `FSR 3.X/4`) run the FSR 4 provider it selected.
     older = bool(_OLD_FSR.fullmatch(str(facts.get("upscaler") or "").strip()))
     version = facts.get("fsr4_provider") if family == "fsr" and not older and not facts.get("texture_failure") else None
-    model = _FSR4_MODELS.get(str(facts.get("fsr4_model") or "")) if version else None
     return {"provider_family": family,
             "provider_name": {"fsr": "FSR", "dlss": "DLSS", "xess": "XeSS"}.get(family),
             "provider_version": version,
-            "provider_model": model,
+            "provider_model": None,
             "provider_source": "optiscaler_log" if available else "unavailable",
             "provider_confidence": "log_provider" if version else "family_only" if family else "unknown"}
 

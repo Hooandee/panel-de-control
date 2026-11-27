@@ -563,6 +563,8 @@ export const it: Record<string, string> = {
   "up.lsfg.flowScale.quality": "Più qualità",
   "up.lsfg.flowScaleHint": "Più a destra: immagine più nitida, ma più carico per la GPU.",
   "up.overlay.configured": "Configurato",
+  "up.overlay.active": "{provider} attivo",
+  "up.overlay.profile": "Profilo {profile}",
   "up.overlay.generating": "Generazione di frame attiva",
   "up.overlay.paused": "In pausa",
   "up.overlay.makoResolution": "Mako: riduci la risoluzione del gioco",
