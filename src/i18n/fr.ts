@@ -520,6 +520,7 @@ export const fr: Record<string, string> = {
   "up.status.loaded": "Activez la mise à l’échelle dans les paramètres graphiques du jeu",
   "up.status.loadedNeedsMod": "OptiScaler s’est chargé, mais sans le mod requis par ce jeu il n’a rien à mettre à l’échelle. La fiche du wiki indique lequel",
   "up.model.tested": "Paquet testé",
+  "up.mode.tested": "Mode testé",
   "up.input.activate": "Dans le jeu, choisissez {input}.",
   "up.input.recommended": "Dans le jeu, choisissez {input}. Panel de Control appliquera {name}",
   "up.status.not_run": "Jouez un peu pour vérifier",

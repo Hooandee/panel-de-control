@@ -56,7 +56,7 @@ vi.mock("./parts", () => {
 vi.mock("./ModelPicker", () => ({ ModelPicker: ({ choice, onChange, onPendingChoice, onSpatial, testedDefault }: any) => <>
   <button onClick={() => onSpatial(true)}>choose Mako</button>
   <button onClick={() => onPendingChoice(true)}>choose DLL engine</button>
-  <output data-testid="selected-build" data-tested-build={testedDefault?.build} data-tested-model={testedDefault?.model}>{choice.build}</output>
+  <output data-testid="selected-build" data-tested-mode={testedDefault?.mode} data-tested-build={testedDefault?.build} data-tested-model={testedDefault?.model}>{choice.build}</output>
   <button onClick={() => onChange({ ...choice, build: "fsr-4.0.2c", quality: "balanced", sharpness: "soft", model: null })}>choose 402</button>
   <button onClick={() => onChange({ ...choice, build: "fsr-4.1.1" })}>choose 411</button>
   <button onClick={() => onChange({ ...choice, build: "fsr-lite", model: null })}>choose Lite</button>
@@ -400,6 +400,7 @@ it.each([
   await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: appid }}
     overview={{ ...overview, preferred: "fsr-4.0.2c", device: "steam_machine", gpu: "rdna3" }} />); });
   expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.1.1");
+  expect(screen.getByTestId("selected-build").dataset.testedMode).toBe("optiscaler");
   expect(screen.getByTestId("selected-build").dataset.testedBuild).toBe("fsr-4.1.1");
   const activation = screen.getByRole("button", { name: "up.activate" });
   expect(activation.parentElement?.previousElementSibling?.textContent).toBe(name);

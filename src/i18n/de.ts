@@ -520,6 +520,7 @@ export const de: Record<string, string> = {
   "up.status.loaded": "Aktiviere Upscaling in den Grafikeinstellungen des Spiels",
   "up.status.loadedNeedsMod": "OptiScaler wurde geladen, hat aber ohne die Mod, die dieses Spiel braucht, nichts zu skalieren. Der Wiki-Eintrag nennt sie",
   "up.model.tested": "Getestetes Paket",
+  "up.mode.tested": "Getesteter Modus",
   "up.input.activate": "Wähle im Spiel {input}.",
   "up.input.recommended": "Wähle im Spiel {input}. Panel de Control wendet {name} an",
   "up.status.not_run": "Spiel kurz, um es zu prüfen",

@@ -1,7 +1,9 @@
 import { buildBlocker } from "./model";
 import type { BuildInfo, GameDetail, UpscalersOverview } from "./types";
 
-export type TestedModel = { build: string; model: string | null };
+type TestedModel = { build: string; model: string | null };
+
+export type TestedDefault = (TestedModel & { mode: "dll" | "optiscaler" }) | { mode: "mako" };
 
 interface TestedPackage extends TestedModel {
   device: string;
@@ -44,7 +46,7 @@ export function needsManualGameConfig(detail: GameDetail): boolean {
     || !!detail.install?.game_config?.some(({ state }) => state === "missing" || state === "failed");
 }
 
-export function testedDefault(detail: GameDetail | null, appid: string, overview: UpscalersOverview): TestedModel | undefined {
+export function testedDefault(detail: GameDetail | null, appid: string, overview: UpscalersOverview): TestedDefault | undefined {
   const guide = gameUpscalerGuidance(detail, appid);
   if (!detail || !guide) return;
   const preferred = detail.preferred ?? overview.preferred;
@@ -60,5 +62,5 @@ export function testedDefault(detail: GameDetail | null, appid: string, overview
     if (detail.shortcut || (needsManualGameConfig(detail) && !forcesDx12)) return;
   }
   if ((build.models?.[0] ?? null) !== tested.model) return;
-  return { build: tested.build, model: tested.model };
+  return { mode: "optiscaler", build: tested.build, model: tested.model };
 }

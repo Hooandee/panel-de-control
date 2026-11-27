@@ -1,12 +1,28 @@
 // @vitest-environment happy-dom
-import { forwardRef } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { forwardRef, useState, type ReactNode } from "react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 const focus = vi.hoisted(() => vi.fn());
 vi.mock("../themes/runtime/navigationAccess", () => ({ createThemeNavigationAccess: () => ({ focus }) }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock("@decky/ui", () => ({ Focusable: forwardRef<HTMLDivElement, any>(({ onActivate, onCancel, children, ...props }, ref) => <div {...props} ref={ref} onKeyDown={event => { if (event.key === "Escape") onCancel?.(event); }}>{children}</div>) }));
+vi.mock("@decky/ui", () => ({
+  Focusable: forwardRef<HTMLDivElement, any>(({ onActivate, onCancel, children, ...props }, ref) =>
+    <div {...props} ref={ref} onKeyDown={event => { if (event.key === "Escape") onCancel?.(event); }}>{children}</div>),
+  Dropdown: ({ menuLabel, selectedOption, renderButtonValue, rgOptions }: {
+    menuLabel: string; selectedOption: string; renderButtonValue: (label: ReactNode) => ReactNode;
+    rgOptions: { data: string; label: ReactNode }[];
+  }) => {
+    const [open, setOpen] = useState(false);
+    return <>
+      <button aria-label={menuLabel} onClick={() => setOpen(true)}>
+        {renderButtonValue(rgOptions.find(({ data }) => data === selectedOption)?.label)}
+      </button>
+      {open && <div role="menu">{rgOptions.map(({ data, label }) => <div key={data} role="menuitem">{label}</div>)}</div>}
+    </>;
+  },
+}));
 import { ModelPicker } from "./ModelPicker";
+import type { TestedDefault } from "./testedDefaults";
 import type { BuildInfo, UpscalerChoice } from "./types";
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 const base: BuildInfo = { id: "fsr", family: "fsr", version: "4.1.2", image: 1, cost: 1, available: true, supported: true, download_bytes: 1, models: ["lite", "full"] };
@@ -187,11 +203,11 @@ it("never flags anything on an AMD GPU and drops only another generation's copy 
 it("marks only the tested package model and keeps the mark when another model is selected", () => {
   const onChange = vi.fn();
   const props = { builds: [base], choice: { ...choice, model: "full" }, inputs: {}, protonEnv: null, onChange,
-    testedDefault: { build: base.id, model: "full" } };
+    testedDefault: { mode: "optiscaler" as const, build: base.id, model: "full" } };
   const page = render(<ModelPicker {...props} />);
   const trigger = screen.getByRole("button", { name: "up.section.model" });
   expect(trigger.getAttribute("aria-description")).toBe("up.model.tested");
-  expect(trigger.querySelector("svg[aria-hidden]")).toBeTruthy();
+  expect(trigger.querySelector("[data-pdc-up-tested]")).toBeTruthy();
   fireEvent.click(trigger);
   fireEvent.click(screen.getByRole("radio", { name: "FSR 4.1.2 Lite" }));
   expect(onChange).toHaveBeenCalledWith({ ...choice, model: "lite" });
@@ -200,6 +216,50 @@ it("marks only the tested package model and keeps the mark when another model is
   fireEvent.click(trigger);
   const tested = screen.getByRole("radio", { name: "FSR 4.1.2 up.model.full" });
   expect(tested.getAttribute("aria-description")).toBe("up.model.tested");
-  expect(tested.querySelector("svg[aria-hidden]")).toBeTruthy();
+  expect(tested.querySelector("[data-pdc-up-tested]")).toBeTruthy();
   expect(screen.getByRole("radio", { checked: true }).hasAttribute("aria-description")).toBe(false);
+});
+
+it.each([
+  [{ mode: "optiscaler", build: base.id, model: "full" }, "OptiScaler"],
+  [{ mode: "dll", build: "direct", model: null }, "DLL"],
+  [{ mode: "mako" }, "Mako"],
+] satisfies [TestedDefault, string][])("marks the verified mode independently of the selected option", (testedDefault, name) => {
+  const dll: BuildInfo = { ...base, id: "direct", engine: "dll", models: [], dll_names: [provider] };
+  const onSpatial = vi.fn();
+  render(<ModelPicker builds={[base, dll]} choice={{ ...choice, build: testedDefault.mode === "dll" ? dll.id : base.id }}
+    inputs={{}} protonEnv={null} onChange={vi.fn()} onSpatial={onSpatial} spatial={testedDefault.mode === "mako"}
+    testedDefault={testedDefault} />);
+  const trigger = screen.getByRole("button", { name: "up.models.title" });
+  expect(trigger.querySelector("[data-pdc-up-tested]")).toBeTruthy();
+  expect(trigger.getAttribute("aria-description")).toBe("up.mode.tested");
+  fireEvent.click(trigger);
+  const other = name === "Mako" ? "OptiScaler" : "Mako";
+  fireEvent.click(screen.getByRole("radio", { name: other }));
+  expect(trigger.querySelector("[data-pdc-up-tested]")).toBeNull();
+  expect(trigger.hasAttribute("aria-description")).toBe(false);
+  fireEvent.click(trigger);
+  const verified = screen.getByRole("radio", { name, checked: false });
+  expect(verified.querySelector("[data-pdc-up-tested]")).toBeTruthy();
+  expect(verified.getAttribute("aria-description")).toBe("up.mode.tested");
+  expect(screen.getByRole("radio", { name: other, checked: true }).querySelector("[data-pdc-up-tested]")).toBeNull();
+});
+
+it("omits the tested mark without mode or model evidence", () => {
+  const { container } = render(<ModelPicker builds={[base]} choice={choice} inputs={{}} protonEnv={null}
+    onChange={vi.fn()} onSpatial={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "up.models.title" }));
+  fireEvent.click(screen.getByRole("button", { name: "up.section.model" }));
+  expect(container.querySelector("[data-pdc-up-tested]")).toBeNull();
+});
+
+it("passes the tested mode to the native Duo button and menu", () => {
+  render(<ModelPicker duo builds={[base]} choice={choice} inputs={{}} protonEnv={null}
+    onChange={vi.fn()} onSpatial={vi.fn()} testedDefault={{ mode: "optiscaler", build: base.id, model: "full" }} />);
+  const trigger = screen.getByRole("button", { name: "up.models.title" });
+  expect(within(trigger).getByRole("img", { name: "up.mode.tested" })).toBeTruthy();
+  fireEvent.click(trigger);
+  const menu = within(screen.getByRole("menu"));
+  expect(menu.getAllByRole("img", { name: "up.mode.tested" })).toHaveLength(1);
+  expect(menu.getByRole("menuitem", { name: "OptiScaler up.mode.tested" })).toBeTruthy();
 });

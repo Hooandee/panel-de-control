@@ -520,6 +520,7 @@ export const ptBR: Record<string, string> = {
   "up.status.loaded": "Ative o escalonamento nas configurações gráficas do jogo",
   "up.status.loadedNeedsMod": "O OptiScaler foi carregado, mas sem o mod que este jogo exige não há nada para escalonar. A página da wiki diz qual é",
   "up.model.tested": "Pacote testado",
+  "up.mode.tested": "Modo testado",
   "up.input.activate": "No jogo, escolha {input}.",
   "up.input.recommended": "No jogo, selecione {input}. Panel de Control aplicará {name}",
   "up.status.not_run": "Jogue um pouco para verificar",

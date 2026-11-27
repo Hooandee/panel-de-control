@@ -1,17 +1,23 @@
 import { GiSharkFin } from "react-icons/gi";
 import { Focusable } from "@decky/ui";
-import { useEffect, useRef, useState } from "react";
-import { LuCheck, LuChevronDown, LuChevronUp, LuFileCode, LuLayers, LuStar } from "react-icons/lu";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { LuCheck, LuChevronDown, LuChevronUp, LuFileCode, LuLayers } from "react-icons/lu";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { Bars, PickerButton } from "./parts";
 import { buildBlocker, buildLabel, offered } from "./model";
-import type { TestedModel } from "./testedDefaults";
+import type { TestedDefault } from "./testedDefaults";
 import type { BuildInfo, UpscalerChoice } from "./types";
 
 function showScalerIcon(element: HTMLSpanElement | null) {
   element?.querySelector("svg")?.style.setProperty("display", "inline-block", "important");
+}
+
+function TestedMark({ description, announce = false }: { description: string; announce?: boolean }) {
+  return <span data-pdc-up-tested role={announce ? "img" : undefined} aria-label={announce ? description : undefined}
+    aria-hidden={announce ? undefined : true} title={announce ? undefined : description}
+    style={{ flexShrink: 0, lineHeight: 1 }}>{"★\uFE0E"}</span>;
 }
 
 const navigation = createThemeNavigationAccess({ allowInactiveContext: true });
@@ -35,7 +41,7 @@ function supportsDllTargets(build: BuildInfo, targets: string[]): boolean {
 }
 
 export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onChange, dllTargets = [], spatial = false, onSpatial, onPendingChoice, duo = false, appid = "", gpu = "unknown", testedDefault }: {
-  testedDefault?: TestedModel;
+  testedDefault?: TestedDefault;
   gpu?: string;
   duo?: boolean;
   appid?: string;
@@ -83,14 +89,23 @@ export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onCha
   // A version this GPU may not run stays selectable, with a short line saying so.
   const note = (build: BuildInfo) => offered(build, builds, gpu).warn ? t("up.build.mayNotRun")
     : build.may_fallback ? t("up.build.mayUse", { version: build.may_fallback }) : null;
-  const testedLabel = (build: BuildInfo, model: string | null) => testedDefault?.build === build.id && testedDefault.model === model
+  const modeOption = (value: typeof mode, name: string, icon: ReactNode) => {
+    const description = testedDefault?.mode === value ? t("up.mode.tested") : undefined;
+    return {
+      value, description,
+      label: <span ref={showScalerIcon} style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs }}>
+        {icon}<span>{name}</span>{description && <TestedMark description={description} announce={duo} />}
+      </span>,
+    };
+  };
+  const testedLabel = (build: BuildInfo, model: string | null) => testedDefault && testedDefault.mode !== "mako"
+    && testedDefault.build === build.id && testedDefault.model === model
     ? t("up.model.tested") : undefined;
   const named = (build: BuildInfo, model: string | null) => {
     const description = testedLabel(build, model);
-    const label = <span>
-      {optionLabel(build, model)}
-      {description && <LuStar aria-hidden="true" title={description} size={theme.font.caption}
-        style={{ marginInlineStart: theme.space.xs, verticalAlign: "middle" }} />}
+    const label = <span style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs }}>
+      <span>{optionLabel(build, model)}</span>
+      {description && <TestedMark description={description} />}
     </span>;
     const warning = note(build);
     return warning ? <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -106,9 +121,9 @@ export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onCha
   return <Focusable flow-children="column" style={{ ...theme.card, padding: theme.space.sm, fontSize: theme.font.caption, lineHeight: 1.35, minWidth: 0, overflowWrap: "normal", wordBreak: "normal" }}>
     <PickerButton duo={duo} controlId={`${appid}:scaler-engine`} label={t("up.models.title")} value={mode} disabled={disabled}
       options={[
-        { value: "dll", label: <span ref={showScalerIcon} style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs }}><LuFileCode className="pdc-up-dll-icon" aria-hidden size={16} />DLL</span> },
-        { value: "optiscaler", label: <span ref={showScalerIcon} style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs }}><LuLayers className="pdc-up-optiscaler-icon" aria-hidden size={16} />OptiScaler</span> },
-        ...(onSpatial ? [{ value: "mako" as const, label: <span ref={showScalerIcon} style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs }}><GiSharkFin className="pdc-up-mako-icon" aria-hidden size={16} />Mako</span> }] : []),
+        modeOption("dll", "DLL", <LuFileCode className="pdc-up-dll-icon" aria-hidden size={16} />),
+        modeOption("optiscaler", "OptiScaler", <LuLayers className="pdc-up-optiscaler-icon" aria-hidden size={16} />),
+        ...(onSpatial ? [modeOption("mako", "Mako", <GiSharkFin className="pdc-up-mako-icon" aria-hidden size={16} />)] : []),
       ]}
       onChange={next => { if (disabled) return; setMode(next); onSpatial?.(next === "mako"); setOpen(next !== "mako"); }} />
     {mode !== "mako" && <Focusable data-pdc-part="disclosure" ref={trigger} role="button" aria-label={t("up.section.model")} aria-expanded={open} aria-disabled={disabled}
