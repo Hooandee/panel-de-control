@@ -335,7 +335,7 @@ class UpscalerService:
                 return "broken"
             history = entry.get("history") or []
             return history[-1].get("result", "pending") if history else "pending"
-        proxy = install.get("proxy") or ""
+        proxy = install.get("proxy_path") or install.get("proxy") or ""
         if not (target / games.MANIFEST_DIR / "manifest.json").is_file() or not (target / proxy).is_file():
             return "broken"
         history = entry.get("history") or []
@@ -869,7 +869,6 @@ class UpscalerService:
 
         # Everything is downloaded before the current install comes out: a failed or cancelled download leaves
         # the game exactly as it was.
-        self._recover_orphan(target)
         # A signed-only recipe is validated against the catalog's own files: a newer OptiScaler fails to hook the signed FSR 4.
         pinned_only: set[str] = {asset.id for asset in needed(effective_build, recipe)} if required else set()
         paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
@@ -896,6 +895,70 @@ class UpscalerService:
         mod = self.user_mods.status(appid)
         if mod and mod.get("target") != Path(analysis["target"]).relative_to(installed.root).as_posix():
             raise UpscalerError("mod_moved")
+        proxy = str(choice.get("proxy") or _recipe_proxy(recipe) or "dxgi.dll")
+        mod_sources = self.user_mods.sources(appid)
+        loader_names = {name.casefold() for name in (*mod_sources, *recipe_files)}
+        native_recipe_dlls = {f"{stem}.dll" for stem in user_mods.native_dlls(recipe_files)}
+        occupied = (_unmanaged_dlls(target, previous, {*games.PROXY_NAMES, *native_recipe_dlls})
+                    if native_recipe_dlls or proxy in loader_names else {})
+        if proxy in loader_names:
+            proxy = next((name for name in games.PROXY_NAMES
+                          if name not in loader_names and name not in occupied and name != "d3d12.dll"), None)
+            if proxy is None:
+                raise UpscalerError("mod_conflict")
+        aliases = {}
+        for name in {proxy, *native_recipe_dlls}:
+            paths_at_name = occupied.get(name.casefold(), ())
+            if len(paths_at_name) > 1:
+                raise UpscalerError("recipe_files_invalid")
+            if paths_at_name:
+                aliases[name] = paths_at_name[0]
+        if analysis["foreign"] and not previous:
+            raise UpscalerError("foreign")
+        # Only recipes with Proton prerequisites (Luma's runtimes) and mods built against a recent Visual C++ runtime
+        # touch the prefix; game files alone don't.
+        components_error = None
+        windows_verbs = tuple(dict.fromkeys((*(auto_recipes.verbs(automatic) if automatic else ()),
+                                             *((mod or {}).get("verbs", []) if mod_sources else ()))))
+        if windows_verbs:
+            self._update_job(phase="dependencies")
+            try:
+                # A recipe's install always runs in a scaler transition; a user's mod may not, and then there is no
+                # checkpoint to roll the prefix back with.
+                checkpoint = self.scaler_transitions.pending(appid)
+                transitional = checkpoint is not None
+                save = self.scaler_transitions._save if transitional else (lambda _checkpoint: None)
+                checkpoint = checkpoint if transitional else {}
+                checkpoint["recipe_dependencies"] = True
+                save(checkpoint)
+                attempts: list[dict] = []
+                try:
+                    try:
+                        receipt = prefix_dependencies.prepare(self.home, installed, windows_verbs, self.logger, self.proc, attempts,
+                                                              cancelled=self._cancel.is_set)
+                    finally:
+                        entry["windows_components"] = {"at": time.time(), "attempts": attempts[-8:]}
+                except (prefix_dependencies.DependencyError, OSError) as error:
+                    components_error = getattr(error, "code", type(error).__name__)
+                    entry["windows_components"]["error"] = components_error
+                    if components_error in ("running", "cancelled"):
+                        raise
+                    receipt = None
+                    prefix_dependencies.abandon(self.home, installed, self.proc)
+                    checkpoint["recipe_dependencies"] = False
+                    if automatic and recipes.HORIZON_UNLOCKER in automatic.dependencies:
+                        checkpoint["entry"]["windows_components"] = entry["windows_components"]
+                        save(checkpoint)
+                        raise UpscalerError(components_error, getattr(error, "detail", "")) from None
+                    save(checkpoint)
+                if receipt:
+                    checkpoint["recipe_prefix"] = receipt
+                    save(checkpoint)
+                    prefix_dependencies.publish(receipt, installed.root, self.proc)
+                    if not transitional:
+                        prefix_dependencies.finish(receipt, self.proc)
+            except prefix_dependencies.DependencyError as error:
+                raise UpscalerError(error.code) from None
         # The mod's settings as the user left them: the old install takes those files away with it.
         kept_settings = {relative: _small_text(target / relative) for relative in (recipe.mod_settings if mod and recipe else {})}
         left = self._replace(entry, installed)
@@ -907,13 +970,6 @@ class UpscalerService:
             raise UpscalerError("foreign")
 
         recipe = self._recipe(appid, entry.get("identity"), installed)
-        proxy = str(choice.get("proxy") or _recipe_proxy(recipe) or "dxgi.dll")
-        mod_sources = self.user_mods.sources(appid)
-        loader_names = {name.casefold() for name in (*mod_sources, *recipe_files)}
-        if proxy.casefold() in loader_names:
-            proxy = next((name for name in games.PROXY_NAMES if name.casefold() not in loader_names and name != "d3d12.dll"), None)
-            if proxy is None:
-                raise UpscalerError("mod_conflict")
         build = catalog.for_game(build, analysis["inputs"], self.gpu, recipe)
         assets = needed(build, recipe)
         if any(asset.id not in paths for asset in assets):
@@ -952,7 +1008,7 @@ class UpscalerService:
         panel_names = {name.casefold() for name in (*sources, "OptiScaler.ini")}
         if any(name.casefold() in panel_names for name in mod_sources):
             raise UpscalerError("mod_conflict")
-        sources = {**mod_sources, **sources}
+        sources = {aliases.get(name, name): source for name, source in {**mod_sources, **sources}.items()}
         solution = solution_plan.resolve(self.gpu, analysis, recipe, archive_asset.generation, build.engine, choice.get("fg_route"), dependencies_ready=bool(automatic))
         fg_plan = _requested_fg(solution, choice)
         wiki_ini = wiki.resolve_settings(base_ini, recipe.wiki_settings) if recipe else {}
@@ -977,47 +1033,6 @@ class UpscalerService:
             overrides.update(image_overrides)
         else:
             entry.pop("image_settings", None)
-        # Only recipes with Proton prerequisites (Luma's runtimes) and mods built against a recent Visual C++ runtime
-        # touch the prefix; game files alone don't.
-        components_error = None
-        windows_verbs = tuple(dict.fromkeys((*(auto_recipes.verbs(automatic) if automatic else ()),
-                                             *((mod or {}).get("verbs", []) if mod_sources else ()))))
-        if windows_verbs:
-            self._update_job(phase="dependencies")
-            try:
-                # A recipe's install always runs in a scaler transition; a user's mod may not, and then there is no
-                # checkpoint to roll the prefix back with.
-                checkpoint = self.scaler_transitions.pending(appid)
-                transitional = checkpoint is not None
-                save = self.scaler_transitions._save if transitional else (lambda _checkpoint: None)
-                checkpoint = checkpoint if transitional else {}
-                checkpoint["recipe_dependencies"] = True
-                save(checkpoint)
-                attempts: list[dict] = []
-                try:
-                    try:
-                        receipt = prefix_dependencies.prepare(self.home, installed, windows_verbs, self.logger, self.proc, attempts,
-                                                              cancelled=self._cancel.is_set)
-                    finally:
-                        entry["windows_components"] = {"at": time.time(), "attempts": attempts[-8:]}
-                except (prefix_dependencies.DependencyError, OSError) as error:
-                    components_error = getattr(error, "code", type(error).__name__)
-                    entry["windows_components"]["error"] = components_error
-                    if components_error in ("running", "cancelled"):
-                        raise
-                    # The game files still go in: the game page says what is missing and offers to try again.
-                    receipt = None
-                    prefix_dependencies.abandon(self.home, installed, self.proc)
-                    checkpoint["recipe_dependencies"] = False
-                    save(checkpoint)
-                if receipt:
-                    checkpoint["recipe_prefix"] = receipt
-                    save(checkpoint)
-                    prefix_dependencies.publish(receipt, installed.root, self.proc)
-                    if not transitional:
-                        prefix_dependencies.finish(receipt, self.proc)
-            except prefix_dependencies.DependencyError as error:
-                raise UpscalerError(error.code) from None
         self._update_job(phase="copy")
         with tempfile.TemporaryDirectory(prefix="recipe-", dir=self.cache.root) as prepared:
             try:
@@ -1054,6 +1069,7 @@ class UpscalerService:
         entry["install"] = {
             "build": build.id, "archive": build.archive, "proxy": proxy, "target": str(target), "exe": analysis["exe"],
             "installed_at": now, "options": _clean_options(choice), "solution": solution,
+            **({"proxy_path": aliases[proxy]} if proxy in aliases and aliases[proxy] != proxy else {}),
             "native_dlls": sorted({*(recipe.native_dlls if recipe else ()),
                                    *user_mods.native_dlls((*mod_sources, *recipe_files))}),
             "mod": {"filename": mod.get("filename"), "id": mod.get("id")} if mod and mod_sources else None,
@@ -2733,6 +2749,32 @@ def _failed_builds(entry: dict) -> dict[str, dict]:
     marks = entry.get("failed_builds")
     return {build_id: item for build_id, item in marks.items() if isinstance(item, dict)} if isinstance(marks, dict) else {}
 
+
+def _unmanaged_dlls(target: Path, install: dict, candidates: set[str]) -> dict[str, list[str]]:
+    """Existing spellings that will remain or be restored when Panel removes its prior install."""
+    recorded = {}
+    backups = set()
+    if install.get("target") == str(target):
+        try:
+            manifest = json.loads((target / games.MANIFEST_DIR / "manifest.json").read_text())
+            if isinstance(manifest, dict) and isinstance(manifest.get("files"), dict) and isinstance(manifest.get("backups"), list):
+                recorded = manifest["files"]
+                backups = set(manifest["backups"])
+        except (OSError, ValueError, TypeError):
+            pass
+    occupied: dict[str, list[str]] = {}
+    try:
+        for path in target.iterdir():
+            name, folded = path.name, path.name.casefold()
+            if folded not in candidates:
+                continue
+            digest = recorded.get(name)
+            if digest and name not in backups and not path.is_symlink() and path.is_file() and sha256(path) == digest:
+                continue
+            occupied.setdefault(folded, []).append(name)
+    except OSError:
+        raise UpscalerError("recipe_files_invalid") from None
+    return occupied
 
 def _recipe_proxy(recipe) -> str | None:
     return recipe.proxy if recipe and recipe.proxy in catalog.PROXIES else None

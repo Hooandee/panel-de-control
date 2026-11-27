@@ -17,6 +17,7 @@ from . import recipe_catalog
 WIKI_FILE = Path(__file__).with_name("recipes_wiki.json")
 NEEDS = ("reframework", "nvngx_dlss", "anti_cheat_off", "luma", "mod")
 STATUSES = ("works", "broken", "partial")
+HORIZON_UNLOCKER = "hzd-dlss-unlocker"
 
 
 @dataclass(frozen=True)
@@ -213,7 +214,10 @@ def recipe_for(appid: str, live: Recipe | None = None, *, engine: str = "optisca
     if entry:
         dependency_gpus = entry.conditions.get("dependency_gpus")
         dependencies = entry.dependencies if dependency_gpus is None or gpu in dependency_gpus else ()
-        hand = replace(hand or Recipe(entry.appid), exe=entry.exe or (hand.exe if hand else None), args=entry.args, ini=dict(entry.ini),
+        settings = dict(entry.ini)
+        if HORIZON_UNLOCKER in dependencies:
+            settings["Spoofing.Dxgi"] = "false"
+        hand = replace(hand or Recipe(entry.appid), exe=entry.exe or (hand.exe if hand else None), args=entry.args, ini=settings,
                       dependencies=dependencies, catalog_revision=entry.revision,
                       catalog_version=catalog.catalog_version, source="game-recipes",
                       recommended_input=entry.recommended_input, effective_api=entry.effective_api, quality_owner=entry.quality_owner, recommended_build=entry.recommended_build, optiscaler_root_files=entry.optiscaler_root_files,

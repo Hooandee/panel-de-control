@@ -429,3 +429,13 @@ def test_horizon_unlocker_has_a_pinned_7z_with_one_file_and_its_proton_runtime()
     asset = catalog.assets[dependency.asset]
     assert (asset.filename, asset.format, asset.size) == ('CyberFSR_DLSS-Unlocker_v2.0.0.15.7z', '7z', 700050)
     assert asset.sha256 == '03489dc79f0c9e0612de0e28cc6ec0e98896a5e6fc657cc9e663d16c531f11c9'
+
+
+def test_horizon_unlocker_keeps_dxgi_spoofing_off_after_wiki_refresh():
+    appid = '1151640'
+    wiki = recipes.Recipe(appid, status='works', wiki_settings={'Dxgi': 'true', 'OverlayMenu': 'true'})
+    amd = recipes.recipe_for(appid, wiki, platform='linux', arch='x86_64', gpu='rdna2')
+    nvidia = recipes.recipe_for(appid, wiki, platform='linux', arch='x86_64', gpu='nvidia')
+    assert amd.ini['Spoofing.Dxgi'] == 'false'
+    assert amd.wiki_settings == {'OverlayMenu': 'true'}
+    assert nvidia.ini == {} and nvidia.wiki_settings['Dxgi'] == 'true'

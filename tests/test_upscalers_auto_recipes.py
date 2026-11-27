@@ -296,9 +296,10 @@ def test_an_abandoned_staging_is_removed_and_one_in_use_is_left(tmp_path, monkey
     assert not transaction.exists() and (compat / 'pfx').is_dir()
 
 
-def test_horizon_unlocker_installs_and_rolls_back_as_a_managed_recipe(steam, fake_catalog, proc, monkeypatch):
+@pytest.fixture
+def horizon_unlocker(steam, fake_catalog, proc, monkeypatch):
     from dataclasses import replace
-    from upscalers import games, recipe_catalog
+    from upscalers import recipe_catalog
 
     appid = '1151640'
     service = _service(steam, fake_catalog, proc)
@@ -326,7 +327,13 @@ def test_horizon_unlocker_installs_and_rolls_back_as_a_managed_recipe(steam, fak
     monkeypatch.setattr(prefix_dependencies, 'publish', lambda *args: calls.append('publish'))
     monkeypatch.setattr(prefix_dependencies, 'rollback', lambda *args: calls.append('rollback'))
     monkeypatch.setattr(prefix_dependencies, 'finish', lambda *args: calls.append('finish'))
+    return service, appid, game, calls
 
+
+def test_horizon_unlocker_installs_and_rolls_back_as_a_managed_recipe(horizon_unlocker):
+    from upscalers import games
+
+    service, appid, game, calls = horizon_unlocker
     checkpoint = service.begin_scaler_transition(appid)
     result = service.install(appid, {'build': 'fsr-test', 'proxy': 'winmm.dll'})
     assert result['overrides'] == ['dxgi=n,b', 'winmm=n,b']
@@ -342,3 +349,101 @@ def test_horizon_unlocker_installs_and_rolls_back_as_a_managed_recipe(steam, fak
     assert not (game / 'dxgi.dll').exists()
     assert not (game / games.MANIFEST_DIR).exists()
     assert calls == [('vcrun2022',), 'publish', 'rollback']
+
+
+def test_horizon_preserves_winmm_spelling_and_skips_foreign_proxy_alias(horizon_unlocker):
+    service, appid, game, _ = horizon_unlocker
+    previous = game / 'WiNmM.dll'
+    previous.write_bytes(b'user winmm')
+    foreign = game / 'DXGI.DLL'
+    foreign.write_bytes(b'user DXGI')
+    checkpoint = service.begin_scaler_transition(appid)
+    result = service.install(appid, {'build': 'fsr-test', 'proxy': 'winmm.dll'})
+    assert result['overrides'] == ['version=n,b', 'winmm=n,b']
+    assert [path.name for path in game.iterdir() if path.name.casefold() == 'winmm.dll'] == [previous.name]
+    assert previous.read_bytes() == b'upstream DLL'
+    assert foreign.read_bytes() == b'user DXGI'
+    service.finish_scaler_transition(appid, checkpoint['token'], True)
+    assert previous.read_bytes() == b'user winmm'
+    assert foreign.read_bytes() == b'user DXGI'
+    assert not (game / 'version.dll').exists()
+
+
+def test_horizon_reports_when_every_alternative_proxy_is_occupied(horizon_unlocker):
+    from upscalers import games
+    from test_upscalers_scaler_transition import files
+
+    service, appid, game, calls = horizon_unlocker
+    for name in games.PROXY_NAMES:
+        if name != 'winmm.dll':
+            (game / name.upper()).write_bytes(b'user DLL')
+    before = files(game)
+    service.begin_scaler_transition(appid)
+    with pytest.raises(UpscalerError, match='mod_conflict'):
+        service.install(appid, {'build': 'fsr-test', 'proxy': 'winmm.dll'})
+    assert files(game) == before
+    assert not calls
+
+
+def test_horizon_can_reuse_its_previous_proxy_but_not_one_with_a_foreign_backup(horizon_unlocker):
+    service, appid, game, _ = horizon_unlocker
+    (game / 'DXGI.dll').write_bytes(b'user DXGI')
+    first = service.begin_scaler_transition(appid)
+    assert service.install(appid, {'build': 'fsr-test'})['overrides'] == ['dxgi=n,b', 'winmm=n,b']
+    service.finish_scaler_transition(appid, first['token'])
+
+    second = service.begin_scaler_transition(appid)
+    choice = {'build': 'fsr-test', 'proxy': 'winmm.dll'}
+    assert service.install(appid, choice)['overrides'] == ['version=n,b', 'winmm=n,b']
+    assert (game / 'DXGI.dll').read_bytes() == b'user DXGI'
+    service.finish_scaler_transition(appid, second['token'])
+
+    service.begin_scaler_transition(appid)
+    assert service.install(appid, choice)['overrides'] == ['version=n,b', 'winmm=n,b']
+
+
+@pytest.mark.parametrize('has_prior', [False, True])
+def test_horizon_runtime_failure_leaves_existing_install_in_place_and_allows_retry(horizon_unlocker, monkeypatch, has_prior):
+    from test_upscalers_scaler_transition import files
+
+    service, appid, game, calls = horizon_unlocker
+    if has_prior:
+        service.gpu = 'unknown'
+        service.install(appid, {'build': 'fsr-test'})
+        service.gpu = 'rdna2'
+    before = files(game)
+    before_install = service._game_state(appid).get('install')
+    first = service.begin_scaler_transition(appid)
+
+    def fail(*args, **kwargs):
+        raise prefix_dependencies.DependencyError('prefix_install_failed')
+
+    with monkeypatch.context() as patched:
+        patched.setattr(prefix_dependencies, 'prepare', fail)
+        patched.setattr(prefix_dependencies, 'abandon', lambda *args: calls.append('abandon'))
+        with pytest.raises(UpscalerError, match='prefix_install_failed'):
+            service.install(appid, {'build': 'fsr-test'})
+        assert files(game) == before
+        assert service._game_state(appid).get('install') == before_install
+        assert calls == ['abandon']
+    service.finish_scaler_transition(appid, first['token'], True)
+    service.finish_scaler_transition(appid, first['token'])
+
+    service.begin_scaler_transition(appid)
+    assert service.install(appid, {'build': 'fsr-test'})['overrides'] == ['dxgi=n,b', 'winmm=n,b']
+
+
+def test_horizon_rejects_two_spellings_before_touching_game(horizon_unlocker):
+    from test_upscalers_scaler_transition import files
+
+    service, appid, game, calls = horizon_unlocker
+    (game / 'winmm.dll').write_bytes(b'one')
+    (game / 'WINMM.dll').write_bytes(b'two')
+    if sum(path.name.casefold() == 'winmm.dll' for path in game.iterdir()) != 2:
+        pytest.skip('requires a case-sensitive filesystem')
+    before = files(game)
+    service.begin_scaler_transition(appid)
+    with pytest.raises(UpscalerError, match='recipe_files_invalid'):
+        service.install(appid, {'build': 'fsr-test'})
+    assert files(game) == before
+    assert not calls
