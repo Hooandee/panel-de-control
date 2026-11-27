@@ -20,6 +20,7 @@ def test_game_input_recommendation_requires_detected_input(steam, fake_catalog, 
         monkeypatch.setattr(service, '_find', lambda appid, lookup=None: installed)
     detail = service.game('292030')
     assert detail['recipe_info']['recommended_input'] == expected
+    assert detail['solution']['recommended_input'] == expected
     assert detail['fg_note'] == 'reflexOff'
 
 
