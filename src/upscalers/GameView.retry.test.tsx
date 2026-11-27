@@ -53,10 +53,10 @@ vi.mock("./parts", () => {
     ListRow: ({ label, onPress }: any) => state.advancedRows ? <button onClick={onPress}>{label}</button> : null, SegmentRow: ({ options }: any) => <div>{options.map((o: any) => <span key={o.value}>{o.label}{o.caption && <small>{o.caption}</small>}</span>)}</div>, statusColor: () => "",
     ActionButton: ({ label, onPress, disabled }: any) => <button disabled={disabled} onClick={onPress}>{label}</button> };
 });
-vi.mock("./ModelPicker", () => ({ ModelPicker: ({ choice, onChange, onPendingChoice, onSpatial }: any) => <>
+vi.mock("./ModelPicker", () => ({ ModelPicker: ({ choice, onChange, onPendingChoice, onSpatial, testedDefault }: any) => <>
   <button onClick={() => onSpatial(true)}>choose Mako</button>
   <button onClick={() => onPendingChoice(true)}>choose DLL engine</button>
-  <output data-testid="selected-build">{choice.build}</output>
+  <output data-testid="selected-build" data-tested-build={testedDefault?.build} data-tested-model={testedDefault?.model}>{choice.build}</output>
   <button onClick={() => onChange({ ...choice, build: "fsr-4.0.2c", quality: "balanced", sharpness: "soft", model: null })}>choose 402</button>
   <button onClick={() => onChange({ ...choice, build: "fsr-4.1.1" })}>choose 411</button>
   <button onClick={() => onChange({ ...choice, build: "fsr-lite", model: null })}>choose Lite</button>
@@ -70,7 +70,7 @@ import { readInstallRequest, startInstallJob, trackJob } from "./jobRunner";
 import { readAppDetails } from "../launch/steamApi";
 import { releasePage, showGame } from "./pageMemory";
 
-const build = { family: "fsr", image: 1, cost: 1, available: true, supported: true, download_bytes: 100 };
+const build = { family: "fsr" as const, image: 1, cost: 1, available: true, supported: true, download_bytes: 100 };
 const overview = { preferred: "fsr-4.1.1", gpu: "rdna2", display: [1920, 1200], job: null,
   builds: [{ ...build, id: "fsr-4.1.1", version: "4.1.1" }, { ...build, id: "fsr-4.0.2c", version: "4.0.2c" }] } as UpscalersOverview;
 const game = { liveAppid: 777, name: "Stellar Blade", isNonSteam: false, coverUrls: [] } as unknown as GameEntry;
@@ -384,4 +384,82 @@ it("tells which option to change in the game's own menu", async () => {
     recipe_info: { needs: [], game_settings: [{ setting: "FidelityFX Super Resolution 2", value: "No" }] } };
   await act(async () => { render(<GameView {...props} />); });
   expect(screen.getByText("up.recipe.gameSetting")).toBeTruthy();
+});
+
+it.each([
+  { appid: 1151640, input: "dlss", name: "NVIDIA DLSS", dependencies: ["hzd-dlss-unlocker"] },
+  { appid: 2420110, input: "fsr31", name: "AMD FSR 3", dependencies: [] },
+  { appid: 1174180, input: "fsr2", name: "AMD FSR 2", dependencies: [] },
+])("marks the tested Fremont default and puts $name above Activate", async ({ appid, input, name, dependencies }) => {
+  state.job = null;
+  state.t = (key, params) => key === "up.input.activate" ? String(params?.input) : key;
+  const solution = { recommended_input: input, input_reconciled: dependencies.length > 0, dependencies, quality: { owner: "panel" } };
+  state.detail = { analysis: { target: "/game", inputs: { [input]: ["/game/input.dll"] }, candidates: [] }, history: [], install: null,
+    solutions: { "fsr-4.1.1": solution, "fsr-4.0.2c": solution }, preferred: "fsr-4.1.1",
+    recipe_info: { needs: [], game_config: appid === 1174180 } };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: appid }}
+    overview={{ ...overview, preferred: "fsr-4.0.2c", device: "steam_machine", gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.1.1");
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBe("fsr-4.1.1");
+  const activation = screen.getByRole("button", { name: "up.activate" });
+  expect(activation.parentElement?.previousElementSibling?.textContent).toBe(name);
+  expect(screen.getAllByText(name)).toHaveLength(1);
+  expect(screen.queryByText("up.input.recommended")).toBeNull();
+  await act(async () => { fireEvent.click(screen.getByText("choose 402")); });
+  expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.0.2c");
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBe("fsr-4.1.1");
+  expect(screen.getAllByText(name)).toHaveLength(1);
+  expect((activation as HTMLButtonElement).disabled).toBe(false);
+});
+
+it.each([
+  { device: "steam_machine", input: ["nvngx_dlss.dll"], dependencies: [], reconciled: false, showHint: false },
+  { device: "steam_machine", input: ["nvngx_dlss.dll"], dependencies: ["hzd-dlss-unlocker"], reconciled: false, showHint: false },
+  { device: "steam_machine", input: [], dependencies: ["hzd-dlss-unlocker"], reconciled: true, showHint: false },
+  { device: "desktop_pc", input: ["nvngx_dlss.dll"], dependencies: ["hzd-dlss-unlocker"], reconciled: true, showHint: true },
+])("omits the star without safely matched evidence (%j)", async ({ device, input, dependencies, reconciled, showHint }) => {
+  const solution = { recommended_input: "dlss", input_reconciled: reconciled, dependencies, quality: { owner: "panel" } };
+  state.detail = { analysis: { target: "/game", inputs: { dlss: input }, candidates: [] }, history: [], install: null,
+    solutions: { "fsr-4.1.1": solution }, recipe_info: { needs: [] } };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1151640 }}
+    overview={{ ...overview, device, gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
+  expect(!!screen.queryByText("up.input.activate")).toBe(showHint);
+  expect(screen.queryByText("up.input.recommended")).toBeNull();
+});
+
+it.each(["draft", "installed", "luma", "failed"])("leaves the player's Forbidden West choice alone after %s", async (mode) => {
+  const choice = { build: "fsr-4.0.2c", quality: "balanced" as const, sharpness: null, model: null };
+  state.detail = { analysis: { target: "/game", inputs: { fsr31: ["amd_fidelityfx_dx12.dll"] }, candidates: [] }, history: [],
+    install: mode === "installed" ? { build: choice.build, options: choice, status: "not_run" } : null,
+    recipe_info: { needs: [], luma_detected: mode === "luma" },
+    failed_builds: mode === "failed" ? [{ build: "fsr-4.1.1" }] : [] };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 2420110 }}
+    draft={mode === "draft" ? { choice, advanced: false } : null}
+    overview={{ ...overview, preferred: mode === "failed" ? choice.build : "fsr-4.1.1", device: "steam_machine", gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").textContent).toBe(mode === "luma" ? "fsr-4.1.1" : choice.build);
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBe(mode === "draft" || mode === "installed" ? "fsr-4.1.1" : undefined);
+  expect(!!screen.queryByText("up.input.activate")).toBe(mode !== "installed" && mode !== "luma");
+});
+
+it("keeps the DX12 instruction without repeating RDR2's game menu option", async () => {
+  state.detail = { analysis: { target: "/game", inputs: { fsr2: ["ffx_fsr2_api_dx12_x64.dll"] }, candidates: [] },
+    history: [], install: null, recipe_info: { needs: [], recommended_input: "fsr2" } };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1174180 }}
+    overview={{ ...overview, preferred: "fsr-4.0.2c", device: "steam_machine", gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.0.2c");
+  expect(screen.getByText("up.notice.rdr2Dx12Only")).toBeTruthy();
+  expect(screen.queryByText("up.notice.rdr2Dx12")).toBeNull();
+  expect(screen.getAllByText("up.input.activate")).toHaveLength(1);
+});
+
+it("keeps RDR2's preferred Lite selected without borrowing the fallback package's star", async () => {
+  const lite = { ...build, id: "fsr-4.1.2-beta", version: "4.1.2", models: ["lite", "full"] };
+  state.detail = { analysis: { target: "/game", inputs: { fsr2: ["ffx_fsr2_api_dx12_x64.dll"] }, candidates: [] },
+    history: [], install: null, recipe_info: { needs: [], game_config: true }, preferred: lite.id };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1174180 }}
+    overview={{ ...overview, builds: [...overview.builds, lite], device: "steam_machine", gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").textContent).toBe(lite.id);
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
+  expect(screen.getAllByText("up.input.activate")).toHaveLength(1);
 });

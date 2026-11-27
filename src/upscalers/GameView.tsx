@@ -45,6 +45,7 @@ import { JobProgress } from "./JobProgress";
 import { FrameGenRow } from "./FrameGenRow";
 import { useThemes } from "../themes/useThemes";
 import { ModelPicker } from "./ModelPicker";
+import { detectedGameInput, gameUpscalerGuidance, testedDefault } from "./testedDefaults";
 import { ModFile, modDownload, wikiModName } from "./ModFile";
 import { UserFiles } from "./UserFiles";
 import { markPendingReinstall, takePendingReinstall } from "./userFileWatch";
@@ -131,6 +132,7 @@ export const GameView: FC<{
   const keepDraft = useRef(!!draft);
   const initialDefault = useRef(!draft && !readInstallRequest(appid));
   const preferred = detail?.preferred ?? overview.preferred;
+  const tested = testedDefault(detail, appid, overview);
   const trace = (action: string, next: UpscalerChoice = choice, ok = true) => {
     recordUiEvent("upscalers", action, {
       appid, stage: action === "restart_result" ? "result" : "intent",
@@ -543,12 +545,16 @@ export const GameView: FC<{
   const inputHintShown = !scalerSeenWorking && qualityMode.mode !== "locked";
   // Luma hands OptiScaler its DLSS input itself; these games have no such option in their menus.
   const lumaInput = !!detail?.recipe_info?.luma_detected || !!detail?.recipe_info?.automatic?.includes("Luma");
-  const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown && !lumaInput
+  const guidance = gameUpscalerGuidance(detail, appid);
+  const activationInput = guidance && detail && selected && !install && !running && optiscalerRecipe && inputHintShown
+    ? detectedGameInput(guidance, detail, selected) : null;
+  const recommendedInput = (!guidance || install) && optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown && !lumaInput
     ? INPUT_NAMES[recommendedInputKey] : null;
   // A setting Panel writes into the game's config on install is only asked of the user when Panel could not write it.
   const configPending = !detail?.recipe_info?.game_config
     || !!detail.install?.game_config?.some((c) => c.state === "missing" || c.state === "failed");
   const notice = detail && !detail.native && configPending ? gameNotice(detail.identity?.steam_appid ?? appid) : null;
+  const noticeKey = notice === "up.notice.rdr2Dx12" && activationInput ? "up.notice.rdr2Dx12Only" : notice;
   const strain = detail && !detail.native && !spatial ? steamMachineStrain(overview.device, gameOutputHeight(detail?.history ?? [], overview.display), selected, choice.quality) : null;
   const recipeBlocked = !!solution?.blocked_reason || (optiscalerRecipe && !solution && !!detail?.recipe_info?.blocked);
   const automaticLuma = optiscalerRecipe && !detail?.recipe_info?.luma_detected && !!detail?.recipe_info?.automatic?.includes("Luma");
@@ -634,7 +640,7 @@ export const GameView: FC<{
           )}
           <LaunchMixNotice liveAppid={game.liveAppid} scaler={install ? runs : detail.analysis.foreign_identity?.engine === "helixsr" ? "HelixSR" : null} />
           {!detail.native && !externalHelix && <ModelPicker onPendingChoice={setPendingModel} gpu={overview.gpu} duo={duo} appid={appid} spatial={spatial} onSpatial={selectSpatial} builds={builds} choice={choice} inputs={inputs} protonEnv={protonEnv} dllTargets={detail.analysis.dll_targets}
-            disabled={running || foreignBusy} onChange={changeChoice} />}
+            disabled={running || foreignBusy} onChange={changeChoice} testedDefault={tested} />}
           {!detail.native && !spatial && selectedEngine === "optiscaler" && !!detail.recipe_info?.user_files?.length && (
             <UserFiles appid={appid} files={detail.recipe_info.user_files} disabled={running || foreignBusy}
               onDetail={(next) => { if (next.install) markPendingReinstall(appid); setDetail(next); }} />
@@ -736,9 +742,9 @@ export const GameView: FC<{
       )}
       {detail && !pendingModel && !spatial && !detail.native && !externalHelix && (qualityMode.mode === "game" || replacesFsr) && <Note>{t("up.quality.inGame")}</Note>}
       {detail && !pendingModel && !spatial && qualityMode.mode === "locked" && <Note>{t("up.quality.useInput", { input: qualityMode.input })}</Note>}
-      {notice && (notice === "up.notice.dx11Launch"
-        ? <Notice icon={<LuInfo size={16} />}>{t(notice)}</Notice>
-        : <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(notice)}</Notice>)}
+      {noticeKey && (noticeKey === "up.notice.dx11Launch"
+        ? <Notice icon={<LuInfo size={16} />}>{t(noticeKey)}</Notice>
+        : <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(noticeKey)}</Notice>)}
       {strain && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.steamMachine.${strain}`)}</Notice>}
       {recommendedInput && notice !== "up.notice.dx11Launch" && <Notice icon={<LuInfo size={16} />}>
         {t("up.input.recommended", { input: recommendedInput, name: badgeLabel(selected, choice.model, choice.build).full })}
@@ -758,9 +764,12 @@ export const GameView: FC<{
           {status === "broken" ? (
             <Row><ActionButton primary label={t("up.repair")} onPress={reinstall} disabled={blocked} /></Row>
           ) : !install ? (
-            <Row>
-              <ActionButton primary label={t("up.activate", { name: badgeLabel(selected, choice.model, choice.build).full })} onPress={apply} disabled={blocked} />
-            </Row>
+            <>
+              {activationInput && <Note>{t("up.input.activate", { input: activationInput })}</Note>}
+              <Row>
+                <ActionButton primary label={t("up.activate", { name: badgeLabel(selected, choice.model, choice.build).full })} onPress={apply} disabled={blocked} />
+              </Row>
+            </>
           ) : dirty || imageDirty ? (
             <>
               {dirty && changes.map((line) => (

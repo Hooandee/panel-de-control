@@ -183,3 +183,23 @@ it("never flags anything on an AMD GPU and drops only another generation's copy 
   expect(screen.getByRole("radio", { name: "FSR 4.0.2c" })).toBeTruthy();
   expect(screen.getAllByRole("radio")).toHaveLength(3);
 });
+
+it("marks only the tested package model and keeps the mark when another model is selected", () => {
+  const onChange = vi.fn();
+  const props = { builds: [base], choice: { ...choice, model: "full" }, inputs: {}, protonEnv: null, onChange,
+    testedDefault: { build: base.id, model: "full" } };
+  const page = render(<ModelPicker {...props} />);
+  const trigger = screen.getByRole("button", { name: "up.section.model" });
+  expect(trigger.getAttribute("aria-description")).toBe("up.model.tested");
+  expect(trigger.querySelector("svg[aria-hidden]")).toBeTruthy();
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole("radio", { name: "FSR 4.1.2 Lite" }));
+  expect(onChange).toHaveBeenCalledWith({ ...choice, model: "lite" });
+  page.rerender(<ModelPicker {...props} choice={{ ...choice, model: "lite" }} />);
+  expect(trigger.hasAttribute("aria-description")).toBe(false);
+  fireEvent.click(trigger);
+  const tested = screen.getByRole("radio", { name: "FSR 4.1.2 up.model.full" });
+  expect(tested.getAttribute("aria-description")).toBe("up.model.tested");
+  expect(tested.querySelector("svg[aria-hidden]")).toBeTruthy();
+  expect(screen.getByRole("radio", { checked: true }).hasAttribute("aria-description")).toBe(false);
+});
