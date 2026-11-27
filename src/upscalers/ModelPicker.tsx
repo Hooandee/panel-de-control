@@ -131,7 +131,7 @@ export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onCha
     {mode !== "mako" && <Focusable data-pdc-part="disclosure" ref={trigger} role="button" aria-label={t("up.section.model")} aria-expanded={open} aria-disabled={disabled}
       aria-description={currentDescription}
       onClick={toggle} onActivate={toggle} onCancel={open ? (event) => { event.stopPropagation(); close(); } : undefined}
-      style={{ padding: theme.space.sm, cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: theme.space.sm }}>
+      style={{ padding: theme.space.sm, cursor: "pointer", color: theme.color.textPrimary, fontWeight: 600, display: "flex", alignItems: "center", gap: theme.space.sm }}>
       <span style={{ flex: 1, minWidth: 0 }}>{mode === choiceMode && current ? named(current, currentModel) : t("up.section.model")}</span>
       {open ? <LuChevronUp size={16} /> : <LuChevronDown size={16} />}
     </Focusable>}
