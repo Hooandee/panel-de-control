@@ -18,8 +18,8 @@ async function refreshEngine(engine: "mako" | "mako5"): Promise<EngineUpdate["st
   }
 }
 
-export function MakoScaling({ appid, liveAppid, isNonSteam, disabled, gameRunning, mixed, onChanged }: {
-  appid: string; liveAppid: number; isNonSteam: boolean; disabled: boolean; gameRunning: boolean; mixed: boolean; onChanged?: () => void;
+export function MakoScaling({ appid, liveAppid, isNonSteam, disabled, gameRunning, mixed, testedResolution, onChanged }: {
+  appid: string; liveAppid: number; isNonSteam: boolean; disabled: boolean; gameRunning: boolean; mixed: boolean; testedResolution?: string; onChanged?: () => void;
 }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<MakoStatus | null>(null);
@@ -101,6 +101,7 @@ export function MakoScaling({ appid, liveAppid, isNonSteam, disabled, gameRunnin
     {status?.reason === "mako_identity_ambiguous" && <Note>{t("up.mako.identity")}</Note>}
     {gameRunning && <Note>{t("up.error.running")}</Note>}
     {busy && <Note><Spinner size={12} /> {t("up.activating")}</Note>}
+    {!active && testedResolution && <Note>{t("up.input.activate", { input: testedResolution })}</Note>}
     <Row>
       {dirty && <ActionButton label={t("up.discard")} disabled={busy} onPress={() => { if (status) accept(status); }} />}
       {(!active || dirty) && <ActionButton primary label={t(active ? "up.save" : "up.activate", { name: "Mako" })} disabled={blocked} busy={busy} onPress={() => void save(true)} />}

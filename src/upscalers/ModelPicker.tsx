@@ -6,7 +6,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { Bars, PickerButton } from "./parts";
-import { buildBlocker, buildLabel, offered } from "./model";
+import { supportsDllTargets, buildBlocker, buildLabel, offered } from "./model";
 import type { TestedDefault } from "./testedDefaults";
 import type { BuildInfo, UpscalerChoice } from "./types";
 
@@ -21,24 +21,6 @@ function TestedMark({ description, announce = false }: { description: string; an
 }
 
 const navigation = createThemeNavigationAccess({ allowInactiveContext: true });
-
-function supportsDllTargets(build: BuildInfo, targets: string[]): boolean {
-  const provider = "amd_fidelityfx_upscaler_dx12.dll";
-  const loader = "amd_fidelityfx_loader_dx12.dll";
-  const files = build.dll_names ?? [];
-  if (!targets.length || !files.includes(provider)) return false;
-  const legacyFiles = new Set([...files, ...(build.dll_legacy_names ?? [])]);
-  const entries = targets.map(path => {
-    const separator = path.lastIndexOf("/");
-    return { directory: path.slice(0, separator + 1), name: path.slice(separator + 1).toLowerCase() };
-  });
-  const providerDirectories = new Set(entries.filter(entry => entry.name === provider || entry.name === "amd_fidelityfx_dx12.dll").map(entry => entry.directory));
-  return entries.every(({ directory, name }) => {
-    if (name === "amd_fidelityfx_dx12.dll") return legacyFiles.has(loader) && legacyFiles.has("amd_fidelityfx_framegeneration_dx12.dll");
-    if (name === loader) return files.includes(loader) || providerDirectories.has(directory);
-    return files.includes(name);
-  });
-}
 
 export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onChange, dllTargets = [], spatial = false, onSpatial, onPendingChoice, duo = false, appid = "", gpu = "unknown", testedDefault }: {
   testedDefault?: TestedDefault;

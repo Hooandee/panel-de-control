@@ -3,8 +3,10 @@ beside the game's exe together with OptiScaler, through the same manifest, so tu
 Nothing in the archive is ever run."""
 
 import fnmatch
+from functools import lru_cache
 import json
 import os
+import re
 import shutil
 import stat
 from struct import error as struct_error
@@ -15,7 +17,8 @@ import zipfile
 import zlib
 from pathlib import Path, PurePosixPath
 
-from . import pe, user_deps
+from . import games, pe, user_deps
+from .assets import sha256
 
 MAX_FILES = 400
 MAX_TOTAL = 2 * 1024 * 1024 * 1024
@@ -97,6 +100,101 @@ def prefix_verbs(folder: Path, destinations) -> list[str]:
         if any(dll.startswith(_VC_RUNTIME) for dll in imported):
             return ["vcrun2022"]
     return []
+
+
+_ERSS_DLL = "erss-fg.dll"
+_ERSS_SETTINGS = "ERSS2/ERSS-FG.toml"
+_ERSS_HEADER = b"# Version: 4.14.1-0 (86498e0) Release"
+_ERSS_VERSION = frozenset({"4.14.1", "4.14.1.0", "4.14.1-0"})
+_ERSS_REVISION = re.compile(rb"(?<![a-zA-Z0-9])86498e0(?![a-zA-Z0-9])")
+_ERSS_FILES = {
+    _ERSS_DLL: 14648832,
+    "d3d12.dll": 521216,
+    "erssreshadestub.addon": 455168,
+    "erss2/bin/amd_fidelityfx_framegeneration_dx12.dll": 38245640,
+    "erss2/bin/amd_fidelityfx_loader_dx12.dll": 25864,
+    "erss2/bin/amd_fidelityfx_upscaler_dx12.dll": 22348552,
+}
+
+
+def _file_stamp(path: Path) -> tuple[int, ...]:
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode):
+        raise ValueError("not_regular")
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+@lru_cache(maxsize=32)
+def _erss_binary(path: Path, stamp: tuple[int, ...]) -> bool | None:
+    imports = pe.imported_dlls(str(path))
+    if not any(dll.startswith(_VC_RUNTIME) for dll in imports):
+        return False
+    versions = pe.version_strings(str(path))
+    reported = [versions[key] for key in ("ProductVersion", "FileVersion") if versions.get(key)]
+    if reported:
+        return any(version in _ERSS_VERSION for version in reported)
+    with path.open("rb") as handle:
+        binary = handle.read(_ERSS_FILES[_ERSS_DLL] + 1)
+    return True if _ERSS_REVISION.search(binary) else None
+
+
+@lru_cache(maxsize=32)
+def _mod_digest(path: Path, stamp: tuple[int, ...]) -> str:
+    return sha256(path)
+
+
+def _erss_runtime(dll: Path, relative: str, stamp: tuple[int, ...], install: dict) -> bool:
+    target_path = install.get("target")
+    installed_at = install.get("installed_at")
+    if not isinstance(target_path, str) or not isinstance(installed_at, (float, int)):
+        return False
+    target = Path(target_path)
+    config = target / _ERSS_SETTINGS
+    receipt = target / games.MANIFEST_DIR / "manifest.json"
+    if not target.is_absolute() or config.parent.is_symlink() or receipt.parent.is_symlink():
+        return False
+    if _file_stamp(config)[3] <= installed_at * 1e9:
+        return False
+    with config.open("rb") as handle:
+        if handle.readline(len(_ERSS_HEADER) + 3).rstrip(b"\r\n") != _ERSS_HEADER:
+            return False
+    if _file_stamp(receipt)[2] > 1024 * 1024:
+        return False
+    manifest = json.loads(receipt.read_text())
+    if not isinstance(manifest, dict) or manifest.get("incomplete"):
+        return False
+    files = manifest.get("files")
+    owned = manifest.get("owned")
+    if not isinstance(files, dict) or not isinstance(owned, list) or relative not in owned:
+        return False
+    installed = target / relative
+    installed_stamp = _file_stamp(installed)
+    return (installed_stamp[2] == _ERSS_FILES[_ERSS_DLL] and
+            files.get(relative) == _mod_digest(dll, stamp) == _mod_digest(installed, installed_stamp))
+
+
+def _tested_release(folder: Path, files: list[str], meta: dict, install: dict | None) -> str | None:
+    by_name = {name.casefold(): name for name in files}
+    if meta.get("target") != "Game" or not meta.get("id") or not _ERSS_FILES.keys() <= by_name.keys():
+        return None
+    try:
+        if any(_file_stamp(folder / by_name[name])[2] != size for name, size in _ERSS_FILES.items()):
+            return None
+        relative = by_name[_ERSS_DLL]
+        dll = folder / relative
+        stamp = _file_stamp(dll)
+        has_version = _erss_binary(dll, stamp)
+        if has_version is False:
+            return None
+        if has_version:
+            return "erss-fg-4.14.1"
+        installed_mod = (install or {}).get("mod")
+        if isinstance(installed_mod, dict) and installed_mod.get("id") == meta["id"] and _erss_runtime(
+                dll, relative, stamp, install):
+            return "erss-fg-4.14.1"
+    except (OSError, ValueError, struct_error):
+        return None
+    return None
 
 
 def replaces_optiscaler(destinations) -> bool:
@@ -284,14 +382,18 @@ class Store:
             return {}
         return data if isinstance(data, dict) and isinstance(data.get("files"), list) else {}
 
-    def status(self, appid: str) -> dict | None:
+    def status(self, appid: str, *, install: dict | None = None) -> dict | None:
         meta = self._meta(appid)
+        folder = self._folder(appid) / "files"
         files = [f for f in meta.get("files", []) if isinstance(f, str)]
-        if not files or not all((self._folder(appid) / "files" / f).is_file() for f in files):
+        if not files or not all((folder / f).is_file() for f in files):
             return None
-        return {"filename": meta.get("filename"), "id": meta.get("id"), "target": meta.get("target"), "count": len(files),
-                "files": files[:PREVIEW], "native_dlls": native_dlls(files),
-                "verbs": [v for v in meta.get("verbs", []) if v == "vcrun2022"]}
+        status = {"filename": meta.get("filename"), "id": meta.get("id"), "target": meta.get("target"), "count": len(files),
+                  "files": files[:PREVIEW], "native_dlls": native_dlls(files),
+                  "verbs": [v for v in meta.get("verbs", []) if v == "vcrun2022"]}
+        if str(appid) == "1245620" and (release := _tested_release(folder, files, meta, install)):
+            status["tested_release"] = release
+        return status
 
     def sources(self, appid: str) -> dict[str, Path]:
         if self.status(appid) is None:

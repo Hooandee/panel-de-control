@@ -394,7 +394,7 @@ it.each([
   { appid: 1151640, input: "dlss", name: "NVIDIA DLSS", dependencies: ["hzd-dlss-unlocker"] },
   { appid: 2420110, input: "fsr31", name: "AMD FSR 3", dependencies: [] },
   { appid: 1174180, input: "fsr2", name: "AMD FSR 2.0", dependencies: [] },
-])("marks the tested Fremont default and puts $name above Activate", async ({ appid, input, name, dependencies }) => {
+])("puts $name above Activate without marking a different OptiScaler release", async ({ appid, input, name, dependencies }) => {
   state.job = null;
   state.t = (key, params) => key === "up.input.activate" ? String(params?.input) : key;
   const solution = { recommended_input: input, input_reconciled: dependencies.length > 0, dependencies, quality: { owner: "panel" } };
@@ -404,15 +404,15 @@ it.each([
   await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: appid }}
     overview={{ ...overview, preferred: "fsr-4.0.2c", device: "steam_machine", gpu: "rdna3" }} />); });
   expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.1.1");
-  expect(screen.getByTestId("selected-build").dataset.testedMode).toBe("optiscaler");
-  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBe("fsr-4.1.1");
+  expect(screen.getByTestId("selected-build").dataset.testedMode).toBeUndefined();
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
   const activation = screen.getByRole("button", { name: "up.activate" });
   expect(activation.parentElement?.previousElementSibling?.textContent).toBe(name);
   expect(screen.getAllByText(name)).toHaveLength(1);
   expect(screen.queryByText("up.input.recommended")).toBeNull();
   await act(async () => { fireEvent.click(screen.getByText("choose 402")); });
   expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.0.2c");
-  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBe("fsr-4.1.1");
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
   expect(screen.getAllByText(name)).toHaveLength(1);
   expect((activation as HTMLButtonElement).disabled).toBe(false);
 });
@@ -443,7 +443,7 @@ it.each(["draft", "installed", "luma", "failed"])("leaves the player's Forbidden
     draft={mode === "draft" ? { choice, advanced: false } : null}
     overview={{ ...overview, preferred: mode === "failed" ? choice.build : "fsr-4.1.1", device: "steam_machine", gpu: "rdna3" }} />); });
   expect(screen.getByTestId("selected-build").textContent).toBe(mode === "luma" ? "fsr-4.1.1" : choice.build);
-  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBe(mode === "draft" || mode === "installed" ? "fsr-4.1.1" : undefined);
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
   expect(!!screen.queryByText("up.input.activate")).toBe(mode !== "installed" && mode !== "luma");
 });
 

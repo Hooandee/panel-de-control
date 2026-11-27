@@ -499,13 +499,13 @@ class UpscalerService:
             "foreign_backup": {"at": entry["foreign_backup"]["at"]} if isinstance(entry.get("foreign_backup"), dict) else None,
             "fg_note": recipe.fg_note if recipe else None,
             "fg_plan": None if installed.native else selected["fg_plan"],
-            "mod": self._mod_status(appid, install),
+            "mod": self._mod_status(appid, install, Path(analysis["target"]).relative_to(installed.root).as_posix() if analysis["target"] else None),
             "mod_download": user_mods.DOWNLOADS.get(str(appid)),
         }
 
     # ---- a mod the user brings for one game --------------------------------
-    def _mod_status(self, appid: str, install) -> dict | None:
-        status = self.user_mods.status(appid)
+    def _mod_status(self, appid: str, install, target: str | None) -> dict | None:
+        status = self.user_mods.status(appid, install=install)
         installed_mod = install.get("mod") if isinstance(install, dict) else None
         if status is None:
             # Removed here, still in the game until the upscaler reinstalls.
@@ -514,7 +514,10 @@ class UpscalerService:
                         "applied": False, "removed": True}
             return None
         applied = isinstance(installed_mod, dict) and installed_mod.get("id") == status.get("id")
-        return {**{k: v for k, v in status.items() if k not in ("id", "target")}, "applied": applied}
+        hidden = {"id", "target"}
+        if status.get("target") != target:
+            hidden.add("tested_release")
+        return {**{k: v for k, v in status.items() if k not in hidden}, "applied": applied}
 
     def _mod_target(self, appid: str) -> tuple[games.Installed, str, set[str], set[str]]:
         installed = self._find(appid)

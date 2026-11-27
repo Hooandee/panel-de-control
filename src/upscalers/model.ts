@@ -63,6 +63,24 @@ export function buildLabel(build: Pick<BuildInfo, "family" | "version"> & { chan
   return build.channel === "beta" ? `${name} Beta` : name;
 }
 
+export function supportsDllTargets(build: BuildInfo, targets: string[]): boolean {
+  const provider = "amd_fidelityfx_upscaler_dx12.dll";
+  const loader = "amd_fidelityfx_loader_dx12.dll";
+  const files = build.dll_names ?? [];
+  if (!targets.length || !files.includes(provider)) return false;
+  const legacyFiles = new Set([...files, ...(build.dll_legacy_names ?? [])]);
+  const entries = targets.map(path => {
+    const separator = path.lastIndexOf("/");
+    return { directory: path.slice(0, separator + 1), name: path.slice(separator + 1).toLowerCase() };
+  });
+  const providerDirectories = new Set(entries.filter(entry => entry.name === provider || entry.name === "amd_fidelityfx_dx12.dll").map(entry => entry.directory));
+  return entries.every(({ directory, name }) => {
+    if (name === "amd_fidelityfx_dx12.dll") return legacyFiles.has(loader) && legacyFiles.has("amd_fidelityfx_framegeneration_dx12.dll");
+    if (name === loader) return files.includes(loader) || providerDirectories.has(directory);
+    return files.includes(name);
+  });
+}
+
 /** Why a build cannot go into this game, or null. HLX FSR 4 and Proton's FSR 4 only replace a game's own FSR 3.1. */
 export function buildBlocker(
   build: Pick<BuildInfo, "way" | "engine">, inputs: Record<string, unknown>, protonEnv: string | null = null,
