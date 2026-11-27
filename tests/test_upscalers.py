@@ -2088,7 +2088,7 @@ def test_a_loose_mod_dll_is_installed_and_the_original_is_restored(steam, fake_c
     target = game / "bin/x64_dx12"
     original = target / "D3D12.dll"
     _write(original, b"original")
-    dll = home / "Downloads/D3D12.dll"
+    dll = home / "Downloads/d3d12.dll"
     _write(dll, b"replacement")
     service = _service(steam, fake_catalog, proc)
 
@@ -2106,7 +2106,46 @@ def test_a_loose_mod_dll_is_installed_and_the_original_is_restored(steam, fake_c
 
     service.uninstall(APPID)
     assert original.read_bytes() == b"original"
+    assert [entry.name for entry in target.iterdir() if entry.name.casefold() == "d3d12.dll"] == ["D3D12.dll"]
     assert dll.read_bytes() == b"replacement"
+
+
+def test_loose_mod_dll_refuses_multiple_casefold_aliases(tmp_path):
+    from upscalers import user_mods
+
+    dll = _write(tmp_path / "d3d12.dll")
+    store = user_mods.Store(tmp_path / "store")
+    with pytest.raises(user_mods.ModError, match="^ambiguous_files$"):
+        store.adopt(APPID, dll, ".", {"D3D12.dll", "d3d12.dll"}, set())
+    assert store.status(APPID) is None
+
+
+def test_loose_mod_dll_refuses_a_destination_symlink(steam, fake_catalog, proc):
+    home, game = steam
+    dll = _write(home / "Downloads/custom.dll")
+    outside = _write(home / "protected.dll", b"original")
+    link = game / "bin/x64_dx12/CUSTOM.dll"
+    link.symlink_to(outside)
+    service = _service(steam, fake_catalog, proc)
+
+    with pytest.raises(UpscalerError, match="^mod_unsafe_archive$"):
+        service.add_mod(APPID, str(dll))
+    assert link.is_symlink()
+    assert outside.read_bytes() == b"original"
+    assert service.game(APPID)["mod"] is None
+
+
+def test_loose_mod_dll_refuses_a_source_symlink(steam, fake_catalog, proc):
+    home, _ = steam
+    dll = _write(home / "protected.dll")
+    link = home / "Downloads/custom.dll"
+    link.parent.mkdir(exist_ok=True)
+    link.symlink_to(dll)
+    service = _service(steam, fake_catalog, proc)
+
+    with pytest.raises(UpscalerError, match="^mod_unreadable$"):
+        service.add_mod(APPID, str(link))
+    assert service.game(APPID)["mod"] is None
 
 
 @pytest.mark.parametrize(("change", "code"), [

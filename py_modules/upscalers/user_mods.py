@@ -327,13 +327,27 @@ class Store:
         return {name: folder / name for name in self._meta(appid)["files"]}
 
     def adopt(self, appid: str, path: Path, target: str, existing: set[str], root_dirs: set[str],
-              password: str | None = None) -> dict:
+              password: str | None = None, *, target_dir: Path | None = None) -> dict:
         path = Path(path)
         self._folder(appid)
         members = _readable(path, password)
         wanted = layout(members, target, existing, root_dirs)
         if replaces_optiscaler(wanted):
             raise ModError("conflict")
+        if path.suffix.lower() == ".dll":
+            matches = [name for name in existing if name.casefold() == path.name.casefold()]
+            if len(matches) > 1:
+                raise ModError("ambiguous_files")
+            if matches:
+                name = matches[0]
+                if target_dir is not None:
+                    try:
+                        mode = (target_dir / name).lstat().st_mode
+                    except OSError:
+                        raise ModError("unsafe_archive") from None
+                    if not stat.S_ISREG(mode):
+                        raise ModError("unsafe_archive")
+                wanted = {name: path.name}
         self.root.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(dir=self.root, prefix=f".{appid}-"))
         try:

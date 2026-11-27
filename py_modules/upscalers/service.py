@@ -553,9 +553,11 @@ class UpscalerService:
         if not any(resolved.is_relative_to(root) for root in allowed):
             raise UpscalerError("mod_unreadable")
         self._idle()
-        _, target, existing, root_dirs = self._mod_target(appid)
+        if resolved.suffix.lower() == ".dll" and chosen.is_symlink():
+            raise UpscalerError("mod_unreadable")
+        installed, target, existing, root_dirs = self._mod_target(appid)
         try:
-            self.user_mods.adopt(appid, resolved, target, existing, root_dirs, password)
+            self.user_mods.adopt(appid, resolved, target, existing, root_dirs, password, target_dir=installed.root / target)
         except user_mods.ModError as error:
             raise UpscalerError(f"mod_{error.code}") from None
         return self.game(appid)
