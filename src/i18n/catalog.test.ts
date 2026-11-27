@@ -197,6 +197,11 @@ describe("Every supported translation catalog", () => {
     });
   });
 
+  it.each(CATALOGS)("%s keeps RDR2's API notice independent of the scaler input", (_lang, catalog) => {
+    expect(catalog["up.notice.rdr2Dx12"]).toContain("DirectX 12");
+    expect(catalog["up.notice.rdr2Dx12"]).not.toContain("FSR");
+  });
+
   it.each(CATALOGS)("%s has exactly the Spanish keys", (_lang, catalog) => {
     expect(Object.keys(catalog).sort()).toEqual(Object.keys(DICTS.es).sort());
   });

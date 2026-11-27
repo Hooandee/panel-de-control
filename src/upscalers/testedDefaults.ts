@@ -22,7 +22,7 @@ const steamDeckLcdLite = { device: "steam_deck_lcd", gpu: "rdna2", build: "fsr-4
 const GUIDANCE: Readonly<Partial<Record<string, GameGuidance>>> = {
   "1151640": { input: "dlss", menuName: "NVIDIA DLSS", requiredDependency: "hzd-dlss-unlocker", tested: [steamMachine, steamDeckLcdLite] },
   "2420110": { input: "fsr31", menuName: "AMD FSR 3", tested: [steamMachine] },
-  "1174180": { input: "fsr2", menuName: "AMD FSR 2", tested: [{ ...steamMachine, requiresDx12Config: true }] },
+  "1174180": { input: "fsr2", menuName: "AMD FSR 2.0", tested: [{ ...steamMachine, requiresDx12Config: true }] },
 };
 
 export function gameUpscalerGuidance(detail: GameDetail | null, appid: string): GameGuidance | undefined {
@@ -39,6 +39,11 @@ export function detectedGameInput(guide: GameGuidance, detail: GameDetail, build
   return guide.menuName;
 }
 
+export function needsManualGameConfig(detail: GameDetail): boolean {
+  return detail.shortcut || !detail.recipe_info?.game_config
+    || !!detail.install?.game_config?.some(({ state }) => state === "missing" || state === "failed");
+}
+
 export function testedDefault(detail: GameDetail | null, appid: string, overview: UpscalersOverview): TestedModel | undefined {
   const guide = gameUpscalerGuidance(detail, appid);
   if (!detail || !guide) return;
@@ -50,7 +55,10 @@ export function testedDefault(detail: GameDetail | null, appid: string, overview
   const plan = detail.solutions?.[build.id];
   const inputs = plan?.inputs ?? detail.analysis.inputs;
   if (plan?.blocked_reason || buildBlocker(build, inputs) || !detectedGameInput(guide, detail, build)) return;
-  if (tested.requiresDx12Config && !detail.recipe_info?.game_config && !(plan?.api_source === "recipe" && plan.effective_api === "d3d12")) return;
+  if (tested.requiresDx12Config) {
+    const forcesDx12 = plan?.api_source === "recipe" && plan.effective_api === "d3d12";
+    if (detail.shortcut || (needsManualGameConfig(detail) && !forcesDx12)) return;
+  }
   if ((build.models?.[0] ?? null) !== tested.model) return;
   return { build: tested.build, model: tested.model };
 }

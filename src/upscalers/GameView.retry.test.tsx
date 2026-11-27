@@ -65,7 +65,7 @@ vi.mock("./ModelPicker", () => ({ ModelPicker: ({ choice, onChange, onPendingCho
 import { GameView } from "./GameView";
 import { pressUpscalerKeyInGame } from "./gameHotkey";
 import { recordUiEvent } from "../system/uiEvents";
-import { installUpscaler, configureUpscaler, getMakoStatus } from "../api";
+import { installUpscaler, configureUpscaler, getMakoStatus, refreshUpscalerWiki } from "../api";
 import { readInstallRequest, startInstallJob, trackJob } from "./jobRunner";
 import { readAppDetails } from "../launch/steamApi";
 import { releasePage, showGame } from "./pageMemory";
@@ -389,7 +389,7 @@ it("tells which option to change in the game's own menu", async () => {
 it.each([
   { appid: 1151640, input: "dlss", name: "NVIDIA DLSS", dependencies: ["hzd-dlss-unlocker"] },
   { appid: 2420110, input: "fsr31", name: "AMD FSR 3", dependencies: [] },
-  { appid: 1174180, input: "fsr2", name: "AMD FSR 2", dependencies: [] },
+  { appid: 1174180, input: "fsr2", name: "AMD FSR 2.0", dependencies: [] },
 ])("marks the tested Fremont default and puts $name above Activate", async ({ appid, input, name, dependencies }) => {
   state.job = null;
   state.t = (key, params) => key === "up.input.activate" ? String(params?.input) : key;
@@ -448,8 +448,7 @@ it("keeps the DX12 instruction without repeating RDR2's game menu option", async
   await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1174180 }}
     overview={{ ...overview, preferred: "fsr-4.0.2c", device: "steam_machine", gpu: "rdna3" }} />); });
   expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.0.2c");
-  expect(screen.getByText("up.notice.rdr2Dx12Only")).toBeTruthy();
-  expect(screen.queryByText("up.notice.rdr2Dx12")).toBeNull();
+  expect(screen.getByText("up.notice.rdr2Dx12")).toBeTruthy();
   expect(screen.getAllByText("up.input.activate")).toHaveLength(1);
 });
 
@@ -482,4 +481,58 @@ it.each([
   expect(selected.textContent).toBe(lite.id);
   expect(selected.dataset.testedBuild).toBe(tested ? lite.id : undefined);
   expect(selected.dataset.testedModel).toBe(tested ? "lite" : undefined);
+});
+
+it.each([
+  { engine: "optiscaler", showDx12: true, inputs: {}, configFailed: true },
+  { engine: "dll", showDx12: false, inputs: { fsr2: ["ffx_fsr2_api_dx12_x64.dll"] }, configFailed: false },
+  { engine: "mako", showDx12: false, inputs: { fsr2: ["ffx_fsr2_api_dx12_x64.dll"] }, configFailed: false },
+] as const)("omits RDR2's FSR selector guidance for $engine when its path does not apply", async ({ engine, showDx12, inputs, configFailed }) => {
+  const selected = { ...build, id: "rdr2-build", version: "4.1.1", engine: engine === "dll" ? "dll" as const : "optiscaler" as const };
+  state.detail = { analysis: { target: "/game", inputs, candidates: [] }, history: [],
+    recipe_info: { needs: [], recommended_input: "fsr2", game_config: configFailed },
+    install: configFailed ? { build: selected.id, status: "not_run", options: { quality: "native" },
+      game_config: [{ tag: "API", state: "failed" }] } : null };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1174180 }}
+    overview={{ ...overview, preferred: selected.id, builds: [selected] }} />); });
+  if (engine === "mako") await act(async () => { fireEvent.click(screen.getByText("choose Mako")); });
+  expect(!!screen.queryByText("up.notice.rdr2Dx12")).toBe(showDx12);
+  expect(screen.queryByText("up.input.activate")).toBeNull();
+  expect(screen.queryByText("up.input.recommended")).toBeNull();
+});
+
+it.each(["held draft", "manual selection"])("preserves a %s when an active installation is refreshed", async (mode) => {
+  let finishWiki!: () => void;
+  vi.mocked(refreshUpscalerWiki).mockImplementationOnce(() => new Promise(resolve => {
+    finishWiki = () => resolve({ updated: true, fresh: true });
+  }));
+  const installedChoice = { build: "fsr-4.1.1", quality: "native", sharpness: null };
+  const draft = { choice: { build: "fsr-4.0.2c", quality: "balanced" as const, sharpness: null }, advanced: false };
+  state.detail = { analysis: { target: "/game", inputs: {}, candidates: [] }, history: [],
+    install: { build: installedChoice.build, status: "active", options: installedChoice } };
+  const currentGame = { ...game, liveAppid: mode === "held draft" ? 803 : 804 };
+  const page = render(<GameView {...props} game={currentGame} draft={mode === "held draft" ? draft : null} />);
+  await act(async () => {});
+  if (mode === "manual selection") fireEvent.click(screen.getByText("choose 402"));
+  expect(screen.getByTestId("selected-build").textContent).toBe(draft.choice.build);
+
+  await act(async () => { finishWiki(); });
+  expect(screen.getByTestId("selected-build").textContent).toBe(draft.choice.build);
+  await act(async () => { page.rerender(<GameView {...props} game={currentGame}
+    overview={{ ...overview, builds: [...overview.builds] }} />); });
+  expect(screen.getByTestId("selected-build").textContent).toBe(draft.choice.build);
+  fireEvent.click(screen.getByText("up.discard"));
+  expect(screen.getByTestId("selected-build").textContent).toBe(installedChoice.build);
+});
+
+it("guides RDR2 shortcuts to DirectX 12 without marking the launcher route as tested", async () => {
+  state.detail = { shortcut: true, identity: { steam_appid: 1174180 },
+    analysis: { target: "/game", apis: ["vulkan"], inputs: { fsr2: ["ffx_fsr2_api_dx12_x64.dll"] }, candidates: [] },
+    history: [], install: null, recipe_info: { needs: [], game_config: true } };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 9803 }}
+    overview={{ ...overview, device: "steam_machine", gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
+  expect(screen.getByText("up.notice.rdr2Dx12")).toBeTruthy();
+  expect(screen.getAllByText("up.input.activate")).toHaveLength(1);
+  expect((screen.getByRole("button", { name: "up.activate" }) as HTMLButtonElement).disabled).toBe(false);
 });

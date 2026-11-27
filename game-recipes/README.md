@@ -30,20 +30,16 @@ The canonical recipe path remains `game-recipes/games/<Steam appid>.json`, indep
 
 After a game update, verify prerequisites and launch behavior, append the observed build and update the evidence date. If changed files or configuration require a different recipe, update its mappings/settings, increment the game revision and catalog version, and re-run the catalog tests. Add a build restriction only when compatibility requires one.
 
+A fresh page starts with the game's recommended package. A star appears beside that option when its package and model have been tested in gameplay for the game and device and the required input and recipe are available. Installed settings, saved selections and pending installs take priority. Quality and frame generation remain independent choices. Before activating OptiScaler, the page can show the exact menu option to select in the game.
+
+Add tested packages to [the selector catalog](../src/upscalers/testedDefaults.ts) using the Steam app ID, the device profile and GPU, the exact package and model, and any required recipe condition. Use the name from the game's menu for the input hint.
+
+Una ficha nueva parte del paquete recomendado para el juego. La opción lleva una estrella cuando su paquete y modelo se han probado en partida para ese juego y equipo y están disponibles su entrada y los requisitos de la receta. La configuración instalada, la selección guardada y las instalaciones pendientes tienen prioridad. La calidad y la generación de frames se eligen por separado. Antes de activar OptiScaler, la ficha puede mostrar la opción exacta que debes elegir en el juego.
+
+Añade los paquetes probados al [catálogo del selector](../src/upscalers/testedDefaults.ts) con el AppID de Steam, el perfil de equipo y GPU, el paquete y modelo exactos y los requisitos de su receta. Para la instrucción, usa el nombre del menú del juego.
+
 `configuration` applies allowlisted INI keys while preserving unrelated settings. Remake sets `ReShade.ini` → `Luma.SRUserType=2` so Luma supplies DLSS input to OptiScaler even after a previous disabled selection. The installer stages this edit and includes it in its file rollback. A nonempty `INSTALL.BasePath` redirect is unsupported; an existing configuration is never silently replaced.
 
 `recommended_input` is optional game-menu guidance (`dlss`, `fsr31`, `fsr2` or `xess`), separate from the output upscaler selected in Panel. It is offered only for detected game inputs and the matching engine. It does not change game settings or prove the requested rendering quality is active.
 
 `anti_cheat: true` marks a game whose anti-cheat leaves no files for Panel's analysis to detect (Diablo IV). It only affects the warning: every engine that injects or changes game files asks for the same warning and "I understand the risk" confirmation as EasyAntiCheat/BattlEye, and once accepted anything is installed; `proton` builds write nothing into the game and apply without it. `signed_only: true` marks anti-tamper that closes the game on unsigned code (Diablo IV). It only steers the recommendation: Panel recommends builds whose every written binary is signed (catalog `signed`), skips the unsigned helpers `dlssg_to_fsr3` and `fakenvapi` and the files the game already ships when the chosen build is signed, and enables `fsr-4.1.1` (OptiScaler 0.9.4 + AMD's `amdxcffx64`) on RDNA2. It never blocks: every build the GPU supports stays listed and installs in full when the user picks it. `recommended_build` is used only on GPUs that build supports, so a recipe can recommend `proton-fsr4` and still fall back to the GPU's own preferred build on RDNA2.
-
-## Tested defaults in the game page
-
-A fresh page starts with the game's recommended package. A star appears beside that option when its package and model have been tested in gameplay for the game and device and the required input and recipe are available. Installed settings, saved selections and pending installs take priority. Quality and frame generation remain independent choices. Before activating OptiScaler, the page can show the exact menu option to select in the game.
-
-Add tested packages to [the selector catalog](../src/upscalers/testedDefaults.ts) using the Steam app ID, the device profile and GPU, the exact package and model, and any required recipe condition. Use the name from the game's menu for the input hint.
-
-## Opciones probadas en la ficha del juego
-
-Una ficha nueva parte del paquete recomendado para el juego. La opción lleva una estrella cuando su paquete y modelo se han probado en partida para ese juego y equipo y están disponibles su entrada y los requisitos de la receta. La configuración instalada, la selección guardada y las instalaciones pendientes tienen prioridad. La calidad y la generación de frames se eligen por separado. Antes de activar OptiScaler, la ficha puede mostrar la opción exacta que debes elegir en el juego.
-
-Añade los paquetes probados al [catálogo del selector](../src/upscalers/testedDefaults.ts) con el AppID de Steam, el perfil de equipo y GPU, el paquete y modelo exactos y los requisitos de su receta. Para la instrucción, usa el nombre del menú del juego.
