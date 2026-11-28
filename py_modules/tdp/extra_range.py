@@ -14,6 +14,8 @@ def is_strix_halo(device) -> bool:
 
 def extra_tdp_max_ac(device) -> int | None:
     """Charger ceiling a manual request may reach, or None when the device has none."""
+    if getattr(device, "capped_ryzenadj_max_w", None) is not None:
+        return None
     if getattr(device, "vendor", None) != "amd":
         return None
     if getattr(device, "desktop_mode", False) or device.key.startswith("steam_"):

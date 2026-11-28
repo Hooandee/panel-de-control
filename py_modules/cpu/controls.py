@@ -102,9 +102,14 @@ class CoreControl:
     Writing needs root. `set()` reads the result back: if the kernel clamps a write,
     the reported active count reflects reality, not the request."""
 
-    def __init__(self, root="/"):
+    def __init__(self, root="/", *, read_only=False):
         self._base = os.path.join(root, _CPU)
         self._arm = device_tree.is_arm(root)
+        if read_only:
+            self._cores = {}
+            self.max_cores = None
+            self.supported = False
+            return
         # Bring every offlined CPU back first: the kernel drops the topology of an offline
         # CPU, so a prior core-limit would make the map (and max_cores) reflect only the
         # online subset. Online all → read the true hardware topology → _apply_cpu
@@ -168,7 +173,7 @@ class CoreControl:
                    if any(self._is_online(i) for i in idxs))
 
     def set(self, n):
-        if not self.supported:
+        if not self.supported or self.max_cores is None:
             return False
         n = max(1, min(self.max_cores, int(n)))  # always keep cpu0's core
         for pos, idxs in enumerate(self._cores.values()):

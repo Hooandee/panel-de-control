@@ -41,14 +41,20 @@ function commit(next: string[]): void {
 /** Optimistic toggle + authoritative RPC (backend routes power/learning + re-applies).
  *  Returns the RPC promise so callers can sequence follow-up reads (e.g. a TDP refresh
  *  after re-enabling the power module) on the confirmed result. */
-export function setModuleDisabled(id: string, disabled: boolean): Promise<void> {
+export function setModuleDisabled(id: string, disabled: boolean): Promise<boolean> {
   const cur = new Set(getDisabled());
   if (disabled) cur.add(id);
   else cur.delete(id);
   commit([...cur]);
   return setUiModule(id, disabled)
-    .then((r) => commit(r.disabled))
-    .catch(() => hydrateModules()); // RPC failed → reconcile with the backend truth
+    .then((r) => {
+      commit(r.disabled);
+      return r.disabled.includes(id) === disabled;
+    })
+    .catch(() => {
+      hydrateModules();
+      return false;
+    });
 }
 
 /** Reset the customization layout (used by the editor reset). One authoritative RPC.

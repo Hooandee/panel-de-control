@@ -554,6 +554,31 @@
     },
     {
       "chip": "AMD Ryzen AI 9 HX 370",
+      "display_name": "AYANEO FLIP 1S DS",
+      "dmi_matches": [
+        {
+          "board_names": [],
+          "product_name": "FLIP 1S DS",
+          "sys_vendor": "AYANEO"
+        }
+      ],
+      "experimental": true,
+      "key": "ayaneo_flip_1s_ds",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 15,
+        "tdp_max": 25,
+        "tdp_max_charger": 25,
+        "tdp_min": 4,
+        "tdp_presets": []
+      },
+      "match_names": [],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen AI 9 HX 370",
       "display_name": "AOKZOE A1X",
       "dmi_matches": [],
       "experimental": true,

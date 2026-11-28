@@ -97,7 +97,11 @@ export const PotenciaProviderMount: FC<{
   // Re-enable the power module (master switch on) via the editor's path, then re-pull
   // the TDP state so the monitor view clears. Returns the promise for the button guard.
   const onReactivate = useCallback(
-    () => setModuleDisabled("power", false).then(() => refresh()),
+    async () => {
+      const enabled = await setModuleDisabled("power", false);
+      refresh();
+      return enabled;
+    },
     [refresh],
   );
   const onDisablePdcTdp = useCallback(

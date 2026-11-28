@@ -134,6 +134,18 @@ def test_core_control_onlines_offlined_cpus_at_init(tmp_path):
         assert open(f"{root}/{base}/cpu{i}/online").read().strip() == "1"
 
 
+def test_read_only_core_control_leaves_offline_cpus_alone(tmp_path):
+    root = str(tmp_path)
+    _make_cpu_tree(root, cores=4)
+    online = tmp_path / "sys/devices/system/cpu/cpu2/online"
+    online.write_text("0")
+
+    control = CoreControl(root=root, read_only=True)
+
+    assert not control.set(4)
+    assert online.read_text() == "0"
+
+
 def test_core_control_never_offlines_cpu0_core(tmp_path):
     root = str(tmp_path)
     _make_cpu_tree(root, cores=4)

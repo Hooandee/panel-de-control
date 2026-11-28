@@ -1,4 +1,4 @@
-import { FC, useRef } from "react";
+import { FC, useRef, useState } from "react";
 import { Focusable } from "@decky/ui";
 import { LuActivity } from "react-icons/lu";
 
@@ -8,21 +8,24 @@ import { theme } from "../theme";
 interface Props {
   // Steam is driving the TDP: say so and offer to recover it.
   steam?: boolean;
-  onReactivate?: () => void | Promise<void>;
+  onReactivate?: () => void | Promise<boolean | void>;
 }
 
 // Shown in Potencia when the TDP master switch is off: only the live arc plus a
 // button to turn control back on.
 export const TdpMonitorNotice: FC<Props> = ({ steam = false, onReactivate }) => {
   const { t } = useI18n();
+  const [failed, setFailed] = useState(false);
   // Focusable fires onActivate AND onClick; guard for the whole write so one press
   // isn't two RPCs. Released when it settles so a later retry works.
   const busy = useRef(false);
   const reactivate = () => {
     if (busy.current || !onReactivate) return;
     busy.current = true;
+    setFailed(false);
     Promise.resolve()
       .then(() => onReactivate())
+      .then((enabled) => setFailed(enabled === false), () => setFailed(true))
       .finally(() => { busy.current = false; });
   };
   return (
@@ -39,6 +42,7 @@ export const TdpMonitorNotice: FC<Props> = ({ steam = false, onReactivate }) => 
         <LuActivity size={16} color={theme.color.textMuted} style={{ flex: "0 0 auto" }} />
         {t(steam ? "tdp.steamControl.line" : "tdp.monitor.notice")}
       </div>
+      {failed && <div role="alert">{t("tdp.monitor.reactivateFailed")}</div>}
       {onReactivate && (
         <Focusable
           onActivate={reactivate}

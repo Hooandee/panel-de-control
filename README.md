@@ -133,6 +133,19 @@ Pero muchas más han recibido soporte: OneXFly Apex, GPD Win 5, GPD Win Mini, AO
 OneXPlayer X2 Mini Pro y unas cuantas más, incluso PC de sobremesa, la Steam Machine y la PS5 con Linux. Si tu
 equipo no está en la lista, Panel mira qué se puede controlar en él y te enseña eso.
 
+En Linux, Panel reconoce la **AYANEO FLIP 1S DS** y muestra las RPM del ventilador
+si el kernel las publica mediante `ayaneo_ec`. El control de TDP está desactivado
+por defecto. Desactiva los demás gestores de TDP antes de activarlo en Ajustes.
+Auto-TDP y el mantenimiento del TDP con batería baja se activan por separado;
+este último no actúa mientras Auto-TDP esté activo. Panel usa RyzenAdj sin modificar
+y limita a 25 W los valores de STAPM, PPT rápido y PPT lento que aplica, tanto con
+batería como con cargador. Guarda los límites exactos antes de tomar el control
+y puede restaurarlos aunque superen los 25 W. Si cambia la fuente de alimentación
+o no se puede confirmar, Panel no escribe los límites guardados hasta confirmar
+de nuevo la fuente original. Esto restaura los valores guardados, no los de
+fábrica. Los controles de CPU, GPU y ventilador quedan a cargo del sistema o de
+las herramientas que ya uses.
+
 ## 📦 Instalación
 
 Con [Decky Loader](https://decky.xyz/) instalado:

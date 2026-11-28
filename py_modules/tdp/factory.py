@@ -16,6 +16,7 @@ from device_quirks import (
     xbox_ally_x_20_legacy_rail_floors,
     asus_legacy_overshoot_guard,
 )
+from lifecycle import read_mains_state
 from tdp.alib import AlibBackend
 from tdp.amd_dptc import AmdDptcBackend
 from tdp.arm_levels import ArmPerformanceLevels
@@ -326,6 +327,20 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
                    desktop_ceiling_hint_w=None) -> TDPBackend:
     """Pick the first supported TDP strategy for the detected device; else NullBackend.
     A desktop CPU is only driven when its firmware PL1 ceiling is readable."""
+    capped_max = getattr(device, "capped_ryzenadj_max_w", None)
+    if capped_max is not None:
+        kwargs = {"resolve": ryzenadj_resolve} if ryzenadj_resolve is not None else {}
+        return RyzenadjBackend(
+            TdpLimits.from_profile(device),
+            require_readback=True,
+            write_temp_limit=False,
+            hard_write_max_mw=capped_max * 1000,
+            read_power_source=lambda: read_mains_state(root),
+            safety_lock_path=_runtime_lock_path(root, f"ryzenadj-{device.key}.lock"),
+            **kwargs,
+        )
+    if getattr(device, "monitor_only_power_fans", False):
+        return NullBackend(f"monitor-only power support for {device.key}")
     desktop_limits = _desktop_limits(device, root, desktop_ceiling_hint_w)
     fallback = desktop_limits or TdpLimits.from_profile(device)
 

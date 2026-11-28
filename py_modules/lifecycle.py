@@ -33,6 +33,24 @@ def read_on_ac(root="/"):
     return port_online and not has_mains
 
 
+def read_mains_state(root="/") -> bool | None:
+    """Return a confirmed Mains state, or None if it cannot be read."""
+    states = []
+    for path in glob.glob(os.path.join(root, "sys/class/power_supply", "*")):
+        try:
+            with open(os.path.join(path, "type"), encoding="utf-8") as handle:
+                if handle.read().strip() != "Mains":
+                    continue
+            with open(os.path.join(path, "online"), encoding="utf-8") as handle:
+                online = handle.read().strip()
+        except OSError:
+            return None
+        if online not in ("0", "1"):
+            return None
+        states.append(online == "1")
+    return any(states) if states else None
+
+
 def _read_wakeup_count(root="/"):
     try:
         with open(os.path.join(root, "sys/power/wakeup_count")) as f:

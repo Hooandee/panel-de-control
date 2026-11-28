@@ -581,6 +581,8 @@ DEFAULTS = {
     # Master switch: when False we stop writing the TDP rails and Potencia drops to
     # monitor-only, handing TDP to another tool.
     "tdp_control_enabled": True,
+    "flip_ds_tdp_control_enabled": False,
+    "flip_ds_low_battery_tdp_hold": False,
     "low_battery_tdp_hold": False,
     # Modules the user turned off in the customization editor (generic ids only;
     # power/learning are folded from tdp_control_enabled/telemetry_enabled).
@@ -716,7 +718,8 @@ class Plugin(AmbientRpc):
         # init or _main bricks plugin load (UI stuck on spinner forever).
         self._device = device_registry.detect()
         self._desktop_recognition_migration_pending = (
-            recognised_desktop_migration_pending(self._settings, self._device)
+            not self._monitor_only_power_fans()
+            and recognised_desktop_migration_pending(self._settings, self._device)
         )
         self._desktop_recognition_migration_last_attempt = float("-inf")
         self._desktop_recognition_migration_last_failure = None
@@ -729,6 +732,9 @@ class Plugin(AmbientRpc):
         self._tdp_profiles = ProfileStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "tdp_profiles.json"),
             default_watts=self._device.tdp_default or 15,
+            auto_enabled_key=(
+                "flip_ds_auto_tdp" if self._capped_ryzenadj_max() is not None else "auto_tdp"
+            ),
         )
         self._power_ownership = PowerOwnershipStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "power_ownership.json")
@@ -745,7 +751,7 @@ class Plugin(AmbientRpc):
         # One-time migration: auto-TDP and GPU clock used to be flat global settings.
         # Seed them into the global Potencia profile so they take part in per-game scope.
         if not self._settings.get("_potencia_scope_migrated"):
-            if self._settings.get("auto_tdp"):
+            if self._capped_ryzenadj_max() is None and self._settings.get("auto_tdp"):
                 self._tdp_profiles.set_auto_tdp("global", True)
             if self._settings.get("gpu_clock_manual"):
                 self._tdp_profiles.set_gpu_clock(
@@ -838,14 +844,15 @@ class Plugin(AmbientRpc):
         self._tdp_profile_sanitize_max = None
         self._tdp_storage_migration_retry_at = 0.0
         # Preserve durable intent while a dynamic hardware ceiling is unreadable.
-        _lim = self._profile_storage_limits()
-        if _lim is None:
-            self._tdp_profile_sanitize_pending = True
-            self._tdp_storage_migration_retry_at = (
-                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
-            )
-        else:
-            self._sanitize_tdp_profiles(self._tdp_request_min(), _lim.max_ac_w)
+        if not self._monitor_only_power_fans():
+            _lim = self._profile_storage_limits()
+            if _lim is None:
+                self._tdp_profile_sanitize_pending = True
+                self._tdp_storage_migration_retry_at = (
+                    _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
+                )
+            else:
+                self._sanitize_tdp_profiles(self._tdp_request_min(), _lim.max_ac_w)
         # Which daemon owns the controller (HHD / InputPlumber / none). Detected
         # once — the resident daemon doesn't change at runtime. Probe never raises.
         self._controller = controller_detect.detect()
@@ -1015,7 +1022,8 @@ class Plugin(AmbientRpc):
         }
         self._smt = SmtControl()
         self._boost = select_boost()
-        self._cores = CoreControl()
+        self._cores = (CoreControl(read_only=True) if self._monitor_only_power_fans()
+                       else CoreControl())
         self._cpu_frequency = self._build_cpu_frequency_control()
         self._cpu_coordinator = CpuCoordinator(
             self._cores, self._smt, self._boost, self._cpu_frequency
@@ -2120,6 +2128,10 @@ class Plugin(AmbientRpc):
         """Persist a module state and reconcile affected runtime ownership."""
         self._init()
         disabled = bool(disabled)
+        if module_id == "power" and self._capped_ryzenadj_max() is not None:
+            await self.set_tdp_control_enabled(not disabled)
+            self._sync_sampler()
+            return {"disabled": self._user_disabled_all()}
         fans_were_on = self._module_enabled("fanControl")
         charge_generation = None
         if module_id in self._MODULE_SETTING:
@@ -4160,6 +4172,18 @@ class Plugin(AmbientRpc):
         )
 
     def _restore_power_handoff(self, preserve_ownership=False) -> bool | None:
+        if self._capped_ryzenadj_max() is not None:
+            backend = self._tdp_backend
+            if not getattr(backend, "has_capped_transaction", False):
+                return True
+            if preserve_ownership and backend.safety_locked:
+                return None
+            if not self._capped_tdp_owner_clear():
+                decky.logger.warning("FLIP 1S DS TDP release deferred: conflicting manager")
+                return False
+            return bool(trace_tdp_operation(backend, "release", backend.release))
+        if self._monitor_only_power_fans():
+            return True
         hardware_released = self._release_tdp_hardware(preserve_ownership)
         if hardware_released is not True:
             return hardware_released
@@ -4197,7 +4221,9 @@ class Plugin(AmbientRpc):
             "write_allowed": True, "reason": "unobserved_legacy",
         }
         supported = self._game_power_ownership_supported()
-        if not supported:
+        if not self._tdp_device_allows_control():
+            state.update(owner=None, write_allowed=False, reason="monitor_only")
+        elif not supported:
             if self._game_power_ownership_has_context():
                 state.update(write_allowed=False, reason="ownership_capability_lost")
             else:
@@ -4207,7 +4233,8 @@ class Plugin(AmbientRpc):
 
     def _game_power_write_allowed(self):
         return (
-            not getattr(self, "_game_power_context_transition", False)
+            self._tdp_device_allows_control()
+            and not getattr(self, "_game_power_context_transition", False)
             and getattr(self, "_game_power_reset", None) is None
             and self._game_power_owner_state()["write_allowed"]
         )
@@ -4493,12 +4520,20 @@ class Plugin(AmbientRpc):
             else "external_owner"
         )
 
+    def _capped_tdp_owner_clear(self) -> bool:
+        return (
+            self._powerstation_detector.tdp_active() is False
+            and (self._controller_backend.manager != controller_detect.HHD
+                 or self._hhd_tdp_client.current_tdp_enable() is False)
+        )
+
     def _tdp_write_authorized(self) -> bool:
         return (
             not self._steam_download_mode_active()
             and self._game_power_write_allowed()
             and (getattr(self, "_os_id", None) != "anatase"
                  or self._tdp_external_owner is False)
+            and (self._capped_ryzenadj_max() is None or self._capped_tdp_owner_clear())
         )
 
     async def _prime_tdp_ownership(self) -> bool | None:
@@ -4630,6 +4665,9 @@ class Plugin(AmbientRpc):
         """Hand HHD's TDP module over to us (reversible), saving its previous value.
         ok only when the echo confirms it's off."""
         self._init()
+        if self._capped_ryzenadj_max() is not None:
+            return {"ok": False, "hhd_managing": False,
+                    "detail": "Disable other TDP managers before enabling Panel"}
         await self._ensure_recognised_desktop_migration()
         if getattr(self, "_desktop_recognition_migration_pending", False):
             managing = await self._offload_call(
@@ -4749,7 +4787,7 @@ class Plugin(AmbientRpc):
         """Return HHD to its previous tdp_enable if we took it. Idempotent. Clears the
         marker only once the write confirms, so a failed hand-back is retried later."""
         prev = self._settings.get("hhd_tdp_prev")
-        if prev is None:
+        if prev is None or self._monitor_only_power_fans():
             return {
                 "ok": True,
                 "hardware_ok": True,
@@ -4808,7 +4846,7 @@ class Plugin(AmbientRpc):
         )
 
     def _restore_hhd_after_tdp_route_loss(self):
-        if self._settings.get("hhd_tdp_prev") is None:
+        if self._monitor_only_power_fans() or self._settings.get("hhd_tdp_prev") is None:
             return None
         self._remember_hhd_takeover(False)
         previous = self._settings.get("tdp_control_enabled", True)
@@ -4834,7 +4872,13 @@ class Plugin(AmbientRpc):
         """OFF = stop writing rails and hand HHD back (step aside). ON = re-assert
         our setpoint."""
         self._init()
+        if not self._tdp_device_allows_control():
+            return False
         enabled = bool(enabled)
+        capped = self._capped_ryzenadj_max() is not None
+        if enabled and capped and not await self._offload_call(self._capped_tdp_owner_clear):
+            decky.logger.warning("FLIP 1S DS TDP enable blocked: another manager is active or unconfirmed")
+            return False
         if enabled:
             await self._ensure_recognised_desktop_migration()
             if getattr(self, "_desktop_recognition_migration_pending", False):
@@ -4863,7 +4907,8 @@ class Plugin(AmbientRpc):
                 )
                 if not recovered:
                     return False
-        self._settings["tdp_control_enabled"] = enabled
+        setting = "flip_ds_tdp_control_enabled" if capped else "tdp_control_enabled"
+        self._settings[setting] = enabled
         self._save()
         if not enabled:
             self._remember_hhd_takeover(False)
@@ -4903,7 +4948,11 @@ class Plugin(AmbientRpc):
                 if self._power_uses_levels():
                     self._apply_cpu()
                     self._apply_gpu_clock()
-                await self._apply_tdp_now("control-enabled")
+                result = await self._apply_tdp_now("control-enabled")
+                if capped and not result.ok:
+                    decky.logger.warning("FLIP 1S DS TDP enable failed: %s", result.detail)
+                    await self.set_tdp_control_enabled(False)
+                    return False
         return enabled
 
     async def set_seen_autotdp_notice(self, seen: bool) -> bool:
@@ -5006,7 +5055,7 @@ class Plugin(AmbientRpc):
 
     # ---- Fan-curve control (global + per-game, persisted) -------------------
     def _recover_gpd_fan_sync(self):
-        if getattr(self, "_gpd_fan_recovery_done", False):
+        if self._monitor_only_power_fans() or getattr(self, "_gpd_fan_recovery_done", False):
             return None
         self._gpd_fan_recovery_done = True
         if bool(getattr(self._fan_ctrl, "supported", False)):
@@ -5045,6 +5094,8 @@ class Plugin(AmbientRpc):
     def _fans_owned_by_panel(self) -> bool:
         # With fan control off, another tool may own the fans; only a release still
         # pending from the switch-off may write them.
+        if self._monitor_only_power_fans():
+            return False
         settings = getattr(self, "_settings", None)
         return (
             settings is None
@@ -5574,6 +5625,8 @@ class Plugin(AmbientRpc):
 
         Guarded: a bad fan apply must never brick load.
         """
+        if self._monitor_only_power_fans():
+            return True
         try:
             self._reapply_ps5_fan_sync()
         except Exception as error:  # noqa: BLE001
@@ -8012,9 +8065,33 @@ class Plugin(AmbientRpc):
                 }, sort_keys=True, separators=(",", ":")),
             )
 
+    def _monitor_only_power_fans(self) -> bool:
+        return getattr(getattr(self, "_device", None), "monitor_only_power_fans", False) is True
+
+    def _capped_ryzenadj_max(self) -> int | None:
+        return getattr(getattr(self, "_device", None), "capped_ryzenadj_max_w", None)
+
+    def _reject_over_capped_tdp(self, watts: int) -> dict | None:
+        ceiling = self._capped_ryzenadj_max()
+        if ceiling is None:
+            return None
+        if type(watts) is not int:
+            detail = "tdp-watts-must-be-an-integer"
+        elif watts > ceiling:
+            detail = f"tdp-request-exceeds-{ceiling}w-ceiling"
+        else:
+            return None
+        return {"requested_w": watts, "applied_w": None, "ok": False, "detail": detail}
+
+    def _tdp_device_allows_control(self) -> bool:
+        return not self._monitor_only_power_fans() or self._capped_ryzenadj_max() is not None
+
     def _tdp_control_on(self) -> bool:
         """Master switch: whether we're allowed to write the TDP rails at all."""
-        return bool(self._settings.get("tdp_control_enabled", True))
+        if self._capped_ryzenadj_max() is not None:
+            return self._settings.get("flip_ds_tdp_control_enabled") is True
+        return (not self._monitor_only_power_fans()
+                and bool(self._settings.get("tdp_control_enabled", True)))
 
     def _reset_power_values_on_unit_change(self) -> None:
         """Saved power values are watts on PC and performance levels on ARM; a value
@@ -8132,6 +8209,8 @@ class Plugin(AmbientRpc):
 
     def _module_user_disabled(self, mid: str) -> bool:
         """Whether the user turned this module off (before cascade/dependency)."""
+        if mid == "power" and self._capped_ryzenadj_max() is not None:
+            return not self._tdp_control_on()
         setting = self._MODULE_SETTING.get(mid)
         if setting is not None:
             return not bool(self._settings.get(setting, True))
@@ -8139,6 +8218,10 @@ class Plugin(AmbientRpc):
 
     def _module_enabled(self, mid: str) -> bool:
         """Effective state: user flag AND requirements (cascade = all, dependency = any)."""
+        if mid == "power" and not self._tdp_device_allows_control():
+            return False
+        if mid == "fanControl" and self._monitor_only_power_fans():
+            return False
         if self._module_user_disabled(mid):
             return False
         req = self._MODULE_REQUIRES.get(mid)
@@ -8155,8 +8238,8 @@ class Plugin(AmbientRpc):
     def _user_disabled_all(self) -> list:
         """The user-disabled set (for the UI), folding the native-setting modules in."""
         out = list(self._disabled_modules())
-        for mid, setting in self._MODULE_SETTING.items():
-            if not bool(self._settings.get(setting, True)):
+        for mid in self._MODULE_SETTING:
+            if self._module_user_disabled(mid):
                 out.append(mid)
         return out
 
@@ -8305,6 +8388,9 @@ class Plugin(AmbientRpc):
     def _apply_tdp_targets(self, target, on_ac, auto_tdp):
         if not self._game_power_write_allowed():
             return TdpResult(target.get("pl1", 0), None, False, "game-power-owner")
+        if self._capped_ryzenadj_max() is not None:
+            if not self._tdp_control_on() or not self._tdp_write_authorized():
+                return TdpResult(target.get("pl1", 0), None, False, "tdp-ownership-unconfirmed")
         self._tdp_backend_used = True
         apply_targets = getattr(
             self._tdp_backend,
@@ -8809,8 +8895,13 @@ class Plugin(AmbientRpc):
             return configured
         return None
 
+    def _low_battery_hold_setting(self) -> str:
+        if self._capped_ryzenadj_max() is not None:
+            return "flip_ds_low_battery_tdp_hold"
+        return "low_battery_tdp_hold"
+
     def _low_battery_hold_decision(self, on_ac=None):
-        enabled = self._settings.get("low_battery_tdp_hold") is True
+        enabled = self._settings.get(self._low_battery_hold_setting()) is True
         strategy = (
             self._low_battery_hold_strategy()
             if enabled
@@ -9551,7 +9642,8 @@ class Plugin(AmbientRpc):
     def _start_tdp_guard_loop(self):
         lifecycle = getattr(self, "_lifecycle", None)
         if (
-            self._tdp_shutdown
+            not self._tdp_device_allows_control()
+            or self._tdp_shutdown
             or self._tdp_guard_task is not None
             or getattr(lifecycle, "_task", None) is None
         ):
@@ -10596,6 +10688,8 @@ class Plugin(AmbientRpc):
         }
 
     def _build_cpu_frequency_control(self):
+        if self._monitor_only_power_fans():
+            return NullCpuFrequency("monitor_only")
         return select_cpu_frequency(
             persisted_state=self._settings.get("cpu_frequency_handoff"),
             persist_state=self._persist_cpu_frequency_state,
@@ -10708,6 +10802,11 @@ class Plugin(AmbientRpc):
         self, intent, generation, enabled=None,
         preserve_frequency_ownership=False, resume_current=None,
     ):
+        if self._monitor_only_power_fans():
+            return CpuCoordinatorResult(
+                False, "unsupported", generation,
+                {"attempted": False, "ok": None}, "monitor_only",
+            )
         if generation != getattr(self, "_cpu_generation", 0):
             return CpuCoordinatorResult(
                 False,
@@ -10772,6 +10871,8 @@ class Plugin(AmbientRpc):
 
     async def _release_cpu_controls(self, trigger) -> bool:
         self._init()
+        if self._monitor_only_power_fans():
+            return True
         result = None
         async with self._cpu_mutation_lock:
             for attempt in range(1, 4):
@@ -10796,6 +10897,8 @@ class Plugin(AmbientRpc):
         self, trigger, preserve_frequency_ownership=False
     ) -> bool:
         self._init()
+        if self._monitor_only_power_fans():
+            return True
         result = None
         for attempt in range(1, 4):
             generation = self._next_cpu_generation()
@@ -10818,7 +10921,7 @@ class Plugin(AmbientRpc):
         return False
 
     def _apply_cpu(self) -> None:
-        if getattr(self, "_cpu_shutdown", False):
+        if self._monitor_only_power_fans() or getattr(self, "_cpu_shutdown", False):
             return
         generation = self._next_cpu_generation()
         current = self._resume_work_current()
@@ -12085,8 +12188,10 @@ class Plugin(AmbientRpc):
             "threads": info["threads"],
             "base_khz": info["base_khz"],
             "max_khz": info["max_khz"],
-            "smt": {"supported": self._smt.supported, "enabled": self._smt.enabled()},
-            "boost": {"supported": self._boost.supported, "enabled": self._boost.enabled()},
+            "smt": {"supported": not self._monitor_only_power_fans() and self._smt.supported,
+                    "enabled": self._smt.enabled()},
+            "boost": {"supported": not self._monitor_only_power_fans() and self._boost.supported,
+                      "enabled": self._boost.enabled()},
             # Active physical cores (None max = feature unavailable on this device).
             "cores_supported": self._cores.supported,
             "max_cores": self._cores.max_cores,
@@ -12238,7 +12343,8 @@ class Plugin(AmbientRpc):
     def _cpu_scope_is_current(
         self, scope, appid, context_appid=_RPC_CONTEXT_UNSET
     ) -> bool:
-        return self._scope_context_is_current(scope, appid, context_appid)
+        return (not self._monitor_only_power_fans()
+                and self._scope_context_is_current(scope, appid, context_appid))
 
     def _exit_eco_for_cpu(self) -> None:
         self._eco_request_generation = getattr(self, "_eco_request_generation", 0) + 1
@@ -12734,7 +12840,7 @@ class Plugin(AmbientRpc):
             return await self._release_gpu_clock_unlocked(trigger)
 
     def _gpu_release_required(self) -> bool:
-        return bool(
+        return not self._monitor_only_power_fans() and bool(
             getattr(self, "_gpu_owned", False)
             or self._settings.get("gpu_handoff_pending", False)
         )
@@ -13939,9 +14045,10 @@ class Plugin(AmbientRpc):
     async def set_low_battery_tdp_hold(self, enabled: bool) -> dict:
         self._init()
         available = bool(self._low_battery_hold_capability_strategy())
-        self._settings["low_battery_tdp_hold"] = bool(enabled) and available
+        setting = self._low_battery_hold_setting()
+        self._settings[setting] = bool(enabled) and available
         self._save()
-        if self._settings["low_battery_tdp_hold"]:
+        if self._settings[setting]:
             await self._apply_tdp_now("low-battery-hold-toggle")
             await self._offload_call(self._tdp_guard_tick)
         else:
@@ -14037,7 +14144,7 @@ class Plugin(AmbientRpc):
         low_battery_hold = self._low_battery_hold_decision(ac)
         hold_available = bool(self._low_battery_hold_capability_strategy())
         hold_enabled = (
-            self._settings.get("low_battery_tdp_hold") is True
+            self._settings.get(self._low_battery_hold_setting()) is True
             and hold_available
         )
         sidecar_active = self._low_battery_sidecar_active()
@@ -14734,6 +14841,8 @@ class Plugin(AmbientRpc):
         return ready
 
     async def _probe_tdp_backend(self, *, force: bool = False) -> bool:
+        if not self._tdp_device_allows_control():
+            return False
         async with self._tdp_probe_lock:
             backend = self._tdp_backend
             now = _monotonic()
@@ -14796,6 +14905,12 @@ class Plugin(AmbientRpc):
             return True
         try:
             backend = self._tdp_backend
+            if self._capped_ryzenadj_max() is not None and (
+                not getattr(backend, "has_capped_transaction", False)
+                or not self._capped_tdp_owner_clear()
+            ):
+                decky.logger.warning("FLIP 1S DS TDP recovery deferred: ownership unconfirmed")
+                return False
             generation = getattr(self, "_tdp_generation", None)
             resume = getattr(backend, "resume_ownership", None)
             resume_ready = getattr(backend, "ownership_resume_ready", None)
@@ -15103,7 +15218,7 @@ class Plugin(AmbientRpc):
             ),
             "low_battery_hold": {
                 "strategy": self._low_battery_hold_capability_strategy(),
-                "enabled": self._settings.get("low_battery_tdp_hold") is True,
+                "enabled": self._settings.get(self._low_battery_hold_setting()) is True,
                 "active": hold_active,
                 "verified": hold_active and hold_verified,
                 "recovery_pending": self._low_battery_hold_recovery_pending,
@@ -15176,6 +15291,9 @@ class Plugin(AmbientRpc):
         context_appid=_RPC_CONTEXT_UNSET,
     ) -> dict:
         self._init()
+        rejected = self._reject_over_capped_tdp(watts)
+        if rejected is not None:
+            return rejected
         if (
             context_appid is not _RPC_CONTEXT_UNSET
             and not self._scope_context_is_current(scope, appid, context_appid)
@@ -15410,6 +15528,9 @@ class Plugin(AmbientRpc):
         """Apply a preset atomically: sustained watts (+ optional boost mode/offsets) in
         one re-apply. Mirrors set_tdp_watts' guards. boost=None leaves boost untouched."""
         self._init()
+        rejected = self._reject_over_capped_tdp(watts)
+        if rejected is not None:
+            return rejected
         if (
             context_appid is not _RPC_CONTEXT_UNSET
             and not self._scope_context_is_current(scope, appid, context_appid)
@@ -15581,6 +15702,8 @@ class Plugin(AmbientRpc):
         return released and marker_saved
 
     def _restore_desktop_power_safe(self) -> bool:
+        if self._monitor_only_power_fans():
+            return True
         try:
             coordinator = getattr(self, "_desktop_power", None)
             if coordinator is None:
@@ -16140,7 +16263,7 @@ class Plugin(AmbientRpc):
         self._log_tdp_backend_diagnostics()
         # Legion Go S hides its fan sensor unless lenovo_wmi_other is loaded with
         # expose_all_fans=Y — enable it (idempotent, no-op elsewhere, never raises).
-        if fan_expose.ensure_fan_sensor():
+        if not self._monitor_only_power_fans() and fan_expose.ensure_fan_sensor():
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
         if getattr(self, "_ps5_console", None) is not None:
