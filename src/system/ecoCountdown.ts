@@ -9,11 +9,14 @@ const RING = 2 * Math.PI * 9;
 function target(): [Document | null, string] {
   const qam = getQamDocument();
   const view = qam?.defaultView;
-  const menu = qam?.querySelector(`.${quickAccessMenuClasses?.Menu}`)?.getBoundingClientRect();
+  // The loader supplies the class map at runtime. @decky/ui 4.x calls the menu class Menu.
+  const classes: { Menu?: string; QuickAccessMenu?: string; Tabs?: string } | undefined = quickAccessMenuClasses;
+  const menuClass = classes?.Menu || classes?.QuickAccessMenu;
+  const menu = menuClass ? qam?.getElementsByClassName(menuClass)[0]?.getBoundingClientRect() : undefined;
   if (!qam || !view || !menu?.width || qam.visibilityState !== "visible" || !qam.hasFocus()) {
     return [findSP()?.document ?? null, "left:50%;bottom:88px"];
   }
-  const tabs = qam.querySelector(`.${quickAccessMenuClasses?.Tabs}`)?.getBoundingClientRect();
+  const tabs = classes?.Tabs ? qam.getElementsByClassName(classes.Tabs)[0]?.getBoundingClientRect() : undefined;
   const left = Math.max(menu.left, tabs?.right ?? menu.left);
   const right = Math.min(menu.right, view.screen.width - view.screenX);
   return [qam, `left:${Math.round((left + right) / 2)}px;bottom:24px`];
