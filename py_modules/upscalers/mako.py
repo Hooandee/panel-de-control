@@ -38,11 +38,36 @@ ASSET5 = Asset("mako-render-5.0.0", "MAKO-Renderer-v5.0.0-linux.tar.xz",
 PAYLOAD5 = PAYLOAD + ("lib/mako-fg/version.json", "lib/mako-fg/mako-fg-host",
                       "lib/mako-fg/model/weights.bin", "lib/mako-fg/model/ops.spv",
                       "lib/mako-fg/model/transport.spv", "lib/mako-fg/model/mixture.spv")
+# aarch64: upstream only publishes x86_64. Use the community build of the SAME Renderer
+# v5.0.0 (Ken5998/mako-arm64, GPL-3.0). On ARM there is no lib32 and no .x86 layer JSON
+# (a single JSON), and the scaling layer ships separately. Engine 5 (MAKO FG) is the only
+# one available on ARM: its host is x86-64 and runs through FEX (experimental); LSFG runs
+# natively in the layer.
+ASSET5_ARM = Asset("mako-render-5.0.0-arm64", "MAKO-Renderer-v5.0.0-linux-arm64.tar.gz",
+                   "3bace05df3c99508f84f403d7a6585de6e2351411bde6fc844141e1e1c854aad", 11218307,
+                   ("https://github.com/Ken5998/mako-arm64/releases/download/v0.1.0/"
+                    "MAKO-Renderer-v5.0.0-linux-arm64.tar.gz",))
+PAYLOAD5_ARM = ("bin/mako-launch", "bin/mako-cli", "bin/mako-vrr-lease",
+                "lib/libmako-render.so", "lib/libmako-render-scaling.so",
+                "share/mako-render/vulkan/implicit_layer.d/VkLayer_MAKO_render.json",
+                "lib/mako-fg/version.json", "lib/mako-fg/mako-fg-host",
+                "lib/mako-fg/model/weights.bin", "lib/mako-fg/model/ops.spv",
+                "lib/mako-fg/model/transport.spv", "lib/mako-fg/model/mixture.spv")
+
+
+def _arm():
+    """True on aarch64/arm64: use the community build and only engine 5."""
+    return platform.machine().lower() in ("aarch64", "arm64")
+
+
 FLOW = {"quality": 1.0, "balanced": 0.75, "performance": 0.5, "fastest": 0.25}
 FG_MODES = ("quality", "balanced", "performance", "extra-performance")
 DEFAULTS = {"enabled": True, "engine": 4, "mode": "fixed", "multiplier": 2, "target_fps": 120,
             "max_multiplier": 3, "flow": "quality", "flow_scale": 0.75, "fg_mode": "balanced", "performance": False,
             "scaling_enabled": False, "scaling_factor": 1.5, "scaling_sharpness": 0.8}
+if _arm():
+    DEFAULTS["engine"] = 5
+
 LOG = logging.getLogger(__name__)
 MAX_JSON = 128 * 1024
 
@@ -184,9 +209,11 @@ class Mako:
             return state, self.prefix, PAYLOAD, VERSION
         if not isinstance(state.get('v5'), dict):
             state['v5'] = {}
-        return state['v5'], self.prefix5, PAYLOAD5, VERSION5
+        return state['v5'], self.prefix5, (PAYLOAD5_ARM if _arm() else PAYLOAD5), VERSION5
 
     def _engine_of(self, appid, profile):
+        if _arm() and profile.get('engine') == 4:
+            return 5
         if profile.get('engine') in (4, 5):
             return profile['engine']
         # Paused profiles written before they recorded their engine: MAKO 5 configs name their model.
@@ -204,15 +231,15 @@ class Mako:
     def status(self):
         with self._lock:
             state = self._state()
-            installed = self._installed(state)
+            installed = self._installed(state, 5 if _arm() else 4)
             dll = self._dll()
             checked = state.get('inspection', {})
             if not isinstance(checked, dict):
                 checked = {}
             compatible = bool(checked.get('compatible') and checked.get('signature') == self._signature(dll))
-            supported = platform.machine().lower() in ('x86_64', 'amd64')
+            supported = platform.machine().lower() in ('x86_64', 'amd64', 'aarch64', 'arm64')
             reason = ('mako_arch' if not supported else 'mako_not_installed' if not installed else
-                      'mako_dll_missing' if not dll else None if compatible else 'mako_unchecked')
+                      None if _arm() else 'mako_dll_missing' if not dll else None if compatible else 'mako_unchecked')
             profiles = {}
             for key, value in list(state['profiles'].items())[:256]:
                 if not isinstance(value, dict) or not re.fullmatch(r'[0-9]{1,20}', key):
@@ -227,7 +254,7 @@ class Mako:
                   'version': state['v5'].get('version', VERSION5) if installed5 else None}
             return {'installed': installed, 'ready': reason is None, 'reason': reason, 'v5': v5,
                     'notice_dismissed': state.get('notice_dismissed') is True,
-                    'supported': supported, 'spatial_ready': supported and (installed or installed5), 'dll': bool(dll), 'version': state.get('version', VERSION) if installed else None,
+                    'supported': supported, 'spatial_ready': supported and (installed or installed5), 'dll': bool(dll), 'version': (state['v5'].get('version', VERSION5) if _arm() else state.get('version', VERSION)) if installed else None,
                     'foreign': (self.home / '.local/bin/mako-run').exists() or (self.home / '.local/bin/mako-launch').exists(),
                     'profiles': profiles}
 
@@ -239,10 +266,13 @@ class Mako:
             return self.status()
 
     def install(self, cache, progress=None, cancelled=None, *, asset=None, version=None, before_commit=None, line=4):
-        asset = asset or (ASSET if line == 4 else ASSET5)
+        if _arm() and line == 4:
+            # En ARM no hay renderer v4: todo va por la linea 5 (build aarch64).
+            line = 5
+        asset = asset or (ASSET5_ARM if _arm() else (ASSET if line == 4 else ASSET5))
         progress = progress or (lambda size: None)
         cancelled = cancelled or (lambda: False)
-        if platform.machine().lower() not in ('x86_64', 'amd64'):
+        if platform.machine().lower() not in ('x86_64', 'amd64', 'aarch64', 'arm64'):
             raise MakoError('mako_arch')
         with self._lock:
             state = self._state()
@@ -279,11 +309,21 @@ class Mako:
             backup = staging.with_name(staging.name + "-previous")
             try:
                 found = set()
-                with tarfile.open(archive, 'r:xz') as handle:
+                with tarfile.open(archive, 'r:*') as handle:
+                    names = [str(Path(name)) for name in handle.getnames()]
+                    roots = {name.split('/', 1)[0] for name in names}
+                    top = ''
+                    if len(roots) == 1 and names:
+                        root = next(iter(roots))
+                        if root and all(name == root or name.startswith(root + '/') for name in names):
+                            if not any(entry == root or entry.startswith(root + '/') for entry in payload):
+                                top = root + '/'
                     for member in handle:
                         name = str(Path(member.name))
                         if Path(name).is_absolute() or '..' in Path(name).parts or member.issym() or member.islnk():
                             raise MakoError('mako_archive')
+                        if top and name.startswith(top):
+                            name = name[len(top):]
                         if name not in payload:
                             continue
                         if name in found or not member.isfile() or not 0 < member.size <= 64 * 1024 * 1024:
@@ -432,11 +472,13 @@ class Mako:
                     self._event(state, 'remove', appid)
                     self._persist_files(changes, state)
                     return {'env': {}, 'wrappers': [], 'profile': None}
-                if platform.machine().lower() not in ('x86_64', 'amd64'):
+                if platform.machine().lower() not in ('x86_64', 'amd64', 'aarch64', 'arm64'):
                     raise MakoError('mako_arch')
                 if appid not in state['profiles'] and len(state['profiles']) + len(paused) >= 256 and appid not in paused:
                     raise MakoError('mako_profile_limit')
                 line = options['engine']
+                if _arm() and line == 4:
+                    line = 5   # ARM has no v4 renderer: every profile goes through the line 5 build
                 self._verify_install(state, line)
                 _, prefix, _, _ = self._line(state, line)
                 dll = self._dll() if options['enabled'] else None

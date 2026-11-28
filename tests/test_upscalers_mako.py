@@ -188,7 +188,7 @@ def test_report_rejects_corrupt_values_and_unrecognized_profiles(setup):
 
 def test_unsupported_arch_and_incompatible_dll_are_explicit(setup, monkeypatch):
     manager, cache, _, _ = setup
-    monkeypatch.setattr(mako.platform, 'machine', lambda: 'aarch64')
+    monkeypatch.setattr(mako.platform, 'machine', lambda: 'ppc64le')
     assert manager.status()['reason'] == 'mako_arch'
     with pytest.raises(mako.MakoError, match='mako_arch'):
         manager.install(cache)
