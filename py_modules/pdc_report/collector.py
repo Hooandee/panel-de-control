@@ -58,6 +58,11 @@ _CONTROLLER_ENUM_PATHS = frozenset({
     ("controller", "buttons", "target", "gamepad"),
     ("controller_diagnostics", "dbus", "capabilities"),
     ("controller_diagnostics", "mapped_buttons", "source"),
+    *(
+        ("journal", part, field)
+        for part in ("recent", "older")
+        for field in ("caps_before", "caps_after", "caps_lost", "caps_gained")
+    ),
 })
 # Identifiers that can appear inside free text (log lines, dmesg/journal output).
 _MAC = re.compile(r"\b(?:[0-9a-fA-F]{2}[:_-]){5}[0-9a-fA-F]{2}\b")

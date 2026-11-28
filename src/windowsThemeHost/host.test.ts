@@ -103,6 +103,17 @@ describe("Windows theme host", () => {
     expect(host.status()).toMatchObject({ revision: 1, steamDocument: true, mounted: ["hooandee-eclipse@0.2.5"], errors: [] });
   });
 
+  it("reports the Big Picture document it mounted on without its query", () => {
+    const doc = document;
+    host = createWindowsThemeHost(scopeWith([{ m_ID: "GamepadUI_Full_Root", doc }]));
+
+    expect(host.status().steamDocumentInfo).toMatchObject({ visibilityState: doc.visibilityState, innerWidth: doc.defaultView?.innerWidth });
+    expect(host.status().steamDocumentInfo?.location).not.toContain("?");
+    host.dispose();
+    host = createWindowsThemeHost(scopeWith([]));
+    expect(host.status().steamDocumentInfo).toBeNull();
+  });
+
   it("unmounts when the theme is turned off and ignores stale revisions", async () => {
     host = createWindowsThemeHost(scopeWith([{ m_ID: "GamepadUI_Full_Root", doc: document }]));
     host.update({ revision: 2, snapshot: snapshot(true), extensions: [extension] });

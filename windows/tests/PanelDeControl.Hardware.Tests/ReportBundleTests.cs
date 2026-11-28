@@ -61,6 +61,25 @@ public sealed class ReportBundleTests : IDisposable
     }
 
     [Fact]
+    public void BundleCarriesTheThemeEngineSectionRedacted()
+    {
+        var engine = new JsonObject
+        {
+            ["current"] = new JsonObject { ["themes"] = new JsonArray() },
+            ["last_while_enabled"] = new JsonObject
+            {
+                ["targets"] = new JsonArray(new JsonObject { ["title"] = @"C:\Users\Hooandee\Steam", ["big_picture"] = true }),
+            },
+        };
+
+        var section = Build(new JsonObject(), engine)["windows"]!["theme_engine"]!;
+
+        Assert.True(section["last_while_enabled"]!["targets"]![0]!["big_picture"]!.GetValue<bool>());
+        Assert.Equal(@"~\Steam", section["last_while_enabled"]!["targets"]![0]!["title"]!.GetValue<string>());
+        Assert.Null(Build(new JsonObject())["windows"]!["theme_engine"]);
+    }
+
+    [Fact]
     public void LogsShareOneBudgetAndStartOnAWholeLine()
     {
         var log = Path.Combine(folder, "companion.log");
@@ -135,7 +154,7 @@ public sealed class ReportBundleTests : IDisposable
         Assert.Equal("panel-de-control", JsonNode.Parse(File.ReadAllText(response.SavedPath!))!["app"]!.GetValue<string>());
     }
 
-    private JsonObject Build(JsonObject machine)
+    private JsonObject Build(JsonObject machine, JsonNode? themeEngine = null)
     {
         return ReportBundleBuilder.Build(
             new ReportRequest(ReportKind.Bug, new[] { "themes" }, "Duo no se aplica"),
@@ -144,7 +163,8 @@ public sealed class ReportBundleTests : IDisposable
             new JsonObject(),
             machine,
             Array.Empty<ReportLogSource>(),
-            redactor);
+            redactor,
+            themeEngine);
     }
 
     private ReportSender Sender(StubHandler handler)

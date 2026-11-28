@@ -606,6 +606,11 @@ public sealed class ThemesView : UserControl
         {
             version = $"{Localized("ThemesEarlyTag")} · {version}";
         }
+
+        if (theme.EarlyUpdateAvailable)
+        {
+            version = $"{version} · {string.Format(Localized("ThemesEarlyUpdateAvailable"), theme.EarlyVersion)}";
+        }
         if (!theme.Enabled)
         {
             return (version, "PdcTextMutedBrush");
@@ -714,7 +719,7 @@ public sealed class ThemesView : UserControl
                     $"early-{Guid.NewGuid():N}.zip",
                     NameCollisionOption.ReplaceExisting);
                 return await client.InstallEarlyAsync(catalogId, copy.Path);
-            });
+            }, card.Entry?.EarlyVersion);
         }
         finally
         {
@@ -742,7 +747,7 @@ public sealed class ThemesView : UserControl
         await RunAsync(() => client.SetOptionAsync(card.Name, option, value));
     }
 
-    private async Task RunAsync(Func<Task<ThemesResponse>> operation)
+    private async Task RunAsync(Func<Task<ThemesResponse>> operation, string? publishedEarly = null)
     {
         if (operationPending)
         {
@@ -765,14 +770,15 @@ public sealed class ThemesView : UserControl
             operationPending = false;
         }
 
-        Apply(response, response.Status == ThemesResponseStatus.Ok ? null : ErrorText(response.ErrorCode));
+        Apply(response, response.Status == ThemesResponseStatus.Ok ? null : ErrorText(response.ErrorCode, publishedEarly));
     }
 
-    private static string ErrorText(string? code) => code switch
+    private static string ErrorText(string? code, string? publishedEarly = null) => code switch
     {
         "artifact_hash_mismatch" or "artifact_size_mismatch" or "invalid_archive" or "unsafe_archive" or "invalid_package" or "identity_mismatch" =>
             Localized("ThemesErrorPackage"),
         "catalog_unavailable" or "publication_changed" => Localized("ThemesErrorCatalog"),
+        "early_archive_unpublished" when publishedEarly is not null => string.Format(Localized("ThemesErrorEarlyOther"), publishedEarly),
         "early_archive_unpublished" or "unknown_theme" => Localized("ThemesErrorEarlyUnpublished"),
         "themes_timeout" or "themes_response_unavailable" => Localized("ThemesErrorTimeout"),
         _ => Localized("ThemesErrorGeneric"),

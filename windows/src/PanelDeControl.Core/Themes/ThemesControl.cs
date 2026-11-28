@@ -328,6 +328,15 @@ public sealed class ThemeEntry
     public bool UpdateAvailable =>
         InstalledVersion is not null && PublishedVersion is not null && Broken is null && CompareVersions(PublishedVersion, InstalledVersion) > 0;
 
+    /// <summary>
+    /// The published early is newer than the installed version (and than the stable one, whose update covers it):
+    /// an installed theme learns of it the same way a missing one does.
+    /// </summary>
+    public bool EarlyUpdateAvailable =>
+        InstalledVersion is not null && EarlyVersion is not null && Broken is null
+        && CompareVersions(EarlyVersion, InstalledVersion) > 0
+        && (PublishedVersion is null || CompareVersions(EarlyVersion, PublishedVersion) > 0);
+
     /// <summary>Applied means every targeted Steam page read back complete and the runtime mounted.</summary>
     public bool Applied =>
         Enabled && PagesExpected > 0 && PagesApplied == PagesExpected && (!RuntimeExpected || RuntimeMounted);

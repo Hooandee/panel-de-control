@@ -16,7 +16,15 @@ public enum SteamThemeConnection
 
 public sealed record ThemePageStatus(string Title, int Expected, int Applied);
 
-public sealed record ThemeHostStatus(bool Present, bool SteamDocument, IReadOnlyList<string> Mounted, IReadOnlyList<string> Errors, bool GameRunning = false);
+public sealed record HostDocumentInfo(string Title, string Location, string VisibilityState, int InnerWidth, int InnerHeight);
+
+public sealed record ThemeHostStatus(
+    bool Present,
+    bool SteamDocument,
+    IReadOnlyList<string> Mounted,
+    IReadOnlyList<string> Errors,
+    bool GameRunning = false,
+    HostDocumentInfo? Document = null);
 
 public sealed record ThemeEngineStatus(
     long Cycle,
@@ -27,6 +35,8 @@ public sealed record ThemeEngineStatus(
     string? LastError)
 {
     public long InputsGeneration { get; init; }
+
+    public ThemeDiagnostics? Diagnostics { get; init; }
 
     public static ThemeEngineStatus Initial { get; } = new(
         0,
@@ -58,7 +68,7 @@ public sealed class SteamThemeEngine
     private const string HostGlobal = "__pdcWindowsThemeHost";
 
     /// <summary>Must match <c>WINDOWS_THEME_HOST_VERSION</c>: an older host left in Steam by a previous build is replaced.</summary>
-    public const int HostVersion = 13;
+    public const int HostVersion = 14;
 
     private static readonly TimeSpan CycleInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan IdleCycleInterval = TimeSpan.FromSeconds(30);
@@ -86,6 +96,7 @@ public sealed class SteamThemeEngine
     private long hostRevision;
     private string? hostInputsFingerprint;
     private ThemeEngineStatus status = ThemeEngineStatus.Initial;
+    private ThemeDiagnostics? lastEnabledDiagnostics;
     private TaskCompletionSource<ThemeEngineStatus> nextCycle = NewCycleSignal();
 
     public SteamThemeEngine(
@@ -113,6 +124,18 @@ public sealed class SteamThemeEngine
             lock (statusGate)
             {
                 return status;
+            }
+        }
+    }
+
+    /// <summary>The newest cycle that ran with a theme enabled, kept after the themes are turned off.</summary>
+    public ThemeDiagnostics? LastEnabledDiagnostics
+    {
+        get
+        {
+            lock (statusGate)
+            {
+                return lastEnabledDiagnostics;
             }
         }
     }
@@ -245,6 +268,24 @@ public sealed class SteamThemeEngine
 
     internal async Task<ThemeEngineStatus> CycleAsync(CancellationToken cancellationToken)
     {
+        var result = await RunCycleAsync(cancellationToken).ConfigureAwait(false);
+        // A closed or restarting Steam still lists the enabled themes; that empty snapshot
+        // must not replace the last one that saw Steam.
+        if (result.Diagnostics is { Themes.Count: > 0 } diagnostics
+            && (result.Connection is SteamThemeConnection.Connected or SteamThemeConnection.WaitingForBigPicture
+                || diagnostics.Targets.Count > 0))
+        {
+            lock (statusGate)
+            {
+                lastEnabledDiagnostics = diagnostics;
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<ThemeEngineStatus> RunCycleAsync(CancellationToken cancellationToken)
+    {
         var cycle = Status.Cycle + 1;
         var generation = Interlocked.Read(ref requestedGeneration);
         if (inputs is null || generation != loadedGeneration)
@@ -297,12 +338,20 @@ public sealed class SteamThemeEngine
         }
 
         var pageStatuses = new List<ThemePageStatus>();
+        var cssResults = new Dictionary<string, (int Expected, int Applied)>(StringComparer.Ordinal);
+        var bigPictureIds = new HashSet<string>(StringComparer.Ordinal);
         var applied = current.Enabled.ToDictionary(selection => selection.Theme.Name, _ => (expected: 0, applied: 0), StringComparer.Ordinal);
         var bigPictureSeen = false;
         foreach (var target in live.Where(target => target.Title != SharedContextTitle))
         {
             var steamTarget = new SteamTarget(target.Id, target.Title, target.Url, pages.TryGetValue(target.Id, out var known) ? known.Classes : new HashSet<string>());
-            bigPictureSeen |= ThemeTargetMatcher.IsBigPicture(steamTarget);
+            var isBigPicture = ThemeTargetMatcher.IsBigPicture(steamTarget);
+            bigPictureSeen |= isBigPicture;
+            if (isBigPicture)
+            {
+                bigPictureIds.Add(target.Id);
+            }
+
             var sheets = ThemeComposer.SheetsFor(steamTarget, current.Enabled);
             if (sheets.Count == 0 && !pages.ContainsKey(target.Id)
                 && !await HasLeftoverSheetsAsync(target, cancellationToken).ConfigureAwait(false))
@@ -315,6 +364,7 @@ public sealed class SteamThemeEngine
                 var session = await SessionAsync(target, cancellationToken).ConfigureAwait(false);
                 var count = await SyncPageAsync(target, session, sheets, cancellationToken).ConfigureAwait(false);
                 pageStatuses.Add(new ThemePageStatus(target.Title, sheets.Count, count));
+                cssResults[target.Id] = (sheets.Count, count);
                 foreach (var theme in sheets.Select(sheet => sheet.ThemeName).Distinct())
                 {
                     var entry = applied[theme];
@@ -326,6 +376,7 @@ public sealed class SteamThemeEngine
                 cancellationToken.ThrowIfCancellationRequested();
                 lastError = "page_unavailable";
                 pageStatuses.Add(new ThemePageStatus(target.Title, sheets.Count, 0));
+                cssResults[target.Id] = (sheets.Count, 0);
                 await DropAsync(target.Id).ConfigureAwait(false);
             }
         }
@@ -339,25 +390,47 @@ public sealed class SteamThemeEngine
                 return new ThemeApplication(applied[selection.Theme.Name].expected, applied[selection.Theme.Name].applied, extension is not null, mounted);
             },
             StringComparer.Ordinal);
-        return new ThemeEngineStatus(
-            cycle,
-            bigPictureSeen ? SteamThemeConnection.Connected : SteamThemeConnection.WaitingForBigPicture,
-            pageStatuses,
-            host,
-            themes,
-            lastError);
+        var connected = bigPictureSeen ? SteamThemeConnection.Connected : SteamThemeConnection.WaitingForBigPicture;
+        return new ThemeEngineStatus(cycle, connected, pageStatuses, host, themes, lastError)
+        {
+            Diagnostics = new ThemeDiagnostics(
+                DateTimeOffset.UtcNow,
+                connected.ToString(),
+                targets.Select(target => new ThemeTargetDiagnostics(
+                    target.Type,
+                    target.Title,
+                    ThemeDiagnostics.SanitizeUrl(target.Url),
+                    bigPictureIds.Contains(target.Id),
+                    cssResults.TryGetValue(target.Id, out var css) ? css.Expected : null,
+                    cssResults.TryGetValue(target.Id, out css) ? css.Applied : null)).ToArray(),
+                host,
+                themes,
+                liveClasses?.Count,
+                classTable.Describe(steam.BetaClient),
+                lastError),
+        };
     }
 
-    private ThemeEngineStatus Disconnected(long cycle, SteamThemeConnection connection, ThemeEngineInputs current) => new(
-        cycle,
-        connection,
-        Array.Empty<ThemePageStatus>(),
-        new ThemeHostStatus(false, false, Array.Empty<string>(), Array.Empty<string>()),
-        current.Enabled.ToDictionary(
+    private ThemeEngineStatus Disconnected(long cycle, SteamThemeConnection connection, ThemeEngineInputs current)
+    {
+        var host = new ThemeHostStatus(false, false, Array.Empty<string>(), Array.Empty<string>());
+        var themes = current.Enabled.ToDictionary(
             selection => selection.Theme.Name,
             selection => new ThemeApplication(0, 0, selection.Theme.Marker?.Extension is not null, false),
-            StringComparer.Ordinal),
-        null);
+            StringComparer.Ordinal);
+        return new ThemeEngineStatus(cycle, connection, Array.Empty<ThemePageStatus>(), host, themes, null)
+        {
+            Diagnostics = new ThemeDiagnostics(
+                DateTimeOffset.UtcNow,
+                connection.ToString(),
+                Array.Empty<ThemeTargetDiagnostics>(),
+                host,
+                themes,
+                null,
+                classTable.Describe(steam.BetaClient),
+                null),
+        };
+    }
 
     private void Publish(ThemeEngineStatus result)
     {
@@ -617,7 +690,29 @@ public sealed class SteamThemeEngine
             status.TryGetProperty("steamDocument", out var document) && document.ValueKind == JsonValueKind.True,
             Strings(status, "mounted"),
             Strings(status, "errors"),
-            status.TryGetProperty("gameRunning", out var gameRunning) && gameRunning.ValueKind == JsonValueKind.True);
+            status.TryGetProperty("gameRunning", out var gameRunning) && gameRunning.ValueKind == JsonValueKind.True,
+            ReadDocument(status));
+    }
+
+    private static HostDocumentInfo? ReadDocument(JsonElement status)
+    {
+        if (!status.TryGetProperty("steamDocumentInfo", out var info) || info.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        static string Text(JsonElement element, string name) =>
+            element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
+
+        static int Number(JsonElement element, string name) =>
+            element.TryGetProperty(name, out var value) && value.TryGetInt32(out var number) ? number : 0;
+
+        return new HostDocumentInfo(
+            Text(info, "title"),
+            ThemeDiagnostics.SanitizeUrl(Text(info, "location")),
+            Text(info, "visibilityState"),
+            Number(info, "innerWidth"),
+            Number(info, "innerHeight"));
     }
 
     private async Task RefreshTranslatorAsync(string sessionId, ICdpSession session, CancellationToken cancellationToken)

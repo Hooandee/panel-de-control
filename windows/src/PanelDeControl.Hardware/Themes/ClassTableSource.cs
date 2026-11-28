@@ -2,9 +2,14 @@ using System.Net.Http;
 
 namespace PanelDeControl.Hardware.Themes;
 
+/// <summary>Rows in the class table in use and how old its cache file is; null when there is none.</summary>
+public sealed record ClassTableInfo(int Rows, double? AgeHours);
+
 public interface IClassTableSource
 {
     IReadOnlyList<IReadOnlyList<string>>? Current(bool betaClient);
+
+    ClassTableInfo? Describe(bool betaClient) => null;
 }
 
 /// <summary>
@@ -48,6 +53,16 @@ public sealed class ClassTableSource : IClassTableSource, IDisposable
 
             channels[betaClient] = channel;
             return channel.Table;
+        }
+    }
+
+    public ClassTableInfo? Describe(bool betaClient)
+    {
+        lock (gate)
+        {
+            var rows = channels.TryGetValue(betaClient, out var channel) ? channel.Table?.Count ?? 0 : 0;
+            var written = CacheTime(betaClient);
+            return new ClassTableInfo(rows, written == DateTime.MinValue ? null : Math.Round((DateTime.UtcNow - written).TotalHours, 1));
         }
     }
 

@@ -38,7 +38,8 @@ public static class ReportBundleBuilder
         JsonNode? capabilityInventory,
         JsonNode? machine,
         IEnumerable<ReportLogSource> logs,
-        ReportRedactor redactor)
+        ReportRedactor redactor,
+        JsonNode? themeEngine = null)
     {
         var bundle = new JsonObject
         {
@@ -71,6 +72,7 @@ public static class ReportBundleBuilder
             {
                 ["capability_inventory"] = capabilityInventory,
                 ["machine"] = machine,
+                ["theme_engine"] = themeEngine,
             },
         };
         return (JsonObject)Redact(bundle, redactor, keepSerialRuns: false)!;
