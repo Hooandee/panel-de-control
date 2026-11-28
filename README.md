@@ -133,6 +133,10 @@ Pero muchas más han recibido soporte: OneXFly Apex, GPD Win 5, GPD Win Mini, AO
 OneXPlayer X2 Mini Pro y unas cuantas más, incluso PC de sobremesa, la Steam Machine y la PS5 con Linux. Si tu
 equipo no está en la lista, Panel mira qué se puede controlar en él y te enseña eso.
 
+En Linux, Panel reconoce la **AYANEO FLIP 1S DS** y muestra las RPM del ventilador
+si el kernel las publica mediante `ayaneo_ec`. Los controles de CPU, GPU, TDP y
+ventilador quedan a cargo del sistema o de las herramientas que ya uses.
+
 ## 📦 Instalación
 
 Con [Decky Loader](https://decky.xyz/) instalado:

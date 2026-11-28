@@ -540,6 +540,8 @@ class Ps5GpuClock(DevfreqGpuClock):
 
 def select_gpu_clock(device, root="/"):
     """AMD → amdgpu OverDrive; Intel → xe (newer) then i915; else Null."""
+    if getattr(device, "monitor_only_power_fans", False):
+        return NullGpuClock()
     if getattr(device, "arch", "x86") == "arm":
         order = (DevfreqGpuClock,)
     elif getattr(device, "key", None) == "playstation_5":

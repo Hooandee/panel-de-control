@@ -77,6 +77,8 @@ class DeviceProfile:
     # x86-only paths (watt-based TDP backends, ryzenadj, amdgpu/i915 clocks).
     arch: str = "x86"
     dt_compatible: tuple[str, ...] = field(default_factory=tuple)
+    # Keep CPU, GPU, TDP and fan control with the system or another tool.
+    monitor_only_power_fans: bool = False
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -236,6 +238,11 @@ DEVICE_TABLE = (
                   8, 15, 35, 35,
                   dmi_matches=(DmiMatch("AYANEO 3", "AYANEO"),),
                   experimental=True),
+    DeviceProfile("ayaneo_flip_1s_ds", "AYANEO FLIP 1S DS",
+                  "AMD Ryzen AI 9 HX 370", "amd",
+                  0, 0, 0, 0,
+                  dmi_matches=(DmiMatch("FLIP 1S DS", "AYANEO"),),
+                  experimental=True, monitor_only_power_fans=True),
     DeviceProfile("aokzoe_a1x", "AOKZOE A1X", "AMD Ryzen AI 9 HX 370", "amd",
                   4, 18, 30, 30, match_names=("AOKZOE A1X",), experimental=True,
                   tdp_presets=(12, 18, 30, 30)),

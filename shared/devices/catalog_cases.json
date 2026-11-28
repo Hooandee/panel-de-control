@@ -15,6 +15,9 @@
     {"id": "dmi_exact_board_match", "input": {"product_name": "ZOTAC GAMING ZONE", "sys_vendor": "ZOTAC", "board_name": "G1A1W"}, "expected": {"key": "zotac_gaming_zone"}},
     {"id": "dmi_rejects_wrong_vendor", "input": {"product_name": "ZOTAC GAMING ZONE", "sys_vendor": "Other", "board_name": "G1A1W"}, "expected": {"key": "generic"}},
     {"id": "dmi_case_and_space_insensitive", "input": {"product_name": " ayaneo 3 ", "sys_vendor": "ayaneo", "board_name": ""}, "expected": {"key": "ayaneo_3"}},
+    {"id": "ayaneo_flip_1s_ds", "input": {"product_name": "FLIP 1S DS", "sys_vendor": "AYANEO", "board_name": "FLIP 1S DS"}, "expected": {"key": "ayaneo_flip_1s_ds"}},
+    {"id": "ayaneo_flip_1s_ds_wrong_vendor", "input": {"product_name": "FLIP 1S DS", "sys_vendor": "Other", "board_name": "FLIP 1S DS"}, "expected": {"key": "generic"}},
+    {"id": "ayaneo_flip_1s_kb", "input": {"product_name": "FLIP 1S KB", "sys_vendor": "AYANEO", "board_name": ""}, "expected": {"key": "generic"}},
     {"id": "unknown_device", "input": {"product_name": "Some Laptop 15", "sys_vendor": "Contoso", "board_name": "X1"}, "expected": {"key": "generic"}},
     {"id": "empty_identity", "input": {"product_name": "", "sys_vendor": "", "board_name": ""}, "expected": {"key": "generic"}}
   ]

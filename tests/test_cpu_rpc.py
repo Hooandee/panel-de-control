@@ -5,8 +5,10 @@ never touches live hardware, then inject fake SMT/boost controls.
 """
 import asyncio
 import importlib
+import json
 import sys
 import types
+from functools import partial
 
 from cpu.frequency import CpuFrequencyResult
 
@@ -99,7 +101,8 @@ class _FakeFrequency:
         }
 
 
-def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None, frequency=None):
+def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None, frequency=None,
+                 *, fake_tdp=True):
     fake_decky = types.ModuleType("decky")
     fake_decky.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
     fake_decky.DECKY_USER = "deck"
@@ -131,7 +134,8 @@ def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None, freque
         def read_applied(self):
             return 15
 
-    monkeypatch.setattr(factory, "select_backend", lambda device, **kw: _FakeBackend())
+    if fake_tdp:
+        monkeypatch.setattr(factory, "select_backend", lambda device, **kw: _FakeBackend())
 
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)
@@ -161,6 +165,71 @@ def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None, freque
         monkeypatch.setattr(main.Plugin, "_init", patched_init)
 
     return main.Plugin()
+
+
+def test_flip_ds_lifecycle_leaves_power_and_fans_to_the_system(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    files = {
+        "class/dmi/id/sys_vendor": "AYANEO",
+        "class/dmi/id/product_name": "FLIP 1S DS",
+        "class/hwmon/hwmon7/name": "ayaneo_ec",
+        "class/hwmon/hwmon7/fan1_input": "3599",
+        "class/hwmon/hwmon7/pwm1_enable": "2",
+        "devices/system/cpu/cpu2/online": "0",
+        "devices/system/cpu/smt/control": "off",
+        "devices/system/cpu/cpufreq/boost": "0",
+    }
+    for name, value in files.items():
+        path = tmp_path / "sys" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(value)
+    (tmp_path / "state.json").write_text(json.dumps({
+        "tdp_control_enabled": True, "hhd_tdp_takeover": True, "hhd_tdp_prev": True,
+        "gpu_handoff_pending": True, "fan_release_pending": True,
+        "desktop_mode_enabled": True, "desktop_power_mode": "performance",
+    }))
+
+    plugin = _make_plugin(tmp_path, monkeypatch, fake_tdp=False)
+    import main
+
+    detect = main.device_registry.detect
+    monkeypatch.setattr(main.device_registry, "detect", partial(detect, root=root))
+    for name in ("CoreControl", "SmtControl", "select_boost", "FanReader"):
+        monkeypatch.setattr(main, name, partial(getattr(main, name), root=root))
+    select_fan = main.fan_control.select_fan_backend
+    monkeypatch.setattr(main.fan_control, "select_fan_backend", partial(select_fan, root=root))
+    monkeypatch.setattr(main.Plugin, "_start_steam_inventory_compat", lambda self: None)
+    monkeypatch.setattr(main.osinfo, "read_os_id", lambda: "cachyos")
+
+    writes = []
+
+    def reject_write(*args, **kwargs):
+        writes.append((args, kwargs))
+        raise AssertionError("unexpected power or fan write")
+
+    monkeypatch.setattr(main.CpuCoordinator, "apply", reject_write)
+    monkeypatch.setattr(main.fan_expose, "ensure_fan_sensor", reject_write)
+    monkeypatch.setattr(main.controller_hhd, "set_tdp_enable", reject_write)
+
+    async def exercise():
+        await plugin._main()
+        try:
+            assert (await plugin.get_device())["key"] == "ayaneo_flip_1s_ds"
+            plugin._reapply_all(on_ac=False)
+            await plugin._drain_offloaded()
+            fan = await plugin.get_fan_state()
+            assert [(item["rpm"], item["percent"]) for item in fan["fans"]] == [(3599, None)]
+            assert not (await plugin.set_smt(True))["smt"]["supported"]
+            assert not (await plugin.set_gpu_clock(600, 1200))["supported"]
+            assert not await plugin.set_tdp_control_enabled(True)
+            assert not (await plugin.set_fan_preset("balanced", "global"))["supported"]
+        finally:
+            await plugin._unload()
+
+    asyncio.run(exercise())
+    assert writes == []
+    for name, value in files.items():
+        assert (tmp_path / "sys" / name).read_text() == value
 
 
 def test_get_cpu_state_shape(tmp_path, monkeypatch):

@@ -133,6 +133,10 @@ Many more have received support too: OneXFly Apex, GPD Win 5, GPD Win Mini, AOKZ
 OneXPlayer X2 Mini Pro and quite a few others, even desktop PCs, the Steam Machine and the PS5 running Linux. If
 your device isn't on the list, Panel looks at what it can control on it and shows you that.
 
+On Linux, Panel recognizes the **AYANEO FLIP 1S DS** and displays fan RPM when the
+kernel exposes it through `ayaneo_ec`. CPU, GPU, TDP and fan controls remain with
+the system or your existing tools; Panel does not take them over.
+
 ## 📦 Installation
 
 With [Decky Loader](https://decky.xyz/) installed:

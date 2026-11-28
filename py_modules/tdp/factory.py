@@ -326,6 +326,8 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
                    desktop_ceiling_hint_w=None) -> TDPBackend:
     """Pick the first supported TDP strategy for the detected device; else NullBackend.
     A desktop CPU is only driven when its firmware PL1 ceiling is readable."""
+    if getattr(device, "monitor_only_power_fans", False):
+        return NullBackend(f"monitor-only power support for {device.key}")
     desktop_limits = _desktop_limits(device, root, desktop_ceiling_hint_w)
     fallback = desktop_limits or TdpLimits.from_profile(device)
 
