@@ -476,7 +476,7 @@ def test_panel_resolution_prefers_the_internal_panel(tmp_path):
 
 def test_compatibility_flags_games_that_ship_an_upscaler(steam, fake_catalog, proc):
     service = _service(steam, fake_catalog, proc)
-    assert service.compatibility([APPID, "999"]) == {APPID: {"native": False, "inputs": ["DLSS", "FSR 3.1"], "preferred": "fsr-4.1.2-beta"}}
+    assert service.compatibility([APPID, "999"]) == {APPID: {"native": False, "inputs": ["DLSS", "FSR 3.1"], "preferred": "fsr-test"}}
 
 
 def test_log_reader_takes_real_optiscaler_lines(tmp_path):
@@ -1843,7 +1843,7 @@ def test_appimage_shortcut_on_the_desktop_is_a_linux_game_not_the_desktop_folder
         {"appid": shortcut_id, "name": "Uncharted", "exe": f'"{app}"', "start": f'"{desktop}"'},
     ]))
     service = _service(steam, fake_catalog, proc)
-    assert service.compatibility([str(shortcut_id)])[str(shortcut_id)] == {"native": True, "inputs": [], "preferred": "fsr-4.1.2-beta"}
+    assert service.compatibility([str(shortcut_id)])[str(shortcut_id)] == {"native": True, "inputs": [], "preferred": "fsr-test"}
     with pytest.raises(UpscalerError):
         service.install(str(shortcut_id), {"build": "fsr-test"})
     assert not (desktop / "HelixSR/setup/dxgi.dll").exists()
@@ -2081,6 +2081,134 @@ def test_a_users_mod_goes_in_with_optiscaler_and_leaves_with_it(steam, fake_cata
     service.uninstall(APPID)
     assert (target / "D3D12.dll").read_bytes() == b"game's own"
     assert not (target / "dxgi.dll").exists() and not (target / "ERSS2").exists()
+
+
+def test_a_loose_mod_dll_is_installed_and_the_original_is_restored(steam, fake_catalog, proc):
+    home, game = steam
+    target = game / "bin/x64_dx12"
+    original = target / "D3D12.dll"
+    _write(original, b"original")
+    dll = home / "Downloads/d3d12.dll"
+    _write(dll, b"replacement")
+    service = _service(steam, fake_catalog, proc)
+
+    assert service.mod_candidates(APPID)["candidates"] == []
+    assert service.add_mod(APPID, str(dll))["mod"]["files"] == ["D3D12.dll"]
+    service.install(APPID, {"build": "fsr-test"})
+    assert original.read_bytes() == b"replacement"
+    assert service.game(APPID)["mod"]["applied"] is True
+
+    reserved = home / "Downloads/nvngx_dlss.dll"
+    _write(reserved, b"reserved")
+    with pytest.raises(UpscalerError, match="mod_conflict"):
+        service.add_mod(APPID, str(reserved))
+    assert service.game(APPID)["mod"]["applied"] is True
+
+    service.uninstall(APPID)
+    assert original.read_bytes() == b"original"
+    assert [entry.name for entry in target.iterdir() if entry.name.casefold() == "d3d12.dll"] == ["D3D12.dll"]
+    assert dll.read_bytes() == b"replacement"
+
+
+def test_loose_mod_dll_refuses_multiple_casefold_aliases(tmp_path):
+    from upscalers import user_mods
+
+    dll = _write(tmp_path / "d3d12.dll")
+    store = user_mods.Store(tmp_path / "store")
+    with pytest.raises(user_mods.ModError, match="^ambiguous_files$"):
+        store.adopt(APPID, dll, ".", {"D3D12.dll", "d3d12.dll"}, set())
+    assert store.status(APPID) is None
+
+
+def test_failed_mod_publication_preserves_the_previous_mod(tmp_path, monkeypatch):
+    from upscalers import user_mods
+
+    first = _write(tmp_path / "first.dll", b"first")
+    second = _write(tmp_path / "second.dll", b"second")
+    store = user_mods.Store(tmp_path / "store")
+    previous = store.adopt(APPID, first, ".", set(), set())
+    replace = os.replace
+
+    def fail_publication(source, destination):
+        if destination == store.root / APPID:
+            monkeypatch.setattr(os, "replace", replace)
+            raise OSError("publication failed")
+        replace(source, destination)
+
+    monkeypatch.setattr(os, "replace", fail_publication)
+    with pytest.raises(user_mods.ModError, match="^unreadable$"):
+        store.adopt(APPID, second, ".", set(), set())
+
+    assert store.status(APPID) == previous
+    assert store.sources(APPID)["first.dll"].read_bytes() == b"first"
+    assert store.adopt(APPID, second, ".", set(), set())["filename"] == "second.dll"
+
+
+def test_loose_mod_dll_refuses_a_destination_symlink(steam, fake_catalog, proc):
+    home, game = steam
+    dll = _write(home / "Downloads/custom.dll")
+    outside = _write(home / "protected.dll", b"original")
+    link = game / "bin/x64_dx12/CUSTOM.dll"
+    link.symlink_to(outside)
+    service = _service(steam, fake_catalog, proc)
+
+    with pytest.raises(UpscalerError, match="^mod_unsafe_archive$"):
+        service.add_mod(APPID, str(dll))
+    assert link.is_symlink()
+    assert outside.read_bytes() == b"original"
+    assert service.game(APPID)["mod"] is None
+
+
+def test_loose_mod_dll_refuses_a_source_symlink(steam, fake_catalog, proc):
+    home, _ = steam
+    dll = _write(home / "protected.dll")
+    link = home / "Downloads/custom.dll"
+    link.parent.mkdir(exist_ok=True)
+    link.symlink_to(dll)
+    service = _service(steam, fake_catalog, proc)
+
+    with pytest.raises(UpscalerError, match="^mod_unreadable$"):
+        service.add_mod(APPID, str(link))
+    assert service.game(APPID)["mod"] is None
+
+
+@pytest.mark.parametrize(("change", "code"), [
+    ("grow", "too_large"),
+    ("symlink", "unreadable"),
+    ("fifo", "unreadable"),
+    ("backslash", "unsafe_archive"),
+])
+def test_loose_mod_dll_checks_the_source_before_copying(tmp_path, monkeypatch, change, code):
+    from upscalers import user_mods
+
+    dll = tmp_path / (r"folder\custom.dll" if change == "backslash" else "custom.dll")
+    dll.write_bytes(b"initial")
+    replacement = tmp_path / "replacement.dll"
+    replacement.write_bytes(b"outside selection")
+    monkeypatch.setattr(user_mods.user_deps, "MAX_MEMBER", len(b"initial"))
+    extract = user_mods._extract_all
+
+    def change_source(path, wanted, destination, password):
+        if change == "grow":
+            with path.open("ab") as source:
+                source.write(b"extra")
+        elif change == "symlink":
+            path.unlink()
+            path.symlink_to(replacement)
+        elif change == "fifo":
+            path.unlink()
+            os.mkfifo(path)
+        try:
+            extract(path, wanted, destination, password)
+        finally:
+            if change == "grow":
+                assert all(file.stat().st_size <= len(b"initial") for file in destination.iterdir())
+
+    monkeypatch.setattr(user_mods, "_extract_all", change_source)
+    store = user_mods.Store(tmp_path / "store")
+    with pytest.raises(user_mods.ModError, match=f"^{code}$"):
+        store.adopt(APPID, dll, ".", set(), set())
+    assert store.status(APPID) is None
 
 
 def test_a_mod_that_overwrites_optiscalers_files_is_refused(steam, fake_catalog, proc):

@@ -115,8 +115,11 @@ def _seven_zip() -> bool:
 
 
 def _entries(path: Path, password: str | None = None) -> tuple[list[tuple[str, int]], bool]:
-    """Files in the archive with their sizes, and whether they are encrypted, read before anything is extracted;
-    links are refused."""
+    """List sizes and encryption before copying files. Archive links are refused."""
+    if path.suffix.lower() == ".dll":
+        if "\\" in path.name:
+            raise ModError("unsafe_archive")
+        return [(path.name, path.stat().st_size)], False
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:
             entries = []
@@ -165,7 +168,7 @@ def _entries(path: Path, password: str | None = None) -> tuple[list[tuple[str, i
 
 
 def _readable(path: Path, password: str | None = None) -> list[str]:
-    if path.is_symlink() or not path.is_file() or path.suffix.lower() not in user_deps.ARCHIVES:
+    if path.is_symlink() or not path.is_file() or path.suffix.lower() not in (*user_deps.ARCHIVES, ".dll"):
         raise ModError("unreadable")
     if path.stat().st_size > user_deps.MAX_ARCHIVE:
         raise ModError("too_large")
@@ -187,8 +190,32 @@ def _readable(path: Path, password: str | None = None) -> list[str]:
     return members
 
 
+def _copy_loose_dll(path: Path, destination: Path) -> None:
+    remaining = min(user_deps.MAX_ARCHIVE, user_deps.MAX_MEMBER, MAX_TOTAL)
+    try:
+        # O_NONBLOCK keeps a substituted FIFO from blocking before fstat can reject it.
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as source:
+            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                raise ModError("unreadable")
+            with destination.open("wb") as sink:
+                while chunk := source.read(min(64 * 1024, remaining + 1)):
+                    if len(chunk) > remaining:
+                        raise ModError("too_large")
+                    sink.write(chunk)
+                    remaining -= len(chunk)
+    except OSError:
+        raise ModError("unreadable") from None
+
+
 def _extract_all(path: Path, wanted: dict[str, str], destination: Path, password: str | None = None) -> None:
     destination.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() == ".dll":
+        for target in wanted:
+            out = destination / target
+            out.parent.mkdir(parents=True, exist_ok=True)
+            _copy_loose_dll(path, out)
+        return
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:
             for target, member in wanted.items():
@@ -300,13 +327,27 @@ class Store:
         return {name: folder / name for name in self._meta(appid)["files"]}
 
     def adopt(self, appid: str, path: Path, target: str, existing: set[str], root_dirs: set[str],
-              password: str | None = None) -> dict:
+              password: str | None = None, *, target_dir: Path | None = None) -> dict:
         path = Path(path)
         self._folder(appid)
         members = _readable(path, password)
         wanted = layout(members, target, existing, root_dirs)
         if replaces_optiscaler(wanted):
             raise ModError("conflict")
+        if path.suffix.lower() == ".dll":
+            matches = [name for name in existing if name.casefold() == path.name.casefold()]
+            if len(matches) > 1:
+                raise ModError("ambiguous_files")
+            if matches:
+                name = matches[0]
+                if target_dir is not None:
+                    try:
+                        mode = (target_dir / name).lstat().st_mode
+                    except OSError:
+                        raise ModError("unsafe_archive") from None
+                    if not stat.S_ISREG(mode):
+                        raise ModError("unsafe_archive")
+                wanted = {name: path.name}
         self.root.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(dir=self.root, prefix=f".{appid}-"))
         try:
@@ -320,12 +361,18 @@ class Store:
             if old.exists():
                 trash = self.root / f".{appid}-old-{time.time_ns()}"
                 os.replace(old, trash)
-            os.replace(staging, old)
+            try:
+                os.replace(staging, old)
+            except OSError:
+                if trash is not None:
+                    os.replace(trash, old)
+                raise
             if trash:
                 shutil.rmtree(trash, ignore_errors=True)
-        except BaseException:
+        except OSError:
+            raise ModError("unreadable") from None
+        finally:
             shutil.rmtree(staging, ignore_errors=True)
-            raise
         return self.status(appid) or {}
 
     def remove(self, appid: str) -> None:

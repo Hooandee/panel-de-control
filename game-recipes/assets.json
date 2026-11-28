@@ -1,4 +1,12 @@
 {
+  "cyberfsr-dlss-unlocker-2-0-0-15": {
+    "url": "https://github.com/MOVZX/CyberFSR2/releases/download/2.0.0.15/CyberFSR_DLSS-Unlocker_v2.0.0.15.7z",
+    "source_url": "https://github.com/MOVZX/CyberFSR2/releases/tag/2.0.0.15",
+    "sha256": "03489dc79f0c9e0612de0e28cc6ec0e98896a5e6fc657cc9e663d16c531f11c9",
+    "size": 700050,
+    "filename": "CyberFSR_DLSS-Unlocker_v2.0.0.15.7z",
+    "format": "7z"
+  },
   "luma-ff7-800": {
     "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-800/Luma-Final_Fantasy_VII_Remake.zip",
     "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-800",

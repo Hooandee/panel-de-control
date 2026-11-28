@@ -64,6 +64,7 @@ explicación. FSR4, HDR, escalado y compañía, pero solo lo que tu versión de 
 
 🎮 **Escaladores.** Elige un juego instalado para configurar su escalado y la generación de frames.
 La lista también reconoce juegos instalados en otras bibliotecas de Steam.
+Con «Añadir un mod» puedes elegir una DLL suelta o un archivo ZIP, 7z o RAR para ese juego.
 
 🧹 **Limpieza.** Descubre cuánto ocupan la Shader Cache y los prefijos de tus juegos y recupera
 espacio en un momento.

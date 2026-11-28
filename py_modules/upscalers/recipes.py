@@ -17,6 +17,7 @@ from . import recipe_catalog
 WIKI_FILE = Path(__file__).with_name("recipes_wiki.json")
 NEEDS = ("reframework", "nvngx_dlss", "anti_cheat_off", "luma", "mod")
 STATUSES = ("works", "broken", "partial")
+HORIZON_UNLOCKER = "hzd-dlss-unlocker"
 
 
 @dataclass(frozen=True)
@@ -205,13 +206,19 @@ def with_wiki(recipe: Recipe | None, live: Recipe | None) -> Recipe | None:
 
 
 def recipe_for(appid: str, live: Recipe | None = None, *, engine: str = "optiscaler",
-               platform: str | None = None, arch: str | None = None, game_build: str | None = None) -> Recipe | None:
+               platform: str | None = None, arch: str | None = None, game_build: str | None = None,
+               gpu: str | None = None) -> Recipe | None:
     catalog = recipe_catalog.bundled()
     entry = catalog.match(appid, engine, platform, arch, game_build=game_build)
     hand = RECIPES.get(str(appid))
     if entry:
-        hand = replace(hand or Recipe(entry.appid), exe=entry.exe or (hand.exe if hand else None), args=entry.args, ini=dict(entry.ini),
-                      dependencies=entry.dependencies, catalog_revision=entry.revision,
+        dependency_gpus = entry.conditions.get("dependency_gpus")
+        dependencies = entry.dependencies if dependency_gpus is None or gpu in dependency_gpus else ()
+        settings = dict(entry.ini)
+        if HORIZON_UNLOCKER in dependencies:
+            settings["Spoofing.Dxgi"] = "false"
+        hand = replace(hand or Recipe(entry.appid), exe=entry.exe or (hand.exe if hand else None), args=entry.args, ini=settings,
+                      dependencies=dependencies, catalog_revision=entry.revision,
                       catalog_version=catalog.catalog_version, source="game-recipes",
                       recommended_input=entry.recommended_input, effective_api=entry.effective_api, quality_owner=entry.quality_owner, recommended_build=entry.recommended_build, optiscaler_root_files=entry.optiscaler_root_files,
                       reframework_upscaler=entry.reframework_upscaler, optiscaler_fg=entry.optiscaler_fg,
@@ -219,7 +226,7 @@ def recipe_for(appid: str, live: Recipe | None = None, *, engine: str = "optisca
                       anti_cheat=entry.anti_cheat or bool(hand and hand.anti_cheat),
                       signed_only=entry.signed_only or bool(hand and hand.signed_only))
         # The catalog installs Luma itself; games the wiki does not list still need it named.
-        if any(dep.startswith("luma-") for dep in entry.dependencies):
+        if any(dep.startswith("luma-") for dep in dependencies):
             hand = replace(hand, needs=tuple(dict.fromkeys((*hand.needs, "luma"))))
     else:
         # Protection belongs to the game, not to the platform the rest of its entry is written for.

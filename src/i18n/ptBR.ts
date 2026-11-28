@@ -563,6 +563,8 @@ export const ptBR: Record<string, string> = {
   "up.lsfg.flowScale.quality": "Mais qualidade",
   "up.lsfg.flowScaleHint": "Mais à direita: imagem mais nítida, mas mais carga na GPU.",
   "up.overlay.configured": "Configurado",
+  "up.overlay.active": "{provider} ativo",
+  "up.overlay.profile": "Perfil {profile}",
   "up.overlay.generating": "Gerando frames",
   "up.overlay.paused": "Pausado",
   "up.overlay.makoResolution": "Mako: reduza a resolução do jogo",

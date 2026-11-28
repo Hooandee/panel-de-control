@@ -1,4 +1,14 @@
 {
+  "hzd-dlss-unlocker": {
+    "kind": "game_files",
+    "asset": "cyberfsr-dlss-unlocker-2-0-0-15",
+    "requires": [
+      "vcrun2022"
+    ],
+    "files": {
+      "winmm.dll": "winmm.dll"
+    }
+  },
   "vcrun2022": {
     "kind": "proton_dependency",
     "provider": "winetricks",

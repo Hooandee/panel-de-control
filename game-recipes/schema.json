@@ -48,7 +48,7 @@
           "maxLength": 512
         },
         "format": {
-          "const": "zip"
+          "enum": ["zip", "7z"]
         }
       },
       "required": [
@@ -194,6 +194,14 @@
                   "x86_64",
                   "aarch64"
                 ]
+              }
+            },
+            "dependency_gpus": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": ["rdna2", "rdna3", "rdna35", "rdna4"]
               }
             },
             "game_builds": {

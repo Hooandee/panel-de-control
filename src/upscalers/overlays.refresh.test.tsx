@@ -9,7 +9,8 @@ const hoisted = vi.hoisted(() => ({
 vi.mock("@decky/ui", () => ({ findSP: () => window }));
 vi.mock("@decky/api", () => ({ routerHook: { addGlobalComponent: () => {}, removeGlobalComponent: () => {} }, callable: () => vi.fn().mockResolvedValue(null) }));
 vi.mock("../api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../api")>()), getUpscalersOverview: hoisted.overview }));
-vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string, args?: { provider?: string }) =>
+  key === "up.overlay.active" ? `${args?.provider} active` : key }) }));
 vi.mock("../platform/overGameComposition", () => ({ OverGameComposition: () => null }));
 vi.mock("../platform/qamSurface", () => ({ subscribeQamSurface: () => () => {} }));
 vi.mock("../tdp/useRunningGame", () => ({ useRunningGame: () => ({ liveAppid: 3564860 }) }));
@@ -38,9 +39,9 @@ it("names the HelixSR install in the pill once its job finishes, not the OptiSca
   const stop = startUpscalerOverlays();
   render(<InGameBadge />);
   await act(async () => { await Promise.resolve(); });
-  expect(screen.getByText("FSR 4.1.2 Lite")).toBeTruthy();
+  expect(screen.getByText("FSR active")).toBeTruthy();
   await act(async () => { for (const listener of hoisted.listeners) listener({ job: { appid: "3564860" }, finished: true }); });
-  expect(screen.queryByText("FSR 4.1.2 Lite")).toBeNull();
+  expect(screen.queryByText("FSR active")).toBeNull();
   expect(screen.getByText(/^HLX 3\.3\.0/)).toBeTruthy();
   stop();
 });

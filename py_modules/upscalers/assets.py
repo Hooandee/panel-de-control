@@ -125,6 +125,43 @@ class AssetCache:
         shutil.rmtree(self.unpacked(asset), ignore_errors=True)
         return self.ensure(asset, lambda _done: None, lambda: False)
 
+    def repair_missing_members(self, asset: Asset, members: set[str], cancelled: Callable[[], bool]) -> None:
+        """Recover missing archive members in place while leaving every published file readable."""
+        with self._lock(asset):
+            if cancelled():
+                raise AssetError("cancelled")
+            root = self.unpacked(asset)
+            missing = []
+            for member in sorted(members):
+                relative = Path(member)
+                if not relative.parts or relative.is_absolute() or ".." in relative.parts:
+                    raise AssetError("unsafe_archive")
+                target = root / relative
+                if root.is_symlink() or any((root / part).is_symlink() for part in (relative, *relative.parents)):
+                    raise AssetError("unsafe_archive")
+                if not target.is_file():
+                    if target.exists():
+                        raise AssetError("unsafe_archive")
+                    missing.append(relative)
+            if not missing:
+                return
+            self._download(asset, lambda _done: None, cancelled)
+            with tempfile.TemporaryDirectory(prefix=".repair-", dir=root.parent) as directory:
+                extracted = Path(directory) / "unpacked"
+                self._unpack(asset, extracted)
+                if any(not (extracted / relative).is_file() for relative in missing):
+                    raise AssetError("unpack_failed")
+                if cancelled():
+                    raise AssetError("cancelled")
+                for relative in missing:
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        os.link(extracted / relative, target)
+                    except FileExistsError:
+                        if target.is_symlink() or not target.is_file():
+                            raise AssetError("unsafe_archive") from None
+
     def _extract_member(self, asset: Asset) -> None:
         """Resolve one catalog member from a verified ZIP or the existing safe 7z unpacker."""
         target = self.member(asset)
@@ -221,8 +258,9 @@ class AssetCache:
         if digest.hexdigest() != asset.sha256:
             raise AssetError("hash_mismatch")
 
-    def _unpack(self, asset: Asset) -> None:
-        destination = self.unpacked(asset)
+    def _unpack(self, asset: Asset, destination: Path | None = None) -> None:
+        if destination is None:
+            destination = self.unpacked(asset)
         shutil.rmtree(destination, ignore_errors=True)
         staging = Path(tempfile.mkdtemp(dir=destination.parent, prefix=".unpack-"))
         try:

@@ -17,6 +17,8 @@ def resolve(gpu, analysis, recipe=None, generation=9, engine="optiscaler", route
     owner = getattr(recipe, "quality_owner", "panel") if engine == "optiscaler" else "game"
     recommended = getattr(recipe, "recommended_input", None)
     reconciled = bool(engine == "optiscaler" and dependencies_ready and recommended and getattr(recipe, "dependencies", ()))
+    if engine != "optiscaler" or not (reconciled or analysis.get("inputs", {}).get(recommended)):
+        recommended = None
     offered = (catalog.fg_plan(gpu, analysis.get("inputs", {}), getattr(recipe, "fg", None),
                                generation, ["d3d12"], analysis.get("streamline"), route)
                if engine == "optiscaler" else None)

@@ -65,6 +65,7 @@ FSR4, HDR, scaling and more, but only what your Proton version supports.
 
 🎮 **Upscalers.** Pick an installed game to configure upscaling and frame generation. The list
 also recognizes games installed in other Steam library folders.
+Use “Add a mod” to choose a loose DLL or a ZIP, 7z or RAR archive for that game.
 
 🧹 **Cleanup.** See how much space your games' Shader Cache and prefixes take up and get it back in
 a moment.

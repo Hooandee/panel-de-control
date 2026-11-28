@@ -11,7 +11,7 @@ import { ListCard, ListRow, Note } from "./parts";
 import type { GameDetail, GameMod } from "./types";
 import { cancelUserFileWatch, downloadMod, MOD_WATCH, onUserFileWatch, watchingFor } from "./userFileWatch";
 
-const EXTENSIONS = ["zip", "7z", "rar"];
+const EXTENSIONS = ["zip", "7z", "rar", "dll"];
 const PROGRESS_MS = 2000;
 // The picker and Steam's browser close the QAM and unmount this card: the last error and a password-protected archive
 // have to outlive it, so the download watch's outcome is recorded here even with no card on screen.

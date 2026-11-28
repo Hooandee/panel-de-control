@@ -80,6 +80,19 @@ it("keeps to one row on games that need no mod", async () => {
   expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["up.mod.add"]);
 });
 
+it("lets the user pick a loose DLL for a game that needs no mod", async () => {
+  const { openFilePicker } = await import("@decky/api");
+  const { addUpscalerMod } = await import("../api");
+  const path = "/home/deck/Downloads/graphics.dll";
+  vi.mocked(openFilePicker).mockResolvedValueOnce({ realpath: path } as never);
+
+  await act(async () => { render(<ModFile appid="1627720" mod={null} needed={false} name={null} download={null} onDetail={vi.fn()} />); });
+  await act(async () => { fireEvent.click(screen.getByText("up.mod.add")); });
+
+  expect(openFilePicker).toHaveBeenLastCalledWith(0, "/home/deck/Downloads", true, true, undefined, ["zip", "7z", "rar", "dll"]);
+  expect(addUpscalerMod).toHaveBeenLastCalledWith("1627720", path, undefined);
+});
+
 it("lets the download wait be cancelled", async () => {
   await act(async () => { render(<ModFile appid="1245620" mod={null} needed name="ERSS-FG" download={PATREON} onDetail={vi.fn()} />); });
   await act(async () => { fireEvent.click(screen.getByText("up.userFile.download")); });

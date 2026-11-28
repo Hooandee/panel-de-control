@@ -9,12 +9,13 @@ import { OverGameComposition } from "../platform/overGameComposition";
 import { subscribeQamSurface, type QamSurface } from "../platform/qamSurface";
 import { readString, writeString } from "../system/pdcStorage";
 import { useRunningGame } from "../tdp/useRunningGame";
+import { theme } from "../theme";
 import { useGameInFront } from "./gameInFront";
 import { useOverlayLive } from "./useOverlayLive";
 import { startFpsCounterSession } from "./fpsCounter";
 import { onJobUpdate } from "./jobRunner";
 import { badgeLabel, fallbackLine } from "./model";
-import type { BuildInfo, ScalerFallback, UpscalersOverview } from "./types";
+import type { ScalerFallback, UpscalersOverview } from "./types";
 
 export type InGameMode = "off" | "start" | "always";
 export const IN_GAME_MODES: InGameMode[] = ["off", "start", "always"];
@@ -30,18 +31,13 @@ const COVER_IMAGE = /\/(?:assets|customimages|apps)\/(\d+)(?:\/|p\.|\.)/;
 type ProviderFamily = "fsr" | "xess" | "dlss";
 const PROVIDER_NAMES: Record<ProviderFamily, string> = { fsr: "FSR", xess: "XeSS", dlss: "DLSS" };
 
-function providerOf(build: BuildInfo | undefined): ProviderFamily | null {
-  if (!build) return null;
-  return build.family === "xess" ? "xess" : "fsr";
-}
-
 interface Badge {
   label: string;
   short: string;
   state: string;
   build: string;
   engine: string | null;
-  provider: ProviderFamily | null;
+  fsrProfile?: string;
   fg: boolean;
   fgRoute: string | null;
   modFg: string | null;
@@ -74,7 +70,9 @@ export function publishOverview(overview: UpscalersOverview): void {
     const cover = fallback
       ? { label: translate(fallback.observed ? "up.fallback.cover" : "up.fallback.coverNone", { from: fallback.requested, to: fallback.observed ?? "" }), short: fallback.observed ?? translate("up.fallback.coverNone", { from: fallback.requested, to: "" }), state: "fallback" }
       : { label: label.full, short: label.short, state: install.status };
-    next[appid] = { ...cover, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null, modFg: install.mod_fg ?? null, fallback };
+    const fsrProfile = build?.engine === "optiscaler" && build.family === "fsr"
+      ? label.full.slice(PROVIDER_NAMES.fsr.length).trimStart() : undefined;
+    next[appid] = { ...cover, build: install.build, engine: build?.engine ?? null, fsrProfile, fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null, modFg: install.mod_fg ?? null, fallback };
   }
   installs = next;
   makoEngines = Object.fromEntries(Object.entries(overview.engines ?? {}).flatMap(([appid, engines]) => engines.mako?.engine ? [[appid, engines.mako.engine]] : []));
@@ -85,7 +83,7 @@ export function publishOverview(overview: UpscalersOverview): void {
     const label = engines.mako?.spatial ? mako
       : engines.mako?.fg ? `${mako}${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
       : engines.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
-    if (label) covers[appid] = { label, short: label, state: "pending", build: label.toLowerCase(), engine: null, provider: null, fg: false, fgRoute: null, modFg: null, fallback: null };
+    if (label) covers[appid] = { label, short: label, state: "pending", build: label.toLowerCase(), engine: null, fg: false, fgRoute: null, modFg: null, fallback: null };
   }
   engineCovers = covers;
   emit();
@@ -455,14 +453,16 @@ export const InGameBadge: FC = () => {
   const installedDll = badge?.engine === "dll" && badge.state === "not_run";
   const hasContent = installedDll || !!live || !!lossless || makoResolutionWarning || makoMultiplier !== null || !!makoSpatial;
   const observedFamily = live?.provider_family ?? null;
-  const otherProvider = !!observedFamily && !!badge?.provider && badge.engine !== "dll" && observedFamily !== badge.provider;
   const observedName = live?.provider_name ?? (observedFamily ? PROVIDER_NAMES[observedFamily] : null);
-  const observedProvider = otherProvider
-    ? [observedName, live?.provider_version].filter(Boolean).join(" ")
-    // The provider read from the log can differ from the build's version: it is evidence, not the build's name.
-    : live?.provider_source === "optiscaler_log" && live.provider_confidence !== "log_provider" && live.provider_name && live.provider_version
-      ? `${live.provider_name} ${live.provider_version}` : null;
+  const observedVersion = live?.provider_confidence === "log_provider" ? live.provider_version : null;
+  const observedProvider = badge && (!badge.engine || badge.engine === "optiscaler") && live?.provider_source === "optiscaler_log" && observedName
+    ? [observedName, observedVersion, observedVersion && live.provider_model].filter(Boolean).join(" ")
+    : null;
   const fallback = live ? live.fallback ?? null : badge?.fallback ?? null;
+  const fsrProfile = !fallback && live?.provider_confidence === "family_only" && observedProvider === PROVIDER_NAMES.fsr
+    ? badge?.fsrProfile : undefined;
+  const scalerLabel = fallback ? fallbackLine(fallback, t)
+    : fsrProfile ? t("up.overlay.active", { provider: PROVIDER_NAMES.fsr }) : observedProvider ?? badge?.label;
   const fgLabel = lossless
     ? `Lossless Scaling ×${lossless.multiplier} · ${t("up.lsfg.flowScale")} ${Math.round(lossless.flow_scale * 100)} %`
     : badge?.fg ? t(`up.fg.pick.${badge.fgRoute ?? "optiscaler"}`) : badge?.modFg ?? null;
@@ -548,7 +548,8 @@ export const InGameBadge: FC = () => {
           }}
         >
           {scalerShown && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
-            <span style={fallback ? { color: "#ffbe63" } : undefined}>{fallback ? fallbackLine(fallback, t) : observedProvider ?? badge!.label}</span>
+            <span style={fallback ? { color: "#ffbe63" } : undefined}>{scalerLabel}</span>
+            {fsrProfile && <span style={{ color: theme.color.textMuted }}>{t("up.overlay.profile", { profile: fsrProfile })}</span>}
             {resolution && <span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{resolution[0]}p → {resolution[1]}p</span>}
           </div>}
           {makoSpatial && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>

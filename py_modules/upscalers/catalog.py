@@ -325,11 +325,15 @@ BUILDS: dict[str, Build] = {
     )
 }
 
+FSR_LITE_BUILD = "fsr-4.1.2-beta"
+_FSR_411_FALLBACK = {
+    "rdna2": ("fsr-4.1.1-rdna2", "fsr-4.1.1"),
+    "rdna3": ("fsr-4.1.1",),
+    "rdna35": ("fsr-4.1.1",),
+}
+
 PREFERRED = {
-    # OptiScaler 10 runs FSR 4.1.2 Lite on Van Gogh, as AMD's driver picks for APUs.
-    "rdna2": "fsr-4.1.2-beta",
-    "rdna3": "fsr-4.1.1",
-    "rdna35": "fsr-4.1.1",
+    **dict.fromkeys(_FSR_411_FALLBACK, FSR_LITE_BUILD),
     "rdna4": "fsr-4.1.1",
     "intel": "xess",
 }
@@ -423,35 +427,38 @@ def build_signed(build: Build) -> bool:
 
 
 def preferred_build(gpu: str, recipe=None, device: str = "", *, require_signed: bool = False, prefer_signed: bool = False,
-                    failed=frozenset()) -> str:
-    """The build to recommend: a recipe's pick, else the GPU's default; signed ones when the game's protection asks
-    for them (or merely likes them), and never one that already closed this game early."""
+                    failed=frozenset(), blocked=frozenset()) -> str:
+    """Rank the game's recipe and the GPU's compatible builds, excluding known failures and blocked routes."""
     required = require_signed or signed_only(recipe)
 
+    def signed(build: Build) -> bool:
+        return build_signed(for_game(build, {}, gpu, recipe))
+
     def usable(build) -> bool:
-        return bool(build and build.available and build.id not in failed
-                    and build_supported(build, gpu, device, recipe, require_signed=required) and (not required or build_signed(build)))
+        return bool(build and build.available and build.id not in failed and build.id not in blocked
+                    and build_supported(build, gpu, device, recipe, require_signed=required)
+                    and (not required or signed(build)))
 
     default = PREFERRED.get(gpu, "fsr-3.1")
-    ordered = [BUILDS.get(getattr(recipe, "recommended_build", None)), BUILDS.get(default)]
-    chosen = [build for build in ordered if usable(build)]
+    ordered = (getattr(recipe, "recommended_build", None), default, *_FSR_411_FALLBACK.get(gpu, ()))
+    chosen = [build for build_id in dict.fromkeys(ordered) if usable(build := BUILDS.get(build_id))]
     pool = [build for build in BUILDS.values() if build.engine == "optiscaler" and usable(build)]
 
     family = getattr(BUILDS.get(default), "family", "")
 
     def best(builds):
-        return max(builds, key=lambda b: (required and build_signed(b), b.family == family, b.image, -b.cost)).id
+        return max(builds, key=lambda b: (b.family == family, b.image, -b.cost)).id
 
-    if prefer_signed and chosen:
+    if prefer_signed and chosen and chosen[0].id != FSR_LITE_BUILD:
         top = chosen[0]
-        peers = [b for b in (*chosen, *pool) if b.family == top.family and b.image == top.image and build_signed(b)]
-        if peers and not build_signed(top):
+        peers = [b for b in (*chosen, *pool) if b.family == top.family and b.image == top.image and signed(b)]
+        if peers and not signed(top):
             return best(peers)
     if chosen:
         return chosen[0].id
-    if (required or failed) and pool:
-        return best(pool)
-    return "" if required else default
+    if required or failed or blocked or default == FSR_LITE_BUILD:
+        return best(pool) if pool else ""
+    return default
 
 
 _DGPU_CYBOMAN = frozenset({"fsr-4.1.2-lite-dgpu-dll", "fsr-4.1.2-lite-dgpu-lossy-dll"})

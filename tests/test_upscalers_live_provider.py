@@ -202,14 +202,21 @@ def test_unattributed_context_names_do_not_prove_input(tmp_path, marker):
 FSR4_LOG = Path(__file__).parent / 'fixtures/upscalers/fsr4_lite_provider_gow_rdna2.log'
 
 
-def test_fsr4_provider_from_the_log_names_the_version_behind_the_fsr31_entry(tmp_path):
-    # PDC-K4XG (#1411)
-    service, install = make_service(tmp_path, FSR4_LOG.read_text() + '[I] Creating new FSR 3.X upscaler\n')
+def test_driver_query_in_zero_dawn_does_not_name_the_rendering_provider(tmp_path):
+    # OptiScaler's active context showed FSR 4.1.2 INT8 Lite in this session.
+    service, install = make_service(tmp_path,
+        'OptiScaler v10.0.0-dev (a1e0e193) loaded\n'
+        'Upscaler support - fsr4: int8 lite (forced), dlss: false\n'
+        '[I] TryCreateOptiFeature Creating FSR 3.X upscaler feature\n'
+        '[I] FSR4DriverDll::QueryProvider amdxcffx64.dll provider for 10000: 4.1.1 *, id: F5A5CA1E81001001, struct version: 2\n'
+        '[I] FeatureProvider_Dx12::ChangeFeature Creating new FSR 3.X upscaler\n'
+        "[I] FFXFeatureDx12::InitFFX Using OptiScaler auto exposure instead of FSR's\n"
+        '[I] FeatureProvider_Dx12::ChangeFeature init successful for FSR 3.X, upscaler changed\n')
     live = service.live('292030')
-    assert (live['provider_family'], live['provider_version'], live['provider_model']) == ('fsr', '4.1.1', 'Lite')
-    assert live['provider_confidence'] == 'log_provider'
+    assert (live['provider_family'], live['provider_version'], live['provider_model']) == ('fsr', None, None)
+    assert live['provider_confidence'] == 'family_only'
     observed = diagnostics.snapshot(install)['observed']
-    assert (observed['provider_version'], observed['provider_model']) == ('4.1.1', 'Lite')
+    assert (observed['provider_version'], observed['provider_model']) == (None, None)
 
 
 @pytest.mark.parametrize('created', ['', '[I] init successful for XeSS, upscaler changed\n'])
@@ -231,7 +238,19 @@ def test_fsr4_provider_is_not_claimed_when_an_older_fsr_runs(tmp_path, tail):
     assert service.live('292030')['provider_version'] is None
 
 
-def test_only_the_upscaler_effect_names_the_fsr4_provider(tmp_path):
-    other = '[I] FSR4DriverDll::QueryProvider amdxcffx64.dll provider for 20000: 4.0.9 *, id: 1, struct version: 2\n'
-    service, _ = make_service(tmp_path, FSR4_LOG.read_text() + other + '[I] Creating new FSR 3.X upscaler\n')
-    assert service.live('292030')['provider_version'] == '4.1.1'
+@pytest.mark.parametrize(('scope', 'result', 'tail', 'expected'), [
+    (True, 'The operation was successful.', '', '4.1.1'),
+    (False, 'The operation was successful.', '', None),
+    (True, 'An error occurred that is not further specified.', '', None),
+    (True, 'The operation was successful.', '[I] Creating new FSR 3.X upscaler\n', None),
+])
+def test_only_successful_driver_creation_inside_the_optiscaler_context_confirms_a_version(tmp_path, scope, result, tail, expected):
+    service, _ = make_service(tmp_path,
+        '[I] FSR4DriverDll::QueryProvider amdxcffx64.dll provider for 10000: 4.1.1 *, id: 1, struct version: 2\n'
+        '[I] TryCreateOptiFeature Creating FSR 3.X upscaler feature\n'
+        + ('[D] FFXFeatureDx12::InitFFX _createContext!\n' if scope else '')
+        + f'[I] FSR4DriverProviderDx12::CreateContext Created driver upscaler context, result: {result}\n'
+        + tail)
+    live = service.live('292030')
+    assert live['provider_version'] == expected
+    assert live['provider_model'] is None
