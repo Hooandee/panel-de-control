@@ -477,6 +477,8 @@ class Mako:
                 if appid not in state['profiles'] and len(state['profiles']) + len(paused) >= 256 and appid not in paused:
                     raise MakoError('mako_profile_limit')
                 line = options['engine']
+                if _arm() and line == 4:
+                    line = 5   # ARM has no v4 renderer: every profile goes through the line 5 build
                 self._verify_install(state, line)
                 _, prefix, _, _ = self._line(state, line)
                 dll = self._dll() if options['enabled'] else None
