@@ -47,6 +47,17 @@ def _write(path: Path, text: str) -> None:
     ownership.own_like(path.parent, [path])
 
 
+def matches(user: Path | None, entries) -> bool:
+    if user is None or not entries:
+        return False
+    for relative, tag, value in entries:
+        text = _read(user / relative)
+        match = _element(tag).search(text) if text is not None else None
+        if not match or match[2] != value:
+            return False
+    return True
+
+
 def apply(user: Path | None, entries) -> list[dict]:
     records = []
     for relative, tag, value in entries:

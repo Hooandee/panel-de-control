@@ -5,6 +5,8 @@
 export interface PageDraft<C = unknown> {
   choice: C;
   advanced: boolean;
+  edited?: boolean;
+  spatial?: boolean;
 }
 
 type Listener = (draft: PageDraft) => void;

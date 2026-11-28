@@ -1,0 +1,400 @@
+{
+  "292030": {
+    "name": "The Witcher 3: Wild Hunt",
+    "profiles": {
+      "legion_go_s": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite",
+        "input": "fsr31",
+        "menuName": "AMD FSR Upscaling",
+        "api": "d3d12",
+        "exe": "witcher3.exe"
+      },
+      "rog_ally": {
+        "gpu": "rdna3",
+        "mode": "mako",
+        "output": [
+          1920,
+          1080
+        ],
+        "render": [
+          1280,
+          720
+        ]
+      },
+      "msi_claw_8_ai_plus": {
+        "gpu": "intel",
+        "build": "xess",
+        "model": null,
+        "input": "fsr31",
+        "menuName": "AMD FSR",
+        "api": "d3d12",
+        "exe": "witcher3.exe"
+      }
+    }
+  },
+  "418370": {
+    "name": "Resident Evil 7 Biohazard",
+    "userFile": "puredark-upscaler-base",
+    "api": "d3d12",
+    "profiles": {
+      "steam_deck_lcd": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "548430": {
+    "name": "Deep Rock Galactic",
+    "input": "dlss",
+    "menuName": "NVIDIA DLSS",
+    "fixedQuality": true,
+    "api": "d3d12",
+    "profiles": {
+      "steam_deck_lcd": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "881020": {
+    "name": "Granblue Fantasy: Relink",
+    "dependency": "luma-gbfr",
+    "api": "d3d11",
+    "profiles": {
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "883710": {
+    "name": "Resident Evil 2",
+    "userFile": "puredark-upscaler-base",
+    "api": "d3d12",
+    "profiles": {
+      "legion_go_s": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "952060": {
+    "name": "Resident Evil 3",
+    "userFile": "puredark-upscaler-base",
+    "api": "d3d12",
+    "profiles": {
+      "legion_go_s": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "990080": {
+    "name": "Hogwarts Legacy",
+    "profiles": {
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite",
+        "input": "dlss",
+        "menuName": "NVIDIA DLSS"
+      },
+      "steam_deck_oled": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite",
+        "input": "fsr31",
+        "menuName": "AMD FSR 3"
+      }
+    }
+  },
+  "1086940": {
+    "name": "Baldur's Gate 3",
+    "input": "dlss",
+    "menuName": "NVIDIA DLSS",
+    "api": "d3d11",
+    "exe": "bg3_dx11.exe",
+    "profiles": {
+      "steam_deck_oled": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "1151640": {
+    "name": "Horizon Zero Dawn Complete Edition",
+    "input": "dlss",
+    "menuName": "NVIDIA DLSS",
+    "dependency": "hzd-dlss-unlocker",
+    "profiles": {
+      "steam_deck_lcd": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      },
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.1",
+        "model": null,
+        "installedOptiScaler": "0.9.5"
+      }
+    }
+  },
+  "1174180": {
+    "name": "Red Dead Redemption 2",
+    "input": "fsr2",
+    "menuName": "AMD FSR 2.0",
+    "requiresDx12Config": true,
+    "profiles": {
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.1",
+        "model": null,
+        "installedOptiScaler": "0.9.5"
+      }
+    }
+  },
+  "1245620": {
+    "name": "Elden Ring",
+    "modRelease": "erss-fg-4.14.1",
+    "profiles": {
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "1462040": {
+    "name": "FINAL FANTASY VII REMAKE INTERGRADE",
+    "dependency": "luma-ff7",
+    "api": "d3d11",
+    "profiles": {
+      "rog_ally": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      },
+      "steam_deck_lcd": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "1627720": {
+    "name": "Lies of P",
+    "input": "fsr31",
+    "menuName": "AMD FSR 3",
+    "profiles": {
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "1687950": {
+    "name": "Persona 5 Royal",
+    "dependency": "luma-p5r",
+    "api": "d3d11",
+    "profiles": {
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      },
+      "rog_ally_x": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "1888930": {
+    "name": "The Last of Us Part I",
+    "menuEngine": "dll",
+    "input": "fsr31",
+    "menuName": "AMD FSR 3",
+    "profiles": {
+      "steam_deck_oled": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-lite-dll",
+        "model": "lite"
+      }
+    }
+  },
+  "2050650": {
+    "name": "Resident Evil 4",
+    "userFile": "puredark-upscaler-base",
+    "api": "d3d12",
+    "profiles": {
+      "steam_deck_lcd": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      },
+      "legion_go_s": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "full"
+      }
+    }
+  },
+  "2054970": {
+    "name": "Dragon's Dogma 2",
+    "input": "fsr31",
+    "menuName": "AMD FSR 3",
+    "profiles": {
+      "legion_go_s": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "2246340": {
+    "name": "Monster Hunter Wilds",
+    "input": "dlss",
+    "menuName": "NVIDIA DLSS",
+    "profiles": {
+      "steam_deck_lcd": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      },
+      "legion_go_s": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.1",
+        "model": null
+      }
+    }
+  },
+  "2344520": {
+    "name": "Diablo IV",
+    "input": "fsr31",
+    "menuName": "AMD FSR",
+    "signedOnly": true,
+    "profiles": {
+      "steam_deck_lcd": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.1",
+        "model": null
+      }
+    }
+  },
+  "2420110": {
+    "name": "Horizon Forbidden West Complete Edition",
+    "input": "fsr31",
+    "menuName": "AMD FSR 3",
+    "profiles": {
+      "steam_deck_lcd": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      },
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.1",
+        "model": null,
+        "installedOptiScaler": "0.9.5"
+      }
+    }
+  },
+  "2679460": {
+    "name": "Metaphor: ReFantazio",
+    "dependency": "luma-mrf",
+    "api": "d3d11",
+    "profiles": {
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "3017860": {
+    "name": "DOOM: The Dark Ages",
+    "input": "fsr31",
+    "menuName": "FSR",
+    "api": "vulkan",
+    "proxy": "winmm.dll",
+    "profiles": {
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  },
+  "3564860": {
+    "name": "Stellar Blade Demo",
+    "requiresTemporalInput": true,
+    "profiles": {
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      },
+      "rog_ally_x": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      },
+      "steam_deck_lcd": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite",
+        "input": "fsr31",
+        "menuName": "AMD FidelityFX Super Resolution 3"
+      },
+      "legion_go_s": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite",
+        "input": "fsr31",
+        "menuName": "AMD FidelityFX Super Resolution 3"
+      }
+    }
+  },
+  "3764200": {
+    "name": "Resident Evil Requiem",
+    "menuEngine": "dll",
+    "input": "fsr31",
+    "menuName": "AMD FSR",
+    "profiles": {
+      "steam_deck_lcd": {
+        "gpu": "rdna2",
+        "build": "fsr-4.1.2-lite-dll",
+        "model": "lite"
+      },
+      "rog_ally": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-lite-igpu-dll",
+        "model": "lite"
+      }
+    }
+  },
+  "4732690": {
+    "name": "Arknights: Endfield",
+    "input": "dlss",
+    "menuName": "NVIDIA DLSS",
+    "api": "d3d11",
+    "proxy": "d3d12.dll",
+    "profiles": {
+      "steam_machine": {
+        "gpu": "rdna3",
+        "build": "fsr-4.1.2-beta",
+        "model": "lite"
+      }
+    }
+  }
+}

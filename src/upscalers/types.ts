@@ -150,6 +150,8 @@ export interface GameDetail {
     foreign_identity?: { engine: "helixsr" | "optiscaler" | "unknown"; variant: "dlss" | "fsr" | "unknown"; evidence: string[]; manifest_error: boolean } | null;
   };
   install: {
+    archive?: string;
+    components?: { id: string; version?: string }[];
     build: string;
     proxy: string;
     exe: string | null;
@@ -209,6 +211,7 @@ export interface UserFile {
 
 /** A mod the user brought for one game, installed beside the exe with OptiScaler. */
 export interface GameMod {
+  tested_release?: string;
   filename: string | null;
   count: number;
   files: string[];
@@ -229,6 +232,7 @@ export interface RecipeInfo {
   game_settings?: { setting: string; value: string }[];
   /** Panel sets a game setting itself on install (RDR2's API): the page only asks while it could not. */
   game_config?: boolean;
+  game_config_matches?: boolean;
   anr_settings?: { setting: string; value: string }[];
   fps_counter?: boolean;
   quality_on_exit?: boolean;

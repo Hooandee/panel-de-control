@@ -174,7 +174,7 @@ export const ActionButton: FC<{
 export function PickerButton<T extends string>({ label, value, options, onChange, disabled, badge, showLabel = false, duo = false, controlId, ready = true }: {
   label: string;
   value: T;
-  options: { value: T; label: ReactNode; caption?: string }[];
+  options: { value: T; label: ReactNode; caption?: string; valueLabel?: string; description?: string }[];
   onChange: (value: T) => void;
   disabled?: boolean;
   badge?: ReactNode;
@@ -202,7 +202,8 @@ export function PickerButton<T extends string>({ label, value, options, onChange
     setOpen(false);
   };
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
-  const current = options.find((o) => o.value === value)?.label ?? value;
+  const current = options[selectedIndex]?.value === value ? options[selectedIndex] : undefined;
+  const description = [current?.valueLabel, current?.description].filter(Boolean).join(". ");
   const toggle = () => { if (!disabled) { if (open) close(); else setOpen(true); } };
   if (duo) return <div style={{ ...theme.card, minWidth: 0, maxWidth: "100%", display: "flex", alignItems: "center", gap: theme.space.xs, padding: theme.space.sm }}>
     {showLabel && <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body }}>{label}</span>}
@@ -215,14 +216,14 @@ export function PickerButton<T extends string>({ label, value, options, onChange
   </div>;
   return (
     <Focusable flow-children="column" style={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", opacity: disabled ? 0.45 : 1 }}>
-      <Focusable data-pdc-part="surface-action" ref={trigger} role="button" aria-label={label} aria-expanded={open} aria-disabled={disabled}
+      <Focusable data-pdc-part="surface-action" ref={trigger} role="button" aria-label={label} aria-description={description || undefined} aria-expanded={open} aria-disabled={disabled}
         onActivate={toggle} onClick={toggle} onCancel={open ? (event) => { event.stopPropagation(); close(); } : undefined}
         style={{ width: "100%", minWidth: 0, cursor: "pointer" }}>
         <div style={{ ...theme.card, boxSizing: "border-box", width: "100%", padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", alignItems: "center", gap: theme.space.xs }}>
         {showLabel && <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary }}>{label}</span>}
         <span style={{ flex: showLabel ? "0 1 auto" : 1, minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", gap: theme.space.xs,
           fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, whiteSpace: "normal", overflowWrap: "anywhere" }}>
-          {current}
+          {current?.label ?? value}
         </span>
         {badge && <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", alignSelf: "center", flexShrink: 0 }}>{badge}</span>}
         <LuChevronDown size={16} color={theme.color.textMuted} style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : undefined }} />
@@ -231,7 +232,7 @@ export function PickerButton<T extends string>({ label, value, options, onChange
       {open && <Focusable role="radiogroup" aria-label={label} onCancel={(event) => { event.stopPropagation(); close(); }} flow-children="column" style={{ display: "flex", flexDirection: "column" }}>
         {options.map((option, index) => {
           const select = () => { if (!disabled) { close(); onChange(option.value); } };
-          return <Focusable key={option.value} ref={index === selectedIndex ? selectedOption : undefined} role="radio" aria-checked={option.value === value} aria-disabled={disabled}
+          return <Focusable key={option.value} ref={index === selectedIndex ? selectedOption : undefined} role="radio" aria-description={option.description} aria-checked={option.value === value} aria-disabled={disabled}
             onActivate={select} onClick={select}
             style={{ width: "100%", minWidth: 0, cursor: "pointer" }}>
             <div style={{ boxSizing: "border-box", width: "100%", display: "flex", alignItems: "flex-start", gap: theme.space.xs, padding: `${theme.space.sm}px ${theme.space.md}px`,

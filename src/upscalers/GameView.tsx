@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ReactN
 import { LuArrowLeftRight, LuInfo, LuCircleCheck, LuCircleDashed, LuTriangleAlert } from "react-icons/lu";
 
 import {
-  cancelUpscalersJob, configureUpscaler, getUpscalersGame,
+  cancelUpscalersJob, configureUpscaler, getUpscalersGame, getUpscalerLaunchReceipt,
   refreshUpscalerWiki, setUpscalersExe, uninstallUpscaler, verifyUpscaler, adoptForeignUpscaler, restoreForeignUpscaler,
 } from "../api";
 import { CompactBackAction } from "../components/CompactBackAction";
@@ -17,7 +17,10 @@ import { openIdentityModal } from "./IdentityModal";
 import { readShortcutHint } from "./shortcutHint";
 import { useI18n } from "../i18n";
 import type { GameEntry } from "../launch/steamApi";
+import { activeDisplayResolution } from "../steam/performanceSettingsRuntime";
+import { hasMakoLeftover } from "./makoLeftover";
 import { readAppDetails } from "../launch/steamApi";
+import { getEnv, parse } from "../launch/compose";
 import { CATALOG, pillVisible } from "../launch/catalog";
 import type { GpuGen } from "../launch/proton";
 import { useProtonCapabilities } from "../launch/useProtonCapabilities";
@@ -45,6 +48,7 @@ import { JobProgress } from "./JobProgress";
 import { FrameGenRow } from "./FrameGenRow";
 import { useThemes } from "../themes/useThemes";
 import { ModelPicker } from "./ModelPicker";
+import { detectedGameInput, gameUpscalerGuidance, initialBuild, needsManualGameConfig, testedDefault } from "./testedDefaults";
 import { ModFile, modDownload, wikiModName } from "./ModFile";
 import { UserFiles } from "./UserFiles";
 import { markPendingReinstall, takePendingReinstall } from "./userFileWatch";
@@ -106,31 +110,68 @@ export const GameView: FC<{
     window.addEventListener("pdc-scaler-switch", refresh);
     return () => window.removeEventListener("pdc-scaler-switch", refresh);
   }, [appid]);
-  const [spatial, setSpatial] = useState(false);
+  const [spatial, setSpatial] = useState(draft?.spatial ?? false);
+  const [makoAvailable, setMakoAvailable] = useState(false);
   const [spatialInstalled, setSpatialInstalled] = useState(false);
-  const spatialSelected = useRef(false);
+  const spatialSelected = useRef(draft?.spatial);
   const panelQuality = useRef<Quality>("native");
   useEffect(() => {
     let alive = true;
-    spatialSelected.current = false;
-    setSpatial(false);
+
     setPendingModel(false);
     setSpatialInstalled(false);
+    setMakoAvailable(false);
     const refresh = (initial = false) => { void getMakoStatus(appid).then(status => {
       if (!alive) return;
       const installed = !!status.profiles[appid]?.scaling_enabled;
       setSpatialInstalled(installed);
-      if (initial && !spatialSelected.current) setSpatial(installed);
+      setMakoAvailable(status.supported && !status.foreign && status.reason !== "mako_identity_ambiguous");
+      if (initial && spatialSelected.current === undefined) setSpatial(installed);
     }).catch(() => {}); };
     const changed = () => refresh();
     refresh(true);
     window.addEventListener("pdc-mako-changed", changed);
     return () => { alive = false; window.removeEventListener("pdc-mako-changed", changed); };
   }, [appid]);
-  const selectSpatial = (value: boolean) => { spatialSelected.current = true; setSpatial(value); };
-  const keepDraft = useRef(!!draft);
-  const initialDefault = useRef(!draft && !readInstallRequest(appid));
-  const preferred = detail?.preferred ?? overview.preferred;
+  const selectSpatial = (value: boolean) => {
+    spatialSelected.current = value;
+    setSpatial(value);
+    writeDraft(game.liveAppid, { choice, advanced, edited: hasLocalChoice.current, spatial: value });
+  };
+  const keepDraft = useRef(false);
+  const hasLocalChoice = useRef(draft ? draft.edited !== false : false);
+  const [reshadeRedirected, setReshadeRedirected] = useState(false);
+  const guidance = gameUpscalerGuidance(detail, appid, overview.device);
+  const checkSpatial = guidance?.profiles[overview.device ?? ""]?.mode === "mako" && makoAvailable;
+  const [spatialOutput, setSpatialOutput] = useState<[number, number] | null>(null);
+  useEffect(() => {
+    setSpatialOutput(null);
+    if (!checkSpatial) return;
+    let generation = 0;
+    const refresh = () => {
+      const current = ++generation;
+      void Promise.all([activeDisplayResolution(), readAppDetails(game.liveAppid), getUpscalerLaunchReceipt(appid, "mako")])
+        .then(([output, app, receipt]) => {
+          if (current === generation) setSpatialOutput(app && !hasMakoLeftover(app.launch, receipt) ? output : null);
+        }).catch(() => { if (current === generation) setSpatialOutput(null); });
+    };
+    refresh();
+    window.addEventListener("resize", refresh);
+    window.addEventListener("pdc-mako-changed", refresh);
+    return () => { generation++; window.removeEventListener("resize", refresh); window.removeEventListener("pdc-mako-changed", refresh); };
+  }, [checkSpatial, appid, game.liveAppid]);
+  const tested = testedDefault(detail, appid, overview, checkSpatial ? spatialOutput : null, reshadeRedirected);
+  const preferred = initialBuild(detail?.preferred ?? overview.preferred, tested, detail?.analysis.anti_cheat_kind === "signed_only");
+  const testedSpatial = tested?.mode === "mako";
+  useEffect(() => {
+    if (!detail || detail.install || spatialSelected.current !== undefined || hasLocalChoice.current || pendingInstall(appid) || readInstallRequest(appid)) return;
+    setSpatial(spatialInstalled || testedSpatial);
+  }, [appid, detail, spatialInstalled, testedSpatial]);
+  const testedModel = tested && tested.mode !== "mako" && tested.build === preferred && tested.model === "lite" ? "lite" : null;
+  useEffect(() => {
+    if (!detail || detail.install || hasLocalChoice.current || pendingInstall(appid) || readInstallRequest(appid)) return;
+    setChoice({ ...defaultChoice(preferred), model: testedModel });
+  }, [appid, detail, preferred, testedModel]);
   const trace = (action: string, next: UpscalerChoice = choice, ok = true) => {
     recordUiEvent("upscalers", action, {
       appid, stage: action === "restart_result" ? "result" : "intent",
@@ -139,24 +180,26 @@ export const GameView: FC<{
     }, ok);
   };
   const changeChoice = (next: UpscalerChoice) => {
-    initialDefault.current = false;
+    hasLocalChoice.current = true;
     trace("select", next);
     setChoice(next);
-    writeDraft(game.liveAppid, { choice: next, advanced });
+    writeDraft(game.liveAppid, { choice: next, advanced, edited: true, spatial: spatialSelected.current });
   };
   const toggleAdvanced = () => {
     recordUiEvent("upscalers", "advanced", { appid, open: !advanced });
     setAdvanced(!advanced);
-    writeDraft(game.liveAppid, { choice, advanced: !advanced });
+    writeDraft(game.liveAppid, { choice, advanced: !advanced, edited: hasLocalChoice.current, spatial: spatialSelected.current });
   };
   useEffect(() => {
     showGame(game.liveAppid);
     return onDraft(game.liveAppid, (next) => {
+      hasLocalChoice.current = next.edited !== false;
+      if (next.spatial !== undefined) { spatialSelected.current = next.spatial; setSpatial(next.spatial); }
       setChoice(next.choice as UpscalerChoice);
       setAdvanced(next.advanced);
     });
   }, [game.liveAppid]);
-  useEffect(() => { writeDraft(game.liveAppid, { choice, advanced }); }, [game.liveAppid, choice, advanced]);
+  useEffect(() => { writeDraft(game.liveAppid, { choice, advanced, edited: hasLocalChoice.current, spatial: spatialSelected.current }); }, [game.liveAppid, choice, advanced, spatial]);
   const [trackedJob, setJob] = useState<UpscalerJob | null>(overview.job?.appid === appid ? overview.job : null);
   const job = trackedJob?.appid === appid ? trackedJob : null;
   const [message, setMessage] = useState<string | null>(() => {
@@ -181,7 +224,10 @@ export const GameView: FC<{
   const [compat, setCompat] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    readAppDetails(game.liveAppid).then((d) => { if (!cancelled) setCompat(d?.compatName ?? ""); }).catch(() => undefined);
+    readAppDetails(game.liveAppid).then((d) => { if (!cancelled) {
+      setCompat(d?.compatName ?? "");
+      setReshadeRedirected(!!getEnv(parse(d?.launch ?? ""), "RESHADE_BASE_PATH_OVERRIDE"));
+    } }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [game.liveAppid]);
   const capabilities = useProtonCapabilities(compat ?? "", compat === null);
@@ -202,7 +248,7 @@ export const GameView: FC<{
   const backOverride = useMemo(() => ({ label: t("up.back"), onBack }), [t, onBack]);
   const borrowedBack = useSectionBack(backOverride);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (background = false) => {
     try {
       const hint = game.isNonSteam ? await readShortcutHint(game.liveAppid, game.name) : null;
       const next = await getUpscalersGame(appid, hint);
@@ -211,14 +257,11 @@ export const GameView: FC<{
       setLoadError(null);
       const request = pendingInstall(appid) ?? readInstallRequest(appid);
       if (request) setChoice(request);
-      else if (next.install && !keepDraft.current) {
+      else if (next.install && !keepDraft.current && !(background && hasLocalChoice.current)) {
+        hasLocalChoice.current = false;
         setChoice(restoredChoice(next.install.build, next.install.options, overview.builds, next.preferred ?? overview.preferred));
       }
-      else if (initialDefault.current && !next.install) {
-        setChoice(defaultChoice(next.preferred ?? overview.preferred));
-      }
-      initialDefault.current = false;
-      keepDraft.current = false;
+      if (!background) keepDraft.current = false;
     } catch (error) {
       if (mounted.current) setLoadError(upscalerErrorCode(error));
     }
@@ -226,7 +269,7 @@ export const GameView: FC<{
 
   useEffect(() => {
     mounted.current = true;
-    void load();
+    void load(true);
     return () => { mounted.current = false; };
   }, [load]);
 
@@ -235,7 +278,7 @@ export const GameView: FC<{
     let done = false;
     const slow = setTimeout(() => { if (!done && mounted.current) setWikiUpdating(true); }, 300);
     refreshUpscalerWiki(appid)
-      .then((result) => { if (result.updated && mounted.current) void load(); })
+      .then((result) => { if (result.updated && mounted.current) void load(true); })
       .catch(() => undefined)
       .finally(() => { done = true; clearTimeout(slow); if (mounted.current) setWikiUpdating(false); });
     return () => clearTimeout(slow);
@@ -485,7 +528,7 @@ export const GameView: FC<{
     setVerifying(true);
     try {
       setVerify(await verifyUpscaler(appid));
-      await load();
+      await load(true);
       onChanged();
     } catch {
       setMessage(t("up.error.generic"));
@@ -543,12 +586,11 @@ export const GameView: FC<{
   const inputHintShown = !scalerSeenWorking && qualityMode.mode !== "locked";
   // Luma hands OptiScaler its DLSS input itself; these games have no such option in their menus.
   const lumaInput = !!detail?.recipe_info?.luma_detected || !!detail?.recipe_info?.automatic?.includes("Luma");
-  const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown && !lumaInput
+  const activationInput = guidance && detail && selected && !install && !running && !spatial && !pendingModel && !externalHelix && inputHintShown
+    ? detectedGameInput(guidance, detail, selected) : null;
+  const recommendedInput = !guidance?.menuName && optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown && !lumaInput
     ? INPUT_NAMES[recommendedInputKey] : null;
-  // A setting Panel writes into the game's config on install is only asked of the user when Panel could not write it.
-  const configPending = !detail?.recipe_info?.game_config
-    || !!detail.install?.game_config?.some((c) => c.state === "missing" || c.state === "failed");
-  const notice = detail && !detail.native && configPending ? gameNotice(detail.identity?.steam_appid ?? appid) : null;
+  const notice = detail && !detail.native && needsManualGameConfig(detail) ? gameNotice(detail.identity?.steam_appid ?? appid) : null;
   const strain = detail && !detail.native && !spatial ? steamMachineStrain(overview.device, gameOutputHeight(detail?.history ?? [], overview.display), selected, choice.quality) : null;
   const recipeBlocked = !!solution?.blocked_reason || (optiscalerRecipe && !solution && !!detail?.recipe_info?.blocked);
   const automaticLuma = optiscalerRecipe && !detail?.recipe_info?.luma_detected && !!detail?.recipe_info?.automatic?.includes("Luma");
@@ -634,7 +676,7 @@ export const GameView: FC<{
           )}
           <LaunchMixNotice liveAppid={game.liveAppid} scaler={install ? runs : detail.analysis.foreign_identity?.engine === "helixsr" ? "HelixSR" : null} />
           {!detail.native && !externalHelix && <ModelPicker onPendingChoice={setPendingModel} gpu={overview.gpu} duo={duo} appid={appid} spatial={spatial} onSpatial={selectSpatial} builds={builds} choice={choice} inputs={inputs} protonEnv={protonEnv} dllTargets={detail.analysis.dll_targets}
-            disabled={running || foreignBusy} onChange={changeChoice} />}
+            disabled={running || foreignBusy} onChange={changeChoice} testedDefault={tested} />}
           {!detail.native && !spatial && selectedEngine === "optiscaler" && !!detail.recipe_info?.user_files?.length && (
             <UserFiles appid={appid} files={detail.recipe_info.user_files} disabled={running || foreignBusy}
               onDetail={(next) => { if (next.install) markPendingReinstall(appid); setDetail(next); }} />
@@ -673,7 +715,7 @@ export const GameView: FC<{
         </div>
       )}
       {loadError === "not_installed" && <Note tone="warn">{t("up.error.missingFolder")}</Note>}
-      {loadError && loadError !== "not_installed" && <Row><ActionButton label={t("load.retry")} onPress={() => void load()} /></Row>}
+      {loadError && loadError !== "not_installed" && <Row><ActionButton label={t("load.retry")} onPress={() => void load(true)} /></Row>}
 
       {detail && !detail.native && (
         <>
@@ -717,6 +759,7 @@ export const GameView: FC<{
 
 
       {detail && spatial && <MakoScaling key={appid} appid={appid} liveAppid={game.liveAppid} isNonSteam={game.isNonSteam}
+        testedResolution={tested?.mode === "mako" ? tested.render?.join(" × ") : undefined}
         disabled={running || foreignBusy || gameRunning || switchingScaler || !!detail.updating} gameRunning={gameRunning} mixed={!install && detail.analysis.foreign} onChanged={() => { void load(); onChanged(); }} />}
 
       {detail && !pendingModel && !spatial && !detail.native && !externalHelix && !replacesFsr && qualityMode.mode !== "game" && (
@@ -736,7 +779,7 @@ export const GameView: FC<{
       )}
       {detail && !pendingModel && !spatial && !detail.native && !externalHelix && (qualityMode.mode === "game" || replacesFsr) && <Note>{t("up.quality.inGame")}</Note>}
       {detail && !pendingModel && !spatial && qualityMode.mode === "locked" && <Note>{t("up.quality.useInput", { input: qualityMode.input })}</Note>}
-      {notice && (notice === "up.notice.dx11Launch"
+      {notice && (notice !== "up.notice.rdr2Dx12" || optiscalerRecipe) && (notice === "up.notice.dx11Launch"
         ? <Notice icon={<LuInfo size={16} />}>{t(notice)}</Notice>
         : <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(notice)}</Notice>)}
       {strain && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.steamMachine.${strain}`)}</Notice>}
@@ -758,9 +801,12 @@ export const GameView: FC<{
           {status === "broken" ? (
             <Row><ActionButton primary label={t("up.repair")} onPress={reinstall} disabled={blocked} /></Row>
           ) : !install ? (
-            <Row>
-              <ActionButton primary label={t("up.activate", { name: badgeLabel(selected, choice.model, choice.build).full })} onPress={apply} disabled={blocked} />
-            </Row>
+            <>
+              {activationInput && <Note>{t("up.input.activate", { input: guidance?.fixedQuality ? activationInput + " (" + t("up.quality.quality") + ")" : activationInput })}</Note>}
+              <Row>
+                <ActionButton primary label={t("up.activate", { name: badgeLabel(selected, choice.model, choice.build).full })} onPress={apply} disabled={blocked} />
+              </Row>
+            </>
           ) : dirty || imageDirty ? (
             <>
               {dirty && changes.map((line) => (

@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { GameDetail, UpscalersOverview, UpscalerJob } from "./types";
 import type { GameEntry } from "../launch/steamApi";
 
-const state = vi.hoisted(() => ({ detail: null as unknown, job: null as unknown, nextId: 0, running: null as any, advancedRows: false, frameProps: null as any, t: (key: string, _params?: Record<string, unknown>) => key }));
+const state = vi.hoisted(() => ({ detail: null as unknown, job: null as unknown, nextId: 0, running: null as any, advancedRows: false, frameProps: null as any, verifyPending: undefined as (() => Promise<void>) | undefined, t: (key: string, _params?: Record<string, unknown>) => key }));
 vi.mock("../system/uiEvents", () => ({ recordUiEvent: vi.fn() }));
 vi.mock("../api", () => ({
   getUpscalerModCandidates: vi.fn(async () => ({ folder: "/home/deck/Downloads", candidates: [] })),
@@ -22,6 +22,7 @@ vi.mock("../api", () => ({
     state.detail = { ...detail, install: { ...detail.install, options: choice } };
     return { live: false };
   }),
+  verifyUpscaler: vi.fn(async () => ({ status: "active" })),
   refreshUpscalerWiki: vi.fn(async () => ({ updated: false })),
   recordUpscalerArgs: vi.fn(async () => ({})),
 }));
@@ -41,7 +42,10 @@ vi.mock("./IdentityModal", () => ({ openIdentityModal: vi.fn() }));
 vi.mock("./shortcutHint", () => ({ readShortcutHint: vi.fn() }));
 vi.mock("./MakoScaling", () => ({ MakoScaling: () => null }));
 vi.mock("./AdvancedIni", () => ({ AdvancedIni: () => null }));
-vi.mock("./LivePanel", () => ({ DuringPlay: () => null, useUpscalerLive: () => [{ fps: null, render: null, output: null, generating: null, canPause: false }, vi.fn()] }));
+vi.mock("./LivePanel", () => ({ DuringPlay: () => null, useUpscalerLive: (_appid: string, playing: boolean, verifyPending?: () => Promise<void>) => {
+  state.verifyPending = playing ? verifyPending : undefined;
+  return [{ fps: null, render: null, output: null, generating: null, canPause: false }, vi.fn()];
+} }));
 vi.mock("./WikiFacts", () => ({ WikiFacts: () => null }));
 vi.mock("./restartGame", () => ({ restartGame: vi.fn() }));
 vi.mock("../navigation/showModal", () => ({ showModal: vi.fn() }));
@@ -53,10 +57,10 @@ vi.mock("./parts", () => {
     ListRow: ({ label, onPress }: any) => state.advancedRows ? <button onClick={onPress}>{label}</button> : null, SegmentRow: ({ options }: any) => <div>{options.map((o: any) => <span key={o.value}>{o.label}{o.caption && <small>{o.caption}</small>}</span>)}</div>, statusColor: () => "",
     ActionButton: ({ label, onPress, disabled }: any) => <button disabled={disabled} onClick={onPress}>{label}</button> };
 });
-vi.mock("./ModelPicker", () => ({ ModelPicker: ({ choice, onChange, onPendingChoice, onSpatial }: any) => <>
+vi.mock("./ModelPicker", () => ({ ModelPicker: ({ choice, onChange, onPendingChoice, onSpatial, spatial, testedDefault }: any) => <>
   <button onClick={() => onSpatial(true)}>choose Mako</button>
   <button onClick={() => onPendingChoice(true)}>choose DLL engine</button>
-  <output data-testid="selected-build">{choice.build}</output>
+  <output data-testid="selected-build" data-spatial={spatial} data-tested-mode={testedDefault?.mode} data-tested-build={testedDefault?.build} data-tested-model={testedDefault?.model}>{choice.build}</output>
   <button onClick={() => onChange({ ...choice, build: "fsr-4.0.2c", quality: "balanced", sharpness: "soft", model: null })}>choose 402</button>
   <button onClick={() => onChange({ ...choice, build: "fsr-4.1.1" })}>choose 411</button>
   <button onClick={() => onChange({ ...choice, build: "fsr-lite", model: null })}>choose Lite</button>
@@ -65,12 +69,12 @@ vi.mock("./ModelPicker", () => ({ ModelPicker: ({ choice, onChange, onPendingCho
 import { GameView } from "./GameView";
 import { pressUpscalerKeyInGame } from "./gameHotkey";
 import { recordUiEvent } from "../system/uiEvents";
-import { installUpscaler, configureUpscaler, getMakoStatus } from "../api";
+import { installUpscaler, configureUpscaler, getMakoStatus, refreshUpscalerWiki, verifyUpscaler } from "../api";
 import { readInstallRequest, startInstallJob, trackJob } from "./jobRunner";
 import { readAppDetails } from "../launch/steamApi";
 import { releasePage, showGame } from "./pageMemory";
 
-const build = { family: "fsr", image: 1, cost: 1, available: true, supported: true, download_bytes: 100 };
+const build = { family: "fsr" as const, image: 1, cost: 1, available: true, supported: true, download_bytes: 100 };
 const overview = { preferred: "fsr-4.1.1", gpu: "rdna2", display: [1920, 1200], job: null,
   builds: [{ ...build, id: "fsr-4.1.1", version: "4.1.1" }, { ...build, id: "fsr-4.0.2c", version: "4.0.2c" }] } as UpscalersOverview;
 const game = { liveAppid: 777, name: "Stellar Blade", isNonSteam: false, coverUrls: [] } as unknown as GameEntry;
@@ -384,4 +388,192 @@ it("tells which option to change in the game's own menu", async () => {
     recipe_info: { needs: [], game_settings: [{ setting: "FidelityFX Super Resolution 2", value: "No" }] } };
   await act(async () => { render(<GameView {...props} />); });
   expect(screen.getByText("up.recipe.gameSetting")).toBeTruthy();
+});
+
+it.each([
+  { appid: 1151640, input: "dlss", name: "NVIDIA DLSS", dependencies: ["hzd-dlss-unlocker"] },
+  { appid: 2420110, input: "fsr31", name: "AMD FSR 3", dependencies: [] },
+  { appid: 1174180, input: "fsr2", name: "AMD FSR 2.0", dependencies: [] },
+])("puts $name above Activate without marking a different OptiScaler release", async ({ appid, input, name, dependencies }) => {
+  state.job = null;
+  state.t = (key, params) => key === "up.input.activate" ? String(params?.input) : key;
+  const solution = { recommended_input: input, input_reconciled: dependencies.length > 0, dependencies, quality: { owner: "panel" } };
+  state.detail = { analysis: { target: "/game", inputs: { [input]: ["/game/input.dll"] }, candidates: [] }, history: [], install: null,
+    solutions: { "fsr-4.1.1": solution, "fsr-4.0.2c": solution }, preferred: "fsr-4.1.1",
+    recipe_info: { needs: [], game_config: appid === 1174180, game_config_matches: appid === 1174180 } };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: appid }}
+    overview={{ ...overview, preferred: "fsr-4.0.2c", device: "steam_machine", gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.1.1");
+  expect(screen.getByTestId("selected-build").dataset.testedMode).toBeUndefined();
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
+  const activation = screen.getByRole("button", { name: "up.activate" });
+  expect(activation.parentElement?.previousElementSibling?.textContent).toBe(name);
+  expect(screen.getAllByText(name)).toHaveLength(1);
+  expect(screen.queryByText("up.input.recommended")).toBeNull();
+  await act(async () => { fireEvent.click(screen.getByText("choose 402")); });
+  expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.0.2c");
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
+  expect(screen.getAllByText(name)).toHaveLength(1);
+  expect((activation as HTMLButtonElement).disabled).toBe(false);
+});
+
+it.each([
+  { device: "steam_machine", input: ["nvngx_dlss.dll"], dependencies: [], reconciled: false, showHint: false },
+  { device: "steam_machine", input: ["nvngx_dlss.dll"], dependencies: ["hzd-dlss-unlocker"], reconciled: false, showHint: false },
+  { device: "steam_machine", input: [], dependencies: ["hzd-dlss-unlocker"], reconciled: true, showHint: false },
+  { device: "desktop_pc", input: ["nvngx_dlss.dll"], dependencies: ["hzd-dlss-unlocker"], reconciled: true, showHint: true },
+])("omits the star without safely matched evidence (%j)", async ({ device, input, dependencies, reconciled, showHint }) => {
+  const solution = { recommended_input: "dlss", input_reconciled: reconciled, dependencies, quality: { owner: "panel" } };
+  state.detail = { analysis: { target: "/game", inputs: { dlss: input }, candidates: [] }, history: [], install: null,
+    solutions: { "fsr-4.1.1": solution }, recipe_info: { needs: [] } };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1151640 }}
+    overview={{ ...overview, device, gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
+  expect(!!screen.queryByText("up.input.activate")).toBe(showHint);
+  expect(screen.queryByText("up.input.recommended")).toBeNull();
+});
+
+it.each(["draft", "installed", "luma", "failed"])("leaves the player's Forbidden West choice alone after %s", async (mode) => {
+  const choice = { build: "fsr-4.0.2c", quality: "balanced" as const, sharpness: null, model: null };
+  state.detail = { analysis: { target: "/game", inputs: { fsr31: ["amd_fidelityfx_dx12.dll"] }, candidates: [] }, history: [],
+    install: mode === "installed" ? { build: choice.build, options: choice, status: "not_run" } : null,
+    recipe_info: { needs: [], luma_detected: mode === "luma" },
+    failed_builds: mode === "failed" ? [{ build: "fsr-4.1.1" }] : [] };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 2420110 }}
+    draft={mode === "draft" ? { choice, advanced: false } : null}
+    overview={{ ...overview, preferred: mode === "failed" ? choice.build : "fsr-4.1.1", device: "steam_machine", gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").textContent).toBe(mode === "luma" ? "fsr-4.1.1" : choice.build);
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
+  expect(!!screen.queryByText("up.input.activate")).toBe(mode !== "installed" && mode !== "luma");
+});
+
+it("keeps the DX12 instruction without repeating RDR2's game menu option", async () => {
+  state.detail = { analysis: { target: "/game", inputs: { fsr2: ["ffx_fsr2_api_dx12_x64.dll"] }, candidates: [] },
+    history: [], install: null, recipe_info: { needs: [], recommended_input: "fsr2" } };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1174180 }}
+    overview={{ ...overview, preferred: "fsr-4.0.2c", device: "steam_machine", gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.0.2c");
+  expect(screen.getByText("up.notice.rdr2Dx12")).toBeTruthy();
+  expect(screen.getAllByText("up.input.activate")).toHaveLength(1);
+});
+
+it("guides RDR2 to DirectX 12 when the recipe declares it but the game configuration is unverified", async () => {
+  state.detail = { analysis: { target: "/game", inputs: { fsr2: ["ffx_fsr2_api_dx12_x64.dll"] }, candidates: [] },
+    history: [], install: null, recipe_info: { needs: [], game_config: true, game_config_matches: false } };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1174180 }}
+    overview={{ ...overview, device: "steam_machine", gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").dataset.testedMode).toBeUndefined();
+  expect(screen.getByText("up.notice.rdr2Dx12")).toBeTruthy();
+  expect(screen.getAllByText("up.input.activate")).toHaveLength(1);
+});
+
+it("preserves an edited selection when pending verification refreshes the installation", async () => {
+  const game = { ...props.game, liveAppid: 1174180 };
+  state.running = game;
+  const install = { build: "fsr-4.1.1", status: "pending", options: { quality: "native" } };
+  const detail = { analysis: { target: "/game", inputs: {}, candidates: [] }, history: [], install };
+  state.detail = detail;
+  await act(async () => { render(<GameView {...props} game={game} />); });
+  await act(async () => { fireEvent.click(screen.getByText("choose 402")); });
+  expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.0.2c");
+  state.detail = { ...detail, install: { ...install, status: "active" } };
+  const verify = state.verifyPending!;
+  await act(async () => { await verify(); });
+  expect(verifyUpscaler).toHaveBeenCalledWith("1174180");
+  expect(screen.getByTestId("selected-build").textContent).toBe("fsr-4.0.2c");
+});
+
+it("keeps RDR2's preferred Lite selected without borrowing the fallback package's star", async () => {
+  const lite = { ...build, id: "fsr-4.1.2-beta", version: "4.1.2", models: ["lite", "full"] };
+  state.detail = { analysis: { target: "/game", inputs: { fsr2: ["ffx_fsr2_api_dx12_x64.dll"] }, candidates: [] },
+    history: [], install: null, recipe_info: { needs: [], game_config: true }, preferred: lite.id };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1174180 }}
+    overview={{ ...overview, builds: [...overview.builds, lite], device: "steam_machine", gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").textContent).toBe(lite.id);
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
+  expect(screen.getAllByText("up.input.activate")).toHaveLength(1);
+});
+
+it.each([
+  { device: "steam_deck_lcd", tested: true },
+  { device: "steam_deck_oled", tested: false },
+])("marks Zero Dawn Lite only on the tested Deck profile ($device)", async ({ device, tested }) => {
+  const lite = { ...build, id: "fsr-4.1.2-beta", version: "4.1.2", models: ["lite", "full"] };
+  state.detail = {
+    analysis: { target: "/game", inputs: { dlss: ["nvngx_dlss.dll"] }, candidates: [] },
+    history: [], install: null, preferred: lite.id, recipe_info: { needs: [] },
+    solutions: { [lite.id]: {
+      recommended_input: "dlss", input_reconciled: true, dependencies: ["hzd-dlss-unlocker"], quality: { owner: "panel" },
+    } },
+  };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1151640 }}
+    overview={{ ...overview, builds: [...overview.builds, lite], device }} />); });
+  const selected = screen.getByTestId("selected-build");
+  expect(selected.textContent).toBe(lite.id);
+  expect(selected.dataset.testedBuild).toBe(tested ? lite.id : undefined);
+  expect(selected.dataset.testedModel).toBe(tested ? "lite" : undefined);
+});
+
+it.each([
+  { engine: "optiscaler", showDx12: true, inputs: {}, configFailed: true },
+  { engine: "dll", showDx12: false, inputs: { fsr2: ["ffx_fsr2_api_dx12_x64.dll"] }, configFailed: false },
+  { engine: "mako", showDx12: false, inputs: { fsr2: ["ffx_fsr2_api_dx12_x64.dll"] }, configFailed: false },
+] as const)("omits RDR2's FSR selector guidance for $engine when its path does not apply", async ({ engine, showDx12, inputs, configFailed }) => {
+  const selected = { ...build, id: "rdr2-build", version: "4.1.1", engine: engine === "dll" ? "dll" as const : "optiscaler" as const };
+  state.detail = { analysis: { target: "/game", inputs, candidates: [] }, history: [],
+    recipe_info: { needs: [], recommended_input: "fsr2", game_config: configFailed },
+    install: configFailed ? { build: selected.id, status: "not_run", options: { quality: "native" },
+      game_config: [{ tag: "API", state: "failed" }] } : null };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 1174180 }}
+    overview={{ ...overview, preferred: selected.id, builds: [selected] }} />); });
+  if (engine === "mako") await act(async () => { fireEvent.click(screen.getByText("choose Mako")); });
+  expect(!!screen.queryByText("up.notice.rdr2Dx12")).toBe(showDx12);
+  expect(screen.queryByText("up.input.activate")).toBeNull();
+  expect(screen.queryByText("up.input.recommended")).toBeNull();
+});
+
+it.each(["held draft", "manual selection"])("preserves a %s when an active installation is refreshed", async (mode) => {
+  let finishWiki!: () => void;
+  vi.mocked(refreshUpscalerWiki).mockImplementationOnce(() => new Promise(resolve => {
+    finishWiki = () => resolve({ updated: true, fresh: true });
+  }));
+  const installedChoice = { build: "fsr-4.1.1", quality: "native", sharpness: null };
+  const draft = { choice: { build: "fsr-4.0.2c", quality: "balanced" as const, sharpness: null }, advanced: false };
+  state.detail = { analysis: { target: "/game", inputs: {}, candidates: [] }, history: [],
+    install: { build: installedChoice.build, status: "active", options: installedChoice } };
+  const currentGame = { ...game, liveAppid: mode === "held draft" ? 803 : 804 };
+  const page = render(<GameView {...props} game={currentGame} draft={mode === "held draft" ? draft : null} />);
+  await act(async () => {});
+  if (mode === "manual selection") fireEvent.click(screen.getByText("choose 402"));
+  expect(screen.getByTestId("selected-build").textContent).toBe(draft.choice.build);
+
+  await act(async () => { finishWiki(); });
+  expect(screen.getByTestId("selected-build").textContent).toBe(draft.choice.build);
+  await act(async () => { page.rerender(<GameView {...props} game={currentGame}
+    overview={{ ...overview, builds: [...overview.builds] }} />); });
+  expect(screen.getByTestId("selected-build").textContent).toBe(draft.choice.build);
+  fireEvent.click(screen.getByText("up.discard"));
+  expect(screen.getByTestId("selected-build").textContent).toBe(installedChoice.build);
+});
+
+it("guides RDR2 shortcuts to DirectX 12 without marking the launcher route as tested", async () => {
+  state.detail = { shortcut: true, identity: { steam_appid: 1174180 },
+    analysis: { target: "/game", apis: ["vulkan"], inputs: { fsr2: ["ffx_fsr2_api_dx12_x64.dll"] }, candidates: [] },
+    history: [], install: null, recipe_info: { needs: [], game_config: true } };
+  await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 9803 }}
+    overview={{ ...overview, device: "steam_machine", gpu: "rdna3" }} />); });
+  expect(screen.getByTestId("selected-build").dataset.testedBuild).toBeUndefined();
+  expect(screen.getByText("up.notice.rdr2Dx12")).toBeTruthy();
+  expect(screen.getAllByText("up.input.activate")).toHaveLength(1);
+  expect((screen.getByRole("button", { name: "up.activate" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("keeps the selected spatial scaler when frame generation changes", async () => {
+  state.job = null;
+  state.detail = { analysis: { target: "/game", inputs: {}, candidates: [] }, history: [], install: null };
+  await act(async () => { render(<GameView {...props} />); });
+  await act(async () => { fireEvent.click(screen.getByText("choose Mako")); });
+  expect(screen.getByTestId("selected-build").dataset.spatial).toBe("true");
+  await act(async () => { state.frameProps.onOptiscaler("off", null); });
+  expect(screen.getByTestId("selected-build").dataset.spatial).toBe("true");
 });

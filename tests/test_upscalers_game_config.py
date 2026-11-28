@@ -27,7 +27,9 @@ def test_install_switches_red_dead_to_directx12_and_uninstall_puts_vulkan_back(s
     original = SYSTEM_XML.read_bytes()
     path = _prefix_settings(steam, original)
     service = _service(steam, fake_catalog, proc)
+    assert service.game(APPID)["recipe_info"]["game_config_matches"] is False
     service.install(APPID, {'build': 'fsr-test'})
+    assert service.game(APPID)["recipe_info"]["game_config_matches"] is True
     text = path.read_bytes()
     assert b'<API>kSettingAPI_DX12</API>' in text and text.replace(b'kSettingAPI_DX12', b'kSettingAPI_Vulkan') == original
     assert [entry['state'] for entry in service.game(APPID)['install']['game_config']] == ['set']
@@ -43,6 +45,7 @@ def test_a_setting_the_user_changed_since_stays_theirs(steam, fake_catalog, proc
     service.install(APPID, {'build': 'fsr-test'})
     changed = path.read_bytes().replace(b'kSettingAPI_DX12', b'kSettingAPI_Vulkan').replace(b'<fsr2Index value="0" />', b'<fsr2Index value="1" />')
     path.write_bytes(changed)
+    assert service.game(APPID)["recipe_info"]["game_config_matches"] is False
     service.uninstall(APPID)
     assert path.read_bytes() == changed
 
@@ -52,6 +55,7 @@ def test_without_the_games_settings_yet_nothing_is_written(steam, fake_catalog, 
     _rdr2_recipe(monkeypatch)
     service = _service(steam, fake_catalog, proc)
     service.install(APPID, {'build': 'fsr-test'})
+    assert service.game(APPID)["recipe_info"]["game_config_matches"] is False
     assert [entry['state'] for entry in service.game(APPID)['install']['game_config']] == ['missing']
     home, game = steam
     assert not (game.parents[2] / 'steamapps/compatdata').exists()

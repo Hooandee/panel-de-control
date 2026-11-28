@@ -63,6 +63,8 @@ salen, dónde y con qué colores.
 explicación. FSR4, HDR, escalado y compañía, pero solo lo que tu versión de Proton soporta.
 
 🎮 **Escaladores.** Elige un juego instalado para configurar su escalado y la generación de frames.
+Una estrella marca el modo y el modelo probados para ese juego y equipo, aunque elijas otros. Por ejemplo, en Steam Deck LCD marca OptiScaler en Deep Rock Galactic y DLL en Resident Evil Requiem.
+Cuando aplica, la ficha indica qué elegir en el juego justo encima de Activar.
 La lista también reconoce juegos instalados en otras bibliotecas de Steam.
 
 🧹 **Limpieza.** Descubre cuánto ocupan la Shader Cache y los prefijos de tus juegos y recupera

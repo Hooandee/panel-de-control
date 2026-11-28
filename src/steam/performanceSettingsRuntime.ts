@@ -7,6 +7,8 @@ interface QueryClientView {
   fetchQuery?: (options: { queryKey: string[]; queryFn: () => Promise<unknown>; retry: false }) => Promise<unknown>;
 }
 interface DisplayView {
+  current_mode_id?: number;
+  modes?: { id: number; width: number; height: number }[];
   is_primary?: boolean;
   is_enabled?: boolean;
   is_internal?: boolean;
@@ -132,6 +134,13 @@ function readQuery<T>(key: string[]): T | null {
 function settingsStore(): SettingsView | null {
   const store = (window as unknown as { settingsStore?: SettingsView }).settingsStore;
   return typeof store?.GetClientSetting === "function" ? store : null;
+}
+
+export async function activeDisplayResolution(): Promise<[number, number] | null> {
+  const store = (window as unknown as { SystemDisplayManagerStore?: { GetState(): Promise<{ displays?: DisplayView[] }> } }).SystemDisplayManagerStore;
+  const display = (await store?.GetState())?.displays?.find(item => item.is_primary && item.is_enabled);
+  const mode = display?.modes?.find(item => item.id === display.current_mode_id);
+  return mode && mode.width > 0 && mode.height > 0 ? [mode.width, mode.height] : null;
 }
 
 export function createPerformanceSettingsDeps(): PerformanceSettingsDeps {
