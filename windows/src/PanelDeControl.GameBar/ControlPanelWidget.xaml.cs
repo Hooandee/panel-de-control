@@ -108,10 +108,20 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         InitializeComponent();
         ThemeLibraryHost.Content = themesView;
         PowerArcTrack.Data = CreatePowerArcGeometry(1);
-        PowerArcFill.Data = CreatePowerArcGeometry(0);
-        ApplyAccent(ReadSavedAccent());
+        SetHeroArc(0);
+        if (Skins.Current == PdcSkin.Glass)
+        {
+            ApplyAccent(ReadSavedAccent());
+        }
+
         BuildAccentSwatches();
-        CreateHeroGlow();
+        BuildSkinChoices();
+        SectionTabs.GettingFocus += SectionTabs_GettingFocus;
+        foreach (var slider in new[] { TdpSlider, VolumeSlider, BrightnessSlider, CpuMaximumStateSlider })
+        {
+            slider.PreviewKeyDown += Slider_PreviewKeyDown;
+        }
+        ApplySkinLayout();
         foreach (var line in new[]
         {
             PowerModeDetail, PowerDrawDetail, PowerStatus, CpuControlStatus, CpuControlNote, RefreshRateStatus,
@@ -119,15 +129,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         })
         {
             CollapseWhenEmpty(line);
-        }
-
-        foreach (var toggle in new[] { ExperimentalTdpToggle, MuteToggle, CpuBoostToggle })
-        {
-            toggle.OnContent = string.Empty;
-            toggle.OffContent = string.Empty;
-            toggle.MinWidth = 0;
-            toggle.Width = 44;
-            toggle.HorizontalAlignment = HorizontalAlignment.Right;
         }
 
         refreshTimer.Tick += OnRefreshTimerTick;
@@ -150,7 +151,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 }
 
                 BuildSections();
-                SelectSection(0);
+                var reopen = sections.FindIndex(view => view.Definition.Id == reopenSectionId);
+                reopenSectionId = null;
+                SelectSection(Math.Max(reopen, 0));
             }
             catch (Exception exception)
             {
@@ -175,6 +178,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
 
         disposed = true;
+        UpdateAmbient(allowed: false);
         refreshTimer.Stop();
         heroTimer.Stop();
         InvalidatePendingOperations();
@@ -192,6 +196,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private async void OnLoaded(object sender, RoutedEventArgs args)
     {
+        UpdateAmbient();
         if (gameBarWidget is null || gameBarWidget.Visible)
         {
             refreshTimer.Start();
@@ -201,6 +206,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
+        UpdateAmbient(allowed: false);
         refreshTimer.Stop();
         heroTimer.Stop();
         InvalidatePendingOperations();
@@ -226,6 +232,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             return;
         }
 
+        UpdateAmbient();
         if (sender.Visible)
         {
             refreshTimer.Start();
@@ -241,6 +248,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs args)
     {
+        Motion.Spin(RefreshIcon);
         await RefreshAsync();
         if (DiagnosticsList.Visibility == Visibility.Visible)
         {
@@ -284,10 +292,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             DiagnosticsList.Children.Add(new TextBlock
             {
                 Text = line,
-                FontSize = 13,
                 Margin = new Thickness(0, 4, 0, 0),
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = ResourceBrush("PdcTextMutedBrush"),
+                Style = Components.Style("PdcLabelStyle"),
             });
         }
     }
@@ -411,18 +418,52 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private async void OnGameBarDisplayModeChanged(XboxGameBarWidget sender, object args)
     {
-        if (sender.GameBarDisplayMode != XboxGameBarDisplayMode.Foreground)
-        {
-            return;
-        }
-
         if (!Dispatcher.HasThreadAccess)
         {
             await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => OnGameBarDisplayModeChanged(sender, args));
             return;
         }
 
-        await ApplySteamHomeAsync();
+        if (disposed)
+        {
+            return;
+        }
+
+        UpdateAmbient();
+        if (sender.GameBarDisplayMode == XboxGameBarDisplayMode.Foreground)
+        {
+            await ApplySteamHomeAsync();
+        }
+    }
+
+    private bool ambientRunning;
+
+    // Breathing and the aurora loop forever; a pinned widget over a game or a hidden one must not keep the
+    // compositor busy, so they run only while the widget is in front.
+    private void UpdateAmbient(bool allowed = true)
+    {
+        var shown = allowed && !disposed && (gameBarWidget is null ||
+            (gameBarWidget.Visible && gameBarWidget.GameBarDisplayMode == XboxGameBarDisplayMode.Foreground));
+        if (shown == ambientRunning)
+        {
+            return;
+        }
+
+        ambientRunning = shown;
+        aurora?.Run(shown);
+        if (shown)
+        {
+            Motion.Breathe(LiveHalo, 0.08f, 0.45f, TimeSpan.FromSeconds(2.4));
+            if (Skins.Current == PdcSkin.Glass)
+            {
+                Motion.Breathe(HeroGlowHost, 0.6f, 1f, TimeSpan.FromSeconds(4.5));
+            }
+        }
+        else
+        {
+            Motion.StopBreathing(LiveHalo);
+            Motion.StopBreathing(HeroGlowHost);
+        }
     }
 
     private Task RefreshThemesWhenShownAsync()
@@ -742,7 +783,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 {
                     Content = $"{hertz} Hz",
                     Tag = hertz,
-                    Style = (Style)Application.Current.Resources["PdcSegmentButtonStyle"],
+                    Style = Components.Style("PdcSegmentButtonStyle"),
                 };
                 Grid.SetColumn(chip, RefreshRateChips.ColumnDefinitions.Count - 1);
                 AutomationProperties.SetName(chip, string.Format(Localized("RefreshRateAutomation"), hertz));
@@ -754,10 +795,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         foreach (var chip in RefreshRateChips.Children.OfType<Button>())
         {
             var active = Equals(chip.Tag, response.ObservedHertz);
-            chip.Background = active
-                ? new SolidColorBrush(WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x70))
-                : new SolidColorBrush(Colors.Transparent);
-            chip.FontWeight = active ? Windows.UI.Text.FontWeights.SemiBold : Windows.UI.Text.FontWeights.Normal;
+            Components.MarkChoice(chip, active);
             chip.IsEnabled = !refreshWritePending;
         }
 
@@ -817,13 +855,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         SetRing(BatteryRing, battery, batteryColor, RingOuterSize);
         SetRing(CpuRing, FindReading(snapshot, "cpu.load"), cpuColor, RingOuterSize - (2 * RingInset));
         SetRing(GpuRing, FindReading(snapshot, "gpu.load"), gpuColor, RingOuterSize - (4 * RingInset));
-        BatteryValue.Foreground = new SolidColorBrush(batteryColor);
-        TileCpuValue.Foreground = new SolidColorBrush(cpuColor);
-        TileGpuValue.Foreground = new SolidColorBrush(gpuColor);
+        ShowReading(BatteryValue, battery, batteryColor);
+        ShowReading(TileCpuValue, FindReading(snapshot, "cpu.load"), cpuColor);
+        ShowReading(TileGpuValue, FindReading(snapshot, "gpu.load"), gpuColor);
         ApplyEnergy(snapshot);
         PowerSourceValue.Text = FormatPowerSource(snapshot);
         SystemBatteryValue.Text = Format(snapshot, "battery.level", "0", "%");
-        SystemBatteryValue.Foreground = new SolidColorBrush(batteryColor);
+        ShowReading(SystemBatteryValue, battery, batteryColor);
         SystemBatteryDetail.Text = PowerDrawDetail.Text;
         ApplyBatteryHealth(snapshot);
         ApplyFan(FanOneValue, snapshot, "fan.cpu.rpm");
@@ -847,6 +885,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 ? string.Empty
                 : StatusText(snapshot.Readings.FirstOrDefault());
         ConnectionStatus.Visibility = healthy ? Visibility.Collapsed : Visibility.Visible;
+        var live = ResourceBrush(healthy ? "PdcOkBrush" : "PdcWarnBrush");
+        LiveDot.Fill = live;
+        LiveHalo.Fill = live;
     }
 
     private async void VolumeSlider_ValueChanged(
@@ -1262,9 +1303,128 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         return CreateArcSegmentGeometry(0, fraction);
     }
 
-    private static PathGeometry CreateArcSegmentGeometry(double from, double to)
+    private double heroFraction;
+
+    private void SetHeroArc(double fraction)
     {
-        var start = PowerArc.PointAt(from, ArcCenterX, ArcCenterY, ArcRadius);
+        heroFraction = fraction;
+        PowerArcFill.Data = CreatePowerArcGeometry(fraction);
+        LinearHeroFill.Width = Math.Max(0, fraction * LinearHero.ActualWidth);
+    }
+
+    private void LinearHero_SizeChanged(object sender, SizeChangedEventArgs args) =>
+        LinearHeroFill.Width = Math.Max(0, heroFraction * args.NewSize.Width);
+
+    private static PathGeometry CreateArcTicksGeometry()
+    {
+        var geometry = new PathGeometry();
+        for (var step = 0; step <= 10; step++)
+        {
+            var inner = PowerArc.PointAt(step / 10.0, ArcCenterX, ArcCenterY, ArcRadius + 7);
+            var outer = PowerArc.PointAt(step / 10.0, ArcCenterX, ArcCenterY, ArcRadius + (step % 5 == 0 ? 15 : 11));
+            var figure = new PathFigure { StartPoint = new Point(inner.X, inner.Y) };
+            figure.Segments.Add(new LineSegment { Point = new Point(outer.X, outer.Y) });
+            geometry.Figures.Add(figure);
+        }
+
+        return geometry;
+    }
+
+    private void ApplySkinLayout()
+    {
+        var skin = Skins.Current;
+        var glass = skin == PdcSkin.Glass;
+        AuroraHost.Visibility = glass ? Visibility.Visible : Visibility.Collapsed;
+        HeroGlowHost.Visibility = glass ? Visibility.Visible : Visibility.Collapsed;
+        if (glass)
+        {
+            CreateHeroGlow();
+            CreateAurora();
+            PowerArcShine.Data = CreateArcSegmentGeometry(0.02, 0.98, ArcRadius - 3.5);
+            PowerArcShine.Visibility = Visibility.Visible;
+        }
+
+        if (skin == PdcSkin.Instrument)
+        {
+            PowerArcTicks.Data = CreateArcTicksGeometry();
+            PowerArcTicks.Visibility = Visibility.Visible;
+            PowerArcTrack.StrokeStartLineCap = PenLineCap.Flat;
+            PowerArcTrack.StrokeEndLineCap = PenLineCap.Flat;
+            PowerArcFill.StrokeStartLineCap = PenLineCap.Flat;
+            PowerArcFill.StrokeEndLineCap = PenLineCap.Flat;
+        }
+
+        if (skin == PdcSkin.Editorial)
+        {
+            PowerArcView.Visibility = Visibility.Collapsed;
+            LinearHero.Visibility = Visibility.Visible;
+            PowerDrawValue.FontWeight = Windows.UI.Text.FontWeights.Bold;
+            PowerDrawValue.FontStretch = Windows.UI.Text.FontStretch.Condensed;
+            // The unit sits on the number's baseline; a 132 px line leaves far more room below it than 60 px.
+            HeroWattsUnit.Margin = new Thickness(6, 0, 0, 34);
+            HeroPercentUnit.Margin = new Thickness(6, 0, 0, 34);
+            TabIndicator.VerticalAlignment = VerticalAlignment.Bottom;
+            TabIndicator.Height = 3;
+            TabIndicator.BorderThickness = new Thickness(0);
+        }
+
+        AccentTitle.Visibility = glass ? Visibility.Visible : Visibility.Collapsed;
+        AccentSwatches.Visibility = glass ? Visibility.Visible : Visibility.Collapsed;
+        SkinAccentNote.Visibility = glass ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private static string? reopenSectionId;
+
+    private void BuildSkinChoices()
+    {
+        SkinLabel.Text = Localized("SkinLabel");
+        SkinAccentNote.Text = Localized("SkinOwnAccent");
+        for (var index = 0; index < Skins.All.Count; index++)
+        {
+            var skin = Skins.All[index];
+            var choice = new Button
+            {
+                Content = Localized("Skin" + skin),
+                Tag = skin,
+                Style = Components.Style("PdcSegmentButtonStyle"),
+            };
+            Components.MarkChoice(choice, skin == Skins.Current);
+            choice.Click += SkinChoice_Click;
+            Grid.SetColumn(choice, index);
+            SkinChoices.Children.Add(choice);
+        }
+    }
+
+    // Skin values are read when elements are built, so the page is built again on the new skin.
+    private void SkinChoice_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: PdcSkin skin } || skin == Skins.Current || Frame is not Frame frame)
+        {
+            return;
+        }
+
+        var parameter = (object?)gameBarWidget;
+        var previous = Skins.Current;
+        reopenSectionId = "themes";
+        Skins.Choose(skin);
+        try
+        {
+            // The old page stays alive until the new one is built, so a failure leaves a working widget.
+            frame.Navigate(typeof(ControlPanelWidget), parameter);
+            frame.BackStack.Clear();
+            Dispose();
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("skin-switch", exception);
+            reopenSectionId = null;
+            Skins.Choose(previous);
+        }
+    }
+
+    private static PathGeometry CreateArcSegmentGeometry(double from, double to, double radius = ArcRadius)
+    {
+        var start = PowerArc.PointAt(from, ArcCenterX, ArcCenterY, radius);
         var figure = new PathFigure
         {
             StartPoint = new Point(start.X, start.Y),
@@ -1272,11 +1432,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         };
         if (to > from)
         {
-            var end = PowerArc.PointAt(to, ArcCenterX, ArcCenterY, ArcRadius);
+            var end = PowerArc.PointAt(to, ArcCenterX, ArcCenterY, radius);
             figure.Segments.Add(new ArcSegment
             {
                 Point = new Point(end.X, end.Y),
-                Size = new Size(ArcRadius, ArcRadius),
+                Size = new Size(radius, radius),
                 IsLargeArc = PowerArc.IsLargeArc(to - from),
                 SweepDirection = SweepDirection.Clockwise,
             });
@@ -1354,12 +1514,15 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         DesktopHeaderSlot.Children.Add(StatusBlock);
         DesktopContent.Children.Add(SectionHeaderBlock);
         DesktopContent.Children.Add(SectionHost);
-        HeaderDetail.TextWrapping = TextWrapping.Wrap;
-        HeaderDetail.TextTrimming = TextTrimming.None;
+        HeaderDetail.Orientation = Orientation.Vertical;
+        foreach (var pill in HeaderDetail.Children.OfType<FrameworkElement>())
+        {
+            pill.HorizontalAlignment = HorizontalAlignment.Left;
+        }
         SectionHeaderBlock.Margin = new Thickness(0, 0, 0, 24);
         SectionHeaderBlock.Visibility = Visibility.Visible;
-        SectionTitle.FontSize = 30;
-        SectionDescription.FontSize = 14;
+        SectionTitle.Style = Components.Style("PdcDisplayTitleStyle");
+        SectionDescription.Style = Components.Style("PdcLeadStyle");
         DesktopScroller.SizeChanged += (_, _) => ReflowDesktopColumns();
     }
 
@@ -1471,6 +1634,27 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         return grid;
     }
 
+    // Above the blocks and outside them, so the desktop column balancing never moves it.
+    private static void AddSectionNote(Panel panel, string text)
+    {
+        var note = new TextBlock { Text = text, Style = Components.Style("PdcSectionNoteStyle") };
+        if (panel is not Grid grid)
+        {
+            panel.Children.Insert(0, note);
+            return;
+        }
+
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition());
+        foreach (var column in grid.Children)
+        {
+            Grid.SetRow((FrameworkElement)column, 1);
+        }
+
+        Grid.SetColumnSpan(note, 2);
+        grid.Children.Add(note);
+    }
+
     private void BuildSections()
     {
         EnergyTitle.Text = Localized("BlockEnergyTitle");
@@ -1523,33 +1707,30 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 target.Children.Add(block);
             }
 
+            if (WindowsPreview.VisibleBlocks(section).Any(block => WindowsPreview.IsReadOnly(section, block)))
+            {
+                AddSectionNote(panel, Localized("ReadOnlyNote"));
+            }
+
             SectionHost.Children.Add(panel);
             var label = new TextBlock
             {
                 Text = Localized("Nav" + section.ResourceStem),
-                FontSize = 13,
-                VerticalAlignment = VerticalAlignment.Center,
+                Style = Components.Style("PdcTabLabelStyle"),
                 Visibility = desktopLayout ? Visibility.Visible : Visibility.Collapsed,
             };
             var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = desktopLayout ? 12 : 7 };
-            content.Children.Add(new FontIcon
-            {
-                FontFamily = (FontFamily)Application.Current.Resources["PdcIconFontFamily"],
-                FontSize = 16,
-                Glyph = section.Glyph,
-            });
+            content.Children.Add(new FontIcon { Glyph = section.Glyph, Style = Components.Style("PdcIconNavStyle") });
             content.Children.Add(label);
             var tab = new Button
             {
-                Style = (Style)Application.Current.Resources["PdcTabButtonStyle"],
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = desktopLayout ? HorizontalAlignment.Left : HorizontalAlignment.Center,
-                Padding = desktopLayout ? new Thickness(14, 11, 14, 11) : new Thickness(11, 8, 11, 8),
+                Style = Components.Style(desktopLayout ? "PdcNavButtonStyle" : "PdcTabButtonStyle"),
                 Content = content,
                 Tag = sections.Count,
             };
             AutomationProperties.SetName(tab, Localized("Nav" + section.ResourceStem));
             tab.Click += SectionTab_Click;
+            tab.GotFocus += SectionTab_GotFocus;
             var tabHost = !desktopLayout
                 ? (Panel)SectionTabs
                 : section.Id == PinnedSectionId ? DesktopNavPinned : DesktopNav;
@@ -1564,15 +1745,21 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
-    // A disabled host disables every control inside it, including ones the readings later re-enable.
-    private static FrameworkElement ReadOnlyBlock(FrameworkElement block) => new ContentControl
+    // A disabled host disables every control inside it, including ones the readings later re-enable. The outer
+    // host stays enabled and focusable so a controller can still move through, and scroll, a section of readings.
+    private static FrameworkElement ReadOnlyBlock(FrameworkElement block)
     {
-        Content = block,
-        IsEnabled = false,
-        IsTabStop = false,
-        HorizontalContentAlignment = HorizontalAlignment.Stretch,
-        VerticalContentAlignment = VerticalAlignment.Stretch,
-    };
+        var inert = new ContentControl
+        {
+            Content = block,
+            IsEnabled = false,
+            IsTabStop = false,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Stretch,
+        };
+        Components.MarkReadOnly(inert);
+        return new Button { Style = Components.Style("PdcFocusableBlockStyle"), Content = inert };
+    }
 
     private static Border CreatePendingBlock(SectionDefinition section, BlockDefinition block)
     {
@@ -1582,44 +1769,35 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         layout.Children.Add(new Border
         {
-            Width = 38,
-            Height = 38,
-            CornerRadius = new CornerRadius(12),
+            Style = Components.Style("PdcIconTileStyle"),
             VerticalAlignment = VerticalAlignment.Top,
             Background = new SolidColorBrush(WithAlpha(accent, 0x30)),
-            Child = new FontIcon
-            {
-                FontFamily = (FontFamily)Application.Current.Resources["PdcIconFontFamily"],
-                FontSize = 16,
-                Glyph = block.Glyph,
-                Foreground = new SolidColorBrush(accent),
-            },
+            Child = new FontIcon { Glyph = block.Glyph, Style = Components.Style("PdcIconNavStyle"), Foreground = new SolidColorBrush(accent) },
         });
         var text = new StackPanel();
         text.Children.Add(new TextBlock
         {
             Text = Localized(block.ResourceStem + "Title"),
-            Style = (Style)Application.Current.Resources["PdcTitleStyle"],
+            Style = Components.Style("PdcTitleStyle"),
         });
         text.Children.Add(new TextBlock
         {
             Text = Localized(block.ResourceStem + "Desc"),
             Margin = new Thickness(0, 3, 0, 0),
-            Style = (Style)Application.Current.Resources["PdcMutedStyle"],
+            Style = Components.Style("PdcMutedStyle"),
         });
         text.Children.Add(new TextBlock
         {
             Text = Localized("BlockPending"),
             Margin = new Thickness(0, 8, 0, 0),
-            FontSize = 11,
             Foreground = new SolidColorBrush(accent),
-            Style = (Style)Application.Current.Resources["PdcCaptionStyle"],
+            Style = Components.Style("PdcFineStyle"),
         });
         Grid.SetColumn(text, 1);
         layout.Children.Add(text);
         return new Border
         {
-            Style = (Style)Application.Current.Resources["PdcCardStyle"],
+            Style = Components.Style("PdcCardStyle"),
             Child = layout,
         };
     }
@@ -1628,6 +1806,63 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         byte Mix(byte channel) => (byte)(channel + ((255 - channel) * 0.35));
         return Color.FromArgb(color.A, Mix(color.R), Mix(color.G), Mix(color.B));
+    }
+
+    // Focus that comes into the bar from the header or the content goes to the open section's tab, so leaving the
+    // content never switches section by itself.
+    private void SectionTabs_GettingFocus(UIElement sender, GettingFocusEventArgs args)
+    {
+        if (desktopLayout || sections.Count <= selectedSection || args.FocusState != FocusState.Keyboard ||
+            args.NewFocusedElement is not Button || IsInside(args.OldFocusedElement, SectionTabs))
+        {
+            return;
+        }
+
+        var open = sections[selectedSection].Tab;
+        if (!ReferenceEquals(args.NewFocusedElement, open))
+        {
+            args.TrySetNewFocusedElement(open);
+        }
+    }
+
+    // A horizontal slider takes all four arrows; with arrows as the way around (compact Game Bar has no Tab),
+    // Up and Down must move on instead of writing a new value.
+    private static void Slider_PreviewKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        var direction = args.Key switch
+        {
+            VirtualKey.Up => FocusNavigationDirection.Up,
+            VirtualKey.Down => FocusNavigationDirection.Down,
+            _ => FocusNavigationDirection.None,
+        };
+        if (direction != FocusNavigationDirection.None)
+        {
+            FocusManager.TryMoveFocus(direction);
+            args.Handled = true;
+        }
+    }
+
+    private static bool IsInside(DependencyObject? element, DependencyObject container)
+    {
+        for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (ReferenceEquals(node, container))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Inside the Game Bar bar the section follows the focus, so D-pad or arrows left and right change section
+    // without depending on LB/RB. Pointer focus leaves selection to the click.
+    private void SectionTab_GotFocus(object sender, RoutedEventArgs args)
+    {
+        if (!desktopLayout && sender is Button { Tag: int index, FocusState: FocusState.Keyboard } && index != selectedSection)
+        {
+            SelectSection(index);
+        }
     }
 
     private void SectionTab_Click(object sender, RoutedEventArgs args)
@@ -1639,12 +1874,34 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     }
 
     // Fills the bar when the tabs fit; when they do not, the grid grows past it and the bar scrolls.
-    private void SectionTabsScroller_SizeChanged(object sender, SizeChangedEventArgs args) =>
+    private void SectionTabsScroller_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
         SectionTabs.MinWidth = args.NewSize.Width;
+        _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, () => PlaceTabIndicator(animate: false));
+    }
+
+    private void PlaceTabIndicator(bool animate)
+    {
+        if (desktopLayout || sections.Count <= selectedSection)
+        {
+            return;
+        }
+
+        SectionTabsLayer.UpdateLayout();
+        var tab = sections[selectedSection].Tab;
+        if (tab.ActualWidth <= 0)
+        {
+            return;
+        }
+
+        var origin = tab.TransformToVisual(SectionTabsLayer).TransformPoint(new Point(0, 0));
+        Motion.Glide(TabIndicator, TabIndicatorShift, origin.X, tab.ActualWidth, animate);
+    }
 
     private void SelectSection(int index)
     {
         var wasThemes = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
+        var previous = selectedSection;
         selectedSection = index;
         if (!wasThemes && sections[index].Definition.Id == "themes")
         {
@@ -1653,14 +1910,23 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         var current = sections[index].Definition;
         var accent = ToColor(current.AccentArgb);
+        var glass = Skins.Current == PdcSkin.Glass;
+        Brush sectionFill = glass ? new SolidColorBrush(WithAlpha(Lighten(accent), 0x48)) : ResourceBrush("PdcTabIndicatorBrush");
+        Brush sectionRim = glass ? new SolidColorBrush(WithAlpha(Lighten(accent), 0xB0)) : ResourceBrush("PdcTabIndicatorRimBrush");
+        // A lime block behind light text does not read in the Editorial side menu; it gets a quiet layer instead.
+        var desktopFill = Skins.Current == PdcSkin.Editorial ? ResourceBrush("PdcLayerStrongBrush") : sectionFill;
         for (var position = 0; position < sections.Count; position++)
         {
             var view = sections[position];
             var selected = position == index;
+            if (selected && view.Panel.Visibility != Visibility.Visible)
+            {
+                Motion.PrepareEntrance(view.Panel, Math.Sign(index - previous));
+            }
+
             view.Panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
             view.Label.Visibility = selected || desktopLayout ? Visibility.Visible : Visibility.Collapsed;
-            view.Tab.Background = new SolidColorBrush(selected ? WithAlpha(accent, 0x70) : Colors.Transparent);
-            view.Tab.Foreground = ResourceBrush(selected ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
+            Components.MarkTab(view.Tab, selected, desktopLayout, desktopFill, sectionRim);
             if (!desktopLayout)
             {
                 SectionTabs.ColumnDefinitions[position].Width = selected ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
@@ -1669,6 +1935,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         if (!desktopLayout)
         {
+            TabIndicator.Background = sectionFill;
+            TabIndicator.BorderBrush = sectionRim;
+            PlaceTabIndicator(animate: true);
             sections[index].Tab.StartBringIntoView();
         }
 
@@ -1680,17 +1949,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         SectionTitle.Text = Localized("Nav" + current.ResourceStem);
         SectionDescription.Text = Localized("Nav" + current.ResourceStem + "Desc");
 
-        var glow = new ColorAnimation
-        {
-            To = WithAlpha(Lighten(accent), 0x44),
-            Duration = new Duration(TimeSpan.FromMilliseconds(420)),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-        };
-        Storyboard.SetTarget(glow, SectionGlowTop);
-        Storyboard.SetTargetProperty(glow, "Color");
-        var storyboard = new Storyboard();
-        storyboard.Children.Add(glow);
-        storyboard.Begin();
+        aurora?.Tint(WithAlpha(Lighten(accent), 0x80), WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x50));
     }
 
 
@@ -1769,7 +2028,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             heroZone = null;
             PowerZoneLabel.Text = string.Empty;
             SetHeroGlow(null);
-            PowerArcFill.Data = CreatePowerArcGeometry(0);
+            SetHeroArc(0);
             return;
         }
 
@@ -1812,7 +2071,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         var fraction = PowerArc.Fraction(watts, 0, heroScaleWatts);
         PowerDrawValue.Text = watts.ToString("0.0");
-        PowerArcFill.Data = CreatePowerArcGeometry(fraction);
+        SetHeroArc(fraction);
         PowerArcFill.Stroke = heroGradient ??= HeroGradient();
         if (!heroScaleFromDevice)
         {
@@ -1830,6 +2089,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         heroZone = zone;
         var zoneColor = ToColor(PowerArc.ColorFor(fraction));
         PowerZoneLabel.Text = Localized("PowerZone" + zone);
+        Motion.Pop(PowerZoneLabel);
         PowerZoneLabel.Foreground = new SolidColorBrush(zoneColor);
         SetHeroGlow(zoneColor);
     }
@@ -1840,7 +2100,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var fraction = PowerArc.Fraction(watts, tdpMinimumWatts, scaleMaximum);
         var color = ToColor(PowerArc.ColorFor(fraction));
         PowerDrawValue.Text = watts.ToString("0");
-        PowerArcFill.Data = CreatePowerArcGeometry(tdpPresentation.AppliedWatts.HasValue ? fraction : 0);
+        SetHeroArc(tdpPresentation.AppliedWatts.HasValue ? fraction : 0);
         PowerArcFill.Stroke = new SolidColorBrush(color);
         if (tdpPresentation.AppliedWatts is null)
         {
@@ -1867,6 +2127,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             ChargerBand.Data = null;
             BoostArc.Data = null;
             TdpMarker.Visibility = Visibility.Collapsed;
+            LinearHeroMarker.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -1881,9 +2142,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (tdpPresentation.AppliedWatts == tdpPresentation.SelectedWatts)
         {
             TdpMarker.Visibility = Visibility.Collapsed;
+            LinearHeroMarker.Visibility = Visibility.Collapsed;
             return;
         }
 
+        LinearHeroMarker.Margin = new Thickness(Math.Max(0, (FractionOf(tdpPresentation.SelectedWatts) * LinearHero.ActualWidth) - 1.5), 0, 0, 0);
+        LinearHeroMarker.Visibility = Visibility.Visible;
         var point = PowerArc.PointAt(FractionOf(tdpPresentation.SelectedWatts), ArcCenterX, ArcCenterY, ArcRadius);
         Canvas.SetLeft(TdpMarker, point.X - (TdpMarker.Width / 2));
         Canvas.SetTop(TdpMarker, point.Y - (TdpMarker.Height / 2));
@@ -1895,7 +2159,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var fraction = Math.Min(Math.Max(level, 0), 100) / 100;
         var color = BatteryColorFor(level);
         PowerDrawValue.Text = level.ToString("0");
-        PowerArcFill.Data = CreatePowerArcGeometry(fraction);
+        SetHeroArc(fraction);
         PowerArcFill.Stroke = new SolidColorBrush(color);
         PowerZoneLabel.Text = Localized("HeroBattery");
         PowerZoneLabel.Foreground = new SolidColorBrush(color);
@@ -1989,17 +2253,34 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             : StatusText(cycles);
         foreach (var value in new[] { BatteryHealthValue, BatteryCapacityValue, BatteryCyclesValue })
         {
-            value.FontSize = value.Text.Any(char.IsDigit) ? 20 : 13;
+            value.Style = Components.Style(value.Text.Any(char.IsDigit) ? "PdcValueSmallStyle" : "PdcLabelStyle");
         }
     }
+
+    private static void ShowReading(TextBlock target, TelemetryReading? reading, Color color)
+    {
+        var available = reading?.Status == ReadingStatus.Available && reading.Value.HasValue;
+        StyleReading(target, available, "PdcValueMediumStyle");
+        if (available)
+        {
+            target.Foreground = new SolidColorBrush(color);
+        }
+        else
+        {
+            target.ClearValue(TextBlock.ForegroundProperty);
+        }
+    }
+
+    // A status text (no sensor, unsupported device) takes the fallback style, which fits where a short number goes.
+    private static void StyleReading(TextBlock target, bool available, string valueStyle) =>
+        target.Style = Components.Style(available ? valueStyle : "PdcValueFallbackStyle");
 
     private static void ApplyFan(TextBlock target, HardwareSnapshot snapshot, string id)
     {
         var reading = FindReading(snapshot, id);
         var available = reading?.Status == ReadingStatus.Available && reading.Value.HasValue;
         target.Text = Format(snapshot, id, "0", "RPM");
-        target.FontSize = available ? 32 : 15;
-        target.Foreground = ResourceBrush(available ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
+        StyleReading(target, available, "PdcValueLargeStyle");
     }
 
     private static void ApplyTemperature(TextBlock target, HardwareSnapshot snapshot, string id)
@@ -2007,12 +2288,15 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var reading = FindReading(snapshot, id);
         var celsius = reading?.Status == ReadingStatus.Available ? reading.Value : null;
         target.Text = Format(snapshot, id, "0", "°C");
-        target.FontSize = celsius.HasValue ? 40 : 15;
-        target.Foreground = ResourceBrush(
-            celsius >= 85 ? "PdcDangerBrush"
-            : celsius >= 70 ? "PdcWarnBrush"
-            : celsius.HasValue ? "PdcTextPrimaryBrush"
-            : "PdcTextMutedBrush");
+        StyleReading(target, celsius.HasValue, "PdcValueHugeStyle");
+        if (celsius >= 70)
+        {
+            target.Foreground = ResourceBrush(celsius >= 85 ? "PdcDangerBrush" : "PdcWarnBrush");
+        }
+        else
+        {
+            target.ClearValue(TextBlock.ForegroundProperty);
+        }
     }
 
     private static Color BatteryColor(TelemetryReading? battery)
@@ -2026,6 +2310,19 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     }
 
     private CompositionColorGradientStop? heroGlowStop;
+    private Motion.Aurora? aurora;
+
+    private void CreateAurora()
+    {
+        try
+        {
+            aurora = new Motion.Aurora(AuroraHost);
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("aurora", exception);
+        }
+    }
 
     private void CreateHeroGlow()
     {
@@ -2068,10 +2365,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         ReportText.PlaceholderText = Localized(feature ? "ReportDescribeHintFeature" : "ReportDescribeHint");
         foreach (var (chip, active) in new[] { (ReportKindBug, !feature), (ReportKindFeature, feature) })
         {
-            chip.Background = active
-                ? new SolidColorBrush(WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x70))
-                : new SolidColorBrush(Colors.Transparent);
-            chip.FontWeight = active ? Windows.UI.Text.FontWeights.SemiBold : Windows.UI.Text.FontWeights.Normal;
+            Components.MarkChoice(chip, active);
             chip.IsEnabled = !reportSending;
         }
 
@@ -2172,14 +2466,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var swatch = new Button
             {
                 Tag = accent.Id,
-                Width = 36,
-                Height = 36,
-                Padding = new Thickness(0),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                CornerRadius = new CornerRadius(18),
-                Background = new SolidColorBrush(Colors.Transparent),
-                BorderThickness = new Thickness(0),
-                IsTabStop = true,
+                Style = Components.Style("PdcSwatchButtonStyle"),
                 Content = new Ellipse
                 {
                     Width = 26,
@@ -2203,9 +2490,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         foreach (var swatch in AccentSwatches.Children.OfType<Button>())
         {
-            var selected = Equals(swatch.Tag, id);
-            swatch.BorderBrush = ResourceBrush("PdcTextPrimaryBrush");
-            swatch.BorderThickness = new Thickness(selected ? 2 : 0);
+            Components.MarkSwatch(swatch, Equals(swatch.Tag, id));
         }
     }
 
@@ -2215,6 +2500,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             ApplyAccent(AccentPalette.Resolve(id));
             MarkSelectedSwatch(id);
+            Motion.Pop((FrameworkElement)sender);
             SelectSection(selectedSection);
             try
             {
@@ -2238,11 +2524,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
-    private static readonly string[] AccentAliases =
+    // Brushes of the Glass skin that carry the user's accent at their own opacity.
+    private static readonly string[] AccentDerivedBrushes =
     {
-        "ToggleSwitchFillOn",
-        "ToggleSwitchFillOnPointerOver",
-        "ToggleSwitchFillOnPressed",
+        "PdcAccentSoftBrush",
+        "PdcAccentRimBrush",
+        "PdcIconTileBrush",
     };
 
     private static void ApplyAccent(AccentColor accent)
@@ -2250,9 +2537,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (Application.Current.Resources["PdcAccentBrush"] is SolidColorBrush brush)
         {
             brush.Color = ToColor(accent.Argb);
-            foreach (var key in AccentAliases)
+            foreach (var key in AccentDerivedBrushes)
             {
-                Application.Current.Resources[key] = brush;
+                if (Application.Current.Resources[key] is SolidColorBrush derived)
+                {
+                    derived.Color = brush.Color;
+                }
             }
         }
     }

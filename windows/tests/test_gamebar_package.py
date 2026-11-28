@@ -753,7 +753,7 @@ class GameBarLocalizationTests(unittest.TestCase):
             )
 
     def test_widget_has_no_hard_coded_visible_text(self):
-        allowed = {"—", "↻", "CPU", "GPU", "W", "%", " · "}
+        allowed = {"—", "↻", "CPU", "GPU", "W", "%"}
         visible = (
             "Text",
             "Content",
@@ -792,18 +792,125 @@ class DiagnosticsCardTests(unittest.TestCase):
 
 class DesignSystemTests(unittest.TestCase):
     def test_widget_and_app_never_hard_code_colours(self):
-        for path in (WIDGET, PROJECT_DIR / "App.xaml"):
+        for path in (WIDGET, PROJECT_DIR / "App.xaml", PROJECT_DIR / "Theme" / "PdcComponents.xaml"):
             xaml = path.read_text(encoding="utf-8")
             self.assertNotRegex(xaml, r'"#[0-9A-Fa-f]{6,8}"', path.name)
         code = WIDGET_CODE.read_text(encoding="utf-8")
         self.assertNotIn("Color.FromArgb(255,", code)
 
-    def test_app_merges_the_generated_tokens(self):
+    def test_app_merges_tokens_then_skin_then_components(self):
+        # Skins.cs swaps slot 1: the skin overrides generated tokens and the components read both.
         app = (PROJECT_DIR / "App.xaml").read_text(encoding="utf-8")
         project = PROJECT.read_text(encoding="utf-8")
-        self.assertIn('Source="ms-appx:///Theme/PdcTokens.xaml"', app)
-        self.assertIn('<Page Include="Theme\\PdcTokens.xaml">', project)
+        order = ["Theme/PdcTokens.xaml", "Theme/Skins/PdcSkinGlass.xaml", "Theme/PdcComponents.xaml"]
+        positions = [app.index(f'Source="ms-appx:///{path}"') for path in order]
+        self.assertEqual(sorted(positions), positions)
+        for path in order + ["Theme/Skins/PdcSkinInstrument.xaml", "Theme/Skins/PdcSkinEditorial.xaml"]:
+            self.assertIn(f'<Page Include="{path.replace("/", chr(92))}">', project)
         self.assertIn('x:Key="PdcAccentBrush"', (PROJECT_DIR / "Theme" / "PdcTokens.xaml").read_text(encoding="utf-8"))
+
+    def test_every_resource_the_widget_uses_is_defined(self):
+        # A missing key only fails when the page loads, on the device.
+        theme = PROJECT_DIR / "Theme"
+        defined = set()
+        for path in (theme / "PdcTokens.xaml", theme / "Skins" / "PdcSkinGlass.xaml", theme / "PdcComponents.xaml"):
+            defined |= set(re.findall(r'x:Key="([^"]+)"', path.read_text(encoding="utf-8")))
+        used = set()
+        for path in (WIDGET, theme / "PdcComponents.xaml"):
+            used |= set(re.findall(r"\{(?:Static|Theme)Resource (\w+)\}", path.read_text(encoding="utf-8")))
+        for path in PROJECT_DIR.glob("*.cs"):
+            code = path.read_text(encoding="utf-8")
+            used |= set(re.findall(r'Resources\["(Pdc\w+)"\]', code))
+            used |= set(re.findall(r'Resource(?:Brush|<\w+>)\("(Pdc\w+)"\)', code))
+            used |= set(re.findall(r'Components\.(?:Brush|Style)\("(Pdc\w+)"\)', code))
+        self.assertEqual(set(), used - defined)
+
+    # Design-system rules: every visual piece is a style of Theme/PdcComponents.xaml; screens assign it and
+    # only add layout glue. Colours that carry meaning (a reading, a state) are the one thing a screen may set.
+    VISUAL = {"Background", "BorderBrush", "BorderThickness", "CornerRadius", "Padding", "FontSize", "FontWeight",
+              "Foreground", "FontFamily", "Fill", "Stroke", "Opacity", "CharacterSpacing"}
+    MEANING_BRUSHES = {"PdcOkBrush", "PdcWarnBrush", "PdcDangerBrush", "PdcBrightnessBrush", "PdcBoostBrush"}
+    DRAWINGS = {"Path", "Ellipse", "Rectangle"}
+    LAYOUT_ROOTS = {("Page", "Background"), ("Grid", "Padding"), ("StackPanel", "Padding")}
+
+    def _widget_elements(self):
+        for element in ElementTree.parse(WIDGET).getroot().iter():
+            tag = element.tag.split("}")[1]
+            attrs = {key: value for key, value in element.attrib.items() if "}" not in key}
+            yield tag, attrs, {key: value for key, value in attrs.items() if key in self.VISUAL}
+
+    def test_styled_elements_are_not_restyled_locally(self):
+        for tag, attrs, visual in self._widget_elements():
+            if "Style" not in attrs:
+                continue
+            for key, value in visual.items():
+                meaning = key == "Foreground" and value.strip("{}").split()[-1] in self.MEANING_BRUSHES
+                self.assertTrue(meaning, f"{tag} with {attrs['Style']} sets {key}={value}: add a catalog style")
+
+    def test_unstyled_elements_only_draw_with_tokens(self):
+        for tag, attrs, visual in self._widget_elements():
+            if "Style" in attrs or not visual:
+                continue
+            for key, value in visual.items():
+                allowed = tag in self.DRAWINGS or (tag, key) in self.LAYOUT_ROOTS
+                self.assertTrue(allowed, f"{tag} paints {key} without a catalog style")
+                self.assertTrue(value.startswith("{StaticResource ") or re.fullmatch(r"[\d.,]+", value), f"{tag} {key}={value}")
+
+    def test_no_visual_declaration_is_replicated(self):
+        seen = {}
+        for tag, attrs, visual in self._widget_elements():
+            if len(visual) >= 2:
+                combo = (tag, tuple(sorted(visual.items())))
+                self.assertNotIn(combo, seen, f"{combo} repeats: make it a catalog style")
+                seen[combo] = True
+
+    def test_code_built_ui_uses_the_catalog(self):
+        # Code builds with Components.Style(...); sizes, fonts, radii and paddings never appear as literals.
+        for path in PROJECT_DIR.glob("*.cs"):
+            if path.name == "Components.cs":
+                continue
+            code = path.read_text(encoding="utf-8")
+            for pattern in (r"\bFontSize\s*=", r"\bFontFamily\s*=", r"\bCornerRadius\s*=", r"\bPadding\s*=",
+                            r"new CornerRadius\(", r"Colors\.(?!Transparent)\w+", r"Color\.FromArgb\(\s*\d"):
+                self.assertIsNone(re.search(pattern, code), f"{path.name}: {pattern}")
+        # Data-driven colours (readings, zones, section colour) are the only brushes code assigns; they may not grow.
+        assignments = sum(
+            len(re.findall(r"\b(?:Background|Foreground|BorderBrush)\s*=", path.read_text(encoding="utf-8")))
+            for path in PROJECT_DIR.glob("*.cs")
+            if path.name != "Components.cs"
+        )
+        self.assertLessEqual(assignments, 13)
+
+    def test_brushes_the_code_casts_are_solid_in_every_skin(self):
+        # ResourceBrush() casts to SolidColorBrush: a skin that redefines one of those keys as a gradient crashes.
+        casted = set()
+        for path in PROJECT_DIR.glob("*.cs"):
+            casted |= set(re.findall(r'ResourceBrush\("(Pdc\w+)"\)', path.read_text(encoding="utf-8")))
+        for path in (PROJECT_DIR / "Theme" / "Skins").glob("PdcSkin*.xaml"):
+            for element in ElementTree.parse(path).getroot():
+                key = element.attrib.get("{http://schemas.microsoft.com/winfx/2006/xaml}Key")
+                if key in casted:
+                    self.assertTrue(element.tag.endswith("SolidColorBrush"), f"{path.name} {key}")
+
+    def test_skin_slots_match_the_app_order(self):
+        app = (PROJECT_DIR / "App.xaml").read_text(encoding="utf-8")
+        merged = re.findall(r'<ResourceDictionary Source="ms-appx:///Theme/([^"]+)"', app)
+        skins = (PROJECT_DIR / "Skins.cs").read_text(encoding="utf-8")
+        skin_slot = int(re.search(r"SkinSlot = (\d+);", skins).group(1))
+        components_slot = int(re.search(r"ComponentsSlot = (\d+);", skins).group(1))
+        self.assertTrue(merged[skin_slot].startswith("Skins/PdcSkin"))
+        self.assertEqual("PdcComponents.xaml", merged[components_slot])
+
+    def test_every_skin_defines_the_same_keys(self):
+        key = re.compile(r'x:Key="([^"]+)"')
+        skins = {
+            path.name: {name for name in key.findall(path.read_text(encoding="utf-8")) if not name.startswith("PdcSkin")}
+            for path in (PROJECT_DIR / "Theme" / "Skins").glob("PdcSkin*.xaml")
+        }
+        self.assertEqual(3, len(skins))
+        glass = skins["PdcSkinGlass.xaml"]
+        for name, keys in skins.items():
+            self.assertEqual(set(), glass - keys, f"{name} misses keys of the default skin")
 
     def test_every_power_zone_has_a_localized_label(self):
         strings = load_strings("en-US")

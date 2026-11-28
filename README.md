@@ -121,7 +121,8 @@ la de arriba.
 Panel llega a Windows en early access, como widget de Xbox Game Bar y como app. Los temas ya
 funcionan en el Big Picture de Steam igual que en Linux, sin CSS Loader: se instalan, se activan y
 se ajustan desde el propio Panel. El resto de secciones enseña lo que lee tu equipo y se irá abriendo
-poco a poco. Si algo no funciona como esperabas, desde Ajustes puedes mandarme un reporte.
+poco a poco. En Temas eliges el aspecto del propio Panel: Cristal, Instrumento o Editorial. Si algo
+no funciona como esperabas, desde Ajustes puedes mandarme un reporte.
 
 ## 🕹️ Equipos
 
