@@ -65,3 +65,20 @@ def test_missing_power_or_target_never_judges():
 def test_threshold_has_an_absolute_floor():
     assert exceed_threshold_w(6) == 8.0
     assert exceed_threshold_w(40) == 46.0
+
+
+def test_threshold_honors_configured_silicon_floor():
+    assert exceed_threshold_w(6, floor_w=25.0) == 25.0
+    assert exceed_threshold_w(10, floor_w=25.0) == 25.0
+    assert exceed_threshold_w(20, floor_w=25.0) == 25.0
+    assert exceed_threshold_w(40, floor_w=25.0) == 46.0
+
+
+def test_watch_with_silicon_floor_does_not_trip_at_low_target():
+    watch = MeasuredLimitWatch(floor_w=25.0)
+    watch.reset(5, 0.0)
+    # Strix Halo drawing 21.7W under 3D load at 5W/18W target is within floor
+    assert _run(watch, 21.7, 4.0, 14.0).state == "within_limit"
+    # But an uncontrolled runaway overshoot (e.g. 70W) still trips
+    watch.reset(30, 20.0)
+    assert _run(watch, 70.0, 24.0, 14.0).state == "exceeded"
